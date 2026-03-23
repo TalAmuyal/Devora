@@ -1,0 +1,142 @@
+# CLI Package Spec
+
+Package: `internal/cli`
+
+## Purpose
+
+Define and dispatch the CLI commands. This is the entry point that wires together all domain packages.
+
+## Commands
+
+The CLI has exactly 3 commands, each with a hidden short alias:
+
+| Command | Alias | Args | Description |
+|---------|-------|------|-------------|
+| `workspace-ui` | `w` | none | Open the workspace management TUI |
+| `add` | `a` | none | Open the add-repo TUI (must be inside a workspace) |
+| `rename` | `r` | `<new-name>` (positional, required) | Rename the current terminal session |
+
+## CLI Framework
+
+Hand-rolled dispatcher using `os.Args`. No external CLI framework (cobra, etc.) is needed for 3 commands with minimal argument parsing.
+
+If the CLI grows significantly in the future, migrating to a framework is straightforward because each command is implemented in a separate function.
+
+## UsageError
+
+```go
+type UsageError struct {
+    Message string
+}
+```
+
+Represents a user-facing error caused by incorrect CLI usage (e.g., missing command, unknown command, missing required argument). In `main.go`, `UsageError` is printed to stderr without crash logging, unlike other errors which go through `crash.HandleError`.
+
+## Function
+
+### Run
+
+```go
+func Run(args []string) error
+```
+
+`args` is `os.Args[1:]` (program name already stripped).
+
+Behavior:
+1. If `args` is empty, return a `UsageError` containing the usage message.
+2. Match `args[0]` against known commands and aliases.
+3. Dispatch to the appropriate handler function.
+4. For unknown commands, return an error with the command name.
+
+### Usage Message
+
+```
+usage: debi <command> [args]
+
+Commands:
+  workspace-ui (w)  Open the workspace management UI
+  add (a)           Add a repo to the current workspace
+  rename (r)        Rename the current terminal session
+```
+
+## Command Handlers
+
+### workspace-ui / w
+
+```go
+func runWorkspaceUI() error
+```
+
+1. Load profiles from config.
+2. If no profiles exist, set `showProfileRegistration = true`. Skip to step 4 (`repoNames` remains `nil`).
+3. If profiles exist, set the first profile as active and load repo names.
+4. Launch the workspace TUI via `tui.RunWorkspaceUI(themePath, repoNames, showProfileRegistration)`. The `themePath` is obtained from `tui.DefaultThemePath()`.
+5. After the TUI exits, handle the result:
+   - If `result.SelectedWorkspace` is set, derive `sessionName` from `ws.TaskTitle` (falling back to `ws.Name` if empty), then delegate to `tui.CreateAndAttachSession(ws.Path, sessionName)` to create and attach a terminal session.
+   - If `result.NewWorkspace` is set, delegate to `tui.CreateAndAttachSession(ws.WorkspacePath, ws.SessionName)`.
+   - If the user quit without selection (`result == nil`), return nil.
+
+### add / a
+
+```go
+func runAddRepo() error
+```
+
+1. Detect the current workspace from CWD (using `workspace.ResolveWorkspaceFromCWD`).
+2. If not inside a workspace, return an error: `"not inside a known workspace. Run this command from within a workspace directory"`.
+3. Set the detected profile as active.
+4. Get registered repo names. If none, return a `UsageError`: `"no repos registered in the active profile"`.
+5. Launch the add-repo TUI via `tui.RunAddRepo(themePath, wsPath, repoNames)`.
+
+### rename / r
+
+```go
+func runRename(newName string) error
+```
+
+Renames the current Kitty tab and, if running inside a workspace, updates the task title.
+
+1. Rename the Kitty tab via `process.GetOutput([]string{"kitty", "@", "set-tab-title", newName})`.
+2. Detect the current workspace from CWD (using `workspace.ResolveWorkspaceFromCWD`).
+3. Attempt to update the task title via `task.UpdateTitle(newName, taskPath)`. If the task file does not exist, the rename still succeeds.
+
+The workspace detection is best-effort: if the CWD cannot be resolved or the task file is absent, the rename still succeeds (only the tab title is changed).
+
+## Binary Name
+
+The built binary should be named `debi`.
+
+The `mise.toml` build task should produce `debi`:
+```toml
+[tasks.build]
+run = "go build -o debi ."
+```
+
+## Integration with main.go
+
+```go
+func main() {
+    defer func() {
+        if r := recover(); r != nil {
+            crash.HandlePanic(r)
+            os.Exit(1)
+        }
+    }()
+    if err := cli.Run(os.Args[1:]); err != nil {
+        var usageErr *cli.UsageError
+        if errors.As(err, &usageErr) {
+            fmt.Fprintln(os.Stderr, usageErr.Message)
+            os.Exit(1)
+        }
+        crash.HandleError(err)
+        os.Exit(1)
+    }
+}
+```
+
+## Testing
+
+- Test that unknown commands return an appropriate error.
+- Test that missing arguments for `rename` return an error.
+- Test that empty args print usage.
+- Command handler integration tests are better handled at a higher level (testing the actual TUI behavior or workspace operations).

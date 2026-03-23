@@ -1,0 +1,28 @@
+[settings]
+experimental = true # Required for the 'prepare' feature
+
+[tools]
+go = "1.25"
+
+[prepare.go_deps]
+auto = true
+sources = ["go.mod", "go.sum", "**/*.go"]
+run = "go mod tidy"
+description = "Automatically sync Go module dependencies"
+
+[tasks.build]
+run = "go build -o debi ."
+description = "Build the project"
+
+[tasks.start]
+run = "go run . workspace-ui"
+description = "Run the application"
+
+[tasks.test]
+run = "go test ./..."
+description = "Run all tests"
+
+[tasks.experiment]
+depends = ["build"]
+run = "mv debi ~/.local/bin/."
+description = "Move the built binary to ~/.local/bin for experimental use"

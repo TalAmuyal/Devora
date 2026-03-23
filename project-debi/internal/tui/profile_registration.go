@@ -1,0 +1,210 @@
+package tui
+
+import (
+	"fmt"
+	"strings"
+
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
+	"devora/internal/config"
+	"devora/internal/tui/components"
+)
+
+type profileRegField int
+
+const (
+	fieldProfilePath   profileRegField = iota
+	fieldProfileName
+	fieldProfileSubmit
+)
+
+const profileRegFieldCount = 3
+
+// ProfileRegModel is the form page for registering a new profile: path + name.
+type ProfileRegModel struct {
+	pathInput components.TextInputModel
+	nameInput components.TextInputModel
+	focused   profileRegField
+	hasBack   bool // false on first-run (no back, escape quits)
+	errMsg    string
+	styles    *Styles
+	width     int
+}
+
+func NewProfileRegModel(styles *Styles, hasBack bool) ProfileRegModel {
+	pathInput := components.NewTextInputModel(
+		lipgloss.NewStyle().Foreground(styles.AccentColor),
+		styles.Muted,
+	)
+	pathInput.Placeholder = "Enter profile root path..."
+
+	nameInput := components.NewTextInputModel(
+		lipgloss.NewStyle().Foreground(styles.AccentColor),
+		styles.Muted,
+	)
+	nameInput.Placeholder = "Profile name (for new profiles)..."
+
+	m := ProfileRegModel{
+		pathInput: pathInput,
+		nameInput: nameInput,
+		focused:   fieldProfilePath,
+		hasBack:   hasBack,
+		styles:    styles,
+	}
+	m.updateFocus()
+	return m
+}
+
+// Update handles key events for the profile registration page.
+func (m *ProfileRegModel) Update(msg tea.Msg) tea.Cmd {
+	switch msg := msg.(type) {
+	case tea.KeyPressMsg:
+		key := msg.String()
+
+		switch key {
+		case "ctrl+c":
+			if m.hasBack {
+				return func() tea.Msg { return showWorkspaceListMsg{} }
+			}
+			return tea.Quit
+		case "tab":
+			m.focused = (m.focused + 1) % profileRegFieldCount
+			m.updateFocus()
+			return nil
+		case "shift+tab":
+			m.focused = (m.focused - 1 + profileRegFieldCount) % profileRegFieldCount
+			m.updateFocus()
+			return nil
+		case "enter":
+			if m.focused == fieldProfileSubmit || m.focused == fieldProfileName {
+				return m.register()
+			}
+			return nil
+		}
+
+		// Delegate to focused component
+		m.errMsg = ""
+		switch m.focused {
+		case fieldProfilePath:
+			m.pathInput.HandleKey(key)
+		case fieldProfileName:
+			m.nameInput.HandleKey(key)
+		}
+	}
+	return nil
+}
+
+func (m *ProfileRegModel) register() tea.Cmd {
+	path := strings.TrimSpace(m.pathInput.Value)
+	name := strings.TrimSpace(m.nameInput.Value)
+
+	if path == "" {
+		m.errMsg = "Please enter a path"
+		return nil
+	}
+
+	if !config.IsInitializedProfile(path) && name == "" {
+		m.errMsg = "Please enter a profile name"
+		return nil
+	}
+
+	profile, err := config.RegisterProfile(path, name)
+	if err != nil {
+		m.errMsg = fmt.Sprintf("Error registering profile: %v", err)
+		return nil
+	}
+
+	config.SetActiveProfile(&profile)
+	m.errMsg = ""
+	return func() tea.Msg { return profileActivatedMsg{} }
+}
+
+func (m *ProfileRegModel) updateFocus() {
+	if m.focused == fieldProfilePath {
+		m.pathInput.Focus()
+	} else {
+		m.pathInput.Blur()
+	}
+	if m.focused == fieldProfileName {
+		m.nameInput.Focus()
+	} else {
+		m.nameInput.Blur()
+	}
+}
+
+// View renders the profile registration form.
+func (m *ProfileRegModel) View() string {
+	var b strings.Builder
+
+	// Path field
+	bar := m.styles.Muted.Render("\u2502") + " "
+	label := m.styles.FieldLabelBlurred.Render("Path")
+	if m.focused == fieldProfilePath {
+		bar = lipgloss.NewStyle().Bold(true).Foreground(m.styles.AccentColor).Render("\u2503") + " "
+		label = m.styles.FieldLabelFocused.Render("Path")
+	}
+	b.WriteString("\n")
+	b.WriteString("  " + bar + label + "\n")
+	b.WriteString("  " + bar + m.pathInput.View() + "\n")
+
+	b.WriteString("\n")
+
+	// Name field
+	bar = m.styles.Muted.Render("\u2502") + " "
+	label = m.styles.FieldLabelBlurred.Render("Name")
+	if m.focused == fieldProfileName {
+		bar = lipgloss.NewStyle().Bold(true).Foreground(m.styles.AccentColor).Render("\u2503") + " "
+		label = m.styles.FieldLabelFocused.Render("Name")
+	}
+	b.WriteString("  " + bar + label + "\n")
+	b.WriteString("  " + bar + m.nameInput.View() + "\n")
+
+	b.WriteString("\n")
+
+	// Submit
+	submitLabel := "[ Register ]"
+	if m.focused == fieldProfileSubmit {
+		b.WriteString("  " + m.styles.SubmitFocused.Render(submitLabel))
+	} else {
+		b.WriteString("  " + m.styles.SubmitBlurred.Render(submitLabel))
+	}
+
+	if m.errMsg != "" {
+		b.WriteString("\n\n")
+		b.WriteString(m.styles.NotifyError.Render("\u2717 " + m.errMsg))
+	}
+
+	return b.String()
+}
+
+// Reset clears the form inputs and error message.
+func (m *ProfileRegModel) Reset() {
+	m.pathInput.SetValue("")
+	m.nameInput.SetValue("")
+	m.focused = fieldProfilePath
+	m.errMsg = ""
+	m.updateFocus()
+}
+
+// SetSize updates the width and height available.
+func (m *ProfileRegModel) SetSize(w, h int) {
+	m.width = w
+}
+
+// ActionBindings returns the keybindings for the footer.
+func (m ProfileRegModel) ActionBindings() []components.KeyBinding {
+	backDesc := "Back"
+	if !m.hasBack {
+		backDesc = "Quit"
+	}
+	return []components.KeyBinding{
+		{Key: "tab", Desc: "Next Field"},
+		{Key: "enter", Desc: "Register"},
+		{Key: "ctrl+c", Desc: backDesc},
+	}
+}
+
+// borderTitle returns the title displayed in the border.
+func (m ProfileRegModel) borderTitle() string {
+	return "Register Profile"
+}

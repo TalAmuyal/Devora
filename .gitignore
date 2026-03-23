@@ -1,0 +1,7 @@
+debi
+bin/
+3rd-party-apps/
+devora.app/Contents/Resources
+.venv/
+src.egg-info/
+build/

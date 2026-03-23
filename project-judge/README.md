@@ -1,0 +1,44 @@
+# Command Validator
+
+I really dislike having to manually go through so many permission prompts.
+This projects extends the ability to allow/denies based on more complex rules.
+
+It runs after the permissions block in your settings, so allowing here and denying there will still deny.
+
+git -C <some long path> <command I already allowed> ...
+
+## Setup
+
+- Install `uv`
+- Run `chmod +x ./main.py`
+- Add to `~/.claude/settings.json`:
+
+```json
+    "PermissionRequest": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/path/to/main.py"
+          }
+        ]
+      }
+    ],
+```
+
+## Flow
+
+The script decides whether to allow or deny a permission request based on the command and its arguments.
+When it encounters a situation that it doesn't know how to handle, it saves it as an example case and defer the decision to the user, allowing them to review and decide on it later.
+
+## Testing
+
+An end-to-end test is done by running the script with known inputs and matching that to an expected result.
+The test cases are stored in `./test-cases.json`.
+
+## Backlog
+
+## Next steps
+
+Setup `/sandbox`: TBD

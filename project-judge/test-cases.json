@@ -1,0 +1,396 @@
+[
+    [
+        {
+            "tool_input": {
+                "command": "curl http://example.com"
+            },
+            "session_cwd": "/tmp"
+        },
+        "deferred"
+    ],
+    [
+        {
+            "cwd": "/home/user/workspace/devora-2",
+            "tool_input": {
+                "command": "python -c \"\nfor i in range(5):\n    if i % 2 == 0:\n        print(f'{i} is even')\n    else:\n        print(f'{i} is odd')\n\"",
+                "description": "Run a harmless multi-line Python script"
+            }
+        },
+        "approved"
+    ],
+    [
+        {
+            "cwd": "/home/user/workspace/devora-2",
+            "tool_input": {
+                "command": "python -c \"\nfor i in range(3):\n    print(f'Line {i + 1}: Hello from Python')\nprint('Done!')\n\"",
+                "description": "Run a harmless multi-line Python script"
+            }
+        },
+        "approved"
+    ],
+    [
+        {
+            "cwd": "/home/user/workspace/devora-2",
+            "tool_input": {
+                "command": "python -c \"\nfor i in range(5):\n    if i % 2 == 0:\n        print(f'{i} is even')\n    else:\n        print(f'{i} is odd')\nprint('Done!')\n\"",
+                "description": "Run a harmless multi-line Python script"
+            }
+        },
+        "approved"
+    ],
+    [
+        {
+            "cwd": "/home/user/workspace/claude-code-perms-judge",
+            "tool_input": {
+                "command": "ls -la /home/user/.claude/ 2>/dev/null || echo \"Directory does not exist\"",
+                "description": "Check if .claude directory exists in home"
+            }
+        },
+        "approved"
+    ],
+    [
+        {
+            "cwd": "/home/user/workspace/markdown-rich-copy-paste.nvim",
+            "tool_input": {
+                "command": "git show --stat HEAD && echo \"---DIFF---\" && git diff HEAD~1..HEAD",
+                "description": "Show latest commit info and full diff"
+            }
+        },
+        "approved"
+    ],
+    [
+        {
+            "cwd": "/home/user/workspace/markdown-rich-copy-paste.nvim",
+            "tool_input": {
+                "command": "eval \"$(mise activate bash)\" && busted 2>&1",
+                "description": "Run unit tests"
+            }
+        },
+        "declined"
+    ],
+    [
+        {
+            "cwd": "/home/user/workspace/markdown-rich-copy-paste.nvim",
+            "tool_input": {
+                "command": "./tests/run_e2e.sh 2>&1",
+                "description": "Run end-to-end tests"
+            }
+        },
+        "deferred"
+    ],
+    [
+        {
+            "cwd": "/home/user/workspace/markdown-rich-copy-paste.nvim",
+            "tool_input": {
+                "command": "./tests/run_e2e.sh 2>&1",
+                "description": "Run e2e tests (expecting failures for new paste_override tests)"
+            }
+        },
+        "deferred"
+    ],
+    [
+        {
+            "cwd": "/home/user/workspace/markdown-rich-copy-paste.nvim",
+            "tool_input": {
+                "command": "eval \"$(mise activate bash)\" && busted 2>&1",
+                "description": "Run busted unit tests"
+            }
+        },
+        "declined"
+    ],
+    [
+        {
+            "cwd": "/home/user/workspace/markdown-rich-copy-paste.nvim",
+            "tool_input": {
+                "command": "eval \"$(mise activate bash)\" && busted 2>&1 && echo \"---\" && ./tests/run_e2e.sh 2>&1",
+                "description": "Run all tests (busted + e2e)"
+            }
+        },
+        "declined"
+    ],
+    [
+        {
+            "cwd": "/home/user/workspace/markdown-rich-copy-paste.nvim",
+            "tool_input": {
+                "command": "gaac \"Add configurable paste_override for p key\"",
+                "description": "Commit all changes"
+            }
+        },
+        "approved"
+    ],
+    [
+        {
+            "cwd": "/home/user/workspace/markdown-rich-copy-paste.nvim",
+            "tool_input": {
+                "command": "eval \"$(mise activate bash)\" && busted 2>&1",
+                "description": "Run busted tests (expecting failures for clean_urls)"
+            }
+        },
+        "declined"
+    ],
+    [
+        {
+            "cwd": "/home/user/.local/my_configs/tools/devora-cli",
+            "tool_input": {
+                "command": ".venv/bin/python -m pytest tests/test_workspace_ui.py -x -k \"filter_legend\" --tb=short 2>&1 | tail -40",
+                "description": "Run the new filter legend tests"
+            }
+        },
+        "approved"
+    ],
+    [
+        {
+            "cwd": "/home/user/.local/my_configs/tools/devora-cli",
+            "tool_input": {
+                "command": "mise usage python 2>&1 | head -50; echo \"---\"; mise help use 2>&1 | head -30",
+                "description": "Check mise python and use help"
+            }
+        },
+        "approved"
+    ],
+    [
+        {
+            "cwd": "/home/user/.local/my_configs/tools/devora-cli",
+            "tool_input": {
+                "command": "mise help hooks 2>&1; echo \"===\"; mise help generate task-docs 2>&1 | head -20",
+                "description": "Check mise hooks help"
+            }
+        },
+        "approved"
+    ],
+    [
+        {
+            "cwd": "/home/user/.local/my_configs/tools/devora-cli",
+            "tool_input": {
+                "command": "ls -la .venv/ 2>&1 | head -5; echo \"---\"; mise ls --current 2>&1",
+                "description": "Check venv and current mise tools"
+            }
+        },
+        "approved"
+    ],
+    [
+        {
+            "cwd": "/home/user/.local/my_configs",
+            "tool_input": {
+                "command": "cd /home/user/.local/my_configs && git diff -- tools/devora-cli/devora_cli/workspace_ui.py",
+                "description": "Show workspace_ui.py diff from repo root"
+            }
+        },
+        "approved"
+    ],
+    [
+        {
+            "cwd": "/home/user/.local/my_configs",
+            "tool_input": {
+                "command": "cd /home/user/.local/my_configs && git diff --stat -- tools/devora-cli/",
+                "description": "Check git diff after revert"
+            }
+        },
+        "approved"
+    ],
+    [
+        {
+            "cwd": "/home/user/dev/repo-a_5",
+            "tool_input": {
+                "command": "find /home/user/dev/repo-a_5 -name \"*.json\" -not -path \"*/.venv/*\" -not -path \"*/.pants.d/*\" -not -path \"*/__pycache__/*\" | xargs grep -l '\"panels\"\\|\"__inputs\"\\|\"schemaVersion\"' 2>/dev/null | sort",
+                "description": "Find Grafana dashboard JSON files (by typical schema keys) across the repo"
+            }
+        },
+        "approved"
+    ],
+    [
+        {
+            "cwd": "/home/user/workspace/devora-2",
+            "tool_input": {
+                "command": "python -c \"\nfor i in range(5):\n    if i % 2 == 0:\n        print(f'{i} is even')\n    else:\n        print(f'{i} is odd')\n\"",
+                "description": "Run a harmless multi-line Python script"
+            }
+        },
+        "approved"
+    ],
+    [
+        {
+            "cwd": "/home/user/dev/repo-a_5",
+            "tool_input": {
+                "command": "find /home/user/dev/repo-a_5 -name \"*.json\" -not -path \"*/.venv/*\" -not -path \"*/.pants.d/*\" -not -path \"*/__pycache__/*\" | xargs grep -l '\"panels\"\\|\"__inputs\"\\|\"schemaVersion\"' 2>/dev/null | sort",
+                "description": "Find Grafana dashboard JSON files (by typical schema keys) across the repo"
+            }
+        },
+        "approved"
+    ],
+    [
+        {
+            "cwd": "/home/user/workspace/repos/devora-3/debi",
+            "tool_input": {
+                "command": "git diff --stat && echo \"---\" && git status --short",
+                "description": "Check current changes"
+            }
+        },
+        "approved"
+    ],
+    [
+        {
+            "cwd": "/home/user/dev/repos/repo-a",
+            "tool_input": {
+                "command": "cd /home/user/dev/repos/repo-a/proj-11/helmchart && helm dependency build 2>&1 | tail -5",
+                "timeout": 60000,
+                "description": "Build helm chart dependencies (fetch base chart)"
+            }
+        },
+        "approved"
+    ],
+    [
+        {
+            "cwd": "/home/user/dev/workspaces/ws-3",
+            "tool_input": {
+                "command": "wc -l /tmp/render_stdout.log /tmp/render_stderr.log",
+                "description": "Count lines in stdout and stderr output files"
+            }
+        },
+        "approved"
+    ],
+    [
+        {
+            "cwd": "/home/user/workspace/devora-3/python-impl",
+            "tool_input": {
+                "command": "git log --oneline origin/main..master 2>/dev/null && echo \"---\" && git diff --name-only origin/main..master 2>/dev/null",
+                "description": "Show commits and changed files between origin/main and master"
+            }
+        },
+        "approved"
+    ],
+    [
+        {
+            "cwd": "/home/user/workspace/devora-3/python-impl",
+            "tool_input": {
+                "command": "git -C /home/user/workspace/devora-3/python-impl status",
+                "description": "Check git status"
+            }
+        },
+        "approved"
+    ],
+    [
+        {
+            "cwd": "/home/user/workspace/devora-3/python-impl",
+            "tool_input": {
+                "command": "git -C /home/user/workspace/devora-3/python-impl diff",
+                "description": "Show the unstaged diff"
+            }
+        },
+        "approved"
+    ],
+    [
+        {
+            "cwd": "/home/user/dev/workspaces/ws-3",
+            "tool_input": {
+                "command": "cd /home/user/dev/workspaces/ws-3/pros-8 && mise run render 2>&1 | tee /tmp/render_output.log | tail -5",
+                "timeout": 300000,
+                "description": "Run mise render again, save full output to file, show last 5 lines for exit status"
+            }
+        },
+        "approved"
+    ],
+    [
+        {
+            "cwd": "/home/user/workspace/devora-3/python-impl",
+            "tool_input": {
+                "command": "rm /home/user/workspace/devora-3/python-impl/devora_cli/prompter.py",
+                "description": "Delete unused prompter.py"
+            }
+        },
+        "deferred"
+    ],
+    [
+        {
+            "cwd": "/home/user/workspace/devora-3",
+            "tool_input": {
+                "command": "stat -f \"%Sm\" /tmp/devora_crash_20260312_113150.log 2>&1",
+                "description": "Check the timestamp of the existing crash log"
+            }
+        },
+        "approved"
+    ],
+    [
+        {
+            "cwd": "/home/user/workspace/devora-3/go-impl",
+            "tool_input": {
+                "command": "go build -o debi . 2>&1",
+                "description": "Build the Go project"
+            }
+        },
+        "declined"
+    ],
+    [
+        {
+            "cwd": "/home/user/workspace/devora-3/go-impl",
+            "tool_input": {
+                "command": "MISE_VERBOSE=1 mise build 2>&1",
+                "timeout": 120000,
+                "description": "Build with verbose output to diagnose the go not found issue"
+            }
+        },
+        "approved"
+    ],
+    [
+        {
+            "cwd": "/home/user/workspace/devora-3/go-impl",
+            "tool_input": {
+                "command": "go test -v ./... 2>&1 | tail -200",
+                "timeout": 120000,
+                "description": "Run tests with verbose output to count individual tests"
+            }
+        },
+        "declined"
+    ],
+    [
+        {
+            "cwd": "/home/user/dev/workspaces/ws-1/repo-a",
+            "tool_input": {
+                "command": ".venv/bin/ruff check --fix proj-11/ && .venv/bin/ruff format proj-11/",
+                "description": "Run ruff lint and format on the project"
+            }
+        },
+        "approved"
+    ],
+    [
+        {
+            "cwd": "/home/user/dev/workspaces/ws-1/repo-a",
+            "tool_input": {
+                "command": "git show d209459c22a --stat && echo \"---\" && git show 92ed21fda29 --stat && echo \"---\" && git show 3e5439f142a --stat",
+                "description": "Show file changes in last 3 commits"
+            }
+        },
+        "approved"
+    ],
+    [
+        {
+            "cwd": "/home/user/dev/workspaces/ws-1",
+            "tool_input": {
+                "command": "cd /home/user/dev/workspaces/ws-1/repo-a && PYTHONPATH=. .venv/bin/python proj-13/scripts/penv/local_run.py 2>&1",
+                "timeout": 300000,
+                "description": "Run the penv replay script"
+            }
+        },
+        "approved"
+    ],
+    [
+        {
+            "cwd": "/home/user/dev/workspaces/ws-5/fdev",
+            "tool_input": {
+                "command": "hash",
+                "description": "Run the hash builtin command"
+            }
+        },
+        "approved"
+    ],
+    [
+        {
+            "cwd": "/home/user/workspace/proj-2",
+            "tool_input": {
+                "command": "git diff && echo \"---UNTRACKED---\" && git ls-files --others --exclude-standard",
+                "description": "Show full diff and untracked files"
+            }
+        },
+        "approved"
+    ]
+]
