@@ -110,9 +110,18 @@ GOOS=darwin \
 	--base-icon "$REPO_ROOT/base-icon.png" \
 	--output-dir "$RESOURCES_DIR"
 
+# Bundle Status-line
+GOOS=darwin \
+	GOARCH=arm64 \
+	mise \
+	-C "$REPO_ROOT/project-status-line" \
+	exec \
+	-- \
+	go build \
+	-o "$OUTPUT_CONTAINER_DIR/cc-simple-statusline"
+
 # Bundle prepared files and directories
 bundle "$REPO_ROOT/USER_GUIDE.md"           "$OUTPUT_CONTAINER_DIR/."         overwrite
-bundle "$REPO_ROOT/cc-simple-statusline.sh" "$OUTPUT_CONTAINER_DIR/."         overwrite
 bundle "$SCRIPT_DIR/Info.plist"             "$OUTPUT_DIR/Contents/."          overwrite
 bundle "$THIRD_PARTY_APPS_DIR/kitty.app"    "$RESOURCES_DIR/kitty.app"        check
 bundle "$THIRD_PARTY_APPS_DIR/uv"           "$RESOURCES_DIR/uv"               check
@@ -137,5 +146,4 @@ $SHOLUD_MAKE_DMG \
 	-srcfolder "$OUTPUT_CONTAINER_DIR" \
 	-o "$BIN_MACOS_DIR/Devora.dmg"
 
-echo ""
 echo "Done"

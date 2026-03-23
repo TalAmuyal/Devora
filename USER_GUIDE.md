@@ -14,17 +14,15 @@ For the first usage, you might need to "Right-click > Open" the app to bypass Ma
 
 A Devora-provided status line is available to show the current context-window usage and session cost.
 
-To enable it, copy `cc-simple-statusline.sh` to your `~/.claude/` directory and add the following to your `~/.claude/settings.json`:
+To enable it, copy `cc-simple-statusline` to your `~/.claude/` directory and add the following to your `~/.claude/settings.json`:
 
 ```json
 	"statusLine": {
 		"type": "command",
-		"command": "~/.claude/cc-simple-statusline.sh",
+		"command": "~/.claude/cc-simple-statusline",
 		"padding": 0
 	},
 ```
-
-Please note that `jq` is required for the status line to work. You can install it using Homebrew:
 
 ## Introduction
 

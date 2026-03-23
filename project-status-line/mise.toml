@@ -1,0 +1,19 @@
+[settings]
+experimental = true
+
+[tools]
+go = "1.25"
+
+[prepare.go_deps]
+auto = true
+sources = ["go.mod", "go.sum", "**/*.go"]
+run = "go mod tidy"
+description = "Automatically sync Go module dependencies"
+
+[tasks.build]
+run = "go build -o cc-simple-statusline ."
+description = "Build the project"
+
+[tasks.test]
+run = "go test ./..."
+description = "Run all tests"

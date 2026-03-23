@@ -13,16 +13,13 @@ Devora builds upon the following tools:
 - Neovim, as a multi-purpose tool for:
 	- Code exploration and editing
 	- Terminal multiplexer: It can multiplex files, scratch buffers, and terminals in the same session over different Neovim tabs and Neovim windows (splits)
-- Debi (./project-debi/), a UI tool for [Devora workspace]() and [Devora session]() management
-- Bundler (./bundler/), a tool for bundling the IDE into a self-contained app bundle for distribution
+- Debi (`./project-debi/`), a UI tool for [Devora workspace]() and [Devora session]() management
+- Judge (`./project-judge/`), a Claude Code plugin for auto-approving/rejecting permission requests aiming to reduce permission fatigue and speed up the development process
+- CCC (`./ccc.sh`), a launcher script for Claude Code that customizes its behavior and integrates it with the rest of the IDE
+- CC Status Line (`./project-status-line/`), a simple status line script for Claude Code that shows the current context-window usage and session cost
+- Bundler (`./bundler/`), a tool for bundling the IDE into a self-contained app bundle for distribution
 
 ## Project layout
 
-```
-repo root/
-├─ bundler/
-│  └─ ...
-├─ [PLACE HOLDER]
-└─ project-debi/
-   └─ ...
-```
+Some of the tools are sub-projects in the repo, while others are off-the-shelf tools.
+Sub-projects are located in directories at the root of the repo with a "project-" prefix (e.g., `project-debi/`), while off-the-shelf tools are either vendored with the IDE or are mentioned in the requirements section of the user guide.
