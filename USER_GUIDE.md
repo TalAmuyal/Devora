@@ -35,3 +35,4 @@ TBD
 
 - `ctrl + s`: Open workspace manager in a new OS window tab
 - `ctrl + shift + s`: Open shell in a new OS window tab
+- `ctrl + 1 / 2 / 3`: Small, medium, large text size
