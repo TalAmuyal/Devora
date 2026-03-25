@@ -321,9 +321,9 @@ Steps (executed sequentially):
    process.GetOutput([]string{"git", "worktree", "add", "--detach", targetPath, "origin/" + branch}, process.WithCwd(repoPath))
    ```
    The target path's parent directory should be created if it doesn't exist (use `os.MkdirAll` on the parent before this step).
-5. **Trust mise**: Run `mise trust` in the worktree directory.
+5. **Trust mise**: If `mise` is found on the PATH (via `exec.LookPath`), run `mise trust` in the worktree directory. If `mise` is not installed, log a warning to stderr and to a log file at `/tmp/devora-debi-error-TIMESTAMP.log` (timestamp format `20060102_150405`), then continue without error.
    ```
-   process.GetOutput([]string{"mise", "trust"}, process.WithCwd(targetPath))
+   handleMiseTrust(targetPath)
    ```
 6. **Prepare**: If `config.GetPrepareCommand()` returns a non-nil value, run that command in the worktree directory.
    ```
@@ -331,7 +331,7 @@ Steps (executed sequentially):
    ```
    The prepare command comes from the config resolution chain as a string. Execute it as a shell command (via `process.GetShellOutput` or split into args as appropriate based on the process package API).
 
-Returns an error if any step fails, propagating the underlying error.
+Returns an error if any step fails, propagating the underlying error. The exception is step 5 (Trust mise): if `mise` is not installed, a warning is logged and execution continues.
 
 ### GetRepoBranch
 

@@ -1,8 +1,11 @@
 # User Guide
 
-## Requirements
+## Initial Setup
 
-- Install [Claude Code](https://code.claude.com/docs/en/quickstart#step-1-install-claude-code)
+1. Install [Claude Code](https://code.claude.com/docs/en/quickstart#step-1-install-claude-code)
+2. Install [Mise](https://mise.jdx.dev)
+3. Start Devora and create your first profile.
+4. Get busy :)
 
 ### MacOS
 
@@ -17,11 +20,11 @@ A Devora-provided status line is available to show the current context-window us
 To enable it, copy `cc-simple-statusline` to your `~/.claude/` directory and add the following to your `~/.claude/settings.json`:
 
 ```json
-	"statusLine": {
-		"type": "command",
-		"command": "~/.claude/cc-simple-statusline",
-		"padding": 0
-	},
+  "statusLine": {
+    "type": "command",
+    "command": "~/.claude/cc-simple-statusline",
+    "padding": 0
+  },
 ```
 
 ## Introduction
