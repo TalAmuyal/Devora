@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -22,7 +23,7 @@ const profileRegFieldCount = 3
 
 // ProfileRegModel is the form page for registering a new profile: path + name.
 type ProfileRegModel struct {
-	pathInput components.TextInputModel
+	pathInput components.PathPickerModel
 	nameInput components.TextInputModel
 	focused   profileRegField
 	hasBack   bool // false on first-run (no back, escape quits)
@@ -32,11 +33,14 @@ type ProfileRegModel struct {
 }
 
 func NewProfileRegModel(styles *Styles, hasBack bool) ProfileRegModel {
-	pathInput := components.NewTextInputModel(
+	pathInput := components.NewPathPickerModel(
 		lipgloss.NewStyle().Foreground(styles.AccentColor),
 		styles.Muted,
+		styles.Muted,
+		lipgloss.NewStyle().Bold(true).Foreground(styles.AccentColor),
+		6,
 	)
-	pathInput.Placeholder = "Enter profile root path..."
+	pathInput.SetPlaceholder("Enter profile root path...")
 
 	nameInput := components.NewTextInputModel(
 		lipgloss.NewStyle().Foreground(styles.AccentColor),
@@ -79,7 +83,6 @@ func (m *ProfileRegModel) Update(msg tea.Msg) tea.Cmd {
 			if m.focused == fieldProfileSubmit || m.focused == fieldProfileName {
 				return m.register()
 			}
-			return nil
 		}
 
 		// Delegate to focused component
@@ -95,11 +98,18 @@ func (m *ProfileRegModel) Update(msg tea.Msg) tea.Cmd {
 }
 
 func (m *ProfileRegModel) register() tea.Cmd {
-	path := strings.TrimSpace(m.pathInput.Value)
+	path := strings.TrimSpace(m.pathInput.Value())
 	name := strings.TrimSpace(m.nameInput.Value)
 
 	if path == "" {
 		m.errMsg = "Please enter a path"
+		return nil
+	}
+
+	path = config.ExpandTilde(path)
+
+	if info, err := os.Stat(path); err == nil && !info.IsDir() {
+		m.errMsg = "Path exists but is not a directory"
 		return nil
 	}
 
@@ -145,7 +155,9 @@ func (m *ProfileRegModel) View() string {
 	}
 	b.WriteString("\n")
 	b.WriteString("  " + bar + label + "\n")
-	b.WriteString("  " + bar + m.pathInput.View() + "\n")
+	for _, line := range strings.Split(m.pathInput.View(), "\n") {
+		b.WriteString("  " + bar + line + "\n")
+	}
 
 	b.WriteString("\n")
 
@@ -199,6 +211,7 @@ func (m ProfileRegModel) ActionBindings() []components.KeyBinding {
 	}
 	return []components.KeyBinding{
 		{Key: "tab", Desc: "Next Field"},
+		{Key: "ctrl+l", Desc: "Browse"},
 		{Key: "enter", Desc: "Register"},
 		{Key: "ctrl+c", Desc: backDesc},
 	}

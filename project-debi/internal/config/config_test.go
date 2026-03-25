@@ -1116,3 +1116,44 @@ func TestTerminalSessionCreationTimeoutSeconds_WrongType_ReturnsFallback(t *test
 		t.Fatalf("expected 3 for wrong type, got %d", result)
 	}
 }
+
+// --- ExpandTilde tests ---
+
+func TestExpandTilde_BareTilde(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatalf("could not get home dir: %v", err)
+	}
+
+	result := ExpandTilde("~")
+	if result != home {
+		t.Fatalf("expected %q, got %q", home, result)
+	}
+}
+
+func TestExpandTilde_TildeSlash(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatalf("could not get home dir: %v", err)
+	}
+
+	result := ExpandTilde("~/Documents")
+	expected := filepath.Join(home, "Documents")
+	if result != expected {
+		t.Fatalf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestExpandTilde_AbsolutePath(t *testing.T) {
+	result := ExpandTilde("/usr/local/bin")
+	if result != "/usr/local/bin" {
+		t.Fatalf("expected /usr/local/bin, got %q", result)
+	}
+}
+
+func TestExpandTilde_RelativePath(t *testing.T) {
+	result := ExpandTilde("some/path")
+	if result != "some/path" {
+		t.Fatalf("expected some/path, got %q", result)
+	}
+}

@@ -342,7 +342,7 @@ Single text input for the prepare command (shell command run after worktree crea
 func NewProfileRegModel(styles *Styles, hasBack bool) ProfileRegModel
 ```
 
-Two text inputs (path + name) and a submit button, with three tab stops. Behavior varies based on `hasBack`:
+Path picker (PathPickerModel with directory browser) + name text input + submit button, with three tab stops. Behavior varies based on `hasBack`:
 - First-run (`hasBack=false`): `ctrl+c` quits the app entirely
 - Normal (`hasBack=true`): `ctrl+c` returns to workspace list
 
@@ -350,7 +350,8 @@ Validates that path is provided, and name is required for uninitialized profiles
 
 **Key bindings:**
 - `tab`/`shift+tab` -- cycle fields
-- `enter` -- register (when on name or submit field)
+- `ctrl+l` -- toggle between typing and browsing directories (path field)
+- `enter` -- register (when on name or submit field); descend into directory (when on path field in browse mode)
 - `ctrl+c` -- back or quit (depends on `hasBack`)
 
 **Messages handled:** `tea.KeyPressMsg` only.
@@ -395,6 +396,14 @@ func NewTextInputModel(focusedStyle, blurredStyle lipgloss.Style) TextInputModel
 ```
 
 Single-line text input with cursor, focused/blurred styles, placeholder text, and basic editing (insert, delete, backspace, home/end, left/right).
+
+### PathPickerModel
+
+```go
+func NewPathPickerModel(focusedStyle, blurredStyle, mutedStyle, cursorStyle lipgloss.Style, browserHeight int) PathPickerModel
+```
+
+Directory path picker that bundles a `TextInputModel` with a directory browser. Two modes: Type Mode (text editing) and Browse Mode (directory navigation with vim keys). Shows only directories, supports tilde preservation, and passes through `tab`/`shift+tab`/`ctrl+c` to the parent form.
 
 ### VimNav
 
