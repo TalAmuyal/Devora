@@ -127,6 +127,24 @@ func TestProfileReg_TypingClearsError(t *testing.T) {
 	}
 }
 
+func TestProfileReg_ViewShowsExplanatoryLabel(t *testing.T) {
+	styles := NewStyles(ThemePalette{})
+	m := NewProfileRegModel(&styles, true)
+
+	view := m.View()
+
+	expectedPhrases := []string{
+		"config.json",
+		"repos/",
+		"workspaces/",
+	}
+	for _, phrase := range expectedPhrases {
+		if !strings.Contains(view, phrase) {
+			t.Errorf("expected View() to contain %q, but it did not.\nView output:\n%s", phrase, view)
+		}
+	}
+}
+
 func TestProfileReg_TabDoesNotClearError(t *testing.T) {
 	styles := NewStyles(ThemePalette{})
 	m := NewProfileRegModel(&styles, true)

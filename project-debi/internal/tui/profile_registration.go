@@ -23,6 +23,7 @@ const profileRegFieldCount = 3
 
 // ProfileRegModel is the form page for registering a new profile: path + name.
 type ProfileRegModel struct {
+	infoLabel components.MultiLineLabelModel
 	pathInput components.PathPickerModel
 	nameInput components.TextInputModel
 	focused   profileRegField
@@ -48,7 +49,17 @@ func NewProfileRegModel(styles *Styles, hasBack bool) ProfileRegModel {
 	)
 	nameInput.Placeholder = "Profile name (for new profiles)..."
 
+	infoLabel := components.NewMultiLineLabelModel(
+		"  The chosen directory will be used as the root for Devora.",
+		"  If not already present, the following structure will be created inside:",
+		"    config.json   — profile-specific configurations",
+		"    repos/        — A centralized place to clone your git repos here (and from which worktrees will be created)",
+		"    workspaces/   — Devora-managed worktrees here (each workspaces has one or more worktrees inside it)",
+		"",
+	)
+
 	m := ProfileRegModel{
+		infoLabel: infoLabel,
 		pathInput: pathInput,
 		nameInput: nameInput,
 		focused:   fieldProfilePath,
@@ -145,6 +156,11 @@ func (m *ProfileRegModel) updateFocus() {
 // View renders the profile registration form.
 func (m *ProfileRegModel) View() string {
 	var b strings.Builder
+
+	// Explanatory label
+	b.WriteString("\n")
+	b.WriteString(m.infoLabel.View())
+	b.WriteString("\n")
 
 	// Path field
 	bar := m.styles.Muted.Render("\u2502") + " "

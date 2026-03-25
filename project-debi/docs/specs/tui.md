@@ -342,7 +342,7 @@ Single text input for the prepare command (shell command run after worktree crea
 func NewProfileRegModel(styles *Styles, hasBack bool) ProfileRegModel
 ```
 
-Path picker (PathPickerModel with directory browser) + name text input + submit button, with three tab stops. Behavior varies based on `hasBack`:
+Path picker (PathPickerModel with directory browser) + name text input + submit button, with three tab stops. An explanatory label at the top describes what will be created in the chosen directory (`config.json`, `repos/`, `workspaces/`). Behavior varies based on `hasBack`:
 - First-run (`hasBack=false`): `ctrl+c` quits the app entirely
 - Normal (`hasBack=true`): `ctrl+c` returns to workspace list
 
