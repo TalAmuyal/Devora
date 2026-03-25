@@ -392,5 +392,15 @@
             }
         },
         "approved"
+    ],
+    [
+        {
+            "cwd": "/home/user/.local/devora/workspaces/ws-2/repo-11",
+            "tool_input": {
+                "command": "sed -n '500,1000p' /tmp/mise_lint_output.txt",
+                "description": "Read lines 500-1000 of lint output"
+            }
+        },
+        "approved"
     ]
 ]

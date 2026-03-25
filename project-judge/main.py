@@ -30,8 +30,8 @@ UNSUPPORTED_CASES_FILE = pathlib.Path.home() / ".claude" / "cc-judge-unsupported
 
 
 Command = list[str]
-BooleanDetector: typing.TypeAlias = typing.Callable[[Command], bool]
-DeclineDetector: typing.TypeAlias = typing.Callable[[Command], str | None]
+BooleanDetector: typing.TypeAlias = typing.Callable[[Command, str], bool]
+DeclineDetector: typing.TypeAlias = typing.Callable[[Command, str], str | None]
 
 
 ASK_USER = {
@@ -104,11 +104,55 @@ RISKY_FIND_FLAGS = {
 }
 
 
-def words_decliner(command: Command) -> str | None:
+def words_decliner(
+    command: Command,
+    cwd: str | None,
+) -> str | None:
     for words, msg in DECLINED_COMMANDS:
         if command[0:len(words)] == words:
             return msg
     return None
+
+
+def validate_sed(
+    command: Command,
+    cwd: str | None,
+) -> bool:
+    """
+    Tries to assert that a sed command is safe.
+
+    For example, the following is OK:
+    - ['sed', '-n', '500,1000p', '/tmp/mise_lint_output.txt']
+    """
+    command = command.copy()  # Don't mutate the original
+    if not pop_if_exists(command, "sed"):
+        return False
+
+    if "-i" in command:
+        return False  # Can't auto-allow in-place editing
+
+    command.remove("-n")
+
+    while command:
+        token = command.pop(0)
+        if token.endswith("p") and token[:-1].replace(",", "").isdigit():
+            pass  # E.g. "500,1000p"
+        elif token.startswith("/tmp/"):
+            pass  # /tmp is not a problem
+        elif token == cwd or token.startswith(cwd + "/"):
+            pass  # CWD is not a problem
+        else:
+            return False
+
+    return True
+
+
+def pop_if_exists(lst: list[str], value: str) -> bool:
+    if value in lst:
+        lst.remove(value)
+        return True
+    return False
+
 
 
 class Detectors:
@@ -116,13 +160,13 @@ class Detectors:
         words_decliner,
     ]
     KNOWN_TO_NOT_HANDLE: list[BooleanDetector] = [
-        lambda cmd: cmd[0] in ASK_USER,
-        lambda cmd: cmd[0].startswith("./"),
-        lambda cmd: cmd[0] == "find" and RISKY_FIND_FLAGS & set(cmd),
+        lambda cmd, _: cmd[0] in ASK_USER,
+        lambda cmd, _: cmd[0].startswith("./"),
+        lambda cmd, _: cmd[0] == "find" and RISKY_FIND_FLAGS & set(cmd),
     ]
     APPROVED: list[BooleanDetector] = [
-        lambda cmd: cmd[0] in ALLOWED_COMMANDS,
-        lambda cmd: any(
+        lambda cmd, _: cmd[0] in ALLOWED_COMMANDS,
+        lambda cmd, _: any(
             cmd[0:len(allowed)] == allowed
             for allowed in [
                 ["git", "diff"],
@@ -145,8 +189,9 @@ class Detectors:
                 ["jar", "tf"],
             ]
         ),
-        lambda cmd: cmd[0] == "find" and not (RISKY_FIND_FLAGS & set(cmd)),
-        lambda cmd: bool(frozenset(cmd[1:]) & DERISKING_FLAGS),
+        lambda cmd, _: cmd[0] == "find" and not (RISKY_FIND_FLAGS & set(cmd)),
+        lambda cmd, _: bool(frozenset(cmd[1:]) & DERISKING_FLAGS),
+        validate_sed,
     ]
 
 
@@ -155,6 +200,9 @@ IRRELEVANT_PREFIXES = {
     #
     # A harmless env-vars
     "MISE_VERBOSE=1",
+    "MISE_PREPARE=false",
+    'MISE_PREPARE="false"',
+    "MISE_PREPARE='false'",
     "PYTHONPATH=.",
 }
 
@@ -204,7 +252,7 @@ def main(args: dict, expected: str | None) -> None:
             cmd.pop(c_index)  # Remove the path as well
 
         for check in Detectors.KNOWN_TO_NOT_HANDLE:
-            if check(cmd):
+            if check(cmd, safe_cwd):
                 _debug_mismatch(expected, "deferred", f"known to not handle: {cmd}")
                 direct_to_user_and_exit()
 
@@ -219,11 +267,11 @@ def main(args: dict, expected: str | None) -> None:
             continue  # Allow "cd" into the session's current working directory
 
         for check in Detectors.DECLINED:
-            if msg := check(cmd):
+            if msg := check(cmd, safe_cwd):
                 _debug_mismatch(expected, "declined", f"declined command: {cmd[0]}")
                 deny_and_exit(msg)
 
-        if any(check(cmd) for check in Detectors.APPROVED):
+        if any(check(cmd, safe_cwd) for check in Detectors.APPROVED):
             continue  # Check the next command
         else:
             if expected is None:
