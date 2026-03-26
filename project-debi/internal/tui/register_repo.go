@@ -15,6 +15,7 @@ import (
 // RegisterRepoModel is the form page for registering a git repo by path.
 type RegisterRepoModel struct {
 	pathInput components.TextInputModel
+	navMode   bool
 	errMsg    string
 	styles    *Styles
 	width     int
@@ -40,16 +41,43 @@ func (m *RegisterRepoModel) Update(msg tea.Msg) tea.Cmd {
 	case tea.KeyPressMsg:
 		key := msg.String()
 
+		// Two-stage esc/q navigation
+		if key == "esc" || key == "q" {
+			return m.handleEscOrQ(key)
+		}
+
 		switch key {
-		case "ctrl+c":
-			return func() tea.Msg { return showWorkspaceListMsg{} }
 		case "enter":
 			return m.register()
+		}
+
+		// Any other key in nav mode: re-focus and exit nav mode
+		if m.navMode {
+			m.navMode = false
+			m.pathInput.Focus()
 		}
 
 		m.errMsg = ""
 		m.pathInput.HandleKey(key)
 	}
+	return nil
+}
+
+// handleEscOrQ implements two-stage esc navigation.
+func (m *RegisterRepoModel) handleEscOrQ(key string) tea.Cmd {
+	if m.navMode {
+		return func() tea.Msg { return showWorkspaceListMsg{} }
+	}
+
+	// Insert mode
+	if key == "esc" {
+		m.navMode = true
+		m.pathInput.Blur()
+		return nil
+	}
+	// q types the letter
+	m.errMsg = ""
+	m.pathInput.HandleKey(key)
 	return nil
 }
 
@@ -114,6 +142,7 @@ func (m *RegisterRepoModel) View() string {
 func (m *RegisterRepoModel) Reset() {
 	m.pathInput.SetValue("")
 	m.pathInput.Focus()
+	m.navMode = false
 	m.errMsg = ""
 }
 
@@ -124,10 +153,17 @@ func (m *RegisterRepoModel) SetSize(w, h int) {
 
 // ActionBindings returns the keybindings for the footer.
 func (m RegisterRepoModel) ActionBindings() []components.KeyBinding {
-	return []components.KeyBinding{
+	bindings := []components.KeyBinding{
 		{Key: "enter", Desc: "Register"},
-		{Key: "ctrl+c", Desc: "Back"},
 	}
+
+	if m.navMode {
+		bindings = append(bindings, components.KeyBinding{Key: "esc/q", Desc: "Back"})
+	} else {
+		bindings = append(bindings, components.KeyBinding{Key: "esc", Desc: "Unfocus"})
+	}
+
+	return bindings
 }
 
 // borderTitle returns the title displayed in the border.

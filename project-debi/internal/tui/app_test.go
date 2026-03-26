@@ -9,6 +9,10 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
+func ctrlC() tea.Msg {
+	return tea.KeyPressMsg(tea.Key{Code: 'c', Mod: tea.ModCtrl})
+}
+
 func ctrlD() tea.Msg {
 	return tea.KeyPressMsg(tea.Key{Code: 'd', Mod: tea.ModCtrl})
 }
@@ -29,100 +33,65 @@ func newTestAppModel() AppModel {
 	}
 }
 
-func TestCtrlD_OnWorkspaceList_Quits(t *testing.T) {
-	m := newTestAppModel()
-	m.activePage = PageWorkspaceList
-
-	updated, cmd := m.Update(ctrlD())
-	model := updated.(AppModel)
-
-	if model.activePage != PageWorkspaceList {
-		t.Fatalf("expected to stay on PageWorkspaceList, got page %d", model.activePage)
+func TestCtrlC_QuitsFromAnyPage(t *testing.T) {
+	pages := []struct {
+		name string
+		page Page
+	}{
+		{"WorkspaceList", PageWorkspaceList},
+		{"NewTask", PageNewTask},
+		{"Creation", PageCreation},
+		{"DeleteConfirm", PageDeleteConfirm},
+		{"RegisterRepo", PageRegisterRepo},
+		{"Settings", PageSettings},
+		{"ProfileRegistration", PageProfileRegistration},
 	}
 
-	if cmd == nil {
-		t.Fatal("expected a quit command, got nil")
-	}
+	for _, tc := range pages {
+		t.Run(tc.name, func(t *testing.T) {
+			m := newTestAppModel()
+			m.activePage = tc.page
 
-	msg := cmd()
-	if _, ok := msg.(tea.QuitMsg); !ok {
-		t.Fatalf("expected tea.QuitMsg, got %T", msg)
-	}
-}
+			_, cmd := m.Update(ctrlC())
 
-func TestCtrlD_OnNewTask_GoesBack(t *testing.T) {
-	m := newTestAppModel()
-	m.activePage = PageNewTask
+			if cmd == nil {
+				t.Fatal("expected a quit command, got nil")
+			}
 
-	updated, cmd := m.Update(ctrlD())
-	model := updated.(AppModel)
-
-	if model.activePage != PageWorkspaceList {
-		t.Fatalf("expected PageWorkspaceList, got page %d", model.activePage)
-	}
-
-	if cmd != nil {
-		t.Fatalf("expected nil command, got %T", cmd)
+			msg := cmd()
+			if _, ok := msg.(tea.QuitMsg); !ok {
+				t.Fatalf("expected tea.QuitMsg, got %T", msg)
+			}
+		})
 	}
 }
 
-func TestCtrlD_OnCreation_GoesBack(t *testing.T) {
-	m := newTestAppModel()
-	m.activePage = PageCreation
-
-	updated, _ := m.Update(ctrlD())
-	model := updated.(AppModel)
-
-	if model.activePage != PageWorkspaceList {
-		t.Fatalf("expected PageWorkspaceList, got page %d", model.activePage)
+func TestCtrlD_IsNoOp(t *testing.T) {
+	pages := []struct {
+		name string
+		page Page
+	}{
+		{"WorkspaceList", PageWorkspaceList},
+		{"NewTask", PageNewTask},
+		{"Creation", PageCreation},
 	}
-}
 
-func TestCtrlD_OnDeleteConfirm_GoesBack(t *testing.T) {
-	m := newTestAppModel()
-	m.activePage = PageDeleteConfirm
+	for _, tc := range pages {
+		t.Run(tc.name, func(t *testing.T) {
+			m := newTestAppModel()
+			m.activePage = tc.page
 
-	updated, _ := m.Update(ctrlD())
-	model := updated.(AppModel)
+			updated, cmd := m.Update(ctrlD())
+			model := updated.(AppModel)
 
-	if model.activePage != PageWorkspaceList {
-		t.Fatalf("expected PageWorkspaceList, got page %d", model.activePage)
-	}
-}
+			if model.activePage != tc.page {
+				t.Fatalf("expected to stay on page %d, got page %d", tc.page, model.activePage)
+			}
 
-func TestCtrlD_OnRegisterRepo_GoesBack(t *testing.T) {
-	m := newTestAppModel()
-	m.activePage = PageRegisterRepo
-
-	updated, _ := m.Update(ctrlD())
-	model := updated.(AppModel)
-
-	if model.activePage != PageWorkspaceList {
-		t.Fatalf("expected PageWorkspaceList, got page %d", model.activePage)
-	}
-}
-
-func TestCtrlD_OnSettings_GoesBack(t *testing.T) {
-	m := newTestAppModel()
-	m.activePage = PageSettings
-
-	updated, _ := m.Update(ctrlD())
-	model := updated.(AppModel)
-
-	if model.activePage != PageWorkspaceList {
-		t.Fatalf("expected PageWorkspaceList, got page %d", model.activePage)
-	}
-}
-
-func TestCtrlD_OnProfileRegistration_GoesBack(t *testing.T) {
-	m := newTestAppModel()
-	m.activePage = PageProfileRegistration
-
-	updated, _ := m.Update(ctrlD())
-	model := updated.(AppModel)
-
-	if model.activePage != PageWorkspaceList {
-		t.Fatalf("expected PageWorkspaceList, got page %d", model.activePage)
+			if cmd != nil {
+				t.Fatalf("expected nil command for ctrl+d no-op, got non-nil")
+			}
+		})
 	}
 }
 

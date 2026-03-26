@@ -251,7 +251,7 @@ Creates a path picker with the given styles. `browserHeight` controls how many d
 - `HandleKey(key string) bool` -- Mode-aware key dispatch (only when focused):
   - **Type Mode**: delegates text editing to inner `TextInputModel`. `ctrl+l` or `down` switches to Browse Mode. Typing refreshes the directory listing
   - **Browse Mode**: vim navigation (`j`/`k`/`gg`/`G`), `enter`/`l`/`right` descends into directory, `h`/`left` goes to parent, `ctrl+l` switches back to Type Mode. `up`/`k` from the top of the list switches to Type Mode. Typing a printable character switches to Type Mode and inserts it
-  - **Pass-through keys** (never consumed): `tab`, `shift+tab`, `ctrl+c`. `enter` is not consumed in Type Mode
+  - **Pass-through keys** (never consumed): `tab`, `shift+tab`, `ctrl+c`, `escape`, `q`. `enter` is not consumed in Type Mode
 - `Mode() PathPickerMode` -- Returns current mode
 - `SetPlaceholder(placeholder string)` -- Sets text input placeholder
 - `View() string` -- Renders text input. When focused, also shows a dashed separator and directory listing below. Browse Mode shows a `▸` cursor on the selected entry. When blurred, only the text input is shown

@@ -93,7 +93,7 @@ func (m *WorkspaceListModel) Update(msg tea.Msg) tea.Cmd {
 			return cycleProfileCmd()
 		case "s":
 			return func() tea.Msg { return showSettingsMsg{} }
-		case "q", "escape":
+		case "q", "esc":
 			return tea.Quit
 		default:
 			m.list.HandleKey(key)

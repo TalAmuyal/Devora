@@ -27,6 +27,7 @@ type ProfileRegModel struct {
 	pathInput components.PathPickerModel
 	nameInput components.TextInputModel
 	focused   profileRegField
+	navMode   bool
 	hasBack   bool // false on first-run (no back, escape quits)
 	errMsg    string
 	styles    *Styles
@@ -76,19 +77,25 @@ func (m *ProfileRegModel) Update(msg tea.Msg) tea.Cmd {
 	case tea.KeyPressMsg:
 		key := msg.String()
 
+		// Two-stage esc/q navigation
+		if key == "esc" || key == "q" {
+			return m.handleEscOrQ(key)
+		}
+
 		switch key {
-		case "ctrl+c":
-			if m.hasBack {
-				return func() tea.Msg { return showWorkspaceListMsg{} }
-			}
-			return tea.Quit
 		case "tab":
 			m.focused = (m.focused + 1) % profileRegFieldCount
 			m.updateFocus()
+			if m.focused == fieldProfilePath || m.focused == fieldProfileName {
+				m.navMode = false
+			}
 			return nil
 		case "shift+tab":
 			m.focused = (m.focused - 1 + profileRegFieldCount) % profileRegFieldCount
 			m.updateFocus()
+			if m.focused == fieldProfilePath || m.focused == fieldProfileName {
+				m.navMode = false
+			}
 			return nil
 		case "enter":
 			if m.focused == fieldProfileSubmit || m.focused == fieldProfileName {
@@ -106,6 +113,52 @@ func (m *ProfileRegModel) Update(msg tea.Msg) tea.Cmd {
 		}
 	}
 	return nil
+}
+
+// isTextInputFocused returns true when the focused field is a text input in insert mode.
+func (m *ProfileRegModel) isTextInputFocused() bool {
+	if m.focused == fieldProfileName {
+		return true
+	}
+	return m.focused == fieldProfilePath && m.pathInput.Mode() == components.PathPickerTypeMode
+}
+
+// handleEscOrQ implements two-stage esc navigation.
+func (m *ProfileRegModel) handleEscOrQ(key string) tea.Cmd {
+	// Nav mode: both esc and q trigger back/quit
+	if m.navMode {
+		return m.backOrQuit()
+	}
+
+	if m.isTextInputFocused() {
+		if key == "esc" {
+			m.navMode = true
+			m.updateFocus()
+			m.pathInput.Blur()
+			m.nameInput.Blur()
+			return nil
+		}
+		// q types the letter
+		m.errMsg = ""
+		switch m.focused {
+		case fieldProfilePath:
+			m.pathInput.HandleKey(key)
+		case fieldProfileName:
+			m.nameInput.HandleKey(key)
+		}
+		return nil
+	}
+
+	// Non-text field (submit, or path in browse mode): go back directly
+	return m.backOrQuit()
+}
+
+// backOrQuit returns the appropriate back or quit command.
+func (m *ProfileRegModel) backOrQuit() tea.Cmd {
+	if m.hasBack {
+		return func() tea.Msg { return showWorkspaceListMsg{} }
+	}
+	return tea.Quit
 }
 
 func (m *ProfileRegModel) register() tea.Cmd {
@@ -210,6 +263,7 @@ func (m *ProfileRegModel) Reset() {
 	m.pathInput.SetValue("")
 	m.nameInput.SetValue("")
 	m.focused = fieldProfilePath
+	m.navMode = false
 	m.errMsg = ""
 	m.updateFocus()
 }
@@ -225,12 +279,20 @@ func (m ProfileRegModel) ActionBindings() []components.KeyBinding {
 	if !m.hasBack {
 		backDesc = "Quit"
 	}
-	return []components.KeyBinding{
+
+	bindings := []components.KeyBinding{
 		{Key: "tab", Desc: "Next Field"},
 		{Key: "ctrl+l", Desc: "Browse"},
 		{Key: "enter", Desc: "Register"},
-		{Key: "ctrl+c", Desc: backDesc},
 	}
+
+	if m.navMode || !m.isTextInputFocused() {
+		bindings = append(bindings, components.KeyBinding{Key: "esc/q", Desc: backDesc})
+	} else {
+		bindings = append(bindings, components.KeyBinding{Key: "esc", Desc: "Unfocus"})
+	}
+
+	return bindings
 }
 
 // borderTitle returns the title displayed in the border.

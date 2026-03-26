@@ -8,6 +8,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"devora/internal/config"
+	"devora/internal/tui/components"
 )
 
 func TestRegister_SetsActiveProfile(t *testing.T) {
@@ -154,5 +155,317 @@ func TestProfileReg_TabDoesNotClearError(t *testing.T) {
 
 	if m.errMsg != "some error" {
 		t.Fatalf("expected errMsg to persist after tab, got %q", m.errMsg)
+	}
+}
+
+// Two-stage esc navigation tests
+
+func TestProfileReg_EscOnNameFieldUnfocuses(t *testing.T) {
+	styles := NewStyles(ThemePalette{})
+	m := NewProfileRegModel(&styles, true)
+	m.focused = fieldProfileName
+	m.updateFocus()
+
+	cmd := m.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEscape}))
+
+	if !m.navMode {
+		t.Fatal("expected navMode to be true after esc on name field")
+	}
+	if cmd != nil {
+		t.Fatal("expected nil cmd (unfocus only, not back)")
+	}
+}
+
+func TestProfileReg_EscOnPathFieldInTypeModeUnfocuses(t *testing.T) {
+	styles := NewStyles(ThemePalette{})
+	m := NewProfileRegModel(&styles, true)
+	m.focused = fieldProfilePath
+	m.updateFocus()
+	// PathPicker starts in type mode (insert mode)
+
+	cmd := m.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEscape}))
+
+	if !m.navMode {
+		t.Fatal("expected navMode to be true after esc on path field in type mode")
+	}
+	if cmd != nil {
+		t.Fatal("expected nil cmd (unfocus only, not back)")
+	}
+}
+
+func TestProfileReg_EscOnPathFieldInBrowseModeGoesBack(t *testing.T) {
+	styles := NewStyles(ThemePalette{})
+	m := NewProfileRegModel(&styles, true)
+	m.focused = fieldProfilePath
+	m.updateFocus()
+
+	// Switch PathPicker to browse mode by sending ctrl+l
+	m.pathInput.SetValue("/tmp/")
+	m.pathInput.HandleKey("ctrl+l")
+	if m.pathInput.Mode() != components.PathPickerBrowseMode {
+		t.Fatal("expected pathInput to be in browse mode after ctrl+l")
+	}
+
+	cmd := m.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEscape}))
+
+	if cmd == nil {
+		t.Fatal("expected a command for back, got nil")
+	}
+	msg := cmd()
+	if _, ok := msg.(showWorkspaceListMsg); !ok {
+		t.Fatalf("expected showWorkspaceListMsg, got %T", msg)
+	}
+}
+
+func TestProfileReg_QOnNameFieldTypesLetter(t *testing.T) {
+	styles := NewStyles(ThemePalette{})
+	m := NewProfileRegModel(&styles, true)
+	m.focused = fieldProfileName
+	m.updateFocus()
+
+	m.Update(tea.KeyPressMsg(tea.Key{Code: 'q'}))
+
+	if m.nameInput.Value != "q" {
+		t.Fatalf("expected nameInput to contain 'q', got %q", m.nameInput.Value)
+	}
+	if m.navMode {
+		t.Fatal("expected navMode to remain false after typing q on name field")
+	}
+}
+
+func TestProfileReg_EscOnSubmitGoesBack(t *testing.T) {
+	styles := NewStyles(ThemePalette{})
+	m := NewProfileRegModel(&styles, true)
+	m.focused = fieldProfileSubmit
+	m.navMode = false
+	m.updateFocus()
+
+	cmd := m.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEscape}))
+
+	if cmd == nil {
+		t.Fatal("expected a command for back, got nil")
+	}
+	msg := cmd()
+	if _, ok := msg.(showWorkspaceListMsg); !ok {
+		t.Fatalf("expected showWorkspaceListMsg, got %T", msg)
+	}
+}
+
+func TestProfileReg_QOnSubmitGoesBack(t *testing.T) {
+	styles := NewStyles(ThemePalette{})
+	m := NewProfileRegModel(&styles, true)
+	m.focused = fieldProfileSubmit
+	m.navMode = false
+	m.updateFocus()
+
+	cmd := m.Update(tea.KeyPressMsg(tea.Key{Code: 'q'}))
+
+	if cmd == nil {
+		t.Fatal("expected a command for back, got nil")
+	}
+	msg := cmd()
+	if _, ok := msg.(showWorkspaceListMsg); !ok {
+		t.Fatalf("expected showWorkspaceListMsg, got %T", msg)
+	}
+}
+
+func TestProfileReg_EscInNavModeGoesBack(t *testing.T) {
+	styles := NewStyles(ThemePalette{})
+	m := NewProfileRegModel(&styles, true)
+	m.navMode = true
+
+	cmd := m.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEscape}))
+
+	if cmd == nil {
+		t.Fatal("expected a command for back, got nil")
+	}
+	msg := cmd()
+	if _, ok := msg.(showWorkspaceListMsg); !ok {
+		t.Fatalf("expected showWorkspaceListMsg, got %T", msg)
+	}
+}
+
+func TestProfileReg_QInNavModeGoesBack(t *testing.T) {
+	styles := NewStyles(ThemePalette{})
+	m := NewProfileRegModel(&styles, true)
+	m.navMode = true
+
+	cmd := m.Update(tea.KeyPressMsg(tea.Key{Code: 'q'}))
+
+	if cmd == nil {
+		t.Fatal("expected a command for back, got nil")
+	}
+	msg := cmd()
+	if _, ok := msg.(showWorkspaceListMsg); !ok {
+		t.Fatalf("expected showWorkspaceListMsg, got %T", msg)
+	}
+}
+
+func TestProfileReg_EscInNavModeQuitsWhenNoBack(t *testing.T) {
+	styles := NewStyles(ThemePalette{})
+	m := NewProfileRegModel(&styles, false) // hasBack = false (first-run)
+	m.navMode = true
+
+	cmd := m.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEscape}))
+
+	if cmd == nil {
+		t.Fatal("expected a quit command, got nil")
+	}
+	msg := cmd()
+	if _, ok := msg.(tea.QuitMsg); !ok {
+		t.Fatalf("expected tea.QuitMsg for first-run esc, got %T", msg)
+	}
+}
+
+func TestProfileReg_QInNavModeQuitsWhenNoBack(t *testing.T) {
+	styles := NewStyles(ThemePalette{})
+	m := NewProfileRegModel(&styles, false) // hasBack = false (first-run)
+	m.navMode = true
+
+	cmd := m.Update(tea.KeyPressMsg(tea.Key{Code: 'q'}))
+
+	if cmd == nil {
+		t.Fatal("expected a quit command, got nil")
+	}
+	msg := cmd()
+	if _, ok := msg.(tea.QuitMsg); !ok {
+		t.Fatalf("expected tea.QuitMsg for first-run q, got %T", msg)
+	}
+}
+
+func TestProfileReg_TabToNameFieldExitsNavMode(t *testing.T) {
+	styles := NewStyles(ThemePalette{})
+	m := NewProfileRegModel(&styles, true)
+	m.focused = fieldProfilePath
+	m.navMode = true
+
+	// Tab from path -> name should exit nav mode
+	m.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyTab}))
+
+	if m.focused != fieldProfileName {
+		t.Fatalf("expected focus on fieldProfileName, got %d", m.focused)
+	}
+	if m.navMode {
+		t.Fatal("expected navMode to be false after tab to text field")
+	}
+}
+
+func TestProfileReg_TabToPathFieldExitsNavMode(t *testing.T) {
+	styles := NewStyles(ThemePalette{})
+	m := NewProfileRegModel(&styles, true)
+	m.focused = fieldProfileSubmit
+	m.navMode = true
+
+	// Tab from submit -> path (wraps around) should exit nav mode
+	m.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyTab}))
+
+	if m.focused != fieldProfilePath {
+		t.Fatalf("expected focus on fieldProfilePath, got %d", m.focused)
+	}
+	if m.navMode {
+		t.Fatal("expected navMode to be false after tab to path field")
+	}
+}
+
+func TestProfileReg_TabToSubmitKeepsNavMode(t *testing.T) {
+	styles := NewStyles(ThemePalette{})
+	m := NewProfileRegModel(&styles, true)
+	m.focused = fieldProfileName
+	m.navMode = true
+
+	// Tab from name -> submit should keep navMode true
+	m.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyTab}))
+
+	if m.focused != fieldProfileSubmit {
+		t.Fatalf("expected focus on fieldProfileSubmit, got %d", m.focused)
+	}
+	if !m.navMode {
+		t.Fatal("expected navMode to remain true after tab to submit field")
+	}
+}
+
+func TestProfileReg_ResetClearsNavMode(t *testing.T) {
+	styles := NewStyles(ThemePalette{})
+	m := NewProfileRegModel(&styles, true)
+	m.navMode = true
+
+	m.Reset()
+
+	if m.navMode {
+		t.Fatal("expected navMode to be false after Reset()")
+	}
+}
+
+func TestProfileReg_CtrlCNotHandledAtPageLevel(t *testing.T) {
+	styles := NewStyles(ThemePalette{})
+	m := NewProfileRegModel(&styles, true)
+
+	cmd := m.Update(tea.KeyPressMsg(tea.Key{Code: 'c', Mod: tea.ModCtrl}))
+
+	if cmd != nil {
+		t.Fatal("expected nil cmd for ctrl+c at page level (AppModel handles it)")
+	}
+}
+
+func TestProfileReg_ActionBindings_InsertModeOnNameField(t *testing.T) {
+	styles := NewStyles(ThemePalette{})
+	m := NewProfileRegModel(&styles, true)
+	m.focused = fieldProfileName
+	m.navMode = false
+
+	bindings := m.ActionBindings()
+
+	if !hasBinding(bindings, "esc", "Unfocus") {
+		t.Fatal("expected 'esc Unfocus' binding in insert mode on name field")
+	}
+}
+
+func TestProfileReg_ActionBindings_NavModeWithBack(t *testing.T) {
+	styles := NewStyles(ThemePalette{})
+	m := NewProfileRegModel(&styles, true)
+	m.navMode = true
+
+	bindings := m.ActionBindings()
+
+	if !hasBinding(bindings, "esc/q", "Back") {
+		t.Fatal("expected 'esc/q Back' binding in nav mode with back")
+	}
+}
+
+func TestProfileReg_ActionBindings_NavModeWithQuit(t *testing.T) {
+	styles := NewStyles(ThemePalette{})
+	m := NewProfileRegModel(&styles, false) // hasBack = false (first-run)
+	m.navMode = true
+
+	bindings := m.ActionBindings()
+
+	if !hasBinding(bindings, "esc/q", "Quit") {
+		t.Fatal("expected 'esc/q Quit' binding in nav mode without back (first-run)")
+	}
+}
+
+func TestProfileReg_ActionBindings_NonTextFieldInsertMode(t *testing.T) {
+	styles := NewStyles(ThemePalette{})
+	m := NewProfileRegModel(&styles, true)
+	m.focused = fieldProfileSubmit
+	m.navMode = false
+
+	bindings := m.ActionBindings()
+
+	if !hasBinding(bindings, "esc/q", "Back") {
+		t.Fatal("expected 'esc/q Back' binding on non-text field")
+	}
+}
+
+func TestProfileReg_ActionBindings_NoCtrlC(t *testing.T) {
+	styles := NewStyles(ThemePalette{})
+	m := NewProfileRegModel(&styles, true)
+
+	bindings := m.ActionBindings()
+
+	for _, b := range bindings {
+		if b.Key == "ctrl+c" {
+			t.Fatal("expected no ctrl+c binding in footer")
+		}
 	}
 }

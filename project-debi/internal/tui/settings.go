@@ -13,6 +13,7 @@ import (
 // SettingsModel is the settings form page with a single field: prepare command.
 type SettingsModel struct {
 	prepareCmd  components.TextInputModel
+	navMode     bool
 	styles      *Styles
 	profileName string
 	width       int
@@ -42,6 +43,7 @@ func (m *SettingsModel) Activate(profileName string) {
 		m.prepareCmd.SetValue("")
 	}
 	m.prepareCmd.Focus()
+	m.navMode = false
 }
 
 // Update handles key events for the settings page.
@@ -50,15 +52,41 @@ func (m *SettingsModel) Update(msg tea.Msg) tea.Cmd {
 	case tea.KeyPressMsg:
 		key := msg.String()
 
+		// Two-stage esc/q navigation
+		if key == "esc" || key == "q" {
+			return m.handleEscOrQ(key)
+		}
+
 		switch key {
-		case "ctrl+c":
-			return func() tea.Msg { return showWorkspaceListMsg{} }
 		case "enter":
 			return m.save()
 		}
 
+		// Any other key in nav mode: re-focus and exit nav mode
+		if m.navMode {
+			m.navMode = false
+			m.prepareCmd.Focus()
+		}
+
 		m.prepareCmd.HandleKey(key)
 	}
+	return nil
+}
+
+// handleEscOrQ implements two-stage esc navigation.
+func (m *SettingsModel) handleEscOrQ(key string) tea.Cmd {
+	if m.navMode {
+		return func() tea.Msg { return showWorkspaceListMsg{} }
+	}
+
+	// Insert mode
+	if key == "esc" {
+		m.navMode = true
+		m.prepareCmd.Blur()
+		return nil
+	}
+	// q types the letter
+	m.prepareCmd.HandleKey(key)
 	return nil
 }
 
@@ -101,10 +129,17 @@ func (m *SettingsModel) SetSize(w, h int) {
 
 // ActionBindings returns the keybindings for the footer.
 func (m SettingsModel) ActionBindings() []components.KeyBinding {
-	return []components.KeyBinding{
+	bindings := []components.KeyBinding{
 		{Key: "enter", Desc: "Save"},
-		{Key: "ctrl+c", Desc: "Back"},
 	}
+
+	if m.navMode {
+		bindings = append(bindings, components.KeyBinding{Key: "esc/q", Desc: "Back"})
+	} else {
+		bindings = append(bindings, components.KeyBinding{Key: "esc", Desc: "Unfocus"})
+	}
+
+	return bindings
 }
 
 // borderTitle returns the title displayed in the border.

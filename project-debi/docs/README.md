@@ -24,6 +24,7 @@ Specifications for the domain packages. These define the intended behavior of ea
 | [specs/task.md](specs/task.md) | `internal/task` | Task JSON read/write |
 | [specs/crash.md](specs/crash.md) | `internal/crash` | Crash logging |
 | [specs/tui.md](specs/tui.md) | `internal/tui` | TUI pages, state machine, components |
+| [specs/tui-navigation.md](specs/tui-navigation.md) | `internal/tui` | Navigation key bindings: back, quit, exit behavior across all pages |
 | [specs/tui-operations.md](specs/tui-operations.md) | `internal/tui` | Business logic: workspace gathering, creation, deletion rules, add-repo |
 | [specs/tui-theme.md](specs/tui-theme.md) | `internal/tui` | Theme loading, palette, color mapping, styles |
 | [specs/tui-components.md](specs/tui-components.md) | `internal/tui/components` | Reusable UI widgets: list, checkbox, text input, vim navigation, footer |

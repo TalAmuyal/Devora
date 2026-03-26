@@ -51,7 +51,7 @@ func (m *DeleteConfirmModel) Update(msg tea.Msg) tea.Cmd {
 				}
 				return deleteCompleteMsg{}
 			}
-		case "n", "escape":
+		case "n", "esc", "q":
 			return func() tea.Msg { return showWorkspaceListMsg{} }
 		}
 	}

@@ -119,7 +119,7 @@ func (m *PathPickerModel) handleBrowseKey(key string) bool {
 		m.textInput.Focus()
 		return true
 
-	case "tab", "shift+tab", "ctrl+c":
+	case "tab", "shift+tab", "ctrl+c", "esc", "q":
 		return false
 
 	case "enter", "l", "right":

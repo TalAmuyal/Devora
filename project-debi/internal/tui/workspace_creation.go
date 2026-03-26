@@ -53,7 +53,7 @@ func (m *CreationModel) Update(msg tea.Msg) tea.Cmd {
 		key := msg.String()
 		if m.errMsg != "" {
 			switch key {
-			case "q", "escape":
+			case "q", "esc":
 				return func() tea.Msg { return showWorkspaceListMsg{} }
 			}
 		}

@@ -37,6 +37,7 @@ type AddRepoModel struct {
 	repoList      components.ListModel
 	postfixInput  components.TextInputModel
 	focused       addRepoField
+	navMode       bool
 
 	// Creation progress
 	showProgress bool
@@ -101,21 +102,38 @@ func (m AddRepoModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyPressMsg:
 		key := msg.String()
 
-		// Global
-		if key == "ctrl+d" {
+		// Global: ctrl+c always quits
+		if key == "ctrl+c" {
 			return m, tea.Quit
 		}
 
-		if m.showProgress {
-			if key == "q" || key == "escape" {
+		// Error state (showProgress with errMsg): esc/q quit
+		if m.showProgress && m.errMsg != "" {
+			if key == "q" || key == "esc" {
 				return m, tea.Quit
 			}
 			return m, nil
 		}
 
-		// Quit bindings
-		if key == "q" || key == "escape" || key == "ctrl+c" {
-			return m, tea.Quit
+		// In-progress (no error): all keys are no-op
+		if m.showProgress {
+			return m, nil
+		}
+
+		// Form state: quit bindings with two-stage esc
+		if key == "esc" || key == "q" {
+			if m.focused == fieldAddRepoPostfix && !m.navMode {
+				if key == "esc" {
+					// First esc: unfocus text input, enter nav mode
+					m.postfixInput.Blur()
+					m.navMode = true
+					return m, nil
+				}
+				// q in insert mode: pass through to text input
+			} else {
+				// Non-text field, or nav mode: quit
+				return m, tea.Quit
+			}
 		}
 
 		// Focus cycling
@@ -125,6 +143,7 @@ func (m AddRepoModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.repoList.Reset()
 				m.postfixInput.Focus()
 				m.focused = fieldAddRepoPostfix
+				m.navMode = false
 			case fieldAddRepoPostfix:
 				m.postfixInput.Blur()
 				m.focused = fieldAddRepoSubmit
@@ -143,6 +162,7 @@ func (m AddRepoModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case fieldAddRepoSubmit:
 				m.postfixInput.Focus()
 				m.focused = fieldAddRepoPostfix
+				m.navMode = false
 			}
 			return m, nil
 		}
@@ -152,6 +172,7 @@ func (m AddRepoModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.repoList.Reset()
 			m.postfixInput.Focus()
 			m.focused = fieldAddRepoPostfix
+			m.navMode = false
 			return m, nil
 		}
 
@@ -247,13 +268,21 @@ func (m AddRepoModel) View() tea.View {
 	}
 
 	var bindings []components.KeyBinding
-	if m.showProgress {
-		bindings = []components.KeyBinding{{Key: "q", Desc: "Quit"}}
+	if m.showProgress && m.errMsg != "" {
+		bindings = []components.KeyBinding{{Key: "esc/q", Desc: "Quit"}}
+	} else if m.showProgress {
+		// In-progress: no key hints
+	} else if m.focused == fieldAddRepoPostfix && !m.navMode {
+		bindings = []components.KeyBinding{
+			{Key: "tab", Desc: "Next Field"},
+			{Key: "enter", Desc: "Submit"},
+			{Key: "esc", Desc: "Unfocus"},
+		}
 	} else {
 		bindings = []components.KeyBinding{
 			{Key: "tab", Desc: "Next Field"},
 			{Key: "enter", Desc: "Submit"},
-			{Key: "q", Desc: "Quit"},
+			{Key: "esc/q", Desc: "Quit"},
 		}
 	}
 

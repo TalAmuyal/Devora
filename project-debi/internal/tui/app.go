@@ -270,13 +270,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Key handling - delegate to active page
 	case tea.KeyPressMsg:
-		// Global binding: ctrl+d quits on workspace list, goes back on other pages
-		if msg.String() == "ctrl+d" {
-			if m.activePage == PageWorkspaceList {
-				return m, tea.Quit
-			}
-			m.activePage = PageWorkspaceList
-			return m, nil
+		// Global binding: ctrl+c always quits the entire app
+		if msg.String() == "ctrl+c" {
+			return m, tea.Quit
 		}
 
 		var cmd tea.Cmd

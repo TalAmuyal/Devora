@@ -24,6 +24,7 @@ type NewTaskModel struct {
 	repoList components.CheckboxListModel
 	taskName components.TextInputModel
 	focused  newTaskField
+	navMode  bool
 	errMsg   string
 	styles   *Styles
 	width    int
@@ -66,16 +67,25 @@ func (m *NewTaskModel) Update(msg tea.Msg) tea.Cmd {
 	case tea.KeyPressMsg:
 		key := msg.String()
 
+		// Two-stage esc/q navigation
+		if key == "esc" || key == "q" {
+			return m.handleEscOrQ(key)
+		}
+
 		switch key {
-		case "ctrl+c":
-			return func() tea.Msg { return showWorkspaceListMsg{} }
 		case "tab":
 			m.focused = (m.focused + 1) % newTaskFieldCount
 			m.updateFocus()
+			if m.focused == fieldTaskName {
+				m.navMode = false
+			}
 			return nil
 		case "shift+tab":
 			m.focused = (m.focused - 1 + newTaskFieldCount) % newTaskFieldCount
 			m.updateFocus()
+			if m.focused == fieldTaskName {
+				m.navMode = false
+			}
 			return nil
 		case "enter":
 			if m.focused == fieldSubmit || m.focused == fieldTaskName {
@@ -94,6 +104,32 @@ func (m *NewTaskModel) Update(msg tea.Msg) tea.Cmd {
 		}
 	}
 	return nil
+}
+
+// handleEscOrQ implements two-stage esc navigation.
+// On text field in insert mode: esc unfocuses, q types the letter.
+// On non-text field or in nav mode: both trigger BACK.
+func (m *NewTaskModel) handleEscOrQ(key string) tea.Cmd {
+	// Nav mode: both esc and q go back
+	if m.navMode {
+		return func() tea.Msg { return showWorkspaceListMsg{} }
+	}
+
+	// Insert mode on text field
+	if m.focused == fieldTaskName {
+		if key == "esc" {
+			m.navMode = true
+			m.taskName.Blur()
+			return nil
+		}
+		// q types the letter
+		m.errMsg = ""
+		m.taskName.HandleKey(key)
+		return nil
+	}
+
+	// Non-text field: go back directly
+	return func() tea.Msg { return showWorkspaceListMsg{} }
 }
 
 func (m *NewTaskModel) submit() tea.Cmd {
@@ -182,6 +218,7 @@ func (m *NewTaskModel) Reset() {
 	m.repoList.Reset()
 	m.taskName.SetValue("")
 	m.focused = fieldRepos
+	m.navMode = false
 	m.errMsg = ""
 	m.updateFocus()
 }
@@ -193,12 +230,19 @@ func (m *NewTaskModel) SetSize(w, h int) {
 
 // ActionBindings returns the keybindings for the footer.
 func (m NewTaskModel) ActionBindings() []components.KeyBinding {
-	return []components.KeyBinding{
+	bindings := []components.KeyBinding{
 		{Key: "tab", Desc: "Next Field"},
 		{Key: "space", Desc: "Toggle"},
 		{Key: "enter", Desc: "Submit"},
-		{Key: "ctrl+c", Desc: "Back"},
 	}
+
+	if m.navMode || m.focused != fieldTaskName {
+		bindings = append(bindings, components.KeyBinding{Key: "esc/q", Desc: "Back"})
+	} else {
+		bindings = append(bindings, components.KeyBinding{Key: "esc", Desc: "Unfocus"})
+	}
+
+	return bindings
 }
 
 // borderTitle returns the title displayed in the border.

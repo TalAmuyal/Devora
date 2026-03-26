@@ -409,6 +409,30 @@ func TestBrowseMode_CtrlCNotConsumed(t *testing.T) {
 	}
 }
 
+func TestBrowseMode_EscNotConsumed(t *testing.T) {
+	m := newTestPathPicker(t)
+	dir := setupTestDir(t, "sub")
+	m.SetValue(dir + "/")
+	m.HandleKey("ctrl+l")
+
+	consumed := m.HandleKey("esc")
+	if consumed {
+		t.Fatal("expected esc to pass through to parent in browse mode")
+	}
+}
+
+func TestBrowseMode_QNotConsumed(t *testing.T) {
+	m := newTestPathPicker(t)
+	dir := setupTestDir(t, "sub")
+	m.SetValue(dir + "/")
+	m.HandleKey("ctrl+l")
+
+	consumed := m.HandleKey("q")
+	if consumed {
+		t.Fatal("expected q to pass through to parent in browse mode")
+	}
+}
+
 func TestBrowseMode_UpFromTopSwitchesToTypeMode(t *testing.T) {
 	m := newTestPathPicker(t)
 	dir := setupTestDir(t, "sub")

@@ -104,24 +104,19 @@ PageWorkspaceList <--- showWorkspaceListMsg --- (all sub-pages)
 
 PageNewTask --- NewTaskResult ---> PageCreation --- creationDoneMsg ---> tea.Quit (with result)
                                                 --- creationErrorMsg --> (stays, shows error)
-                                                --- q/escape (error) --> PageWorkspaceList
+                                                --- back (error) -------> PageWorkspaceList
 
 PageDeleteConfirm --- deleteCompleteMsg ---> PageWorkspaceList (+ refresh)
                   --- deleteErrorMsg ------> (stays, shows error)
 ```
 
-### Global Keys (AppModel)
+### Navigation Keys
 
-These bindings apply to pages within `AppModel` only. The standalone `AddRepoModel` has its own key bindings (see [Standalone Models](#addrepomodel)).
-
-| Key | Page | Behavior |
-|-----|------|----------|
-| `ctrl+d` | `PageWorkspaceList` | Quit the app |
-| `ctrl+d` | Any other page | Cancel and return to workspace list |
+For the complete key binding spec covering `ctrl+c`, `esc`, `q`, and `ctrl+d` behavior across all pages and modes (insert vs navigation), see [tui-navigation.md](tui-navigation.md).
 
 ### Hub Model
 
-`PageWorkspaceList` is the hub. All sub-pages return to it via `showWorkspaceListMsg`. Form pages use `ctrl+c` as the back key (except first-run profile registration, where `ctrl+c` quits the app); the creation error state uses `q`/`escape`; the delete confirmation uses `n`/`escape`.
+`PageWorkspaceList` is the hub. All sub-pages return to it via `showWorkspaceListMsg`.
 
 ## AppModel
 
@@ -165,7 +160,7 @@ type AppModel struct {
 3. Data/result messages -- handles workspace loading, creation progress, deletion, profile activation
 4. `spinnerTickMsg` -- advances creation spinner frame (only while on creation page with no error)
 5. `notifyMsg` / `notifyClearMsg` -- ephemeral 4-second notification system
-6. `tea.KeyPressMsg` -- checks global bindings (`ctrl+d`), then delegates to the active page's `Update` method
+6. `tea.KeyPressMsg` -- checks global bindings (see [tui-navigation.md](tui-navigation.md)), then delegates to the active page's `Update` method
 
 ### View layout
 
@@ -247,7 +242,8 @@ Displays workspaces as styled cards with a diamond selection indicator. Each car
 - `enter` -- select workspace (exits TUI with result)
 - `n` -- new task, `d` -- deactivate, `D` -- delete, `r` -- refresh
 - `R` -- register repo, `P` -- add profile, `p` -- cycle profile
-- `s` -- settings, `q`/`escape` -- quit
+- `s` -- settings
+- Navigation keys: see [tui-navigation.md](tui-navigation.md)
 
 **Messages handled:** `tea.KeyPressMsg` (delegates navigation to embedded `ListModel`).
 
@@ -265,7 +261,7 @@ Multi-field form with three tab stops: repo selection (checkbox list), task name
 - `tab`/`shift+tab` -- cycle fields
 - `space` -- toggle repo checkbox (when repos focused)
 - `enter` -- submit (when on task name or submit field)
-- `ctrl+c` -- back to workspace list
+- Navigation keys: see [tui-navigation.md](tui-navigation.md)
 
 **Messages handled:** `tea.KeyPressMsg` only.
 
@@ -282,7 +278,7 @@ Read-only progress display. Shows status text and per-repo progress (preparing/r
 The spinner is driven by `spinnerTickMsg`, handled by `AppModel.Update`: it advances the `spinnerFrame` index and schedules the next tick. The tick stops when creation completes or errors.
 
 **Key bindings (error state only):**
-- `q`/`escape` -- back to workspace list
+- Navigation keys: see [tui-navigation.md](tui-navigation.md)
 
 **Messages handled:** `tea.KeyPressMsg` only. Creation progress messages (`creationStatusMsg`, `repoAddedMsg`, `repoReadyMsg`, `creationDoneMsg`, `creationErrorMsg`) and `spinnerTickMsg` are handled by `AppModel.Update`, which updates `CreationModel` fields directly.
 
@@ -298,7 +294,8 @@ Centered dialog showing workspace name, path, and a warning about the destructiv
 
 **Key bindings:**
 - `y` -- confirm deletion
-- `n`/`escape` -- cancel, back to workspace list
+- `n` -- cancel, back to workspace list
+- Navigation keys: see [tui-navigation.md](tui-navigation.md)
 
 **Messages handled:** `tea.KeyPressMsg` only. `deleteErrorMsg` is handled by `AppModel.Update`, which updates `DeleteConfirmModel.errMsg` directly.
 
@@ -314,7 +311,7 @@ Single text input for entering a git repo path. The path is tilde-expanded (via 
 
 **Key bindings:**
 - `enter` -- register the repo
-- `ctrl+c` -- back to workspace list
+- Navigation keys: see [tui-navigation.md](tui-navigation.md)
 
 **Messages handled:** `tea.KeyPressMsg` only.
 
@@ -330,11 +327,11 @@ Single text input for the prepare command (shell command run after worktree crea
 
 **Key bindings:**
 - `enter` -- save settings
-- `ctrl+c` -- back to workspace list
+- Navigation keys: see [tui-navigation.md](tui-navigation.md)
 
 **Messages handled:** `tea.KeyPressMsg` only.
 
-**Transitions:** On successful save, emits `notifyMsg` (success) + `showWorkspaceListMsg` (auto-navigates back). On save error, emits `notifyMsg` (error) and stays on page. Emits `showWorkspaceListMsg` on cancel (`ctrl+c`).
+**Transitions:** On successful save, emits `notifyMsg` (success) + `showWorkspaceListMsg` (auto-navigates back). On save error, emits `notifyMsg` (error) and stays on page. Emits `showWorkspaceListMsg` on cancel.
 
 ### ProfileRegModel
 
@@ -343,8 +340,8 @@ func NewProfileRegModel(styles *Styles, hasBack bool) ProfileRegModel
 ```
 
 Path picker (PathPickerModel with directory browser) + name text input + submit button, with three tab stops. An explanatory label at the top describes what will be created in the chosen directory (`config.json`, `repos/`, `workspaces/`). Behavior varies based on `hasBack`:
-- First-run (`hasBack=false`): `ctrl+c` quits the app entirely
-- Normal (`hasBack=true`): `ctrl+c` returns to workspace list
+- First-run (`hasBack=false`): cancel quits the app entirely
+- Normal (`hasBack=true`): cancel returns to workspace list
 
 Validates that path is provided, and name is required for uninitialized profiles. On success, activates the profile.
 
@@ -352,7 +349,7 @@ Validates that path is provided, and name is required for uninitialized profiles
 - `tab`/`shift+tab` -- cycle fields
 - `ctrl+l` -- toggle between typing and browsing directories (path field)
 - `enter` -- register (when on name or submit field); descend into directory (when on path field in browse mode)
-- `ctrl+c` -- back or quit (depends on `hasBack`)
+- Navigation keys: see [tui-navigation.md](tui-navigation.md)
 
 **Messages handled:** `tea.KeyPressMsg` only.
 
@@ -367,9 +364,7 @@ Validates that path is provided, and name is required for uninitialized profiles
 **Key bindings:**
 - `tab`/`shift+tab` -- cycle fields (repo list, postfix input, submit button)
 - `enter` -- select repo (from list) or submit (from postfix/submit)
-- `q`/`escape`/`ctrl+c` -- quit
-- `ctrl+d` -- quit (global)
-- `q`/`escape` (progress/error state) -- quit
+- Navigation keys: see [tui-navigation.md](tui-navigation.md)
 
 ## Components (`internal/tui/components`)
 
