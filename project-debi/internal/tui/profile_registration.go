@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -172,9 +173,18 @@ func (m *ProfileRegModel) register() tea.Cmd {
 
 	path = config.ExpandTilde(path)
 
-	if info, err := os.Stat(path); err == nil && !info.IsDir() {
-		m.errMsg = "Path exists but is not a directory"
-		return nil
+	if info, err := os.Stat(path); err == nil {
+		if !info.IsDir() {
+			m.errMsg = "Path exists but is not a directory"
+			return nil
+		}
+	} else {
+		parentDir := filepath.Dir(path)
+		parentInfo, parentErr := os.Stat(parentDir)
+		if parentErr != nil || !parentInfo.IsDir() {
+			m.errMsg = "Parent directory does not exist"
+			return nil
+		}
 	}
 
 	if !config.IsInitializedProfile(path) && name == "" {

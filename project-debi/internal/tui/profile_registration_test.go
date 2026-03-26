@@ -115,6 +115,49 @@ func TestRegister_PathIsFileShowsError(t *testing.T) {
 	}
 }
 
+func TestRegister_RejectsPathWhenParentDirDoesNotExist(t *testing.T) {
+	tmpDir := t.TempDir()
+	config.SetConfigPathForTesting(filepath.Join(tmpDir, "config.json"))
+	t.Cleanup(func() {
+		config.ResetForTesting()
+	})
+
+	// Path where neither the target nor its parent exist
+	deepPath := filepath.Join(tmpDir, "nonexistent-parent", "new-profile")
+
+	m := &ProfileRegModel{}
+	m.pathInput.SetValue(deepPath)
+	m.nameInput.SetValue("test")
+
+	cmd := m.register()
+	if cmd != nil {
+		t.Fatal("expected nil cmd when parent directory does not exist")
+	}
+	if m.errMsg != "Parent directory does not exist" {
+		t.Fatalf("expected 'Parent directory does not exist', got %q", m.errMsg)
+	}
+}
+
+func TestRegister_CreatesDirectoryWhenParentExists(t *testing.T) {
+	tmpDir := t.TempDir()
+	config.SetConfigPathForTesting(filepath.Join(tmpDir, "config.json"))
+	t.Cleanup(func() {
+		config.ResetForTesting()
+	})
+
+	// Parent exists, target does not
+	profileDir := filepath.Join(tmpDir, "new-profile")
+
+	m := &ProfileRegModel{}
+	m.pathInput.SetValue(profileDir)
+	m.nameInput.SetValue("test")
+
+	cmd := m.register()
+	if cmd == nil {
+		t.Fatalf("expected non-nil cmd, got nil. errMsg: %s", m.errMsg)
+	}
+}
+
 func TestProfileReg_TypingClearsError(t *testing.T) {
 	styles := NewStyles(ThemePalette{})
 	m := NewProfileRegModel(&styles, true)
