@@ -500,6 +500,24 @@ func TestProfileReg_ActionBindings_NonTextFieldInsertMode(t *testing.T) {
 	}
 }
 
+func TestProfileReg_DefaultPathWhenNoProfiles(t *testing.T) {
+	styles := NewStyles(ThemePalette{})
+	m := NewProfileRegModel(&styles, false) // hasBack=false means first-run, no profiles
+
+	if m.pathInput.Value() != "~/devora" {
+		t.Fatalf("expected default path '~/devora' when no profiles exist, got %q", m.pathInput.Value())
+	}
+}
+
+func TestProfileReg_NoDefaultPathWhenProfilesExist(t *testing.T) {
+	styles := NewStyles(ThemePalette{})
+	m := NewProfileRegModel(&styles, true) // hasBack=true means profiles exist
+
+	if m.pathInput.Value() != "" {
+		t.Fatalf("expected empty path when profiles exist, got %q", m.pathInput.Value())
+	}
+}
+
 func TestProfileReg_ActionBindings_NoCtrlC(t *testing.T) {
 	styles := NewStyles(ThemePalette{})
 	m := NewProfileRegModel(&styles, true)

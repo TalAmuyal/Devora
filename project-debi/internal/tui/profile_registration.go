@@ -60,6 +60,10 @@ func NewProfileRegModel(styles *Styles, hasBack bool) ProfileRegModel {
 		"",
 	)
 
+	if !hasBack {
+		pathInput.SetValue("~/devora")
+	}
+
 	m := ProfileRegModel{
 		infoLabel: infoLabel,
 		pathInput: pathInput,
