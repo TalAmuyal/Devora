@@ -27,12 +27,13 @@ type ProfileRegModel struct {
 	infoLabel components.MultiLineLabelModel
 	pathInput components.PathPickerModel
 	nameInput components.TextInputModel
-	focused   profileRegField
-	navMode   bool
-	hasBack   bool // false on first-run (no back, escape quits)
-	errMsg    string
-	styles    *Styles
-	width     int
+	focused          profileRegField
+	navMode          bool
+	hasBack          bool // false on first-run (no back, escape quits)
+	returnToSettings bool
+	errMsg           string
+	styles           *Styles
+	width            int
 }
 
 func NewProfileRegModel(styles *Styles, hasBack bool) ProfileRegModel {
@@ -160,6 +161,9 @@ func (m *ProfileRegModel) handleEscOrQ(key string) tea.Cmd {
 
 // backOrQuit returns the appropriate back or quit command.
 func (m *ProfileRegModel) backOrQuit() tea.Cmd {
+	if m.returnToSettings {
+		return func() tea.Msg { return showSettingsMsg{} }
+	}
 	if m.hasBack {
 		return func() tea.Msg { return showWorkspaceListMsg{} }
 	}

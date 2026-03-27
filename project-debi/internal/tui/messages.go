@@ -6,7 +6,9 @@ type refreshWorkspacesMsg struct{}
 type showNewTaskMsg struct{}
 type showSettingsMsg struct{}
 type showRegisterRepoMsg struct{}
-type showProfileRegistrationMsg struct{}
+type showProfileRegistrationMsg struct {
+	fromSettings bool
+}
 
 // Workspace data types
 

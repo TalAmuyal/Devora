@@ -88,7 +88,7 @@ Page = PageWorkspaceList | PageNewTask | PageCreation | PageDeleteConfirm
 ### Transitions
 
 ```
-PageProfileRegistration  (first-run: entry point; normal: via P key)
+PageProfileRegistration  (first-run: entry point; normal: via settings page)
         |
         | profileActivatedMsg
         v
@@ -99,8 +99,10 @@ PageWorkspaceList <--- showWorkspaceListMsg --- (all sub-pages)
    |    +--- showNewTaskMsg --------------------> PageNewTask
    +--- requestDeleteMsg -----------------------> PageDeleteConfirm
    +--- deactivateCompleteMsg ------------------> (refresh + notification)
-   +--- showProfileRegistrationMsg <-----------> PageProfileRegistration
    +--- WorkspaceInfo (selected) ---------------> tea.Quit (with result)
+
+PageSettings --- showProfileRegistrationMsg ---> PageProfileRegistration
+             <--- showSettingsMsg -------------- (when returnToSettings is true)
 
 PageNewTask --- NewTaskResult ---> PageCreation --- creationDoneMsg ---> tea.Quit (with result)
                                                 --- creationErrorMsg --> (stays, shows error)
@@ -186,7 +188,7 @@ type AppModel struct {
 - `showNewTaskMsg` -- navigate to new task form
 - `showSettingsMsg` -- navigate to settings page
 - `showRegisterRepoMsg` -- navigate to register repo page
-- `showProfileRegistrationMsg` -- navigate to profile registration page
+- `showProfileRegistrationMsg{fromSettings}` -- navigate to profile registration page. `fromSettings` controls whether back/cancel returns to the settings page instead of the workspace list
 
 ### Data types
 
@@ -241,13 +243,13 @@ Displays workspaces as styled cards with a diamond selection indicator. Each car
 - `j`/`k`/`gg`/`G`/arrows -- vim navigation
 - `enter` -- select workspace (exits TUI with result)
 - `n` -- new task, `d` -- deactivate, `D` -- delete, `r` -- refresh
-- `R` -- register repo, `P` -- add profile, `p` -- cycle profile
+- `R` -- register repo, `p` -- cycle profile
 - `s` -- settings
 - Navigation keys: see [tui-navigation.md](tui-navigation.md)
 
 **Messages handled:** `tea.KeyPressMsg` (delegates navigation to embedded `ListModel`).
 
-**Transitions:** Emits `showNewTaskMsg`, `showSettingsMsg`, `showRegisterRepoMsg`, `showProfileRegistrationMsg`, `refreshWorkspacesMsg`, `requestDeleteMsg`, `deactivateCompleteMsg`/`deactivateErrorMsg`, `WorkspaceInfo` (selection), or `tea.Quit`.
+**Transitions:** Emits `showNewTaskMsg`, `showSettingsMsg`, `showRegisterRepoMsg`, `refreshWorkspacesMsg`, `requestDeleteMsg`, `deactivateCompleteMsg`/`deactivateErrorMsg`, `WorkspaceInfo` (selection), or `tea.Quit`.
 
 ### NewTaskModel
 
@@ -323,15 +325,35 @@ Single text input for entering a git repo path. The path is tilde-expanded (via 
 func NewSettingsModel(styles *Styles) SettingsModel
 ```
 
-Single text input for the prepare command (shell command run after worktree creation). Loads current value on activation. Title includes profile name when available.
+Multi-item settings page with three focusable fields navigated via `j`/`k` in navigation mode:
 
-**Key bindings:**
+1. **Prepare Command** (`fieldPrepareCmd`): Inline-editable text input for the shell command run after worktree creation. Press `enter` to start editing (enters editing mode); `enter` saves, `esc` cancels and restores the previous value.
+2. **Add Profile** (`fieldAddProfile`): Press `enter` to navigate to the profile registration page (emits `showProfileRegistrationMsg{fromSettings: true}`).
+3. **Delete Profile** (`fieldDeleteProfile`): Press `enter` to show an inline y/n confirmation prompt. `y` unregisters the active profile; if no profiles remain, quits the app. If other profiles remain, activates the first one and emits `profileActivatedMsg`. `n` or `esc` cancels.
+
+Loads the current prepare-command value on activation. Title includes profile name when available.
+
+The page has three modes:
+- **Navigation mode**: `j`/`k` moves focus between fields, `enter` activates the focused field, `esc`/`q` goes back.
+- **Editing mode** (prepare command): Text input is focused. `enter` saves, `esc` cancels and reverts.
+- **Confirm-delete mode**: Shows y/n prompt. `y` confirms, `n`/`esc` cancels.
+
+**Key bindings (navigation mode):**
+- `j`/`k`/arrows -- move focus between fields
+- `enter` -- activate focused field
+- `esc`/`q` -- back to workspace list
+
+**Key bindings (editing mode):**
 - `enter` -- save settings
-- Navigation keys: see [tui-navigation.md](tui-navigation.md)
+- `esc` -- cancel editing, revert value
+
+**Key bindings (confirm-delete mode):**
+- `y` -- confirm deletion
+- `n`/`esc` -- cancel
 
 **Messages handled:** `tea.KeyPressMsg` only.
 
-**Transitions:** On successful save, emits `notifyMsg` (success) + `showWorkspaceListMsg` (auto-navigates back). On save error, emits `notifyMsg` (error) and stays on page. Emits `showWorkspaceListMsg` on cancel.
+**Transitions:** On save success, emits `notifyMsg` (success) and stays on page. On save error, emits `notifyMsg` (error) and stays on page. On delete, emits `profileActivatedMsg` (if profiles remain) or `tea.Quit` (if last profile). Emits `showProfileRegistrationMsg{fromSettings: true}` for Add Profile. Emits `showWorkspaceListMsg` on back.
 
 ### ProfileRegModel
 
@@ -339,11 +361,12 @@ Single text input for the prepare command (shell command run after worktree crea
 func NewProfileRegModel(styles *Styles, hasBack bool) ProfileRegModel
 ```
 
-Path picker (PathPickerModel with directory browser) + name text input + submit button, with three tab stops. An explanatory label at the top describes what will be created in the chosen directory (`config.json`, `repos/`, `workspaces/`). Behavior varies based on `hasBack`:
+Path picker (PathPickerModel with directory browser) + name text input + submit button, with three tab stops. An explanatory label at the top describes what will be created in the chosen directory (`config.json`, `repos/`, `workspaces/`). Has a `returnToSettings` field set by `AppModel` when navigating from the settings page. Behavior varies based on `hasBack` and `returnToSettings`:
 - First-run (`hasBack=false`): cancel quits the app entirely
-- Normal (`hasBack=true`): cancel returns to workspace list
+- Normal (`hasBack=true`, `returnToSettings=false`): cancel returns to workspace list
+- From settings (`hasBack=true`, `returnToSettings=true`): cancel returns to settings page
 
-Validates that path is provided, and name is required for uninitialized profiles. On success, activates the profile.
+Validates that path is provided, and name is required for uninitialized profiles. On success, activates the profile (emits `profileActivatedMsg`, which always navigates to workspace list regardless of origin).
 
 **Key bindings:**
 - `tab`/`shift+tab` -- cycle fields
@@ -353,7 +376,7 @@ Validates that path is provided, and name is required for uninitialized profiles
 
 **Messages handled:** `tea.KeyPressMsg` only.
 
-**Transitions:** Emits `profileActivatedMsg` on success, `showWorkspaceListMsg` on cancel (when `hasBack` is true).
+**Transitions:** Emits `profileActivatedMsg` on success. On cancel: emits `showSettingsMsg` (when `returnToSettings` is true), `showWorkspaceListMsg` (when `hasBack` is true), or `tea.Quit` (first-run).
 
 ## Standalone Models
 

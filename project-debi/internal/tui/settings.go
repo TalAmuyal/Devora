@@ -10,13 +10,24 @@ import (
 	"devora/internal/tui/components"
 )
 
-// SettingsModel is the settings form page with a single field: prepare command.
+type settingsField int
+
+const (
+	fieldPrepareCmd    settingsField = iota
+	fieldAddProfile
+	fieldDeleteProfile
+)
+
+const settingsFieldCount = 3
+
 type SettingsModel struct {
-	prepareCmd  components.TextInputModel
-	navMode     bool
-	styles      *Styles
-	profileName string
-	width       int
+	prepareCmd    components.TextInputModel
+	focused       settingsField
+	editing       bool
+	confirmDelete bool
+	styles        *Styles
+	profileName   string
+	width         int
 }
 
 func NewSettingsModel(styles *Styles) SettingsModel {
@@ -25,7 +36,6 @@ func NewSettingsModel(styles *Styles) SettingsModel {
 		styles.Muted,
 	)
 	prepareCmd.Placeholder = "Shell command to run after worktree creation..."
-	prepareCmd.Focus()
 
 	return SettingsModel{
 		prepareCmd: prepareCmd,
@@ -33,60 +43,91 @@ func NewSettingsModel(styles *Styles) SettingsModel {
 	}
 }
 
-// Activate loads the current prepare-command value and sets the profile name for the title.
 func (m *SettingsModel) Activate(profileName string) {
 	m.profileName = profileName
+	m.loadPrepareCommandValue()
+	m.focused = fieldPrepareCmd
+	m.editing = false
+	m.confirmDelete = false
+	m.prepareCmd.Blur()
+}
+
+// loadPrepareCommandValue reads the current prepare-command from config and sets the input value.
+func (m *SettingsModel) loadPrepareCommandValue() {
 	current := config.GetPrepareCommand()
 	if current != nil {
 		m.prepareCmd.SetValue(*current)
 	} else {
 		m.prepareCmd.SetValue("")
 	}
-	m.prepareCmd.Focus()
-	m.navMode = false
 }
 
-// Update handles key events for the settings page.
 func (m *SettingsModel) Update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
 		key := msg.String()
 
-		// Two-stage esc/q navigation
-		if key == "esc" || key == "q" {
-			return m.handleEscOrQ(key)
+		if m.confirmDelete {
+			return m.handleConfirmDeleteKey(key)
 		}
 
-		switch key {
-		case "enter":
-			return m.save()
+		if m.editing {
+			return m.handleEditingKey(key)
 		}
 
-		// Any other key in nav mode: re-focus and exit nav mode
-		if m.navMode {
-			m.navMode = false
-			m.prepareCmd.Focus()
-		}
-
-		m.prepareCmd.HandleKey(key)
+		return m.handleNavKey(key)
 	}
 	return nil
 }
 
-// handleEscOrQ implements two-stage esc navigation.
-func (m *SettingsModel) handleEscOrQ(key string) tea.Cmd {
-	if m.navMode {
-		return func() tea.Msg { return showWorkspaceListMsg{} }
+func (m *SettingsModel) handleConfirmDeleteKey(key string) tea.Cmd {
+	switch key {
+	case "y":
+		return m.deleteProfile()
+	case "n", "esc":
+		m.confirmDelete = false
 	}
+	return nil
+}
 
-	// Insert mode
-	if key == "esc" {
-		m.navMode = true
+func (m *SettingsModel) handleEditingKey(key string) tea.Cmd {
+	switch key {
+	case "esc":
+		m.editing = false
 		m.prepareCmd.Blur()
+		m.loadPrepareCommandValue()
+		return nil
+	case "enter":
+		return m.save()
+	default:
+		m.prepareCmd.HandleKey(key)
 		return nil
 	}
-	// q types the letter
-	m.prepareCmd.HandleKey(key)
+}
+
+func (m *SettingsModel) handleNavKey(key string) tea.Cmd {
+	switch key {
+	case "j", "down":
+		m.focused = (m.focused + 1) % settingsFieldCount
+		return nil
+	case "k", "up":
+		m.focused = (m.focused - 1 + settingsFieldCount) % settingsFieldCount
+		return nil
+	case "enter":
+		switch m.focused {
+		case fieldPrepareCmd:
+			m.editing = true
+			m.prepareCmd.Focus()
+			return nil
+		case fieldAddProfile:
+			return func() tea.Msg { return showProfileRegistrationMsg{fromSettings: true} }
+		case fieldDeleteProfile:
+			m.confirmDelete = true
+			return nil
+		}
+	case "esc", "q":
+		return func() tea.Msg { return showWorkspaceListMsg{} }
+	}
 	return nil
 }
 
@@ -102,47 +143,118 @@ func (m *SettingsModel) save() tea.Cmd {
 			return notifyMsg{text: fmt.Sprintf("Error saving settings: %v", err), isError: true}
 		}
 	}
-	return tea.Batch(
-		func() tea.Msg { return notifyMsg{text: "Settings saved", isError: false} },
-		func() tea.Msg { return showWorkspaceListMsg{} },
-	)
+	m.editing = false
+	m.prepareCmd.Blur()
+	return func() tea.Msg { return notifyMsg{text: "Settings saved", isError: false} }
 }
 
-// View renders the settings form.
+func (m *SettingsModel) deleteProfile() tea.Cmd {
+	active := config.GetActiveProfile()
+	if active == nil {
+		return nil
+	}
+	err := config.UnregisterProfile(active.RootPath)
+	if err != nil {
+		return func() tea.Msg {
+			return notifyMsg{text: "Failed to delete profile: " + err.Error(), isError: true}
+		}
+	}
+	m.confirmDelete = false
+	remaining := config.GetProfiles()
+	if len(remaining) == 0 {
+		return tea.Quit
+	}
+	config.SetActiveProfile(&remaining[0])
+	return func() tea.Msg { return profileActivatedMsg{} }
+}
+
+// renderFieldBar returns the vertical bar and styled label for a settings field.
+func (m *SettingsModel) renderFieldBar(field settingsField, text string) (bar string, label string) {
+	if m.focused == field {
+		bar = lipgloss.NewStyle().Bold(true).Foreground(m.styles.AccentColor).Render("\u2503") + " "
+		label = m.styles.FieldLabelFocused.Render(text)
+	} else {
+		bar = m.styles.Muted.Render("\u2502") + " "
+		label = m.styles.FieldLabelBlurred.Render(text)
+	}
+	return bar, label
+}
+
 func (m *SettingsModel) View() string {
 	var b strings.Builder
 
-	bar := lipgloss.NewStyle().Bold(true).Foreground(m.styles.AccentColor).Render("\u2503") + " "
-	label := m.styles.FieldLabelFocused.Render("Prepare Command")
+	// Configuration section
+	b.WriteString("\n")
+	b.WriteString("  " + m.styles.Title.Render("Configuration") + "\n")
+
+	// Prepare Command
+	bar, label := m.renderFieldBar(fieldPrepareCmd, "Prepare Command")
+	b.WriteString("  " + bar + label + "\n")
+	if m.editing {
+		b.WriteString("  " + bar + m.prepareCmd.View() + "\n")
+	} else {
+		value := m.prepareCmd.Value
+		if value == "" {
+			b.WriteString("  " + bar + m.styles.Muted.Render(m.prepareCmd.Placeholder) + "\n")
+		} else {
+			b.WriteString("  " + bar + value + "\n")
+		}
+	}
 
 	b.WriteString("\n")
+
+	// Profiles section
+	b.WriteString("  " + m.styles.Title.Render("Profiles") + "\n")
+
+	// Add Profile
+	bar, label = m.renderFieldBar(fieldAddProfile, "+ Add Profile")
 	b.WriteString("  " + bar + label + "\n")
-	b.WriteString("  " + bar + m.prepareCmd.View() + "\n")
+
+	// Delete Profile
+	if m.confirmDelete && m.focused == fieldDeleteProfile {
+		bar, _ = m.renderFieldBar(fieldDeleteProfile, "")
+		profiles := config.GetProfiles()
+		if len(profiles) <= 1 {
+			b.WriteString("  " + bar + m.styles.FieldLabelFocused.Render(
+				fmt.Sprintf("Delete profile %q? This is the last profile; Devora will exit. (y/n)", m.profileName),
+			) + "\n")
+		} else {
+			b.WriteString("  " + bar + m.styles.FieldLabelFocused.Render(
+				fmt.Sprintf("Delete profile %q? This only removes it from Devora. (y/n)", m.profileName),
+			) + "\n")
+		}
+	} else {
+		bar, label = m.renderFieldBar(fieldDeleteProfile, fmt.Sprintf("\u2715 Delete %q", m.profileName))
+		b.WriteString("  " + bar + label + "\n")
+	}
 
 	return b.String()
 }
 
-// SetSize updates the width and height available.
 func (m *SettingsModel) SetSize(w, h int) {
 	m.width = w
 }
 
-// ActionBindings returns the keybindings for the footer.
 func (m SettingsModel) ActionBindings() []components.KeyBinding {
-	bindings := []components.KeyBinding{
-		{Key: "enter", Desc: "Save"},
+	if m.confirmDelete {
+		return []components.KeyBinding{
+			{Key: "y", Desc: "Confirm"},
+			{Key: "n/esc", Desc: "Cancel"},
+		}
 	}
-
-	if m.navMode {
-		bindings = append(bindings, components.KeyBinding{Key: "esc/q", Desc: "Back"})
-	} else {
-		bindings = append(bindings, components.KeyBinding{Key: "esc", Desc: "Unfocus"})
+	if m.editing {
+		return []components.KeyBinding{
+			{Key: "enter", Desc: "Save"},
+			{Key: "esc", Desc: "Cancel"},
+		}
 	}
-
-	return bindings
+	return []components.KeyBinding{
+		{Key: "enter", Desc: "Select"},
+		{Key: "j/k", Desc: "Navigate"},
+		{Key: "esc/q", Desc: "Back"},
+	}
 }
 
-// borderTitle returns the title displayed in the border.
 func (m SettingsModel) borderTitle() string {
 	if m.profileName != "" {
 		return fmt.Sprintf("Settings . %s", m.profileName)

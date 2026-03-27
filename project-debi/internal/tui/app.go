@@ -152,6 +152,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case showProfileRegistrationMsg:
 		m.profileReg.Reset()
 		m.profileReg.hasBack = true
+		m.profileReg.returnToSettings = msg.fromSettings
 		m.activePage = PageProfileRegistration
 		return m, nil
 

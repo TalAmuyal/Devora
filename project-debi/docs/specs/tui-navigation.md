@@ -105,15 +105,44 @@ No text inputs. Always in navigation mode.
 | `esc` | BACK (cancel delete) |
 | `q` | BACK (cancel delete) |
 
-### RegisterRepo / Settings
+### RegisterRepo
 
-Single text input page. Starts in insert mode. Applies to RegisterRepo (`pathInput`) and Settings (`prepareCmd`).
+Single text input page. Starts in insert mode.
 
 | Key | Insert mode | Navigation mode |
 |---|---|---|
 | `ctrl+c` | QUIT | QUIT |
 | `esc` | UNFOCUS | BACK |
 | `q` | INPUT | BACK |
+
+### Settings
+
+Three focusable fields navigated via `j`/`k`. Three modes: navigation, editing (prepare command text input), and confirm-delete (y/n prompt). Starts in navigation mode.
+
+**Navigation mode** (no text input focused):
+
+| Key | Behavior |
+|---|---|
+| `ctrl+c` | QUIT |
+| `esc` | BACK |
+| `q` | BACK |
+
+**Editing mode** (prepare command text input focused):
+
+| Key | Behavior |
+|---|---|
+| `ctrl+c` | QUIT |
+| `esc` | Cancel edit, return to navigation mode (restores previous value) |
+| `q` | INPUT |
+
+**Confirm-delete mode** (y/n prompt shown):
+
+| Key | Behavior |
+|---|---|
+| `ctrl+c` | QUIT |
+| `esc` | Cancel, return to navigation mode |
+| `y` | Confirm delete |
+| `n` | Cancel, return to navigation mode |
 
 ### ProfileRegistration
 
@@ -169,7 +198,9 @@ Footer hints reflect the current mode. When mode changes, hints update.
 | Creation (error) | `esc/q back` | N/A |
 | DeleteConfirm | `esc/q cancel` | N/A |
 | RegisterRepo | `esc/q back` | `esc unfocus` |
-| Settings | `esc/q back` | `esc unfocus` |
+| Settings (navigation) | `enter select`, `j/k navigate`, `esc/q back` | N/A |
+| Settings (editing) | N/A | `enter save`, `esc cancel` |
+| Settings (confirm-delete) | `y confirm`, `n/esc cancel` | N/A |
 | ProfileRegistration | `esc/q back` | `esc unfocus` |
 | ProfileRegistration (first-run) | `esc/q quit` | `esc unfocus` |
 | AddRepo (form) | `esc/q quit` | `esc unfocus` |

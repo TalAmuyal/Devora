@@ -129,11 +129,26 @@ func RegisterProfile(rootPath string, name string) (Profile, error)
    - If it does not exist or is invalid:
      a. Create the directory structure: `<absRootPath>/`, `<absRootPath>/repos/`, `<absRootPath>/workspaces/` (create parents as needed, no error if they already exist).
      b. Write `{"name": "<name>"}` to `<absRootPath>/config.json` with 4-space indentation.
-3. Load the global config from disk (fresh read, not from cache).
+3. Load the global config from disk via `loadFreshGlobalConfig()`.
 4. Read the `profiles` list from it. If the resolved path is not already in the list, append it.
-5. Write the updated global config back to `~/.config/devora/config.json` (create the directory `~/.config/devora/` if needed). Use 4-space indentation.
-6. Reset the global config cache.
-7. Return the `Profile` with `Name` from the config's `"name"` key, `RootPath` set to the resolved absolute path, and `Config` from the config data.
+5. Write the updated global config via `writeFreshGlobalConfig()`.
+6. Return the `Profile` with `Name` from the config's `"name"` key, `RootPath` set to the resolved absolute path, and `Config` from the config data.
+
+Returns an error if any filesystem or JSON operation fails.
+
+### UnregisterProfile
+
+```go
+func UnregisterProfile(rootPath string) error
+```
+
+Removes a profile from the global config's `profiles` list. Does not delete the profile directory or its contents.
+
+1. Resolve `rootPath` to an absolute path.
+2. Load the global config from disk via `loadFreshGlobalConfig()`.
+3. Remove the resolved path from the `profiles` list. If it was not present, the list is unchanged.
+4. Write the updated global config via `writeFreshGlobalConfig()`.
+5. If the active profile's `RootPath` matches the removed path, clear the active profile (`activeProfile = nil`).
 
 Returns an error if any filesystem or JSON operation fails.
 
@@ -148,6 +163,22 @@ Returns `true` if `<rootPath>/config.json` exists, is valid JSON, and contains a
 ### SetActiveProfile / GetActiveProfile
 
 See [Active Profile State](#active-profile-state) above.
+
+### Global Config Helpers
+
+```go
+func loadFreshGlobalConfig() map[string]any
+```
+
+Reads the global config file from disk (bypassing the cache). Returns an empty map if the file does not exist or contains invalid JSON.
+
+```go
+func writeFreshGlobalConfig(cfg map[string]any) error
+```
+
+Writes the given map to the global config file path with 4-space JSON indentation, creating the parent directory if needed. Resets the global config cache after writing.
+
+Both helpers are unexported and used by `RegisterProfile` and `UnregisterProfile`.
 
 ## Repo Operations
 
@@ -324,6 +355,13 @@ Clears the active profile and resets the global config cache. Must be called bet
 - Duplicate registration (already in global profiles list): no duplicate entry added.
 - Global config directory created if it does not exist.
 - Global config cache is reset after registration.
+
+**Profile unregistration (`UnregisterProfile`):**
+- Removes path from global config profiles list.
+- Profile not in list: no error, list unchanged.
+- Clears active profile if it matches the removed path.
+- Does not delete profile directory or files.
+- Global config cache is reset after unregistration.
 
 **Repo discovery (`GetRegisteredRepos`):**
 - Auto-discovered repos: directories with `.git` in `repos/`.

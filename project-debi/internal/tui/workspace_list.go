@@ -87,8 +87,6 @@ func (m *WorkspaceListModel) Update(msg tea.Msg) tea.Cmd {
 			return func() tea.Msg { return showNewTaskMsg{} }
 		case "R":
 			return func() tea.Msg { return showRegisterRepoMsg{} }
-		case "P":
-			return func() tea.Msg { return showProfileRegistrationMsg{} }
 		case "p":
 			return cycleProfileCmd()
 		case "s":
@@ -168,7 +166,6 @@ func (m WorkspaceListModel) ActionBindings() []components.KeyBinding {
 		{Key: "D", Desc: "Delete"},
 		{Key: "r", Desc: "Refresh"},
 		{Key: "R", Desc: "Register Repo"},
-		{Key: "P", Desc: "Add Profile"},
 		{Key: "p", Desc: "Cycle Profile"},
 		{Key: "s", Desc: "Settings"},
 		{Key: "q", Desc: "Quit"},

@@ -328,6 +328,23 @@ func TestProfileReg_EscInNavModeGoesBack(t *testing.T) {
 	}
 }
 
+func TestProfileReg_EscInNavModeReturnsToSettings(t *testing.T) {
+	styles := NewStyles(ThemePalette{})
+	m := NewProfileRegModel(&styles, true)
+	m.returnToSettings = true
+	m.navMode = true
+
+	cmd := m.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEscape}))
+
+	if cmd == nil {
+		t.Fatal("expected a command for back, got nil")
+	}
+	msg := cmd()
+	if _, ok := msg.(showSettingsMsg); !ok {
+		t.Fatalf("expected showSettingsMsg, got %T", msg)
+	}
+}
+
 func TestProfileReg_QInNavModeGoesBack(t *testing.T) {
 	styles := NewStyles(ThemePalette{})
 	m := NewProfileRegModel(&styles, true)

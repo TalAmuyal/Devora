@@ -1117,6 +1117,206 @@ func TestTerminalSessionCreationTimeoutSeconds_WrongType_ReturnsFallback(t *test
 	}
 }
 
+// --- Profile unregistration tests ---
+
+func TestUnregisterProfile_RemovesFromGlobalConfig(t *testing.T) {
+	tmpDir := setupTest(t)
+	profile1Dir := filepath.Join(tmpDir, "profile1")
+	profile2Dir := filepath.Join(tmpDir, "profile2")
+
+	createProfile(t, profile1Dir, map[string]any{"name": "alpha"})
+	createProfile(t, profile2Dir, map[string]any{"name": "beta"})
+
+	writeJSON(t, filepath.Join(tmpDir, "config.json"), map[string]any{
+		"profiles": []any{profile1Dir, profile2Dir},
+	})
+	resetGlobalConfigCache()
+
+	err := UnregisterProfile(profile1Dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Verify on disk: only profile2 remains
+	globalCfg := readJSON(t, filepath.Join(tmpDir, "config.json"))
+	profilesList, ok := globalCfg["profiles"].([]any)
+	if !ok {
+		t.Fatalf("expected profiles list, got %T", globalCfg["profiles"])
+	}
+	if len(profilesList) != 1 {
+		t.Fatalf("expected 1 profile remaining, got %d: %v", len(profilesList), profilesList)
+	}
+	if profilesList[0] != profile2Dir {
+		t.Fatalf("expected %q to remain, got %v", profile2Dir, profilesList[0])
+	}
+}
+
+func TestUnregisterProfile_ResetsGlobalConfigCache(t *testing.T) {
+	tmpDir := setupTest(t)
+	profile1Dir := filepath.Join(tmpDir, "profile1")
+	profile2Dir := filepath.Join(tmpDir, "profile2")
+
+	createProfile(t, profile1Dir, map[string]any{"name": "alpha"})
+	createProfile(t, profile2Dir, map[string]any{"name": "beta"})
+
+	writeJSON(t, filepath.Join(tmpDir, "config.json"), map[string]any{
+		"profiles": []any{profile1Dir, profile2Dir},
+	})
+	resetGlobalConfigCache()
+
+	// Prime the cache
+	profiles := GetProfiles()
+	if len(profiles) != 2 {
+		t.Fatalf("expected 2 profiles before unregister, got %d", len(profiles))
+	}
+
+	err := UnregisterProfile(profile1Dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// GetProfiles should reflect the change (cache was reset)
+	profiles = GetProfiles()
+	if len(profiles) != 1 {
+		t.Fatalf("expected 1 profile after unregister, got %d", len(profiles))
+	}
+	if profiles[0].Name != "beta" {
+		t.Fatalf("expected remaining profile 'beta', got %q", profiles[0].Name)
+	}
+}
+
+func TestUnregisterProfile_ClearsActiveProfileIfRemoved(t *testing.T) {
+	tmpDir := setupTest(t)
+	profileDir := filepath.Join(tmpDir, "profile")
+
+	createProfile(t, profileDir, map[string]any{"name": "alpha"})
+
+	writeJSON(t, filepath.Join(tmpDir, "config.json"), map[string]any{
+		"profiles": []any{profileDir},
+	})
+	resetGlobalConfigCache()
+
+	p := &Profile{Name: "alpha", RootPath: profileDir, Config: map[string]any{"name": "alpha"}}
+	SetActiveProfile(p)
+
+	err := UnregisterProfile(profileDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if GetActiveProfile() != nil {
+		t.Fatal("expected active profile to be nil after unregistering it")
+	}
+}
+
+func TestUnregisterProfile_DoesNotClearActiveProfileIfDifferent(t *testing.T) {
+	tmpDir := setupTest(t)
+	profileADir := filepath.Join(tmpDir, "profileA")
+	profileBDir := filepath.Join(tmpDir, "profileB")
+
+	createProfile(t, profileADir, map[string]any{"name": "alpha"})
+	createProfile(t, profileBDir, map[string]any{"name": "beta"})
+
+	writeJSON(t, filepath.Join(tmpDir, "config.json"), map[string]any{
+		"profiles": []any{profileADir, profileBDir},
+	})
+	resetGlobalConfigCache()
+
+	pB := &Profile{Name: "beta", RootPath: profileBDir, Config: map[string]any{"name": "beta"}}
+	SetActiveProfile(pB)
+
+	err := UnregisterProfile(profileADir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	active := GetActiveProfile()
+	if active == nil {
+		t.Fatal("expected active profile to still be set")
+	}
+	if active.Name != "beta" {
+		t.Fatalf("expected active profile 'beta', got %q", active.Name)
+	}
+}
+
+func TestUnregisterProfile_NoOpWhenPathNotInList(t *testing.T) {
+	tmpDir := setupTest(t)
+	profileDir := filepath.Join(tmpDir, "profile")
+
+	createProfile(t, profileDir, map[string]any{"name": "alpha"})
+
+	writeJSON(t, filepath.Join(tmpDir, "config.json"), map[string]any{
+		"profiles": []any{profileDir},
+	})
+	resetGlobalConfigCache()
+
+	err := UnregisterProfile(filepath.Join(tmpDir, "nonexistent"))
+	if err != nil {
+		t.Fatalf("expected no error for unregistering non-existent path, got: %v", err)
+	}
+
+	// Verify existing profiles are unchanged
+	globalCfg := readJSON(t, filepath.Join(tmpDir, "config.json"))
+	profilesList := globalCfg["profiles"].([]any)
+	if len(profilesList) != 1 {
+		t.Fatalf("expected 1 profile unchanged, got %d", len(profilesList))
+	}
+	if profilesList[0] != profileDir {
+		t.Fatalf("expected %q, got %v", profileDir, profilesList[0])
+	}
+}
+
+func TestUnregisterProfile_DirectoryStillExistsOnDisk(t *testing.T) {
+	tmpDir := setupTest(t)
+	profileDir := filepath.Join(tmpDir, "profile")
+
+	createProfile(t, profileDir, map[string]any{"name": "alpha"})
+
+	writeJSON(t, filepath.Join(tmpDir, "config.json"), map[string]any{
+		"profiles": []any{profileDir},
+	})
+	resetGlobalConfigCache()
+
+	err := UnregisterProfile(profileDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Verify the profile directory and its contents still exist
+	for _, sub := range []string{"", "repos", "workspaces", "config.json"} {
+		path := filepath.Join(profileDir, sub)
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("expected %q to still exist on disk after unregister: %v", path, err)
+		}
+	}
+}
+
+func TestUnregisterProfile_WorksWithNoActiveProfile(t *testing.T) {
+	tmpDir := setupTest(t)
+	profileDir := filepath.Join(tmpDir, "profile")
+
+	createProfile(t, profileDir, map[string]any{"name": "alpha"})
+
+	writeJSON(t, filepath.Join(tmpDir, "config.json"), map[string]any{
+		"profiles": []any{profileDir},
+	})
+	resetGlobalConfigCache()
+
+	// No SetActiveProfile call — activeProfile is nil
+
+	err := UnregisterProfile(profileDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Verify the profile was removed from global config
+	globalCfg := readJSON(t, filepath.Join(tmpDir, "config.json"))
+	profilesList := globalCfg["profiles"].([]any)
+	if len(profilesList) != 0 {
+		t.Fatalf("expected 0 profiles, got %d: %v", len(profilesList), profilesList)
+	}
+}
+
 // --- ExpandTilde tests ---
 
 func TestExpandTilde_BareTilde(t *testing.T) {

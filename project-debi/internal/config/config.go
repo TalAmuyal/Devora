@@ -173,6 +173,35 @@ func GetProfiles() []Profile {
 	return profiles
 }
 
+// loadFreshGlobalConfig reads the global config directly from disk, bypassing the cache.
+func loadFreshGlobalConfig() map[string]any {
+	data, err := os.ReadFile(configPathValue)
+	if err != nil {
+		return map[string]any{}
+	}
+	var cfg map[string]any
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return map[string]any{}
+	}
+	return cfg
+}
+
+// writeFreshGlobalConfig writes the global config to disk and resets the cache.
+func writeFreshGlobalConfig(cfg map[string]any) error {
+	if err := os.MkdirAll(filepath.Dir(configPathValue), 0o755); err != nil {
+		return err
+	}
+	b, err := json.MarshalIndent(cfg, "", "    ")
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(configPathValue, b, 0o644); err != nil {
+		return err
+	}
+	resetGlobalConfigCache()
+	return nil
+}
+
 func RegisterProfile(rootPath string, name string) (Profile, error) {
 	absRootPath, err := filepath.Abs(rootPath)
 	if err != nil {
@@ -205,16 +234,7 @@ func RegisterProfile(rootPath string, name string) (Profile, error) {
 		}
 	}
 
-	// Load fresh global config from disk (not from cache)
-	globalData, err := os.ReadFile(configPathValue)
-	var globalCfg map[string]any
-	if err != nil {
-		globalCfg = map[string]any{}
-	} else {
-		if err := json.Unmarshal(globalData, &globalCfg); err != nil {
-			globalCfg = map[string]any{}
-		}
-	}
+	globalCfg := loadFreshGlobalConfig()
 
 	// Update profiles list
 	var profilePaths []any
@@ -234,19 +254,9 @@ func RegisterProfile(rootPath string, name string) (Profile, error) {
 	}
 	globalCfg["profiles"] = profilePaths
 
-	// Write global config
-	if err := os.MkdirAll(filepath.Dir(configPathValue), 0o755); err != nil {
+	if err := writeFreshGlobalConfig(globalCfg); err != nil {
 		return Profile{}, err
 	}
-	b, err := json.MarshalIndent(globalCfg, "", "    ")
-	if err != nil {
-		return Profile{}, err
-	}
-	if err := os.WriteFile(configPathValue, b, 0o644); err != nil {
-		return Profile{}, err
-	}
-
-	resetGlobalConfigCache()
 
 	profileName, _ := profileCfg["name"].(string)
 	return Profile{
@@ -254,6 +264,40 @@ func RegisterProfile(rootPath string, name string) (Profile, error) {
 		RootPath: absRootPath,
 		Config:   profileCfg,
 	}, nil
+}
+
+func UnregisterProfile(rootPath string) error {
+	absRootPath, err := filepath.Abs(rootPath)
+	if err != nil {
+		return err
+	}
+
+	globalCfg := loadFreshGlobalConfig()
+
+	// Remove from profiles list
+	var profilePaths []any
+	if existingList, ok := globalCfg["profiles"].([]any); ok {
+		for _, p := range existingList {
+			if p != absRootPath {
+				profilePaths = append(profilePaths, p)
+			}
+		}
+	}
+	if profilePaths == nil {
+		profilePaths = []any{}
+	}
+	globalCfg["profiles"] = profilePaths
+
+	if err := writeFreshGlobalConfig(globalCfg); err != nil {
+		return err
+	}
+
+	// Clear active profile if it was the removed one
+	if activeProfile != nil && activeProfile.RootPath == absRootPath {
+		activeProfile = nil
+	}
+
+	return nil
 }
 
 func IsInitializedProfile(rootPath string) bool {
