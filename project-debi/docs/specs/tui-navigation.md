@@ -107,13 +107,15 @@ No text inputs. Always in navigation mode.
 
 ### RegisterRepo
 
-Single text input page. Starts in insert mode.
+Single PathPicker page. Starts in insert mode (type mode).
 
-| Key | Insert mode | Navigation mode |
-|---|---|---|
-| `ctrl+c` | QUIT | QUIT |
-| `esc` | UNFOCUS | BACK |
-| `q` | INPUT | BACK |
+PathPicker has two internal modes: **type mode** (insert mode) and **browse mode** (navigation mode).
+
+| Key | Type mode (insert) | Browse mode (nav) | Navigation mode |
+|---|---|---|---|
+| `ctrl+c` | QUIT | QUIT | QUIT |
+| `esc` | UNFOCUS | BACK | BACK |
+| `q` | INPUT | BACK | BACK |
 
 ### Settings
 
@@ -197,7 +199,7 @@ Footer hints reflect the current mode. When mode changes, hints update.
 | Creation (in-progress) | _(no hints)_ | N/A |
 | Creation (error) | `esc/q back` | N/A |
 | DeleteConfirm | `esc/q cancel` | N/A |
-| RegisterRepo | `esc/q back` | `esc unfocus` |
+| RegisterRepo | `esc/q back` | `esc unfocus`, `ctrl+l browse` |
 | Settings (navigation) | `enter select`, `j/k navigate`, `esc/q back` | N/A |
 | Settings (editing) | N/A | `enter save`, `esc cancel` |
 | Settings (confirm-delete) | `y confirm`, `n/esc cancel` | N/A |

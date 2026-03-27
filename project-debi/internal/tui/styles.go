@@ -4,6 +4,7 @@ import (
 	"image/color"
 
 	"charm.land/lipgloss/v2"
+	"devora/internal/tui/components"
 )
 
 // Styles holds all Lip Gloss styles for the panel-based dashboard design.
@@ -198,4 +199,14 @@ func NewStyles(palette ThemePalette) Styles {
 		WarningColor: palette.Warning,
 		PanelColor:   palette.Panel,
 	}
+}
+
+func (s *Styles) NewPathPicker(browserHeight int) components.PathPickerModel {
+	return components.NewPathPickerModel(
+		lipgloss.NewStyle().Foreground(s.AccentColor),
+		s.Muted,
+		s.Muted,
+		lipgloss.NewStyle().Bold(true).Foreground(s.AccentColor),
+		browserHeight,
+	)
 }

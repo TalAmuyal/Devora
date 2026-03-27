@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"devora/internal/tui/components"
 )
 
 func TestRegisterRepo_TypingClearsError(t *testing.T) {
@@ -53,8 +54,8 @@ func TestRegisterRepo_QInInsertModeTypesLetter(t *testing.T) {
 
 	m.Update(tea.KeyPressMsg(tea.Key{Code: 'q'}))
 
-	if m.pathInput.Value != "q" {
-		t.Fatalf("expected pathInput to contain 'q', got %q", m.pathInput.Value)
+	if m.pathInput.Value() != "q" {
+		t.Fatalf("expected pathInput to contain 'q', got %q", m.pathInput.Value())
 	}
 	if m.navMode {
 		t.Fatal("expected navMode to remain false after typing q")
@@ -110,7 +111,7 @@ func TestRegisterRepo_TypingInNavModeExitsNavMode(t *testing.T) {
 	}
 }
 
-func TestRegisterRepo_EnterInNavModeRefocusesAndSubmits(t *testing.T) {
+func TestRegisterRepo_EnterInNavModeSubmits(t *testing.T) {
 	styles := NewStyles(ThemePalette{})
 	m := NewRegisterRepoModel(&styles)
 	m.navMode = true
@@ -218,5 +219,109 @@ func TestRegisterRepo_ActionBindings_NoCtrlC(t *testing.T) {
 		if b.Key == "ctrl+c" {
 			t.Fatal("expected no ctrl+c binding in footer")
 		}
+	}
+}
+
+// Browse mode tests
+
+func enterBrowseMode(m *RegisterRepoModel) {
+	m.pathInput.HandleKey("ctrl+l")
+}
+
+func TestRegisterRepo_CtrlLEntersBrowseMode(t *testing.T) {
+	styles := NewStyles(ThemePalette{})
+	m := NewRegisterRepoModel(&styles)
+
+	m.Update(tea.KeyPressMsg(tea.Key{Code: 'l', Mod: tea.ModCtrl}))
+
+	if m.pathInput.Mode() != components.PathPickerBrowseMode {
+		t.Fatal("expected PathPickerBrowseMode after ctrl+l")
+	}
+}
+
+func TestRegisterRepo_EscInBrowseModeGoesBack(t *testing.T) {
+	styles := NewStyles(ThemePalette{})
+	m := NewRegisterRepoModel(&styles)
+	enterBrowseMode(&m)
+
+	cmd := m.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEscape}))
+
+	if cmd == nil {
+		t.Fatal("expected a command for back, got nil")
+	}
+	msg := cmd()
+	if _, ok := msg.(showWorkspaceListMsg); !ok {
+		t.Fatalf("expected showWorkspaceListMsg, got %T", msg)
+	}
+}
+
+func TestRegisterRepo_QInBrowseModeGoesBack(t *testing.T) {
+	styles := NewStyles(ThemePalette{})
+	m := NewRegisterRepoModel(&styles)
+	enterBrowseMode(&m)
+
+	cmd := m.Update(tea.KeyPressMsg(tea.Key{Code: 'q'}))
+
+	if cmd == nil {
+		t.Fatal("expected a command for back, got nil")
+	}
+	msg := cmd()
+	if _, ok := msg.(showWorkspaceListMsg); !ok {
+		t.Fatalf("expected showWorkspaceListMsg, got %T", msg)
+	}
+}
+
+func TestRegisterRepo_EnterInBrowseModeDoesNotSubmit(t *testing.T) {
+	styles := NewStyles(ThemePalette{})
+	m := NewRegisterRepoModel(&styles)
+	enterBrowseMode(&m)
+
+	cmd := m.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
+
+	if m.errMsg != "" {
+		t.Fatalf("expected no error (enter should not submit in browse mode), got %q", m.errMsg)
+	}
+	if cmd != nil {
+		t.Fatal("expected nil cmd in browse mode enter")
+	}
+}
+
+func TestRegisterRepo_ActionBindings_BrowseMode(t *testing.T) {
+	styles := NewStyles(ThemePalette{})
+	m := NewRegisterRepoModel(&styles)
+	enterBrowseMode(&m)
+
+	bindings := m.ActionBindings()
+
+	if !hasBinding(bindings, "esc/q", "Back") {
+		t.Fatal("expected 'esc/q Back' binding in browse mode")
+	}
+}
+
+func TestRegisterRepo_ActionBindings_HasBrowseHint(t *testing.T) {
+	styles := NewStyles(ThemePalette{})
+	m := NewRegisterRepoModel(&styles)
+
+	bindings := m.ActionBindings()
+
+	if !hasBinding(bindings, "ctrl+l", "Browse") {
+		t.Fatal("expected 'ctrl+l Browse' binding")
+	}
+}
+
+func TestRegisterRepo_EscInBrowseModeGoesBackToSettings(t *testing.T) {
+	styles := NewStyles(ThemePalette{})
+	m := NewRegisterRepoModel(&styles)
+	m.returnToSettings = true
+	enterBrowseMode(&m)
+
+	cmd := m.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEscape}))
+
+	if cmd == nil {
+		t.Fatal("expected a command for back, got nil")
+	}
+	msg := cmd()
+	if _, ok := msg.(showSettingsMsg); !ok {
+		t.Fatalf("expected showSettingsMsg, got %T", msg)
 	}
 }

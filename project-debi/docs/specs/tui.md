@@ -309,10 +309,11 @@ Centered dialog showing workspace name, path, and a warning about the destructiv
 func NewRegisterRepoModel(styles *Styles) RegisterRepoModel
 ```
 
-Single text input for entering a git repo path. The path is tilde-expanded (via `config.ExpandTilde`) before validation. Validates that the path exists, is a directory, and is a git repository before registering.
+Path picker (PathPickerModel with directory browser) for entering a git repo path. The path is tilde-expanded (via `config.ExpandTilde`) before validation. Validates that the path exists, is a directory, and is a git repository before registering.
 
 **Key bindings:**
-- `enter` -- register the repo
+- `ctrl+l` -- toggle between typing and browsing directories
+- `enter` -- register the repo (type mode); descend into directory (browse mode)
 - Navigation keys: see [tui-navigation.md](tui-navigation.md)
 
 **Messages handled:** `tea.KeyPressMsg` only.

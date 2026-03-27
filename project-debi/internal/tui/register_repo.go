@@ -14,7 +14,7 @@ import (
 
 // RegisterRepoModel is the form page for registering a git repo by path.
 type RegisterRepoModel struct {
-	pathInput        components.TextInputModel
+	pathInput        components.PathPickerModel
 	navMode          bool
 	returnToSettings bool
 	errMsg           string
@@ -23,11 +23,8 @@ type RegisterRepoModel struct {
 }
 
 func NewRegisterRepoModel(styles *Styles) RegisterRepoModel {
-	pathInput := components.NewTextInputModel(
-		lipgloss.NewStyle().Foreground(styles.AccentColor),
-		styles.Muted,
-	)
-	pathInput.Placeholder = "Enter path to git repo..."
+	pathInput := styles.NewPathPicker(6)
+	pathInput.SetPlaceholder("Enter path to git repo...")
 	pathInput.Focus()
 
 	return RegisterRepoModel{
@@ -49,7 +46,9 @@ func (m *RegisterRepoModel) Update(msg tea.Msg) tea.Cmd {
 
 		switch key {
 		case "enter":
-			return m.register()
+			if m.pathInput.Mode() == components.PathPickerTypeMode {
+				return m.register()
+			}
 		}
 
 		// Any other key in nav mode: re-focus and exit nav mode
@@ -64,9 +63,17 @@ func (m *RegisterRepoModel) Update(msg tea.Msg) tea.Cmd {
 	return nil
 }
 
+func (m *RegisterRepoModel) isTextInputFocused() bool {
+	return m.pathInput.Mode() == components.PathPickerTypeMode
+}
+
 // handleEscOrQ implements two-stage esc navigation.
 func (m *RegisterRepoModel) handleEscOrQ(key string) tea.Cmd {
 	if m.navMode {
+		return m.backCmd()
+	}
+
+	if !m.isTextInputFocused() {
 		return m.backCmd()
 	}
 
@@ -83,7 +90,7 @@ func (m *RegisterRepoModel) handleEscOrQ(key string) tea.Cmd {
 }
 
 func (m *RegisterRepoModel) register() tea.Cmd {
-	path := strings.TrimSpace(m.pathInput.Value)
+	path := strings.TrimSpace(m.pathInput.Value())
 
 	if path == "" {
 		m.errMsg = "Please enter a path"
@@ -135,7 +142,9 @@ func (m *RegisterRepoModel) View() string {
 
 	b.WriteString("\n")
 	b.WriteString("  " + bar + label + "\n")
-	b.WriteString("  " + bar + m.pathInput.View() + "\n")
+	for _, line := range strings.Split(m.pathInput.View(), "\n") {
+		b.WriteString("  " + bar + line + "\n")
+	}
 	b.WriteString("\n")
 	b.WriteString("  " + m.styles.Muted.Render("Enter the path to a git repository."))
 
@@ -163,10 +172,11 @@ func (m *RegisterRepoModel) SetSize(w, h int) {
 // ActionBindings returns the keybindings for the footer.
 func (m RegisterRepoModel) ActionBindings() []components.KeyBinding {
 	bindings := []components.KeyBinding{
+		{Key: "ctrl+l", Desc: "Browse"},
 		{Key: "enter", Desc: "Register"},
 	}
 
-	if m.navMode {
+	if m.navMode || !m.isTextInputFocused() {
 		bindings = append(bindings, components.KeyBinding{Key: "esc/q", Desc: "Back"})
 	} else {
 		bindings = append(bindings, components.KeyBinding{Key: "esc", Desc: "Unfocus"})

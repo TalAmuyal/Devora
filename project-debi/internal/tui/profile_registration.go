@@ -37,13 +37,7 @@ type ProfileRegModel struct {
 }
 
 func NewProfileRegModel(styles *Styles, hasBack bool) ProfileRegModel {
-	pathInput := components.NewPathPickerModel(
-		lipgloss.NewStyle().Foreground(styles.AccentColor),
-		styles.Muted,
-		styles.Muted,
-		lipgloss.NewStyle().Bold(true).Foreground(styles.AccentColor),
-		6,
-	)
+	pathInput := styles.NewPathPicker(6)
 	pathInput.SetPlaceholder("Enter profile root path...")
 
 	nameInput := components.NewTextInputModel(
