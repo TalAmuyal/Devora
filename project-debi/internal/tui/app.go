@@ -126,6 +126,10 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Page transitions
 	case showWorkspaceListMsg:
+		repoNames, err := config.GetRegisteredRepoNames()
+		if err == nil {
+			m.repoNames = repoNames
+		}
 		m.activePage = PageWorkspaceList
 		return m, nil
 	case refreshWorkspacesMsg:
@@ -147,6 +151,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case showRegisterRepoMsg:
 		m.registerRepo.Reset()
+		m.registerRepo.returnToSettings = msg.fromSettings
 		m.activePage = PageRegisterRepo
 		return m, nil
 	case showProfileRegistrationMsg:

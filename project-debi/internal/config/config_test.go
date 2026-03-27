@@ -1319,6 +1319,388 @@ func TestUnregisterProfile_WorksWithNoActiveProfile(t *testing.T) {
 
 // --- ExpandTilde tests ---
 
+// --- Repo unregistration tests ---
+
+func TestUnregisterRepo_NoActiveProfile(t *testing.T) {
+	setupTest(t)
+	err := UnregisterRepo("/some/path")
+	if err == nil {
+		t.Fatal("expected error when no active profile")
+	}
+	if err.Error() != "no active profile set" {
+		t.Fatalf("unexpected error message: %v", err)
+	}
+}
+
+func TestUnregisterRepo_RemovesFromConfig(t *testing.T) {
+	tmpDir := setupTest(t)
+	profileDir := filepath.Join(tmpDir, "profile")
+
+	repoPath := filepath.Join(tmpDir, "my-repo")
+	if err := os.MkdirAll(repoPath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	createProfile(t, profileDir, map[string]any{
+		"name":  "test",
+		"repos": []any{repoPath},
+	})
+
+	p := Profile{Name: "test", RootPath: profileDir, Config: map[string]any{
+		"name":  "test",
+		"repos": []any{repoPath},
+	}}
+	SetActiveProfile(&p)
+
+	err := UnregisterRepo(repoPath)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Verify the config.json was updated
+	cfg := readJSON(t, filepath.Join(profileDir, "config.json"))
+	repos, ok := cfg["repos"].([]any)
+	if !ok {
+		t.Fatalf("expected repos list, got %T", cfg["repos"])
+	}
+	if len(repos) != 0 {
+		t.Fatalf("expected 0 repos after unregister, got %d: %v", len(repos), repos)
+	}
+}
+
+func TestUnregisterRepo_LeavesOtherReposIntact(t *testing.T) {
+	tmpDir := setupTest(t)
+	profileDir := filepath.Join(tmpDir, "profile")
+
+	repo1 := filepath.Join(tmpDir, "repo-a")
+	repo2 := filepath.Join(tmpDir, "repo-b")
+	for _, r := range []string{repo1, repo2} {
+		if err := os.MkdirAll(r, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	createProfile(t, profileDir, map[string]any{
+		"name":  "test",
+		"repos": []any{repo1, repo2},
+	})
+
+	p := Profile{Name: "test", RootPath: profileDir, Config: map[string]any{
+		"name":  "test",
+		"repos": []any{repo1, repo2},
+	}}
+	SetActiveProfile(&p)
+
+	err := UnregisterRepo(repo1)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	cfg := readJSON(t, filepath.Join(profileDir, "config.json"))
+	repos := cfg["repos"].([]any)
+	if len(repos) != 1 {
+		t.Fatalf("expected 1 repo remaining, got %d: %v", len(repos), repos)
+	}
+
+	absRepo2, _ := filepath.Abs(repo2)
+	if repos[0] != absRepo2 {
+		t.Fatalf("expected %q to remain, got %v", absRepo2, repos[0])
+	}
+}
+
+func TestUnregisterRepo_NotFound(t *testing.T) {
+	tmpDir := setupTest(t)
+	profileDir := filepath.Join(tmpDir, "profile")
+
+	repoPath := filepath.Join(tmpDir, "my-repo")
+	if err := os.MkdirAll(repoPath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	createProfile(t, profileDir, map[string]any{
+		"name":  "test",
+		"repos": []any{repoPath},
+	})
+
+	p := Profile{Name: "test", RootPath: profileDir, Config: map[string]any{
+		"name":  "test",
+		"repos": []any{repoPath},
+	}}
+	SetActiveProfile(&p)
+
+	err := UnregisterRepo(filepath.Join(tmpDir, "nonexistent-repo"))
+	if err == nil {
+		t.Fatal("expected error for repo not in config")
+	}
+	if err.Error() != "repo not found in config" {
+		t.Fatalf("unexpected error message: %v", err)
+	}
+}
+
+func TestUnregisterRepo_EmptyReposList(t *testing.T) {
+	tmpDir := setupTest(t)
+	profileDir := filepath.Join(tmpDir, "profile")
+
+	createProfile(t, profileDir, map[string]any{
+		"name": "test",
+	})
+
+	p := Profile{Name: "test", RootPath: profileDir, Config: map[string]any{
+		"name": "test",
+	}}
+	SetActiveProfile(&p)
+
+	err := UnregisterRepo(filepath.Join(tmpDir, "some-repo"))
+	if err == nil {
+		t.Fatal("expected error for repo not in config")
+	}
+	if err.Error() != "repo not found in config" {
+		t.Fatalf("unexpected error message: %v", err)
+	}
+}
+
+func TestUnregisterRepo_UpdatesInMemoryConfig(t *testing.T) {
+	tmpDir := setupTest(t)
+	profileDir := filepath.Join(tmpDir, "profile")
+
+	repoPath := filepath.Join(tmpDir, "my-repo")
+	if err := os.MkdirAll(repoPath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	createProfile(t, profileDir, map[string]any{
+		"name":  "test",
+		"repos": []any{repoPath},
+	})
+
+	p := Profile{Name: "test", RootPath: profileDir, Config: map[string]any{
+		"name":  "test",
+		"repos": []any{repoPath},
+	}}
+	SetActiveProfile(&p)
+
+	err := UnregisterRepo(repoPath)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Verify the in-memory active profile config is updated
+	active := GetActiveProfile()
+	reposRaw, ok := active.Config["repos"].([]any)
+	if !ok {
+		t.Fatalf("expected repos list in active profile, got %T", active.Config["repos"])
+	}
+	if len(reposRaw) != 0 {
+		t.Fatalf("expected 0 repos in memory after unregister, got %d", len(reposRaw))
+	}
+}
+
+func TestUnregisterRepo_DoesNotTouchFilesystem(t *testing.T) {
+	tmpDir := setupTest(t)
+	profileDir := filepath.Join(tmpDir, "profile")
+
+	repoPath := filepath.Join(tmpDir, "my-repo")
+	if err := os.MkdirAll(repoPath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	createProfile(t, profileDir, map[string]any{
+		"name":  "test",
+		"repos": []any{repoPath},
+	})
+
+	p := Profile{Name: "test", RootPath: profileDir, Config: map[string]any{
+		"name":  "test",
+		"repos": []any{repoPath},
+	}}
+	SetActiveProfile(&p)
+
+	err := UnregisterRepo(repoPath)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Verify the repo directory still exists on disk
+	if _, err := os.Stat(repoPath); err != nil {
+		t.Fatalf("expected repo directory to still exist: %v", err)
+	}
+}
+
+// --- GetExplicitRepoEntries tests ---
+
+func TestGetExplicitRepoEntries_NoActiveProfile(t *testing.T) {
+	setupTest(t)
+	_, err := GetExplicitRepoEntries()
+	if err == nil {
+		t.Fatal("expected error when no active profile")
+	}
+	if err.Error() != "no active profile set" {
+		t.Fatalf("unexpected error message: %v", err)
+	}
+}
+
+func TestGetExplicitRepoEntries_ReturnsNameAndPath(t *testing.T) {
+	tmpDir := setupTest(t)
+	profileDir := filepath.Join(tmpDir, "profile")
+
+	repoPath := filepath.Join(tmpDir, "my-repo")
+	if err := os.MkdirAll(repoPath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	createProfile(t, profileDir, map[string]any{
+		"name":  "test",
+		"repos": []any{repoPath},
+	})
+
+	p := Profile{Name: "test", RootPath: profileDir, Config: map[string]any{
+		"name":  "test",
+		"repos": []any{repoPath},
+	}}
+	SetActiveProfile(&p)
+
+	entries, err := GetExplicitRepoEntries()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(entries))
+	}
+
+	absPath, _ := filepath.Abs(repoPath)
+	if entries[0].Name != "my-repo" {
+		t.Fatalf("expected name 'my-repo', got %q", entries[0].Name)
+	}
+	if entries[0].Path != absPath {
+		t.Fatalf("expected path %q, got %q", absPath, entries[0].Path)
+	}
+}
+
+func TestGetExplicitRepoEntries_SortedByName(t *testing.T) {
+	tmpDir := setupTest(t)
+	profileDir := filepath.Join(tmpDir, "profile")
+
+	repoZ := filepath.Join(tmpDir, "zebra-repo")
+	repoA := filepath.Join(tmpDir, "alpha-repo")
+	repoM := filepath.Join(tmpDir, "middle-repo")
+	for _, r := range []string{repoZ, repoA, repoM} {
+		if err := os.MkdirAll(r, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	createProfile(t, profileDir, map[string]any{
+		"name":  "test",
+		"repos": []any{repoZ, repoA, repoM},
+	})
+
+	p := Profile{Name: "test", RootPath: profileDir, Config: map[string]any{
+		"name":  "test",
+		"repos": []any{repoZ, repoA, repoM},
+	}}
+	SetActiveProfile(&p)
+
+	entries, err := GetExplicitRepoEntries()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(entries) != 3 {
+		t.Fatalf("expected 3 entries, got %d", len(entries))
+	}
+
+	expectedNames := []string{"alpha-repo", "middle-repo", "zebra-repo"}
+	for i, entry := range entries {
+		if entry.Name != expectedNames[i] {
+			t.Fatalf("expected entry %d to be %q, got %q", i, expectedNames[i], entry.Name)
+		}
+	}
+}
+
+func TestGetExplicitRepoEntries_ExcludesNonExistentPaths(t *testing.T) {
+	tmpDir := setupTest(t)
+	profileDir := filepath.Join(tmpDir, "profile")
+
+	existingRepo := filepath.Join(tmpDir, "existing-repo")
+	if err := os.MkdirAll(existingRepo, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	nonExistentRepo := filepath.Join(tmpDir, "nonexistent-repo")
+
+	createProfile(t, profileDir, map[string]any{
+		"name":  "test",
+		"repos": []any{existingRepo, nonExistentRepo},
+	})
+
+	p := Profile{Name: "test", RootPath: profileDir, Config: map[string]any{
+		"name":  "test",
+		"repos": []any{existingRepo, nonExistentRepo},
+	}}
+	SetActiveProfile(&p)
+
+	entries, err := GetExplicitRepoEntries()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 entry (non-existent filtered out), got %d", len(entries))
+	}
+
+	if entries[0].Name != "existing-repo" {
+		t.Fatalf("expected 'existing-repo', got %q", entries[0].Name)
+	}
+}
+
+func TestGetExplicitRepoEntries_EmptyReposList(t *testing.T) {
+	tmpDir := setupTest(t)
+	profileDir := filepath.Join(tmpDir, "profile")
+
+	createProfile(t, profileDir, map[string]any{
+		"name": "test",
+	})
+
+	p := Profile{Name: "test", RootPath: profileDir, Config: map[string]any{
+		"name": "test",
+	}}
+	SetActiveProfile(&p)
+
+	entries, err := GetExplicitRepoEntries()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(entries) != 0 {
+		t.Fatalf("expected 0 entries, got %d", len(entries))
+	}
+}
+
+func TestGetExplicitRepoEntries_DoesNotIncludeAutoDiscovered(t *testing.T) {
+	tmpDir := setupTest(t)
+	profileDir := filepath.Join(tmpDir, "profile")
+	createProfile(t, profileDir, map[string]any{"name": "test"})
+
+	// Create an auto-discovered repo (in repos/ dir with .git)
+	autoRepo := filepath.Join(profileDir, "repos", "auto-repo")
+	if err := os.MkdirAll(filepath.Join(autoRepo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	p := Profile{Name: "test", RootPath: profileDir, Config: map[string]any{"name": "test"}}
+	SetActiveProfile(&p)
+
+	entries, err := GetExplicitRepoEntries()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(entries) != 0 {
+		t.Fatalf("expected 0 explicit entries (auto-discovered should not appear), got %d", len(entries))
+	}
+}
+
 func TestExpandTilde_BareTilde(t *testing.T) {
 	home, err := os.UserHomeDir()
 	if err != nil {

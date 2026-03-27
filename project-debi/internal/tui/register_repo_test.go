@@ -174,6 +174,40 @@ func TestRegisterRepo_ActionBindings_NavMode(t *testing.T) {
 	}
 }
 
+func TestRegisterRepo_EscInNavModeGoesBackToSettings(t *testing.T) {
+	styles := NewStyles(ThemePalette{})
+	m := NewRegisterRepoModel(&styles)
+	m.navMode = true
+	m.returnToSettings = true
+
+	cmd := m.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEscape}))
+
+	if cmd == nil {
+		t.Fatal("expected a command for back, got nil")
+	}
+	msg := cmd()
+	if _, ok := msg.(showSettingsMsg); !ok {
+		t.Fatalf("expected showSettingsMsg, got %T", msg)
+	}
+}
+
+func TestRegisterRepo_QInNavModeGoesBackToSettings(t *testing.T) {
+	styles := NewStyles(ThemePalette{})
+	m := NewRegisterRepoModel(&styles)
+	m.navMode = true
+	m.returnToSettings = true
+
+	cmd := m.Update(tea.KeyPressMsg(tea.Key{Code: 'q'}))
+
+	if cmd == nil {
+		t.Fatal("expected a command for back, got nil")
+	}
+	msg := cmd()
+	if _, ok := msg.(showSettingsMsg); !ok {
+		t.Fatalf("expected showSettingsMsg, got %T", msg)
+	}
+}
+
 func TestRegisterRepo_ActionBindings_NoCtrlC(t *testing.T) {
 	styles := NewStyles(ThemePalette{})
 	m := NewRegisterRepoModel(&styles)

@@ -13,21 +13,22 @@ import (
 type settingsField int
 
 const (
-	fieldPrepareCmd    settingsField = iota
-	fieldAddProfile
-	fieldDeleteProfile
+	fieldPrepareCmd settingsField = 0
+	fieldAddRepo    settingsField = 1
+	// Fields 2 through 2+len(explicitRepos)-1 are remove-repo fields.
+	// fieldAddProfile and fieldDeleteProfile are computed dynamically.
 )
 
-const settingsFieldCount = 3
-
 type SettingsModel struct {
-	prepareCmd    components.TextInputModel
-	focused       settingsField
-	editing       bool
-	confirmDelete bool
-	styles        *Styles
-	profileName   string
-	width         int
+	prepareCmd       components.TextInputModel
+	focused          settingsField
+	editing          bool
+	confirmDelete    bool
+	confirmRemoveIdx int
+	explicitRepos    []config.ExplicitRepoEntry
+	styles           *Styles
+	profileName      string
+	width            int
 }
 
 func NewSettingsModel(styles *Styles) SettingsModel {
@@ -38,17 +39,45 @@ func NewSettingsModel(styles *Styles) SettingsModel {
 	prepareCmd.Placeholder = "Shell command to run after worktree creation..."
 
 	return SettingsModel{
-		prepareCmd: prepareCmd,
-		styles:     styles,
+		prepareCmd:       prepareCmd,
+		confirmRemoveIdx: -1,
+		styles:           styles,
 	}
+}
+
+func (m *SettingsModel) fieldCount() int {
+	return int(m.deleteProfileField()) + 1
+}
+
+func (m *SettingsModel) removeRepoBaseField() settingsField {
+	return fieldAddRepo + 1
+}
+
+func (m *SettingsModel) addProfileField() settingsField {
+	return m.removeRepoBaseField() + settingsField(len(m.explicitRepos))
+}
+
+func (m *SettingsModel) deleteProfileField() settingsField {
+	return m.addProfileField() + 1
+}
+
+func (m *SettingsModel) isRemoveRepoField(f settingsField) bool {
+	base := m.removeRepoBaseField()
+	return f >= base && f < m.addProfileField()
+}
+
+func (m *SettingsModel) removeRepoIndex(f settingsField) int {
+	return int(f - m.removeRepoBaseField())
 }
 
 func (m *SettingsModel) Activate(profileName string) {
 	m.profileName = profileName
 	m.loadPrepareCommandValue()
+	m.loadExplicitRepos()
 	m.focused = fieldPrepareCmd
 	m.editing = false
 	m.confirmDelete = false
+	m.confirmRemoveIdx = -1
 	m.prepareCmd.Blur()
 }
 
@@ -62,10 +91,23 @@ func (m *SettingsModel) loadPrepareCommandValue() {
 	}
 }
 
+func (m *SettingsModel) loadExplicitRepos() {
+	entries, err := config.GetExplicitRepoEntries()
+	if err != nil {
+		m.explicitRepos = nil
+		return
+	}
+	m.explicitRepos = entries
+}
+
 func (m *SettingsModel) Update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
 		key := msg.String()
+
+		if m.confirmRemoveIdx >= 0 {
+			return m.handleConfirmRemoveRepoKey(key)
+		}
 
 		if m.confirmDelete {
 			return m.handleConfirmDeleteKey(key)
@@ -76,6 +118,16 @@ func (m *SettingsModel) Update(msg tea.Msg) tea.Cmd {
 		}
 
 		return m.handleNavKey(key)
+	}
+	return nil
+}
+
+func (m *SettingsModel) handleConfirmRemoveRepoKey(key string) tea.Cmd {
+	switch key {
+	case "y":
+		return m.removeRepo()
+	case "n", "esc":
+		m.confirmRemoveIdx = -1
 	}
 	return nil
 }
@@ -106,22 +158,28 @@ func (m *SettingsModel) handleEditingKey(key string) tea.Cmd {
 }
 
 func (m *SettingsModel) handleNavKey(key string) tea.Cmd {
+	count := settingsField(m.fieldCount())
 	switch key {
 	case "j", "down":
-		m.focused = (m.focused + 1) % settingsFieldCount
+		m.focused = (m.focused + 1) % count
 		return nil
 	case "k", "up":
-		m.focused = (m.focused - 1 + settingsFieldCount) % settingsFieldCount
+		m.focused = (m.focused - 1 + count) % count
 		return nil
 	case "enter":
-		switch m.focused {
-		case fieldPrepareCmd:
+		switch {
+		case m.focused == fieldPrepareCmd:
 			m.editing = true
 			m.prepareCmd.Focus()
 			return nil
-		case fieldAddProfile:
+		case m.focused == fieldAddRepo:
+			return func() tea.Msg { return showRegisterRepoMsg{fromSettings: true} }
+		case m.isRemoveRepoField(m.focused):
+			m.confirmRemoveIdx = m.removeRepoIndex(m.focused)
+			return nil
+		case m.focused == m.addProfileField():
 			return func() tea.Msg { return showProfileRegistrationMsg{fromSettings: true} }
-		case fieldDeleteProfile:
+		case m.focused == m.deleteProfileField():
 			m.confirmDelete = true
 			return nil
 		}
@@ -146,6 +204,35 @@ func (m *SettingsModel) save() tea.Cmd {
 	m.editing = false
 	m.prepareCmd.Blur()
 	return func() tea.Msg { return notifyMsg{text: "Settings saved", isError: false} }
+}
+
+func (m *SettingsModel) removeRepo() tea.Cmd {
+	if m.confirmRemoveIdx < 0 || m.confirmRemoveIdx >= len(m.explicitRepos) {
+		m.confirmRemoveIdx = -1
+		return nil
+	}
+
+	entry := m.explicitRepos[m.confirmRemoveIdx]
+	err := config.UnregisterRepo(entry.Path)
+	if err != nil {
+		m.confirmRemoveIdx = -1
+		return func() tea.Msg {
+			return notifyMsg{text: "Failed to remove repo: " + err.Error(), isError: true}
+		}
+	}
+
+	m.confirmRemoveIdx = -1
+	m.loadExplicitRepos()
+
+	// Clamp focus if it would be out of bounds
+	maxField := settingsField(m.fieldCount() - 1)
+	if m.focused > maxField {
+		m.focused = maxField
+	}
+
+	return func() tea.Msg {
+		return notifyMsg{text: fmt.Sprintf("Repo %q removed", entry.Name), isError: false}
+	}
 }
 
 func (m *SettingsModel) deleteProfile() tea.Cmd {
@@ -203,16 +290,41 @@ func (m *SettingsModel) View() string {
 
 	b.WriteString("\n")
 
+	// Repos section
+	b.WriteString("  " + m.styles.Title.Render("Repos") + "\n")
+
+	// Add Repo
+	bar, label = m.renderFieldBar(fieldAddRepo, "+ Add Repo")
+	b.WriteString("  " + bar + label + "\n")
+
+	// Remove Repo entries
+	for i, entry := range m.explicitRepos {
+		field := m.removeRepoBaseField() + settingsField(i)
+		if m.confirmRemoveIdx == i && m.focused == field {
+			bar, _ = m.renderFieldBar(field, "")
+			b.WriteString("  " + bar + m.styles.FieldLabelFocused.Render(
+				fmt.Sprintf("Remove repo %q? (y/n)", entry.Name),
+			) + "\n")
+		} else {
+			bar, label = m.renderFieldBar(field, fmt.Sprintf("\u2715 Remove %s", entry.Name))
+			b.WriteString("  " + bar + label + "\n")
+		}
+	}
+
+	b.WriteString("\n")
+
 	// Profiles section
 	b.WriteString("  " + m.styles.Title.Render("Profiles") + "\n")
 
 	// Add Profile
-	bar, label = m.renderFieldBar(fieldAddProfile, "+ Add Profile")
+	addProfileField := m.addProfileField()
+	bar, label = m.renderFieldBar(addProfileField, "+ Add Profile")
 	b.WriteString("  " + bar + label + "\n")
 
 	// Delete Profile
-	if m.confirmDelete && m.focused == fieldDeleteProfile {
-		bar, _ = m.renderFieldBar(fieldDeleteProfile, "")
+	deleteProfileField := m.deleteProfileField()
+	if m.confirmDelete && m.focused == deleteProfileField {
+		bar, _ = m.renderFieldBar(deleteProfileField, "")
 		profiles := config.GetProfiles()
 		if len(profiles) <= 1 {
 			b.WriteString("  " + bar + m.styles.FieldLabelFocused.Render(
@@ -224,7 +336,7 @@ func (m *SettingsModel) View() string {
 			) + "\n")
 		}
 	} else {
-		bar, label = m.renderFieldBar(fieldDeleteProfile, fmt.Sprintf("\u2715 Delete %q", m.profileName))
+		bar, label = m.renderFieldBar(deleteProfileField, fmt.Sprintf("\u2715 Delete %q", m.profileName))
 		b.WriteString("  " + bar + label + "\n")
 	}
 
@@ -236,7 +348,7 @@ func (m *SettingsModel) SetSize(w, h int) {
 }
 
 func (m SettingsModel) ActionBindings() []components.KeyBinding {
-	if m.confirmDelete {
+	if m.confirmRemoveIdx >= 0 || m.confirmDelete {
 		return []components.KeyBinding{
 			{Key: "y", Desc: "Confirm"},
 			{Key: "n/esc", Desc: "Cancel"},

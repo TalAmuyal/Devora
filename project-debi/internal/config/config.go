@@ -307,6 +307,25 @@ func IsInitializedProfile(rootPath string) bool {
 
 // --- Repo operations ---
 
+// configRepoPaths extracts the string paths from a config map's "repos" key.
+func configRepoPaths(cfg map[string]any) []string {
+	reposRaw, ok := cfg["repos"]
+	if !ok {
+		return nil
+	}
+	reposList, ok := reposRaw.([]any)
+	if !ok {
+		return nil
+	}
+	var paths []string
+	for _, r := range reposList {
+		if s, ok := r.(string); ok {
+			paths = append(paths, s)
+		}
+	}
+	return paths
+}
+
 func autoDiscoverRepos(reposDir string) map[string]string {
 	result := map[string]string{}
 	entries, err := os.ReadDir(reposDir)
@@ -361,18 +380,7 @@ func GetRegisteredRepos() ([]string, error) {
 	reposDir := filepath.Join(activeProfile.RootPath, "repos")
 
 	// Start with explicit repos
-	merged := map[string]string{}
-	if reposRaw, ok := activeProfile.Config["repos"]; ok {
-		if reposList, ok := reposRaw.([]any); ok {
-			var paths []string
-			for _, r := range reposList {
-				if s, ok := r.(string); ok {
-					paths = append(paths, s)
-				}
-			}
-			merged = explicitRepos(paths)
-		}
-	}
+	merged := explicitRepos(configRepoPaths(activeProfile.Config))
 
 	// Overlay auto-discovered repos (auto takes precedence)
 	autoRepos := autoDiscoverRepos(reposDir)
@@ -411,13 +419,9 @@ func RegisterRepo(path string) error {
 	}
 
 	// Check if already present before calling updateProfileConfig
-	if reposRaw, ok := activeProfile.Config["repos"]; ok {
-		if reposList, ok := reposRaw.([]any); ok {
-			for _, r := range reposList {
-				if s, ok := r.(string); ok && s == absPath {
-					return nil // already registered
-				}
-			}
+	for _, p := range configRepoPaths(activeProfile.Config) {
+		if p == absPath {
+			return nil // already registered
 		}
 	}
 
@@ -430,6 +434,71 @@ func RegisterRepo(path string) error {
 		cfg["repos"] = repos
 		return cfg
 	})
+}
+
+func UnregisterRepo(path string) error {
+	if activeProfile == nil {
+		return errors.New("no active profile set")
+	}
+
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return err
+	}
+
+	// Check if the repo is in the list
+	found := false
+	for _, p := range configRepoPaths(activeProfile.Config) {
+		if p == absPath {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return errors.New("repo not found in config")
+	}
+
+	return updateProfileConfig(activeProfile, func(cfg map[string]any) map[string]any {
+		var repos []any
+		if existing, ok := cfg["repos"].([]any); ok {
+			for _, r := range existing {
+				if s, ok := r.(string); ok && s == absPath {
+					continue
+				}
+				repos = append(repos, r)
+			}
+		}
+		if repos == nil {
+			repos = []any{}
+		}
+		cfg["repos"] = repos
+		return cfg
+	})
+}
+
+// ExplicitRepoEntry represents a repo explicitly listed in the profile config.
+type ExplicitRepoEntry struct {
+	Name string
+	Path string
+}
+
+func GetExplicitRepoEntries() ([]ExplicitRepoEntry, error) {
+	if activeProfile == nil {
+		return nil, errors.New("no active profile set")
+	}
+
+	resolved := explicitRepos(configRepoPaths(activeProfile.Config))
+
+	var entries []ExplicitRepoEntry
+	for name, path := range resolved {
+		entries = append(entries, ExplicitRepoEntry{Name: name, Path: path})
+	}
+
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].Name < entries[j].Name
+	})
+
+	return entries, nil
 }
 
 // --- Config mutation ---

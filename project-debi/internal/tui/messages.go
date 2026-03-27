@@ -5,7 +5,9 @@ type showWorkspaceListMsg struct{}
 type refreshWorkspacesMsg struct{}
 type showNewTaskMsg struct{}
 type showSettingsMsg struct{}
-type showRegisterRepoMsg struct{}
+type showRegisterRepoMsg struct {
+	fromSettings bool
+}
 type showProfileRegistrationMsg struct {
 	fromSettings bool
 }

@@ -14,11 +14,12 @@ import (
 
 // RegisterRepoModel is the form page for registering a git repo by path.
 type RegisterRepoModel struct {
-	pathInput components.TextInputModel
-	navMode   bool
-	errMsg    string
-	styles    *Styles
-	width     int
+	pathInput        components.TextInputModel
+	navMode          bool
+	returnToSettings bool
+	errMsg           string
+	styles           *Styles
+	width            int
 }
 
 func NewRegisterRepoModel(styles *Styles) RegisterRepoModel {
@@ -66,7 +67,7 @@ func (m *RegisterRepoModel) Update(msg tea.Msg) tea.Cmd {
 // handleEscOrQ implements two-stage esc navigation.
 func (m *RegisterRepoModel) handleEscOrQ(key string) tea.Cmd {
 	if m.navMode {
-		return func() tea.Msg { return showWorkspaceListMsg{} }
+		return m.backCmd()
 	}
 
 	// Insert mode
@@ -113,8 +114,16 @@ func (m *RegisterRepoModel) register() tea.Cmd {
 		func() tea.Msg {
 			return notifyMsg{text: "Repo registered", isError: false}
 		},
-		func() tea.Msg { return showWorkspaceListMsg{} },
+		m.backCmd(),
 	)
+}
+
+// backCmd returns a command that navigates back to the appropriate page.
+func (m *RegisterRepoModel) backCmd() tea.Cmd {
+	if m.returnToSettings {
+		return func() tea.Msg { return showSettingsMsg{} }
+	}
+	return func() tea.Msg { return showWorkspaceListMsg{} }
 }
 
 // View renders the register repo form.

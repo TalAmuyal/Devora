@@ -18,6 +18,15 @@ type Profile struct {
 }
 ```
 
+### ExplicitRepoEntry
+
+```go
+type ExplicitRepoEntry struct {
+    Name string // filepath.Base of the absolute path
+    Path string // absolute path
+}
+```
+
 ## File Locations
 
 | File | Description |
@@ -96,7 +105,7 @@ func GetActiveProfile() *Profile
 
 - `SetActiveProfile(nil)` clears the active profile.
 - `GetActiveProfile()` returns `nil` when no profile is active.
-- Functions that require an active profile (`GetRegisteredRepos`, `GetRegisteredRepoNames`, `GetWorkspacesRootPath`, `RegisterRepo`) return an error if `GetActiveProfile()` is `nil`. The error message: `"no active profile set"`.
+- Functions that require an active profile (`GetRegisteredRepos`, `GetRegisteredRepoNames`, `GetWorkspacesRootPath`, `RegisterRepo`, `UnregisterRepo`, `GetExplicitRepoEntries`) return an error if `GetActiveProfile()` is `nil`. The error message: `"no active profile set"`.
 
 ## Profile Operations
 
@@ -219,6 +228,39 @@ func RegisterRepo(path string) error
 Appends the given path (resolved to absolute) to the active profile's `"repos"` list in its `config.json`. If the path is already in the list, this is a no-op.
 
 Uses the read-modify-write pattern (see [Profile Config Mutation](#profile-config-mutation)).
+
+Returns an error if no active profile is set.
+
+### UnregisterRepo
+
+```go
+func UnregisterRepo(path string) error
+```
+
+Removes the given path (resolved to absolute) from the active profile's `"repos"` list in its `config.json`. Only removes from config — does not touch the filesystem.
+
+If the resolved path is not in the list, returns an error (`"repo not found in config"`).
+
+Uses the read-modify-write pattern (see [Profile Config Mutation](#profile-config-mutation)).
+
+Returns an error if no active profile is set.
+
+### GetExplicitRepoEntries
+
+```go
+type ExplicitRepoEntry struct {
+    Name string // filepath.Base of the absolute path
+    Path string // absolute path
+}
+
+func GetExplicitRepoEntries() ([]ExplicitRepoEntry, error)
+```
+
+Returns name+path pairs for repos explicitly listed in the active profile's `config.json` `"repos"` array. Does not include auto-discovered repos.
+
+Paths are expanded (`~` expansion) and resolved to absolute. Entries where the path no longer exists on disk are filtered out (matching `explicitRepos()` behavior).
+
+Results are sorted alphabetically by name.
 
 Returns an error if no active profile is set.
 
@@ -374,6 +416,23 @@ Clears the active profile and resets the global config cache. Must be called bet
 **Repo registration (`RegisterRepo`):**
 - Appends to `repos` list in profile config.
 - Duplicate path is a no-op.
+- No active profile: returns error.
+
+**Repo unregistration (`UnregisterRepo`):**
+- Removes path from `repos` list in profile config.
+- Leaves other repos intact.
+- Repo not in list: returns error (`"repo not found in config"`).
+- Empty repos list: returns error.
+- Updates in-memory active profile config.
+- Does not delete the repo directory on disk.
+- No active profile: returns error.
+
+**Explicit repo entries (`GetExplicitRepoEntries`):**
+- Returns name and path for explicit repos.
+- Results sorted alphabetically by name.
+- Excludes paths that do not exist on disk.
+- Returns empty slice when no repos configured.
+- Does not include auto-discovered repos.
 - No active profile: returns error.
 
 **Config mutation (`SetPrepareCommand`):**
