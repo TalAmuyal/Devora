@@ -236,7 +236,7 @@ All form pages that display inline validation errors (`errMsg`) clear the error 
 func NewWorkspaceListModel(styles *Styles) WorkspaceListModel
 ```
 
-Displays workspaces as styled cards with a diamond selection indicator. Each card shows task title (or workspace name), a category badge (ACTIVE/IDLE/INVALID), and a per-repo table with branch name and clean/dirty status.
+Displays workspaces as styled cards. Each card shows task title (or workspace name), a category badge (ACTIVE/IDLE/INVALID), and a per-repo table with branch name and clean/dirty status. Selection is indicated by the `ListModel` bar indicator and a distinct card border style. Cards are pre-rendered into `ListItem.Content` and the `View()` method delegates to `ListModel.View()` for scrollable, viewport-constrained rendering. On terminal resize, card content is refreshed at the new width without resetting the cursor.
 
 **Key bindings:**
 - `1`/`2`/`3` -- switch filter (Active, Inactive, All)
@@ -398,7 +398,7 @@ Validates that path is provided, and name is required for uninitialized profiles
 func NewListModel(indicatorStyle lipgloss.Style) ListModel
 ```
 
-Wrapping list with variable-height items and vim navigation. Tracks cursor position and item count. The workspace list uses `ListModel` for cursor state management but renders cards directly via `renderCard()` rather than calling `ListModel.View()`.
+Wrapping list with variable-height items and vim navigation. Tracks cursor position and item count. The workspace list populates `ListItem.Content` with rendered cards and delegates to `ListModel.View()` for viewport-constrained scrolling. `View()` updates `Content` with selection-aware styling on each render, while `rebuildListItems()` populates initial `Content` for correct `Height()` calculations.
 
 ### CheckboxListModel
 

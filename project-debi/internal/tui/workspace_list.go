@@ -51,8 +51,22 @@ func (m *WorkspaceListModel) SetFilter(mode FilterMode) {
 func (m *WorkspaceListModel) SetSize(w, h int) {
 	m.width = w
 	m.height = h
-	// Account for border (2 lines top/bottom) and title line
 	m.list.Height = h - 2
+}
+
+func (m *WorkspaceListModel) cardInnerWidth() int {
+	cardWidth := m.width - 7 // indicator(1) + margin(2) + border(2) + padding(2)
+	if cardWidth > 90 {
+		cardWidth = 90
+	}
+	if cardWidth < 20 {
+		cardWidth = 20
+	}
+	innerWidth := cardWidth - 6 // border(2) + padding(4)
+	if innerWidth < 10 {
+		innerWidth = 10
+	}
+	return innerWidth
 }
 
 func (m *WorkspaceListModel) Update(msg tea.Msg) tea.Cmd {
@@ -108,25 +122,13 @@ func (m *WorkspaceListModel) View() string {
 		return "\n  " + m.styles.Title.Render(m.emptyMessage()) + "\n"
 	}
 
-	cardWidth := m.width - 6 // margin left(2) + border(2) + padding(4) accounted in style
-	if cardWidth > 90 {
-		cardWidth = 90
-	}
-	if cardWidth < 20 {
-		cardWidth = 20
-	}
-	innerWidth := cardWidth - 6 // border(2) + padding(4)
-	if innerWidth < 10 {
-		innerWidth = 10
-	}
-
-	var cards []string
+	innerWidth := m.cardInnerWidth()
 	for i, ws := range filtered {
 		isSelected := i == m.list.Cursor
-		cards = append(cards, m.renderCard(ws, isSelected, innerWidth, cardWidth))
+		m.list.Items[i].Content = m.renderCard(ws, isSelected, innerWidth)
 	}
 
-	return strings.Join(cards, "\n")
+	return m.list.View()
 }
 
 func (m *WorkspaceListModel) SelectedWorkspace() *WorkspaceInfo {
@@ -173,10 +175,11 @@ func (m WorkspaceListModel) ActionBindings() []components.KeyBinding {
 // rebuildListItems recomputes the filtered list from allWorkspaces.
 func (m *WorkspaceListModel) rebuildListItems() {
 	filtered := m.filteredWorkspaces()
+	innerWidth := m.cardInnerWidth()
 	items := make([]components.ListItem, len(filtered))
 	for i, ws := range filtered {
 		items[i] = components.ListItem{
-			Content: "", // rendering is done in View() via renderCard
+			Content: m.renderCard(ws, false, innerWidth),
 			Value:   ws,
 		}
 	}
@@ -218,18 +221,13 @@ func (m *WorkspaceListModel) filteredWorkspaces() []WorkspaceInfo {
 	return nil
 }
 
-func (m *WorkspaceListModel) renderCard(ws WorkspaceInfo, isSelected bool, innerWidth, cardWidth int) string {
+func (m *WorkspaceListModel) renderCard(ws WorkspaceInfo, isSelected bool, innerWidth int) string {
 	var lines []string
 
 	// Title line with status badge
 	title := ws.TaskTitle
 	if title == "" {
 		title = ws.Name
-	}
-
-	titlePrefix := ""
-	if isSelected {
-		titlePrefix = m.styles.Diamond.Render("\u25c6") + " "
 	}
 
 	var badge string
@@ -242,7 +240,7 @@ func (m *WorkspaceListModel) renderCard(ws WorkspaceInfo, isSelected bool, inner
 		badge = m.styles.BadgeInvalid.Render("INVALID")
 	}
 
-	titleText := titlePrefix + m.styles.CardTitle.Render(title)
+	titleText := m.styles.CardTitle.Render(title)
 	titleWidth := lipgloss.Width(titleText)
 	badgeWidth := lipgloss.Width(badge)
 	gap := innerWidth - titleWidth - badgeWidth
