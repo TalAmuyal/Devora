@@ -37,6 +37,7 @@ PATH="$RESOURCES_DIR/bundled-apps:$PATH"
 cd "$HOME"
 
 export KITTY_CONFIG_DIRECTORY="$RESOURCES_DIR/kitty-configs"
+export DEVORA_RESOURCES_DIR="$RESOURCES_DIR"
 
 $KITTY_EXECUTABLE_PATH \
 	--title "Devora" \

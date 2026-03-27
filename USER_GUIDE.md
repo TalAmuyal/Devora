@@ -20,19 +20,22 @@ A Devora-provided status line is available to show the current context-window us
 To enable it, copy `cc-simple-statusline` to your `~/.claude/` directory and add the following to your `~/.claude/settings.json`:
 
 ```json
+{
   "statusLine": {
     "type": "command",
     "command": "~/.claude/cc-simple-statusline",
     "padding": 0
-  },
+  }
+}
 ```
 
 ## Introduction
 
 TBD
 
-## Cheetsheet
+## Cheatsheet
 
 - `ctrl + s`: Open workspace manager in a new OS window tab
 - `ctrl + shift + s`: Open shell in a new OS window tab
 - `ctrl + 1 / 2 / 3`: Small, medium, large text size
+- `F1`: Open this User Guide

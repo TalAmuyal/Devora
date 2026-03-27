@@ -13,11 +13,14 @@ devora.app/
       │     │  └─ hooks.json
       │     └─ main.py
       ├─ app.icns
+      ├─ USER_GUIDE.md
       ├─ bundled-apps/
       │  ├─ ccc
-      │  └─ debi
+      │  ├─ debi
+      │  └─ glow
       ├─ kitty-configs/
       │  ├─ current-theme.conf
+      │  ├─ glow-theme.json
       │  └─ kitty.conf
       ├─ kitty.app/
       │  └─ ...

@@ -166,6 +166,7 @@ func (m WorkspaceListModel) ActionBindings() []components.KeyBinding {
 		{Key: "p", Desc: "Cycle Profile"},
 		{Key: "s", Desc: "Settings"},
 		{Key: "q", Desc: "Quit"},
+		{Key: "F1", Desc: "Help"},
 	}
 }
 

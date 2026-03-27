@@ -122,9 +122,11 @@ GOOS=darwin \
 
 # Bundle prepared files and directories
 bundle "$REPO_ROOT/USER_GUIDE.md"           "$OUTPUT_CONTAINER_DIR/."         overwrite
+bundle "$REPO_ROOT/USER_GUIDE.md"           "$RESOURCES_DIR/."                overwrite
 bundle "$SCRIPT_DIR/Info.plist"             "$OUTPUT_DIR/Contents/."          overwrite
 bundle "$THIRD_PARTY_APPS_DIR/kitty.app"    "$RESOURCES_DIR/kitty.app"        check
 bundle "$THIRD_PARTY_APPS_DIR/uv"           "$RESOURCES_DIR/uv"               check
+bundle "$THIRD_PARTY_APPS_DIR/glow"          "$BUNDLED_APPS_DIR/glow"          check
 bundle "$REPO_ROOT/kitty-configs"           "$RESOURCES_DIR/."                overwrite
 bundle "$SCRIPT_DIR/bootstrap.sh"           "$ROOT_EXEC_DIR/Devora"           overwrite
 bundle "$REPO_ROOT/ccc.sh"                  "$BUNDLED_APPS_DIR/ccc"           overwrite
