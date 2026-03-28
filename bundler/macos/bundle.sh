@@ -2,14 +2,16 @@
 
 set -e
 
-HELPER_TEXT="Usage: $0 [--help|-h] [--dmg]
+HELPER_TEXT="Usage: $0 [--help|-h] [--dmg] [--dev]
 
+  --dev       Build \"Dev Devora\" variant (can coexist with production app)
   --dmg       Create a DMG file in addition to the app bundle
   --help, -h  Show this help message and exit
 "
 
 # Parse arguments
-SHOLUD_MAKE_DMG=false
+SHOULD_MAKE_DMG=false
+IS_DEV_MODE=false
 while [[ $# -gt 0 ]]; do
 	case "$1" in
 		--help|-h)
@@ -17,7 +19,11 @@ while [[ $# -gt 0 ]]; do
 			exit 0
 			;;
 		--dmg)
-			SHOLUD_MAKE_DMG=true
+			SHOULD_MAKE_DMG=true
+			shift
+			;;
+		--dev)
+			IS_DEV_MODE=true
 			shift
 			;;
 		*)
@@ -29,6 +35,15 @@ while [[ $# -gt 0 ]]; do
 	esac
 done
 
+# Derive app identity from mode
+if $IS_DEV_MODE; then
+	APP_NAME="Dev Devora"
+	APP_IDENTIFIER="com.devora-org.devora-dev"
+else
+	APP_NAME="Devora"
+	APP_IDENTIFIER="com.devora-org.devora"
+fi
+
 # Define basic input paths
 SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
 BUNDLER_DIR=$(dirname "$SCRIPT_DIR")
@@ -36,8 +51,8 @@ REPO_ROOT=$(dirname "$BUNDLER_DIR")
 
 # Define basic output paths
 BIN_MACOS_DIR="$REPO_ROOT/bin/macOS"
-OUTPUT_CONTAINER_DIR="$BIN_MACOS_DIR/Devora"
-OUTPUT_DIR="$OUTPUT_CONTAINER_DIR/Devora.app"
+OUTPUT_CONTAINER_DIR="$BIN_MACOS_DIR/$APP_NAME"
+OUTPUT_DIR="$OUTPUT_CONTAINER_DIR/$APP_NAME.app"
 ROOT_EXEC_DIR="$OUTPUT_DIR/Contents/MacOS"
 RESOURCES_DIR="$OUTPUT_DIR/Contents/Resources"
 BUNDLED_APPS_DIR="$RESOURCES_DIR/bundled-apps"
@@ -74,18 +89,13 @@ bundle() {
 	sleep 0.07
 }
 
+# Clean previous build
+rm -rf "$BIN_MACOS_DIR"
+# Make sure the directory is fully removed before proceeding
+while [ -e "$BIN_MACOS_DIR" ]; do sleep 0.1; done
+sleep 0.5
+
 # Create basic app structure
-[ -d "$OUTPUT_DIR" ] && $SHOULD_CLEAN \
-	&& echo -n "Cleaning previous bundle" \
-	&& rm -rf "$BIN_MACOS_DIR" \
-	&& while [ -e "$BIN_MACOS_DIR" ]; do sleep 0.1; done \
-	&& echo -n "." \
-	&& sleep 1 \
-	&& echo -n "." \
-	&& sync \
-	&& echo -n "." \
-	&& sleep 1 \
-	&& echo " Done"
 mkdir -p "$ROOT_EXEC_DIR" "$RESOURCES_DIR" "$BUNDLED_APPS_DIR" "$BUNDLED_CC_PLUGINS_DIR"
 
 # Prepare third-party apps
@@ -126,12 +136,35 @@ bundle "$REPO_ROOT/USER_GUIDE.md"           "$RESOURCES_DIR/."                ov
 bundle "$SCRIPT_DIR/Info.plist"             "$OUTPUT_DIR/Contents/."          overwrite
 bundle "$THIRD_PARTY_APPS_DIR/kitty.app"    "$RESOURCES_DIR/kitty.app"        check
 bundle "$THIRD_PARTY_APPS_DIR/uv"           "$RESOURCES_DIR/uv"               check
-bundle "$THIRD_PARTY_APPS_DIR/glow"          "$BUNDLED_APPS_DIR/glow"          check
+bundle "$THIRD_PARTY_APPS_DIR/glow"          "$BUNDLED_APPS_DIR/glow"         check
 bundle "$REPO_ROOT/kitty-configs"           "$RESOURCES_DIR/."                overwrite
-bundle "$SCRIPT_DIR/bootstrap.sh"           "$ROOT_EXEC_DIR/Devora"           overwrite
+bundle "$SCRIPT_DIR/bootstrap.sh"           "$ROOT_EXEC_DIR/$APP_NAME"        overwrite
 bundle "$REPO_ROOT/ccc.sh"                  "$BUNDLED_APPS_DIR/ccc"           overwrite
 bundle "$REPO_ROOT/project-judge/cc-plugin" "$BUNDLED_CC_PLUGINS_DIR/judge"   overwrite
 bundle "$REPO_ROOT/project-judge/main.py"   "$BUNDLED_CC_PLUGINS_DIR/judge/." overwrite
+
+# Customize bundled files for dev mode
+if $IS_DEV_MODE; then
+	# Patch Info.plist: app name, executable name (both are <string>Devora</string>), and identifier
+	sed -i '' \
+		-e 's|<string>Devora</string>|<string>'"$APP_NAME"'</string>|' \
+		-e 's|<string>com.devora-org.devora</string>|<string>'"$APP_IDENTIFIER"'</string>|' \
+		"$OUTPUT_DIR/Contents/Info.plist"
+
+	# Patch bootstrap: log prefix, error messages, and window title
+	sed -i '' \
+		-e 's|/tmp/devora-bootstrap-|/tmp/devora-dev-bootstrap-|' \
+		-e 's|Devora Bootstrap Error|Dev Devora Bootstrap Error|' \
+		-e 's|Devora bootstrap failed|Dev Devora bootstrap failed|' \
+		-e 's|--title "Devora"|--title "Dev Devora"|' \
+		"$ROOT_EXEC_DIR/$APP_NAME"
+
+	# Patch kitty.conf: tab title and socket path
+	sed -i '' \
+		-e 's|--tab-title "Devora"|--tab-title "Dev Devora"|' \
+		-e 's|devora-kitty\.sock|devora-kitty-dev.sock|' \
+		"$RESOURCES_DIR/kitty-configs/kitty.conf"
+fi
 
 # Set permissions
 chmod -R 755 "$OUTPUT_DIR"
@@ -140,12 +173,12 @@ chmod -R 755 "$OUTPUT_DIR"
 sync
 
 # Make DMG file
-$SHOLUD_MAKE_DMG \
+$SHOULD_MAKE_DMG \
 	&& echo -n "Creating DMG file" \
 	&& hdiutil create \
 	-format UDZO \
 	-imagekey zlib-level=9 \
 	-srcfolder "$OUTPUT_CONTAINER_DIR" \
-	-o "$BIN_MACOS_DIR/Devora.dmg"
+	-o "$BIN_MACOS_DIR/$APP_NAME.dmg"
 
 echo "Done"
