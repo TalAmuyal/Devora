@@ -87,8 +87,8 @@ From the workspace list:
 
 Once a workspace exists, you can manage it from the workspace list:
 
-- `d` deactivates a workspace (cleans it up and keeps it on disk as cache for future use)
-- `D` deletes a workspace permanently (removes its worktrees and root directory)
+- `d` deactivates a workspace (cleans it up and keeps it on disk as cache for future use). Only available for active workspaces
+- `D` deletes a workspace permanently (removes its worktrees and root directory). Only available for inactive or invalid workspaces (you must deactivate first)
 
 Both actions are blocked if the workspace has an active terminal session, uncommitted changes, or worktrees that are still on a branch (not yet detached).
 
@@ -148,8 +148,8 @@ It can also automate:
 
 - `<enter>`: Open selected workspace (closes the current UI and opens a terminal session)
 - `n`: New task (reuses or creates a workspace on opens it)
-- `d`: Deactivate workspace
-- `D`: Delete workspace
+- `d`: Deactivate workspace (active only)
+- `D`: Delete workspace (inactive/invalid only)
 - `r`: Refresh workspace list
 - `1 / 2 / 3`: Filter workspaces by "Active" (default) / "Inactive" / "All"
 - `j / k`: Navigate list

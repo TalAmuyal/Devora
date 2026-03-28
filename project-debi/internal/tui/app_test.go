@@ -146,13 +146,13 @@ func TestWorkspaceList_D_TriggersDeleteRequest(t *testing.T) {
 		{
 			Path:     "/tmp/ws-1",
 			Name:     "ws-1",
-			Category: CategoryActiveNoSession,
+			Category: CategoryInactive,
 			RepoGitStatuses: map[string]RepoGitStatus{
 				"repo-a": {Branch: "HEAD", IsClean: true},
 			},
 		},
 	}
-	m.workspaceList.rebuildListItems()
+	m.workspaceList.SetFilter(FilterAll)
 
 	keyMsg := tea.KeyPressMsg(tea.Key{Code: 'D'})
 	cmd := m.workspaceList.Update(keyMsg)
@@ -291,6 +291,345 @@ func TestWorkspaceList_Deactivate_BlockedByNonHeadBranch(t *testing.T) {
 	}
 	if !strings.Contains(notify.text, "Cannot deactivate") {
 		t.Fatalf("expected 'Cannot deactivate' in text, got %q", notify.text)
+	}
+}
+
+// ActionBindings tests
+
+func TestWorkspaceList_ActionBindings_ActiveWorkspace(t *testing.T) {
+	m := newTestAppModel()
+	m.workspaceList.loading = false
+	m.workspaceList.allWorkspaces = []WorkspaceInfo{
+		{Path: "/tmp/ws-1", Name: "ws-1", Category: CategoryActiveWithSession},
+	}
+	m.workspaceList.rebuildListItems()
+
+	bindings := m.workspaceList.ActionBindings()
+
+	if !hasBinding(bindings, "d", "Deactivate") {
+		t.Fatal("expected 'd Deactivate' binding for active workspace")
+	}
+	if hasBinding(bindings, "D", "Delete") {
+		t.Fatal("should not show 'D Delete' binding for active workspace")
+	}
+}
+
+func TestWorkspaceList_ActionBindings_ActiveNoSessionWorkspace(t *testing.T) {
+	m := newTestAppModel()
+	m.workspaceList.loading = false
+	m.workspaceList.allWorkspaces = []WorkspaceInfo{
+		{Path: "/tmp/ws-1", Name: "ws-1", Category: CategoryActiveNoSession},
+	}
+	m.workspaceList.rebuildListItems()
+
+	bindings := m.workspaceList.ActionBindings()
+
+	if !hasBinding(bindings, "d", "Deactivate") {
+		t.Fatal("expected 'd Deactivate' binding for active-no-session workspace")
+	}
+	if hasBinding(bindings, "D", "Delete") {
+		t.Fatal("should not show 'D Delete' binding for active-no-session workspace")
+	}
+}
+
+func TestWorkspaceList_ActionBindings_InactiveWorkspace(t *testing.T) {
+	m := newTestAppModel()
+	m.workspaceList.loading = false
+	m.workspaceList.allWorkspaces = []WorkspaceInfo{
+		{Path: "/tmp/ws-1", Name: "ws-1", Category: CategoryInactive},
+	}
+	m.workspaceList.SetFilter(FilterAll)
+
+	bindings := m.workspaceList.ActionBindings()
+
+	if hasBinding(bindings, "d", "Deactivate") {
+		t.Fatal("should not show 'd Deactivate' binding for inactive workspace")
+	}
+	if !hasBinding(bindings, "D", "Delete") {
+		t.Fatal("expected 'D Delete' binding for inactive workspace")
+	}
+}
+
+func TestWorkspaceList_ActionBindings_InvalidWorkspace(t *testing.T) {
+	m := newTestAppModel()
+	m.workspaceList.loading = false
+	m.workspaceList.allWorkspaces = []WorkspaceInfo{
+		{Path: "/tmp/ws-1", Name: "ws-1", Category: CategoryInvalid},
+	}
+	m.workspaceList.SetFilter(FilterAll)
+
+	bindings := m.workspaceList.ActionBindings()
+
+	if hasBinding(bindings, "d", "Deactivate") {
+		t.Fatal("should not show 'd Deactivate' binding for invalid workspace")
+	}
+	if !hasBinding(bindings, "D", "Delete") {
+		t.Fatal("expected 'D Delete' binding for invalid workspace")
+	}
+}
+
+func TestWorkspaceList_ActionBindings_NoSelection(t *testing.T) {
+	m := newTestAppModel()
+	m.workspaceList.loading = false
+	m.workspaceList.allWorkspaces = []WorkspaceInfo{}
+	m.workspaceList.rebuildListItems()
+
+	bindings := m.workspaceList.ActionBindings()
+
+	if hasBinding(bindings, "d", "Deactivate") {
+		t.Fatal("should not show 'd Deactivate' when no workspace selected")
+	}
+	if hasBinding(bindings, "D", "Delete") {
+		t.Fatal("should not show 'D Delete' when no workspace selected")
+	}
+}
+
+func TestWorkspaceList_ActionBindings_AlwaysHasCommonBindings(t *testing.T) {
+	m := newTestAppModel()
+	m.workspaceList.loading = false
+	m.workspaceList.allWorkspaces = []WorkspaceInfo{
+		{Path: "/tmp/ws-1", Name: "ws-1", Category: CategoryActiveNoSession},
+	}
+	m.workspaceList.rebuildListItems()
+
+	bindings := m.workspaceList.ActionBindings()
+
+	if !hasBinding(bindings, "n", "New Task") {
+		t.Fatal("expected 'n New Task' binding")
+	}
+	if !hasBinding(bindings, "r", "Refresh") {
+		t.Fatal("expected 'r Refresh' binding")
+	}
+	if !hasBinding(bindings, "q", "Quit") {
+		t.Fatal("expected 'q Quit' binding")
+	}
+}
+
+// Guard tests: d key on non-active workspaces
+
+func TestWorkspaceList_d_OnInactiveWorkspace_ReturnsNotification(t *testing.T) {
+	m := newTestAppModel()
+	m.workspaceList.loading = false
+	m.workspaceList.allWorkspaces = []WorkspaceInfo{
+		{Path: "/tmp/ws-1", Name: "ws-1", Category: CategoryInactive},
+	}
+	m.workspaceList.SetFilter(FilterAll)
+
+	keyMsg := tea.KeyPressMsg(tea.Key{Code: 'd'})
+	cmd := m.workspaceList.Update(keyMsg)
+
+	if cmd == nil {
+		t.Fatal("expected a notification command, got nil")
+	}
+
+	msg := cmd()
+	notify, ok := msg.(notifyMsg)
+	if !ok {
+		t.Fatalf("expected notifyMsg, got %T", msg)
+	}
+	if !notify.isError {
+		t.Fatal("expected error notification")
+	}
+	if !strings.Contains(notify.text, "already inactive") {
+		t.Fatalf("expected 'already inactive' in text, got %q", notify.text)
+	}
+}
+
+func TestWorkspaceList_d_OnInvalidWorkspace_ReturnsNotification(t *testing.T) {
+	m := newTestAppModel()
+	m.workspaceList.loading = false
+	m.workspaceList.allWorkspaces = []WorkspaceInfo{
+		{Path: "/tmp/ws-1", Name: "ws-1", Category: CategoryInvalid},
+	}
+	m.workspaceList.SetFilter(FilterAll)
+
+	keyMsg := tea.KeyPressMsg(tea.Key{Code: 'd'})
+	cmd := m.workspaceList.Update(keyMsg)
+
+	if cmd == nil {
+		t.Fatal("expected a notification command, got nil")
+	}
+
+	msg := cmd()
+	notify, ok := msg.(notifyMsg)
+	if !ok {
+		t.Fatalf("expected notifyMsg, got %T", msg)
+	}
+	if !notify.isError {
+		t.Fatal("expected error notification")
+	}
+	if !strings.Contains(notify.text, "Cannot deactivate an invalid workspace") {
+		t.Fatalf("expected 'Cannot deactivate an invalid workspace' in text, got %q", notify.text)
+	}
+}
+
+// Guard tests: D key on active workspaces
+
+func TestWorkspaceList_D_OnActiveWithSession_ReturnsNotification(t *testing.T) {
+	m := newTestAppModel()
+	m.workspaceList.loading = false
+	m.workspaceList.allWorkspaces = []WorkspaceInfo{
+		{Path: "/tmp/ws-1", Name: "ws-1", Category: CategoryActiveWithSession},
+	}
+	m.workspaceList.rebuildListItems()
+
+	keyMsg := tea.KeyPressMsg(tea.Key{Code: 'D'})
+	cmd := m.workspaceList.Update(keyMsg)
+
+	if cmd == nil {
+		t.Fatal("expected a notification command, got nil")
+	}
+
+	msg := cmd()
+	notify, ok := msg.(notifyMsg)
+	if !ok {
+		t.Fatalf("expected notifyMsg, got %T", msg)
+	}
+	if !notify.isError {
+		t.Fatal("expected error notification")
+	}
+	if !strings.Contains(notify.text, "Deactivate the workspace first") {
+		t.Fatalf("expected 'Deactivate the workspace first' in text, got %q", notify.text)
+	}
+}
+
+func TestWorkspaceList_D_OnActiveNoSession_ReturnsNotification(t *testing.T) {
+	m := newTestAppModel()
+	m.workspaceList.loading = false
+	m.workspaceList.allWorkspaces = []WorkspaceInfo{
+		{Path: "/tmp/ws-1", Name: "ws-1", Category: CategoryActiveNoSession},
+	}
+	m.workspaceList.rebuildListItems()
+
+	keyMsg := tea.KeyPressMsg(tea.Key{Code: 'D'})
+	cmd := m.workspaceList.Update(keyMsg)
+
+	if cmd == nil {
+		t.Fatal("expected a notification command, got nil")
+	}
+
+	msg := cmd()
+	notify, ok := msg.(notifyMsg)
+	if !ok {
+		t.Fatalf("expected notifyMsg, got %T", msg)
+	}
+	if !notify.isError {
+		t.Fatal("expected error notification")
+	}
+	if !strings.Contains(notify.text, "Deactivate the workspace first") {
+		t.Fatalf("expected 'Deactivate the workspace first' in text, got %q", notify.text)
+	}
+}
+
+// Defense-in-depth: handleDeactivateRequest guards
+
+func TestWorkspaceList_HandleDeactivateRequest_BlocksInactiveWorkspace(t *testing.T) {
+	m := newTestAppModel()
+	m.workspaceList.loading = false
+	m.workspaceList.allWorkspaces = []WorkspaceInfo{
+		{Path: "/tmp/ws-1", Name: "ws-1", Category: CategoryInactive},
+	}
+	m.workspaceList.SetFilter(FilterAll)
+
+	cmd := m.workspaceList.handleDeactivateRequest()
+
+	if cmd == nil {
+		t.Fatal("expected a notification command, got nil")
+	}
+
+	msg := cmd()
+	notify, ok := msg.(notifyMsg)
+	if !ok {
+		t.Fatalf("expected notifyMsg, got %T", msg)
+	}
+	if !notify.isError {
+		t.Fatal("expected error notification")
+	}
+	if !strings.Contains(notify.text, "already inactive") {
+		t.Fatalf("expected 'already inactive' in text, got %q", notify.text)
+	}
+}
+
+func TestWorkspaceList_HandleDeactivateRequest_BlocksInvalidWorkspace(t *testing.T) {
+	m := newTestAppModel()
+	m.workspaceList.loading = false
+	m.workspaceList.allWorkspaces = []WorkspaceInfo{
+		{Path: "/tmp/ws-1", Name: "ws-1", Category: CategoryInvalid},
+	}
+	m.workspaceList.SetFilter(FilterAll)
+
+	cmd := m.workspaceList.handleDeactivateRequest()
+
+	if cmd == nil {
+		t.Fatal("expected a notification command, got nil")
+	}
+
+	msg := cmd()
+	notify, ok := msg.(notifyMsg)
+	if !ok {
+		t.Fatalf("expected notifyMsg, got %T", msg)
+	}
+	if !notify.isError {
+		t.Fatal("expected error notification")
+	}
+	if !strings.Contains(notify.text, "Cannot deactivate an invalid workspace") {
+		t.Fatalf("expected 'Cannot deactivate an invalid workspace' in text, got %q", notify.text)
+	}
+}
+
+// Defense-in-depth: handleDeleteRequest guards
+
+func TestWorkspaceList_HandleDeleteRequest_BlocksActiveWithSession(t *testing.T) {
+	m := newTestAppModel()
+	m.workspaceList.loading = false
+	m.workspaceList.allWorkspaces = []WorkspaceInfo{
+		{Path: "/tmp/ws-1", Name: "ws-1", Category: CategoryActiveWithSession},
+	}
+	m.workspaceList.rebuildListItems()
+
+	cmd := m.workspaceList.handleDeleteRequest()
+
+	if cmd == nil {
+		t.Fatal("expected a notification command, got nil")
+	}
+
+	msg := cmd()
+	notify, ok := msg.(notifyMsg)
+	if !ok {
+		t.Fatalf("expected notifyMsg, got %T", msg)
+	}
+	if !notify.isError {
+		t.Fatal("expected error notification")
+	}
+	if !strings.Contains(notify.text, "Deactivate the workspace first") {
+		t.Fatalf("expected 'Deactivate the workspace first' in text, got %q", notify.text)
+	}
+}
+
+func TestWorkspaceList_HandleDeleteRequest_BlocksActiveNoSession(t *testing.T) {
+	m := newTestAppModel()
+	m.workspaceList.loading = false
+	m.workspaceList.allWorkspaces = []WorkspaceInfo{
+		{Path: "/tmp/ws-1", Name: "ws-1", Category: CategoryActiveNoSession},
+	}
+	m.workspaceList.rebuildListItems()
+
+	cmd := m.workspaceList.handleDeleteRequest()
+
+	if cmd == nil {
+		t.Fatal("expected a notification command, got nil")
+	}
+
+	msg := cmd()
+	notify, ok := msg.(notifyMsg)
+	if !ok {
+		t.Fatalf("expected notifyMsg, got %T", msg)
+	}
+	if !notify.isError {
+		t.Fatal("expected error notification")
+	}
+	if !strings.Contains(notify.text, "Deactivate the workspace first") {
+		t.Fatalf("expected 'Deactivate the workspace first' in text, got %q", notify.text)
 	}
 }
 

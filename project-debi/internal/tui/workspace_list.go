@@ -160,16 +160,29 @@ func (m *WorkspaceListModel) ActiveFilterMode() FilterMode {
 }
 
 func (m WorkspaceListModel) ActionBindings() []components.KeyBinding {
-	return []components.KeyBinding{
+	bindings := []components.KeyBinding{
 		{Key: "n", Desc: "New Task"},
-		{Key: "d", Desc: "Deactivate"},
-		{Key: "D", Desc: "Delete"},
-		{Key: "r", Desc: "Refresh"},
-		{Key: "p", Desc: "Cycle Profile"},
-		{Key: "s", Desc: "Settings"},
-		{Key: "q", Desc: "Quit"},
-		{Key: "F1", Desc: "Help"},
 	}
+
+	selected := m.SelectedWorkspace()
+	if selected != nil {
+		switch selected.Category {
+		case CategoryActiveWithSession, CategoryActiveNoSession:
+			bindings = append(bindings, components.KeyBinding{Key: "d", Desc: "Deactivate"})
+		case CategoryInactive, CategoryInvalid:
+			bindings = append(bindings, components.KeyBinding{Key: "D", Desc: "Delete"})
+		}
+	}
+
+	bindings = append(bindings,
+		components.KeyBinding{Key: "r", Desc: "Refresh"},
+		components.KeyBinding{Key: "p", Desc: "Cycle Profile"},
+		components.KeyBinding{Key: "s", Desc: "Settings"},
+		components.KeyBinding{Key: "q", Desc: "Quit"},
+		components.KeyBinding{Key: "F1", Desc: "Help"},
+	)
+
+	return bindings
 }
 
 // rebuildListItems recomputes the filtered list from allWorkspaces.
@@ -309,6 +322,15 @@ func (m *WorkspaceListModel) handleDeactivateRequest() tea.Cmd {
 		return nil
 	}
 
+	switch info.Category {
+	case CategoryInactive:
+		msg := notifyMsg{text: "Workspace is already inactive", isError: true}
+		return func() tea.Msg { return msg }
+	case CategoryInvalid:
+		msg := notifyMsg{text: "Cannot deactivate an invalid workspace", isError: true}
+		return func() tea.Msg { return msg }
+	}
+
 	if blockerCmd := checkWorkspaceBlockers(info, "deactivate"); blockerCmd != nil {
 		return blockerCmd
 	}
@@ -327,6 +349,11 @@ func (m *WorkspaceListModel) handleDeleteRequest() tea.Cmd {
 	info := m.SelectedWorkspace()
 	if info == nil {
 		return nil
+	}
+
+	if info.Category == CategoryActiveWithSession || info.Category == CategoryActiveNoSession {
+		msg := notifyMsg{text: "Deactivate the workspace first", isError: true}
+		return func() tea.Msg { return msg }
 	}
 
 	if blockerCmd := checkWorkspaceBlockers(info, "delete"); blockerCmd != nil {
