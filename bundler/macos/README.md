@@ -5,7 +5,7 @@ devora.app/
 └─ Contents/
    ├─ Info.plist
    ├─ MacOS/
-   │  └─ Devora
+   │  └─ bootstrap.sh
    └─ Resources/
       ├─ cc-plugins/
       │  └─ judge/
@@ -29,7 +29,7 @@ devora.app/
 
 ## Dev Mode
 
-The `--dev` flag builds a "Dev Devora" variant that can coexist with the production app.
+The `--dev` flag builds a "Dev-Devora" variant that can coexist with the production app.
 It uses a different bundle identifier (`com.devora-org.devora-dev`), different app/window titles, and a separate kitty socket path.
 
-Output goes to `bin/macOS/Dev Devora/Dev Devora.app` (instead of `bin/macOS/Devora/Devora.app`).
+Output goes to `bin/macOS/Dev-Devora/Dev-Devora.app` (instead of `bin/macOS/Devora/Devora.app`).

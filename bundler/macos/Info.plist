@@ -10,7 +10,7 @@
     <string>com.devora-org.devora</string>
 
     <key>CFBundleExecutable</key>
-    <string>Devora</string>
+    <string>bootstrap.sh</string>
 
     <key>CFBundleIconFile</key>
     <string>app</string>

@@ -4,7 +4,7 @@ set -e
 
 HELPER_TEXT="Usage: $0 [--help|-h] [--dmg] [--dev]
 
-  --dev       Build \"Dev Devora\" variant (can coexist with production app)
+  --dev       Build \"Dev-Devora\" variant (can coexist with production app)
   --dmg       Create a DMG file in addition to the app bundle
   --help, -h  Show this help message and exit
 "
@@ -37,7 +37,7 @@ done
 
 # Derive app identity from mode
 if $IS_DEV_MODE; then
-	APP_NAME="Dev Devora"
+	APP_NAME="Dev-Devora"
 	APP_IDENTIFIER="com.devora-org.devora-dev"
 else
 	APP_NAME="Devora"
@@ -138,7 +138,7 @@ bundle "$THIRD_PARTY_APPS_DIR/kitty.app"    "$RESOURCES_DIR/kitty.app"        ch
 bundle "$THIRD_PARTY_APPS_DIR/uv"           "$RESOURCES_DIR/uv"               check
 bundle "$THIRD_PARTY_APPS_DIR/glow"          "$BUNDLED_APPS_DIR/glow"         check
 bundle "$REPO_ROOT/kitty-configs"           "$RESOURCES_DIR/."                overwrite
-bundle "$SCRIPT_DIR/bootstrap.sh"           "$ROOT_EXEC_DIR/$APP_NAME"        overwrite
+bundle "$SCRIPT_DIR/bootstrap.sh"           "$ROOT_EXEC_DIR/."                overwrite
 bundle "$REPO_ROOT/ccc.sh"                  "$BUNDLED_APPS_DIR/ccc"           overwrite
 bundle "$REPO_ROOT/project-judge/cc-plugin" "$BUNDLED_CC_PLUGINS_DIR/judge"   overwrite
 bundle "$REPO_ROOT/project-judge/main.py"   "$BUNDLED_CC_PLUGINS_DIR/judge/." overwrite
@@ -154,14 +154,14 @@ if $IS_DEV_MODE; then
 	# Patch bootstrap: log prefix, error messages, and window title
 	sed -i '' \
 		-e 's|/tmp/devora-bootstrap-|/tmp/devora-dev-bootstrap-|' \
-		-e 's|Devora Bootstrap Error|Dev Devora Bootstrap Error|' \
-		-e 's|Devora bootstrap failed|Dev Devora bootstrap failed|' \
-		-e 's|--title "Devora"|--title "Dev Devora"|' \
-		"$ROOT_EXEC_DIR/$APP_NAME"
+		-e 's|Devora Bootstrap Error|Dev-Devora Bootstrap Error|' \
+		-e 's|Devora bootstrap failed|Dev-Devora bootstrap failed|' \
+		-e 's|--title "Devora"|--title "Dev-Devora"|' \
+		"$ROOT_EXEC_DIR/bootstrap.sh"
 
 	# Patch kitty.conf: tab title and socket path
 	sed -i '' \
-		-e 's|--tab-title "Devora"|--tab-title "Dev Devora"|' \
+		-e 's|--tab-title "Devora"|--tab-title "Dev-Devora"|' \
 		-e 's|devora-kitty\.sock|devora-kitty-dev.sock|' \
 		"$RESOURCES_DIR/kitty-configs/kitty.conf"
 fi
