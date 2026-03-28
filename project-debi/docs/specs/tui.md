@@ -242,7 +242,7 @@ Displays workspaces as styled cards. Each card shows task title (or workspace na
 - `1`/`2`/`3` -- switch filter (Active, Inactive, All)
 - `j`/`k`/`gg`/`G`/arrows -- vim navigation
 - `enter` -- select workspace (exits TUI with result)
-- `n` -- new task, `d` -- deactivate, `D` -- delete, `r` -- refresh
+- `n` -- new task, `d` -- deactivate (active workspaces only), `D` -- delete (inactive/invalid workspaces only), `r` -- refresh
 - `R` -- register repo, `p` -- cycle profile
 - `s` -- settings
 - Navigation keys: see [tui-navigation.md](tui-navigation.md)

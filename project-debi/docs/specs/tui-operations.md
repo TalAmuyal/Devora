@@ -223,7 +223,11 @@ On any error in Steps 1-3, return `creationErrorMsg{err}`. The creation page dis
 
 ## Deactivation Blocking Rules
 
-Before deactivating a workspace, `handleDeactivateRequest()` checks the same three blocking conditions as deletion. Violations are surfaced as error notifications (4-second ephemeral banners). The checks are evaluated in order; the first violation blocks the deactivation.
+Before deactivating a workspace, `handleDeactivateRequest()` checks the workspace state and three blocking conditions. Violations are surfaced as error notifications (4-second ephemeral banners). The checks are evaluated in order; the first violation blocks the deactivation.
+
+### Precondition: Workspace Must Be Active
+
+Deactivation is only available for active workspaces. If the selected workspace is inactive, the notification "Workspace is already inactive" is shown. If the selected workspace is invalid, the notification "Cannot deactivate an invalid workspace" is shown. In both cases, the deactivation is rejected without checking the blocking rules below.
 
 ### Rule 1: Active Session
 
@@ -257,7 +261,11 @@ The workspace list calls `workspace.DeactivateWorkspace(info.Path)` directly (no
 
 ## Delete Blocking Rules
 
-Before navigating to the delete confirmation page, `handleDeleteRequest()` checks three blocking conditions on the selected workspace. Violations are surfaced as error notifications (4-second ephemeral banners). The checks are evaluated in order; the first violation blocks the delete.
+Before navigating to the delete confirmation page, `handleDeleteRequest()` checks the workspace state and three blocking conditions on the selected workspace. Violations are surfaced as error notifications (4-second ephemeral banners). The checks are evaluated in order; the first violation blocks the delete.
+
+### Precondition: Workspace Must Be Inactive or Invalid
+
+Deletion is only available for inactive or invalid workspaces. If the selected workspace is active, the notification "Deactivate the workspace first" is shown. The deletion is rejected without checking the blocking rules below.
 
 ### Rule 1: Active Session
 
