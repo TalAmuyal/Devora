@@ -13,7 +13,8 @@ type KeyBinding struct {
 }
 
 // RenderFooter renders a footer with a separator line and badge-style keybindings.
-func RenderFooter(bindings []KeyBinding, keyStyle, descStyle, separatorStyle lipgloss.Style, width int) string {
+// If versionText is non-empty, it is rendered right-aligned on the keybinding row.
+func RenderFooter(bindings []KeyBinding, keyStyle, descStyle, separatorStyle lipgloss.Style, width int, versionText string) string {
 	if len(bindings) == 0 {
 		return ""
 	}
@@ -31,6 +32,17 @@ func RenderFooter(bindings []KeyBinding, keyStyle, descStyle, separatorStyle lip
 		parts = append(parts, keyStyle.Render(b.Key)+"  "+descStyle.Render(b.Desc))
 	}
 	row := "   " + strings.Join(parts, "    ")
+
+	if versionText != "" {
+		versionStr := separatorStyle.Render(versionText)
+		rowWidth := lipgloss.Width(row)
+		versionWidth := lipgloss.Width(versionStr)
+		gap := width - rowWidth - versionWidth
+		if gap < 2 {
+			gap = 2
+		}
+		row = row + strings.Repeat(" ", gap) + versionStr
+	}
 
 	return sep + "\n" + row
 }

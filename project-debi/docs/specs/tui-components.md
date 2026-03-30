@@ -38,10 +38,10 @@ Data type for footer keybinding display. Returned by each page model's `ActionBi
 ## RenderFooter
 
 ```go
-func RenderFooter(bindings []KeyBinding, keyStyle, descStyle, separatorStyle lipgloss.Style, width int) string
+func RenderFooter(bindings []KeyBinding, keyStyle, descStyle, separatorStyle lipgloss.Style, width int, versionText string) string
 ```
 
-Pure function that renders a separator line and badge-style keybindings. Returns an empty string if `bindings` is empty.
+Pure function that renders a separator line and badge-style keybindings. Returns an empty string if `bindings` is empty. If `versionText` is non-empty, it is rendered right-aligned on the keybinding row using `separatorStyle` for muted color.
 
 ---
 

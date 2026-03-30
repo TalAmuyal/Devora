@@ -181,7 +181,7 @@ func TestSettings_EnterInEditingModeSaves(t *testing.T) {
 
 func TestSettings_JKNavigatesBetweenFields(t *testing.T) {
 	m := newSettingsModel(t)
-	// No explicit repos => fields: prepareCmd(0), addRepo(1), addProfile(2), deleteProfile(3)
+	// No explicit repos => fields: prepareCmd(0), addRepo(1), viewChangelog(2), addProfile(3), deleteProfile(4)
 
 	if m.focused != fieldPrepareCmd {
 		t.Fatalf("expected initial focus on fieldPrepareCmd, got %d", m.focused)
@@ -193,18 +193,23 @@ func TestSettings_JKNavigatesBetweenFields(t *testing.T) {
 	}
 
 	m.Update(settingsKeyMsg('j'))
+	if m.focused != m.viewChangelogField() {
+		t.Fatalf("expected viewChangelogField after second j, got %d", m.focused)
+	}
+
+	m.Update(settingsKeyMsg('j'))
 	if m.focused != m.addProfileField() {
-		t.Fatalf("expected addProfileField after second j, got %d", m.focused)
+		t.Fatalf("expected addProfileField after third j, got %d", m.focused)
 	}
 
 	m.Update(settingsKeyMsg('j'))
 	if m.focused != m.deleteProfileField() {
-		t.Fatalf("expected deleteProfileField after third j, got %d", m.focused)
+		t.Fatalf("expected deleteProfileField after fourth j, got %d", m.focused)
 	}
 
 	m.Update(settingsKeyMsg('j'))
 	if m.focused != fieldPrepareCmd {
-		t.Fatalf("expected fieldPrepareCmd after fourth j (wrap), got %d", m.focused)
+		t.Fatalf("expected fieldPrepareCmd after fifth j (wrap), got %d", m.focused)
 	}
 
 	m.Update(settingsKeyMsg('k'))
@@ -215,6 +220,11 @@ func TestSettings_JKNavigatesBetweenFields(t *testing.T) {
 	m.Update(settingsKeyMsg('k'))
 	if m.focused != m.addProfileField() {
 		t.Fatalf("expected addProfileField after second k, got %d", m.focused)
+	}
+
+	m.Update(settingsKeyMsg('k'))
+	if m.focused != m.viewChangelogField() {
+		t.Fatalf("expected viewChangelogField after third k, got %d", m.focused)
 	}
 }
 
@@ -248,6 +258,21 @@ func TestSettings_EnterOnAddRepoEmitsMessage(t *testing.T) {
 	}
 	if !regMsg.fromSettings {
 		t.Fatal("expected fromSettings to be true")
+	}
+}
+
+func TestSettings_EnterOnViewChangelogEmitsMessage(t *testing.T) {
+	m := newSettingsModel(t)
+	m.focused = m.viewChangelogField()
+
+	cmd := m.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
+
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd for view changelog")
+	}
+	msg := cmd()
+	if _, ok := msg.(openChangelogMsg); !ok {
+		t.Fatalf("expected openChangelogMsg, got %T", msg)
 	}
 }
 
@@ -457,10 +482,10 @@ func TestSettings_NavigationWithExplicitRepos(t *testing.T) {
 		{Name: "repo-a", Path: "/path/to/repo-a"},
 		{Name: "repo-b", Path: "/path/to/repo-b"},
 	}
-	// Fields: prepareCmd(0), addRepo(1), removeRepo-a(2), removeRepo-b(3), addProfile(4), deleteProfile(5)
+	// Fields: prepareCmd(0), addRepo(1), removeRepo-a(2), removeRepo-b(3), viewChangelog(4), addProfile(5), deleteProfile(6)
 
-	if m.fieldCount() != 6 {
-		t.Fatalf("expected fieldCount 6, got %d", m.fieldCount())
+	if m.fieldCount() != 7 {
+		t.Fatalf("expected fieldCount 7, got %d", m.fieldCount())
 	}
 
 	m.focused = fieldPrepareCmd
@@ -479,12 +504,17 @@ func TestSettings_NavigationWithExplicitRepos(t *testing.T) {
 		t.Fatalf("expected removeRepoBaseField+1, got %d", m.focused)
 	}
 
-	m.Update(settingsKeyMsg('j')) // -> addProfile (4)
+	m.Update(settingsKeyMsg('j')) // -> viewChangelog (4)
+	if m.focused != m.viewChangelogField() {
+		t.Fatalf("expected viewChangelogField, got %d", m.focused)
+	}
+
+	m.Update(settingsKeyMsg('j')) // -> addProfile (5)
 	if m.focused != m.addProfileField() {
 		t.Fatalf("expected addProfileField, got %d", m.focused)
 	}
 
-	m.Update(settingsKeyMsg('j')) // -> deleteProfile (5)
+	m.Update(settingsKeyMsg('j')) // -> deleteProfile (6)
 	if m.focused != m.deleteProfileField() {
 		t.Fatalf("expected deleteProfileField, got %d", m.focused)
 	}
@@ -605,9 +635,9 @@ func TestSettings_RemoveRepoClampsFocus(t *testing.T) {
 
 func TestSettings_FieldCountWithNoRepos(t *testing.T) {
 	m := newSettingsModel(t)
-	// No repos: prepareCmd + addRepo + addProfile + deleteProfile = 4
-	if m.fieldCount() != 4 {
-		t.Fatalf("expected fieldCount 4 with no repos, got %d", m.fieldCount())
+	// No repos: prepareCmd + addRepo + viewChangelog + addProfile + deleteProfile = 5
+	if m.fieldCount() != 5 {
+		t.Fatalf("expected fieldCount 5 with no repos, got %d", m.fieldCount())
 	}
 }
 

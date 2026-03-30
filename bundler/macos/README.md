@@ -1,30 +1,37 @@
 ## MacOS App Structure
 
 ```
-devora.app/
-└─ Contents/
-   ├─ Info.plist
-   ├─ MacOS/
-   │  └─ bootstrap.sh
-   └─ Resources/
-      ├─ cc-plugins/
-      │  └─ judge/
-      │     ├─ hooks/
-      │     │  └─ hooks.json
-      │     └─ main.py
-      ├─ app.icns
-      ├─ USER_GUIDE.md
-      ├─ bundled-apps/
-      │  ├─ ccc
-      │  ├─ debi
-      │  └─ glow
-      ├─ kitty-configs/
-      │  ├─ current-theme.conf
-      │  ├─ glow-theme.json
-      │  └─ kitty.conf
-      ├─ kitty.app/
-      │  └─ ...
-      └─ uv
+Devora/                           (DMG root)
+├─ Applications                   (symlink to /Applications)
+├─ CHANGELOG.md
+├─ USER_GUIDE.md
+├─ cc-simple-statusline
+└─ devora.app/
+   └─ Contents/
+      ├─ Info.plist
+      ├─ MacOS/
+      │  └─ bootstrap.sh
+      └─ Resources/
+         ├─ cc-plugins/
+         │  └─ judge/
+         │     ├─ hooks/
+         │     │  └─ hooks.json
+         │     └─ main.py
+         ├─ app.icns
+         ├─ CHANGELOG.md
+         ├─ USER_GUIDE.md
+         ├─ VERSION
+         ├─ bundled-apps/
+         │  ├─ ccc
+         │  ├─ debi
+         │  └─ glow
+         ├─ kitty-configs/
+         │  ├─ current-theme.conf
+         │  ├─ glow-theme.json
+         │  └─ kitty.conf
+         ├─ kitty.app/
+         │  └─ ...
+         └─ uv
 ```
 
 ## Dev Mode
