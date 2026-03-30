@@ -203,6 +203,6 @@ $SHOULD_MAKE_DMG \
 	-format UDZO \
 	-imagekey zlib-level=9 \
 	-srcfolder "$OUTPUT_CONTAINER_DIR" \
-	-o "$BIN_MACOS_DIR/$APP_NAME.dmg"
+	-o "$BIN_MACOS_DIR/${APP_NAME}_${EFFECTIVE_VERSION}.dmg"
 
 echo "Done"

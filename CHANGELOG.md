@@ -14,6 +14,10 @@ Types of changes:
 
 ## Unreleased
 
+### Changed
+
+- Include version in DMG filename (e.g., `Devora_2026-03-28.0.dmg`)
+
 ### Added
 
 - Changelog file to track future changes between releases
