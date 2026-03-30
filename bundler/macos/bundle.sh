@@ -39,9 +39,11 @@ done
 if $IS_DEV_MODE; then
 	APP_NAME="Dev-Devora"
 	APP_IDENTIFIER="com.devora-org.devora-dev"
+	BIN_MACOS_DIR_SUFFIX="-dev"
 else
 	APP_NAME="Devora"
 	APP_IDENTIFIER="com.devora-org.devora"
+	BIN_MACOS_DIR_SUFFIX=""
 fi
 
 # Define basic input paths
@@ -66,7 +68,7 @@ fi
 echo "Effective version: $EFFECTIVE_VERSION"
 
 # Define basic output paths
-BIN_MACOS_DIR="$REPO_ROOT/bin/macOS"
+BIN_MACOS_DIR="$REPO_ROOT/bin/macOS$BIN_MACOS_DIR_SUFFIX"
 OUTPUT_CONTAINER_DIR="$BIN_MACOS_DIR/$APP_NAME"
 OUTPUT_DIR="$OUTPUT_CONTAINER_DIR/$APP_NAME.app"
 ROOT_EXEC_DIR="$OUTPUT_DIR/Contents/MacOS"
