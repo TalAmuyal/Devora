@@ -141,6 +141,7 @@ type AppModel struct {
     palette     ThemePalette
     repoNames   []string
     profileName string
+    version     string
 
     // Creation progress channel
     creationCh chan tea.Msg
@@ -159,10 +160,11 @@ type AppModel struct {
 `AppModel.Update` handles:
 1. `tea.WindowSizeMsg` -- propagates to all page models via `SetSize`
 2. Page transition messages -- sets `activePage` and initializes the target page
-3. Data/result messages -- handles workspace loading, creation progress, deletion, profile activation
-4. `spinnerTickMsg` -- advances creation spinner frame (only while on creation page with no error)
-5. `notifyMsg` / `notifyClearMsg` -- ephemeral 4-second notification system
-6. `tea.KeyPressMsg` -- checks global bindings (see [tui-navigation.md](tui-navigation.md)), then delegates to the active page's `Update` method
+3. `openChangelogMsg` -- opens the changelog in a new Kitty tab via `openChangelogCmd`
+4. Data/result messages -- handles workspace loading, creation progress, deletion, profile activation
+5. `spinnerTickMsg` -- advances creation spinner frame (only while on creation page with no error)
+6. `notifyMsg` / `notifyClearMsg` -- ephemeral 4-second notification system
+7. `tea.KeyPressMsg` -- checks global bindings (see [tui-navigation.md](tui-navigation.md)), then delegates to the active page's `Update` method
 
 ### View layout
 
@@ -175,7 +177,7 @@ type AppModel struct {
 |                                               |
 | check Notification text                       |  <- notification (0-1 lines)
 |----------------------------------------------|  <- footer separator
-|   key  Desc    key  Desc    key  Desc         |  <- footer bindings
+|   key  Desc    key  Desc              version |  <- footer bindings + version
 +----------------------------------------------+
 ```
 
@@ -189,6 +191,7 @@ type AppModel struct {
 - `showSettingsMsg` -- navigate to settings page
 - `showRegisterRepoMsg` -- navigate to register repo page
 - `showProfileRegistrationMsg{fromSettings}` -- navigate to profile registration page. `fromSettings` controls whether back/cancel returns to the settings page instead of the workspace list
+- `openChangelogMsg` -- open the changelog in a new Kitty tab
 
 ### Data types
 
@@ -326,11 +329,21 @@ Path picker (PathPickerModel with directory browser) for entering a git repo pat
 func NewSettingsModel(styles *Styles) SettingsModel
 ```
 
-Multi-item settings page with three focusable fields navigated via `j`/`k` in navigation mode:
+Multi-item settings page with focusable fields navigated via `j`/`k` in navigation mode. Fields are organized into sections:
 
+**Configuration section:**
 1. **Prepare Command** (`fieldPrepareCmd`): Inline-editable text input for the shell command run after worktree creation. Press `enter` to start editing (enters editing mode); `enter` saves, `esc` cancels and restores the previous value.
-2. **Add Profile** (`fieldAddProfile`): Press `enter` to navigate to the profile registration page (emits `showProfileRegistrationMsg{fromSettings: true}`).
-3. **Delete Profile** (`fieldDeleteProfile`): Press `enter` to show an inline y/n confirmation prompt. `y` unregisters the active profile; if no profiles remain, quits the app. If other profiles remain, activates the first one and emits `profileActivatedMsg`. `n` or `esc` cancels.
+
+**Repos section:**
+2. **Add Repo** (`fieldAddRepo`): Press `enter` to navigate to the register repo page.
+3. **Remove Repo** (dynamic, one per explicit repo): Press `enter` to show an inline y/n confirmation prompt.
+
+**Info section:**
+4. **View Changelog** (`viewChangelogField()`): Press `enter` to open the changelog in a new Kitty tab (emits `openChangelogMsg`).
+
+**Profiles section:**
+5. **Add Profile** (`addProfileField()`): Press `enter` to navigate to the profile registration page (emits `showProfileRegistrationMsg{fromSettings: true}`).
+6. **Delete Profile** (`deleteProfileField()`): Press `enter` to show an inline y/n confirmation prompt. `y` unregisters the active profile; if no profiles remain, quits the app. If other profiles remain, activates the first one and emits `profileActivatedMsg`. `n` or `esc` cancels.
 
 Loads the current prepare-command value on activation. Title includes profile name when available.
 
@@ -354,7 +367,7 @@ The page has three modes:
 
 **Messages handled:** `tea.KeyPressMsg` only.
 
-**Transitions:** On save success, emits `notifyMsg` (success) and stays on page. On save error, emits `notifyMsg` (error) and stays on page. On delete, emits `profileActivatedMsg` (if profiles remain) or `tea.Quit` (if last profile). Emits `showProfileRegistrationMsg{fromSettings: true}` for Add Profile. Emits `showWorkspaceListMsg` on back.
+**Transitions:** On save success, emits `notifyMsg` (success) and stays on page. On save error, emits `notifyMsg` (error) and stays on page. On delete, emits `profileActivatedMsg` (if profiles remain) or `tea.Quit` (if last profile). Emits `openChangelogMsg` for View Changelog. Emits `showProfileRegistrationMsg{fromSettings: true}` for Add Profile. Emits `showWorkspaceListMsg` on back.
 
 ### ProfileRegModel
 
@@ -436,10 +449,10 @@ Embeddable vim-style navigation handler. Processes `j`/`k`/`gg`/`G`/arrow keys a
 ### RenderFooter
 
 ```go
-func RenderFooter(bindings []KeyBinding, keyStyle, descStyle, separatorStyle lipgloss.Style, width int) string
+func RenderFooter(bindings []KeyBinding, keyStyle, descStyle, separatorStyle lipgloss.Style, width int, versionText string) string
 ```
 
-Pure function that renders a separator line and badge-style keybindings. Not stateful.
+Pure function that renders a separator line and badge-style keybindings. If `versionText` is non-empty, it is rendered right-aligned on the keybinding row. Not stateful.
 
 ### KeyBinding
 

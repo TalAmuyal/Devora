@@ -290,6 +290,7 @@ func (m AddRepoModel) View() tea.View {
 		bindings,
 		m.styles.FooterKey, m.styles.FooterDesc, m.styles.Separator,
 		m.width,
+		"",
 	)
 
 	view := lipgloss.JoinVertical(lipgloss.Left, content, footer)

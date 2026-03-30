@@ -11,6 +11,7 @@ type showRegisterRepoMsg struct {
 type showProfileRegistrationMsg struct {
 	fromSettings bool
 }
+type openChangelogMsg struct{}
 
 // Workspace data types
 

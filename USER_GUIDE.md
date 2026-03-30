@@ -105,6 +105,10 @@ Profile-specific settings (for the current profile) include:
 - Setting a prepare command: a shell command that runs after every worktree creation (e.g., `npm install`, `mise install`, custom Bash script)
 - **Repos**: Register or unregister repos at arbitrary paths (in addition to auto-discovered repos under `<profile-root>/repos/`)
 
+Info section:
+
+- **View Changelog**: Opens the full changelog in a new kitty tab using glow
+
 ## Optional Additions
 
 ### Simple Status Line
@@ -135,6 +139,16 @@ It can also automate:
 - Programming-language package-managements (`npm`, `poetry`, `uv`, `gem`, `cargo`, etc.) with its [prepare](https://mise.jdx.dev/dev-tools/prepare.html) feature
 - Setting up env-vars
 
+## Versioning
+
+Devora follows a date-based version format: `YYYY-MM-DD.PATCH` (e.g., `2026-03-28.0`).
+
+Development builds between releases show as `YYYY-MM-DD.PATCH-dev.N` where N is the number of commits since the last release.
+
+The current version is displayed in the bottom-right corner of the workspace manager.
+
+To view the full changelog, go to Settings and select "View Changelog".
+
 ## Cheatsheet
 
 ### Devora-wide
@@ -153,7 +167,7 @@ It can also automate:
 - `r`: Refresh workspace list
 - `1 / 2 / 3`: Filter workspaces by "Active" (default) / "Inactive" / "All"
 - `j / k`: Navigate list
-- `s`: Open settings
+- `s`: Open settings (includes "View Changelog" option)
 - `p`: Cycle active profile
 - `q`: Quit (or back in other pages)
 - `esc`: Same as `q`, and also "unfocuses" on text inputs

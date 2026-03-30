@@ -2,9 +2,11 @@ package tui
 
 import (
 	"devora/internal/config"
+	"devora/internal/process"
 	"devora/internal/task"
 	"devora/internal/terminal"
 	"devora/internal/tui/components"
+	"devora/internal/version"
 	"devora/internal/workspace"
 	"encoding/json"
 	"fmt"
@@ -52,6 +54,7 @@ type AppModel struct {
 	palette     ThemePalette
 	repoNames   []string
 	profileName string
+	version     string
 
 	creationCh chan tea.Msg
 
@@ -81,6 +84,7 @@ func NewAppModel(
 		palette:     palette,
 		repoNames:   repoNames,
 		profileName: profileName,
+		version:     version.Get(),
 
 		workspaceList: NewWorkspaceListModel(&styles),
 		newTask:       NewNewTaskModel(repoNames, &styles),
@@ -160,6 +164,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.profileReg.returnToSettings = msg.fromSettings
 		m.activePage = PageProfileRegistration
 		return m, nil
+
+	case openChangelogMsg:
+		return m, m.openChangelogCmd()
 
 	// Data messages
 	case workspaceLoadErrorMsg:
@@ -360,7 +367,7 @@ func (m AppModel) View() tea.View {
 	}
 
 	// Footer
-	footer := components.RenderFooter(actionBindings, m.styles.FooterKey, m.styles.FooterDesc, m.styles.Separator, m.width)
+	footer := components.RenderFooter(actionBindings, m.styles.FooterKey, m.styles.FooterDesc, m.styles.Separator, m.width, m.version)
 
 	// Assemble
 	var parts []string
@@ -436,6 +443,37 @@ func (m AppModel) renderSeparator() string {
 // Result returns the app result after exit.
 func (m AppModel) Result() *AppResult {
 	return m.result
+}
+
+// openChangelogCmd returns a command that opens the changelog in a new Kitty tab.
+func (m AppModel) openChangelogCmd() tea.Cmd {
+	return func() tea.Msg {
+		resourcesDir := os.Getenv("DEVORA_RESOURCES_DIR")
+		if resourcesDir == "" {
+			return notifyMsg{text: "Changelog not available outside the app bundle", isError: true}
+		}
+		configDir := os.Getenv("KITTY_CONFIG_DIRECTORY")
+		if configDir == "" {
+			return notifyMsg{text: "Kitty config directory not set", isError: true}
+		}
+		changelogPath := filepath.Join(resourcesDir, "CHANGELOG.md")
+		glowStylePath := filepath.Join(configDir, "glow-theme.json")
+		shell := os.Getenv("SHELL")
+		if shell == "" {
+			shell = "/bin/sh"
+		}
+		_, err := process.GetOutput([]string{
+			"kitty", "@", "launch",
+			"--type=tab",
+			"--tab-title", "Changelog",
+			shell, "--login", "--interactive",
+			"-c", fmt.Sprintf("glow --style %s --pager %s", glowStylePath, changelogPath),
+		})
+		if err != nil {
+			return notifyMsg{text: fmt.Sprintf("Failed to open changelog: %v", err), isError: true}
+		}
+		return nil
+	}
 }
 
 // loadWorkspacesCmd returns a command that gathers workspace info in the background.

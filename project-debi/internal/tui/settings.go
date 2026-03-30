@@ -53,8 +53,12 @@ func (m *SettingsModel) removeRepoBaseField() settingsField {
 	return fieldAddRepo + 1
 }
 
-func (m *SettingsModel) addProfileField() settingsField {
+func (m *SettingsModel) viewChangelogField() settingsField {
 	return m.removeRepoBaseField() + settingsField(len(m.explicitRepos))
+}
+
+func (m *SettingsModel) addProfileField() settingsField {
+	return m.viewChangelogField() + 1
 }
 
 func (m *SettingsModel) deleteProfileField() settingsField {
@@ -63,7 +67,7 @@ func (m *SettingsModel) deleteProfileField() settingsField {
 
 func (m *SettingsModel) isRemoveRepoField(f settingsField) bool {
 	base := m.removeRepoBaseField()
-	return f >= base && f < m.addProfileField()
+	return f >= base && f < m.viewChangelogField()
 }
 
 func (m *SettingsModel) removeRepoIndex(f settingsField) int {
@@ -177,6 +181,8 @@ func (m *SettingsModel) handleNavKey(key string) tea.Cmd {
 		case m.isRemoveRepoField(m.focused):
 			m.confirmRemoveIdx = m.removeRepoIndex(m.focused)
 			return nil
+		case m.focused == m.viewChangelogField():
+			return func() tea.Msg { return openChangelogMsg{} }
 		case m.focused == m.addProfileField():
 			return func() tea.Msg { return showProfileRegistrationMsg{fromSettings: true} }
 		case m.focused == m.deleteProfileField():
@@ -310,6 +316,14 @@ func (m *SettingsModel) View() string {
 			b.WriteString("  " + bar + label + "\n")
 		}
 	}
+
+	b.WriteString("\n")
+
+	// Info section
+	b.WriteString("  " + m.styles.Title.Render("Info") + "\n")
+
+	bar, label = m.renderFieldBar(m.viewChangelogField(), "View Changelog")
+	b.WriteString("  " + bar + label + "\n")
 
 	b.WriteString("\n")
 
