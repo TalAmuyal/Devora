@@ -369,19 +369,33 @@ func (m AppModel) View() tea.View {
 	// Footer
 	footer := components.RenderFooter(actionBindings, m.styles.FooterKey, m.styles.FooterDesc, m.styles.Separator, m.width, m.version)
 
-	// Assemble
-	var parts []string
-	parts = append(parts, header)
+	// Assemble the top section and pad it so the footer sticks to the bottom.
+	var topParts []string
+	topParts = append(topParts, header)
 	if tabBar != "" {
-		parts = append(parts, tabBar)
+		topParts = append(topParts, tabBar)
 	}
-	parts = append(parts, content)
+	topParts = append(topParts, content)
 	if notify != "" {
-		parts = append(parts, notify)
+		topParts = append(topParts, notify)
 	}
-	parts = append(parts, footer)
+	topSection := lipgloss.JoinVertical(lipgloss.Left, topParts...)
 
-	view := lipgloss.JoinVertical(lipgloss.Left, parts...)
+	if footer != "" {
+		topHeight := lipgloss.Height(topSection)
+		footerHeight := lipgloss.Height(footer)
+		padLines := m.height - topHeight - footerHeight
+		if padLines > 0 {
+			topSection += strings.Repeat("\n", padLines)
+		}
+	}
+
+	var view string
+	if footer != "" {
+		view = lipgloss.JoinVertical(lipgloss.Left, topSection, footer)
+	} else {
+		view = topSection
+	}
 	v := tea.NewView(view)
 	v.AltScreen = true
 	return v

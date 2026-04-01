@@ -7,6 +7,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 func ctrlC() tea.Msg {
@@ -836,5 +837,47 @@ func TestListenCreation_ClosedChannel_ReturnsNil(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("listenCreation blocked on closed channel")
+	}
+}
+
+// Sticky footer tests
+
+// renderSizedView sends a WindowSizeMsg and returns the rendered view content.
+func renderSizedView(m AppModel, width, height int) string {
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: width, Height: height})
+	return updated.(AppModel).View().Content
+}
+
+func TestView_HeightMatchesWindowSize(t *testing.T) {
+	content := renderSizedView(newTestAppModel(), 80, 24)
+
+	if viewHeight := lipgloss.Height(content); viewHeight != 24 {
+		t.Fatalf("expected view height 24, got %d", viewHeight)
+	}
+}
+
+func TestView_FooterOnLastLines(t *testing.T) {
+	content := renderSizedView(newTestAppModel(), 80, 24)
+	lines := strings.Split(content, "\n")
+
+	// The footer occupies the last 2 lines (separator + keybinding row).
+	if len(lines) < 2 {
+		t.Fatalf("expected at least 2 lines, got %d", len(lines))
+	}
+	separatorLine := lines[len(lines)-2]
+	if !strings.Contains(separatorLine, "─") {
+		t.Fatalf("expected footer separator on second-to-last line, got %q", separatorLine)
+	}
+}
+
+func TestView_EmptyFooter_NoExtraBlankLine(t *testing.T) {
+	m := newTestAppModel()
+	m.activePage = PageCreation // ActionBindings() returns nil -> empty footer
+
+	content := renderSizedView(m, 80, 24)
+
+	// With no footer, the view should not exceed the window height
+	if viewHeight := lipgloss.Height(content); viewHeight > 24 {
+		t.Fatalf("expected view height <= 24, got %d", viewHeight)
 	}
 }
