@@ -14,6 +14,10 @@ Types of changes:
 
 ## Unreleased
 
+### Fixed
+
+- Footer now stays attached to the bottom of the screen even when content is short
+
 ### Changed
 
 - Include version in DMG filename (e.g., `Devora_2026-03-28.0.dmg`)
