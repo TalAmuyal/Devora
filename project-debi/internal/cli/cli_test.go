@@ -1,11 +1,42 @@
 package cli
 
 import (
+	"bytes"
 	"errors"
+	"io"
 	"os"
 	"strings"
 	"testing"
 )
+
+func TestRun_HelpFlags_PrintsUsageAndReturnsNil(t *testing.T) {
+	for _, flag := range []string{"-h", "--help"} {
+		t.Run(flag, func(t *testing.T) {
+			old := os.Stdout
+			r, w, err := os.Pipe()
+			if err != nil {
+				t.Fatal(err)
+			}
+			os.Stdout = w
+
+			runErr := Run([]string{flag})
+
+			w.Close()
+			os.Stdout = old
+
+			if runErr != nil {
+				t.Fatalf("expected no error for %s, got: %s", flag, runErr.Error())
+			}
+
+			var buf bytes.Buffer
+			io.Copy(&buf, r)
+			output := buf.String()
+			if !strings.Contains(output, "usage: debi") {
+				t.Fatalf("expected usage message on stdout, got: %q", output)
+			}
+		})
+	}
+}
 
 func TestRun_NoArgs_ReturnsUsageError(t *testing.T) {
 	err := Run([]string{})

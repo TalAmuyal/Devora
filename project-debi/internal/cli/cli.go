@@ -60,6 +60,11 @@ func Run(args []string) error {
 		return &UsageError{Message: usageMessage}
 	}
 
+	if args[0] == "-h" || args[0] == "--help" {
+		fmt.Println(usageMessage)
+		return nil
+	}
+
 	switch args[0] {
 	case "workspace-ui", "w":
 		return runWorkspaceUI()

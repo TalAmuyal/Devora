@@ -16,6 +16,7 @@ Types of changes:
 
 ### Added
 
+- `-h`/`--help` flag support in the debi CLI
 - 23 git shortcut commands (`gaa`, `gaac`, `gaacp`, `gaaa`, `gaaap`, `gb`, `gbd`, `gbdc`, `gcl`, `gcom`, `gd`, `gfo`, `gg`, `gl`, `gpo`, `gpof`, `gpop`, `gri`, `grl`, `grlp`, `grom`, `gst`, `gstash`) for common git workflows
 - `PassthroughError` and `RunPassthrough` in the process package for terminal-connected command execution
 - Enhanced redaction for Judge test cases: path segment hashing, git hash replacement, commit message/PR title redaction, timestamp zeroing, description removal, and audit mode (`--audit`)
