@@ -57,6 +57,14 @@ DECLINED_COMMANDS = (
         ["go", "test"],
         MSG_USE_MISE_TASK,
     ),
+    (
+        ["go", "mod"],
+        MSG_USE_MISE_TASK,
+    ),
+    (
+        ["npm", "install"],
+        MSG_USE_MISE_TASK,
+    ),
 )
 
 ALLOWED_COMMANDS = {
@@ -205,6 +213,8 @@ IRRELEVANT_PREFIXES = {
     "MISE_PREPARE=false",
     'MISE_PREPARE="false"',
     "MISE_PREPARE='false'",
+    "MISE_PREPARE_SKIP=1",
+    "MISE_PREPARE_SKIP=0",
     "PYTHONPATH=.",
 }
 
