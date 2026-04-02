@@ -62,6 +62,10 @@ DECLINED_COMMANDS = (
         MSG_USE_MISE_TASK,
     ),
     (
+        ["go", "vet"],
+        MSG_USE_MISE_TASK,
+    ),
+    (
         ["npm", "install"],
         MSG_USE_MISE_TASK,
     ),
