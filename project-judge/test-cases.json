@@ -402,5 +402,25 @@
             }
         },
         "approved"
+    ],
+    [
+        {
+            "cwd": "/home/user/my-dev/workspaces/ws-1/repo-3",
+            "tool_input": {
+                "command": "cd /home/user/my-dev/workspaces/ws-1/repo-3/sub-folder && go doc charm.land/bubbletea/v2 View 2>&1 | head -40",
+                "description": "Look up the tea.View type documentation"
+            }
+        },
+        "approved"
+    ],
+    [
+        {
+            "cwd": "/home/user/my-dev/workspaces/ws-1/repo-3",
+            "tool_input": {
+                "command": "submit-pr \"Fix footer not sticking to bottom of screen\" \"## Summary\n\n- ...",
+                "description": "Submit PR with sticky footer fix"
+            }
+        },
+        "approved"
     ]
 ]
