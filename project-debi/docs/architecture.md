@@ -20,6 +20,7 @@ main.go
 
 cli
   ├── config     (profiles, repos, settings)
+  ├── git        (git shortcut commands)
   ├── process    (shell command execution)
   ├── tui        (UI entry points)
   └── workspace  (workspace detection from CWD)
@@ -35,11 +36,15 @@ tui
 
 workspace
   ├── config     (workspaces root path, prepare command)
+  ├── git        (default branch name utility)
   ├── process    (git commands)
   └── errgroup   (parallel worktree removal)
 
 terminal
   └── process    (kitty @ commands)
+
+git
+  └── process    (command execution)
 
 config, process, task, crash
   └── (stdlib only)

@@ -2,8 +2,10 @@ package process
 
 import (
 	"errors"
+	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -55,10 +57,10 @@ func TestGetOutput_VerboseExecError_IncludesStderr(t *testing.T) {
 	}
 
 	errStr := execErr.Error()
-	if !contains(errStr, "stderr:") {
+	if !strings.Contains(errStr, "stderr:") {
 		t.Fatalf("error string should contain stderr section, got: %s", errStr)
 	}
-	if !contains(errStr, "oops") {
+	if !strings.Contains(errStr, "oops") {
 		t.Fatalf("error string should contain stderr content, got: %s", errStr)
 	}
 }
@@ -70,10 +72,10 @@ func TestGetOutput_VerboseExecError_OmitsEmptySections(t *testing.T) {
 	}
 
 	errStr := err.Error()
-	if contains(errStr, "stdout:") {
+	if strings.Contains(errStr, "stdout:") {
 		t.Fatalf("error string should not contain stdout section for empty stdout, got: %s", errStr)
 	}
-	if contains(errStr, "stderr:") {
+	if strings.Contains(errStr, "stderr:") {
 		t.Fatalf("error string should not contain stderr section for empty stderr, got: %s", errStr)
 	}
 }
@@ -132,6 +134,50 @@ func TestGetShellOutput_ShellFeatures(t *testing.T) {
 	}
 }
 
+func TestRunPassthrough_Success(t *testing.T) {
+	err := RunPassthrough([]string{"true"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRunPassthrough_FailedCommand_ReturnsPassthroughError(t *testing.T) {
+	err := RunPassthrough([]string{"false"})
+	if err == nil {
+		t.Fatal("expected error for failed command")
+	}
+
+	var ptErr *PassthroughError
+	if !errors.As(err, &ptErr) {
+		t.Fatalf("expected *PassthroughError, got %T", err)
+	}
+	if ptErr.Code != 1 {
+		t.Fatalf("expected exit code 1, got %d", ptErr.Code)
+	}
+}
+
+func TestPassthroughError_ErrorMessage(t *testing.T) {
+	err := &PassthroughError{Code: 42}
+	if err.Error() != "exit code 42" {
+		t.Fatalf("expected %q, got %q", "exit code 42", err.Error())
+	}
+}
+
+func TestRunPassthrough_WithCwd(t *testing.T) {
+	dir := t.TempDir()
+	// Create a marker file in the temp dir
+	markerPath := filepath.Join(dir, "marker.txt")
+	if writeErr := os.WriteFile(markerPath, []byte("hello"), 0644); writeErr != nil {
+		t.Fatalf("failed to create marker file: %v", writeErr)
+	}
+
+	// Use 'test -f marker.txt' to verify CWD was set correctly
+	err := RunPassthrough([]string{"test", "-f", "marker.txt"}, WithCwd(dir))
+	if err != nil {
+		t.Fatalf("expected success when running in dir with marker file, got: %v", err)
+	}
+}
+
 func TestGetShellOutput_WithCwd(t *testing.T) {
 	dir := t.TempDir()
 	out, err := GetShellOutput("pwd", WithCwd(dir))
@@ -146,15 +192,3 @@ func TestGetShellOutput_WithCwd(t *testing.T) {
 	}
 }
 
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && searchString(s, substr)
-}
-
-func searchString(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
-}

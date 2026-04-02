@@ -47,7 +47,36 @@ func WithCwd(cwd string) ExecOption
 
 Sets the working directory for the command.
 
+### PassthroughError
+
+```go
+type PassthroughError struct {
+    Code int
+}
+```
+
+- `Error() string` - Returns `"exit code <Code>"`.
+
+Represents a command that exited with a non-zero status when run in passthrough mode. Used by `main.go` to exit with the same code without crash logging.
+
 ## Functions
+
+### RunPassthrough
+
+```go
+func RunPassthrough(command []string, opts ...ExecOption) error
+```
+
+Executes a command with stdin/stdout/stderr connected directly to the terminal (passthrough mode). Used for git shortcuts where the user interacts with the command directly.
+
+Behavior:
+1. Create `exec.Cmd` from `command[0]` (program) and `command[1:]` (args).
+2. Apply options (e.g., set `cmd.Dir` from `WithCwd`).
+3. Connect `cmd.Stdin = os.Stdin`, `cmd.Stdout = os.Stdout`, `cmd.Stderr = os.Stderr`.
+4. Run the command.
+5. If the command fails with `*exec.ExitError`, return `&PassthroughError{Code: exitErr.ExitCode()}`.
+6. If the command fails with another error, return `fmt.Errorf("failed to run %v: %w", command, err)`.
+7. On success, return nil.
 
 ### GetOutput
 
@@ -83,6 +112,10 @@ This is needed for commands that use shell features (pipes, redirections) or are
 - Test `WithCwd` by running a command that outputs the working directory.
 - Test `GetShellOutput` with a shell expression.
 - Test `Unwrap` returns the underlying error.
+- Test `RunPassthrough` with a successful command (`true`) returns nil.
+- Test `RunPassthrough` with a failing command (`false`) returns `*PassthroughError` with correct exit code.
+- Test `PassthroughError.Error()` returns the expected message format.
+- Test `RunPassthrough` with `WithCwd` sets the working directory correctly.
 
 ## Notes
 

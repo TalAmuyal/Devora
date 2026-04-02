@@ -8,7 +8,9 @@ Define and dispatch the CLI commands. This is the entry point that wires togethe
 
 ## Commands
 
-The CLI has exactly 3 commands, each with a hidden short alias:
+The CLI has 3 workspace commands (each with a hidden short alias) and 23 git shortcuts:
+
+### Workspace Commands
 
 | Command | Alias | Args | Description |
 |---------|-------|------|-------------|
@@ -16,11 +18,42 @@ The CLI has exactly 3 commands, each with a hidden short alias:
 | `add` | `a` | none | Open the add-repo TUI (must be inside a workspace) |
 | `rename` | `r` | `<new-name>` (positional, required) | Rename the current terminal session |
 
+### Git Shortcuts
+
+All git shortcuts run git commands in passthrough mode (stdin/stdout/stderr connected to the terminal).
+They return `PassthroughError` on non-zero exit.
+
+| Command | Args | Description |
+|---------|------|-------------|
+| `gaa` | none | `git add .` |
+| `gaac` | `<msg>` (required) | `git add . && git commit -m <msg>` |
+| `gaacp` | `<msg>` (required) | `gaac` then `git push origin` |
+| `gaaa` | none | `git add . && git commit --amend --no-edit` |
+| `gaaap` | none | `gaaa` then `gpof` |
+| `gb` | `[args]` | `git branch [args]` |
+| `gbd` | `<branch>...` (required) | `git branch -D <branch>...` |
+| `gbdc` | none | Delete current branch (detach first) |
+| `gcl` | none | `gfo` then `gcom` |
+| `gcom` | `[args]` | `git checkout origin/<default-branch> [args]` |
+| `gd` | `[args]` | `git diff [args]` |
+| `gfo` | `[args]` | `git fetch origin [args]` |
+| `gg` | `[args]` | `git grep [args]` |
+| `gl` | `[args]` | `git log [args]` |
+| `gpo` | `[args]` | `git push origin [args]` |
+| `gpof` | `[args]` | `git push origin --force [args]` |
+| `gpop` | `[args]` | `git stash pop [args]` |
+| `gri` | `[N]` | Interactive rebase (N commits or since branch) |
+| `grl` | none | `gfo` then `grom` |
+| `grlp` | none | `grl` then `gpof` |
+| `grom` | none | `git rebase origin/<default-branch>` |
+| `gst` | `[args]` | `git status [args]` |
+| `gstash` | `[args]` | `git stash [args]` |
+
 ## CLI Framework
 
-Hand-rolled dispatcher using `os.Args`. No external CLI framework (cobra, etc.) is needed for 3 commands with minimal argument parsing.
-
-If the CLI grows significantly in the future, migrating to a framework is straightforward because each command is implemented in a separate function.
+Hand-rolled dispatcher using `os.Args`.
+No external CLI framework (cobra, etc.) is needed.
+Git shortcut commands are implemented in the `internal/git` package and dispatched via `switch` cases.
 
 ## UsageError
 
@@ -53,10 +86,35 @@ Behavior:
 ```
 usage: debi <command> [args]
 
-Commands:
+Workspace Commands:
   workspace-ui (w)  Open the workspace management UI
   add (a)           Add a repo to the current workspace
   rename (r)        Rename the current terminal session
+
+Git Shortcuts:
+  gaa               Stage all changes
+  gaac <msg>        Stage all and commit with message
+  gaacp <msg>       Stage all, commit, and push to origin
+  gaaa              Stage all and amend last commit
+  gaaap             Stage all, amend, and force-push
+  gb [args]         git branch
+  gbd <branch>...   Force-delete branches
+  gbdc              Delete current branch (detach first)
+  gcl               Fetch origin and checkout default branch
+  gcom [args]       Checkout default branch from origin
+  gd [args]         git diff
+  gfo [args]        Fetch from origin
+  gg [args]         git grep
+  gl [args]         git log
+  gpo [args]        Push to origin
+  gpof [args]       Force-push to origin
+  gpop [args]       Pop git stash
+  gri [N]           Interactive rebase (N commits or since branch)
+  grl               Fetch and rebase on default branch
+  grlp              Fetch, rebase, and force-push
+  grom              Rebase on origin default branch
+  gst [args]        git status
+  gstash [args]     git stash
 ```
 
 ## Command Handlers
@@ -128,6 +186,10 @@ func main() {
             fmt.Fprintln(os.Stderr, usageErr.Message)
             os.Exit(1)
         }
+        var ptErr *process.PassthroughError
+        if errors.As(err, &ptErr) {
+            os.Exit(ptErr.Code)
+        }
         crash.HandleError(err)
         os.Exit(1)
     }
@@ -139,4 +201,6 @@ func main() {
 - Test that unknown commands return an appropriate error.
 - Test that missing arguments for `rename` return an error.
 - Test that empty args print usage.
+- Test that `gaac`, `gaacp`, and `gbd` without required args return `UsageError`.
+- Test that all 23 git commands are recognized (do not return "unknown command").
 - Command handler integration tests are better handled at a higher level (testing the actual TUI behavior or workspace operations).
