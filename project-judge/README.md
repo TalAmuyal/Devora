@@ -37,6 +37,17 @@ When it encounters a situation that it doesn't know how to handle, it saves it a
 An end-to-end test is done by running the script with known inputs and matching that to an expected result.
 The test cases are stored in `./test-cases.json`.
 
+## Redaction
+
+`redact.py` sanitizes `test-cases.json` before it enters the repo, removing PII and sensitive content.
+It redacts home directory paths, path segments (hashed to `project-XXXXX`), git hashes, commit messages/PR titles, timestamps, and `description` fields.
+
+```
+./redact.py           # Preview redacted output on stdout
+./redact.py --apply   # Redact test-cases.json in place
+./redact.py --audit   # Verify no suspicious content remains
+```
+
 ## Backlog
 
 ## Next steps
