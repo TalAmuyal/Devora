@@ -2,6 +2,7 @@ package cli
 
 import (
 	"devora/internal/config"
+	"devora/internal/git"
 	"devora/internal/process"
 	"devora/internal/task"
 	"devora/internal/tui"
@@ -22,9 +23,41 @@ func (e *UsageError) Error() string {
 	return e.Message
 }
 
+const usageMessage = `usage: debi <command> [args]
+
+Workspace Commands:
+  workspace-ui (w)  Open the workspace management UI
+  add (a)           Add a repo to the current workspace
+  rename (r)        Rename the current terminal session
+
+Git Shortcuts:
+  gaa               Stage all changes
+  gaac <msg>        Stage all and commit with message
+  gaacp <msg>       Stage all, commit, and push to origin
+  gaaa              Stage all and amend last commit
+  gaaap             Stage all, amend, and force-push
+  gb [args]         git branch
+  gbd <branch>...   Force-delete branches
+  gbdc              Delete current branch (detach first)
+  gcl               Fetch origin and checkout default branch
+  gcom [args]       Checkout default branch from origin
+  gd [args]         git diff
+  gfo [args]        Fetch from origin
+  gg [args]         git grep
+  gl [args]         git log
+  gpo [args]        Push to origin
+  gpof [args]       Force-push to origin
+  gpop [args]       Pop git stash
+  gri [N]           Interactive rebase (N commits or since branch)
+  grl               Fetch and rebase on default branch
+  grlp              Fetch, rebase, and force-push
+  grom              Rebase on origin default branch
+  gst [args]        git status
+  gstash [args]     git stash`
+
 func Run(args []string) error {
 	if len(args) < 1 {
-		return &UsageError{Message: "usage: debi <command> [args]\n\nCommands:\n  workspace-ui (w)  Open the workspace management UI\n  add (a)           Add a repo to the current workspace\n  rename (r)        Rename the current terminal session"}
+		return &UsageError{Message: usageMessage}
 	}
 
 	switch args[0] {
@@ -37,6 +70,68 @@ func Run(args []string) error {
 			return &UsageError{Message: "usage: debi rename <new-name>"}
 		}
 		return runRename(args[1])
+
+	// Git shortcuts — no args
+	case "gaa":
+		return git.Gaa()
+	case "gaaa":
+		return git.Gaaa()
+	case "gaaap":
+		return git.Gaaap()
+	case "gbdc":
+		return git.Gbdc()
+	case "gcl":
+		return git.Gcl()
+	case "grl":
+		return git.Grl()
+	case "grlp":
+		return git.Grlp()
+	case "grom":
+		return git.Grom()
+
+	// Git shortcuts — required args
+	case "gaac":
+		if len(args) < 2 {
+			return &UsageError{Message: "usage: debi gaac <msg>"}
+		}
+		return git.Gaac(args[1:])
+	case "gaacp":
+		if len(args) < 2 {
+			return &UsageError{Message: "usage: debi gaacp <msg>"}
+		}
+		return git.Gaacp(args[1:])
+	case "gbd":
+		if len(args) < 2 {
+			return &UsageError{Message: "usage: debi gbd <branch>..."}
+		}
+		return git.Gbd(args[1:])
+
+	// Git shortcuts — optional args
+	case "gb":
+		return git.Gb(args[1:])
+	case "gcom":
+		return git.Gcom(args[1:])
+	case "gd":
+		return git.Gd(args[1:])
+	case "gfo":
+		return git.Gfo(args[1:])
+	case "gg":
+		return git.Gg(args[1:])
+	case "gl":
+		return git.Gl(args[1:])
+	case "gpo":
+		return git.Gpo(args[1:])
+	case "gpof":
+		return git.Gpof(args[1:])
+	case "gpop":
+		return git.Gpop(args[1:])
+	case "gri":
+		return git.Gri(args[1:])
+	case "gst":
+		return git.Gst(args[1:])
+	case "gstash":
+		return git.Gstash(args[1:])
+
 	default:
 		return &UsageError{Message: fmt.Sprintf("unknown command: %s", args[0])}
 	}

@@ -6,10 +6,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"devora/internal/config"
+	"devora/internal/git"
 	"devora/internal/process"
 )
 
@@ -31,14 +31,7 @@ func getRepoPath(repoName string) (string, error) {
 }
 
 func getDefaultBranchName(repoPath string) (string, error) {
-	output, err := process.GetOutput(
-		[]string{"git", "symbolic-ref", "refs/remotes/origin/HEAD"},
-		process.WithCwd(repoPath),
-	)
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimPrefix(output, "refs/remotes/origin/"), nil
+	return git.DefaultBranchName(process.WithCwd(repoPath))
 }
 
 func MakeAndPrepareWorkTree(workspacePath string, repoName string, worktreeDirName string) error {

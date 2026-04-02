@@ -9,6 +9,7 @@ The workspace package manages workspace directories, their lifecycle states, git
 ## Dependencies
 
 - `devora/internal/config` -- profile access, registered repos, prepare command
+- `devora/internal/git` -- `DefaultBranchName` utility (shared with git shortcuts)
 - `devora/internal/process` -- shell command execution
 - `golang.org/x/sync/errgroup` -- parallel worktree removal in `DeleteWorkspace`
 
@@ -310,7 +311,7 @@ Creates a git worktree in the workspace and prepares it for use.
 Steps (executed sequentially):
 
 1. **Resolve repo path**: Look up `repoName` in `config.GetRegisteredRepos()` by matching `filepath.Base()`. Returns an error if no matching repo is found.
-2. **Get default branch**: Run `git symbolic-ref refs/remotes/origin/HEAD` in the repo directory and strip the `refs/remotes/origin/` prefix to get the branch name.
+2. **Get default branch**: Call `git.DefaultBranchName(process.WithCwd(repoPath))` to get the branch name.
 3. **Fetch**: Run `git fetch origin <branch>` in the source repo directory.
    ```
    process.GetOutput([]string{"git", "fetch", "origin", branch}, process.WithCwd(repoPath))

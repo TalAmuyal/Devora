@@ -3,6 +3,7 @@ package main
 import (
 	"devora/internal/cli"
 	"devora/internal/crash"
+	"devora/internal/process"
 	"errors"
 	"fmt"
 	"os"
@@ -20,6 +21,10 @@ func main() {
 		if errors.As(err, &usageErr) {
 			fmt.Fprintln(os.Stderr, usageErr.Message)
 			os.Exit(1)
+		}
+		var ptErr *process.PassthroughError
+		if errors.As(err, &ptErr) {
+			os.Exit(ptErr.Code)
 		}
 		crash.HandleError(err)
 		os.Exit(1)
