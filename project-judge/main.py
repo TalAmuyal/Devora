@@ -88,6 +88,7 @@ ALLOWED_COMMANDS = {
     "python3",
     ".venv/bin/python",
     "./.venv/bin/python",
+    "submit-pr",
 }
 
 DERISKING_FLAGS = {
@@ -180,6 +181,7 @@ class Detectors:
                 ["git" ,"mv"],
                 ["git", "remote", "get-url"],
                 ["git", "rev-parse"],
+                ["go", "doc"],
                 ["helm", "dependency"],
                 ["mise", "help"],
                 ["mise", "ls"],
