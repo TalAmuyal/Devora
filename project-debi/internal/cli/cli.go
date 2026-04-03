@@ -3,6 +3,7 @@ package cli
 import (
 	"devora/internal/config"
 	"devora/internal/git"
+	"devora/internal/health"
 	"devora/internal/process"
 	"devora/internal/task"
 	"devora/internal/tui"
@@ -29,6 +30,9 @@ Workspace Commands:
   workspace-ui (w)  Open the workspace management UI
   add (a)           Add a repo to the current workspace
   rename (r)        Rename the current terminal session
+
+Health:
+  health [flags]        Check Devora dependencies
 
 Git Shortcuts:
   gaa               Stage all changes
@@ -75,6 +79,9 @@ func Run(args []string) error {
 			return &UsageError{Message: "usage: debi rename <new-name>"}
 		}
 		return runRename(args[1])
+
+	case "health":
+		return runHealth(args[1:])
 
 	// Git shortcuts — no args
 	case "gaa":
@@ -218,6 +225,25 @@ func runAddRepo() error {
 		wsPath,
 		repoNames,
 	)
+}
+
+func runHealth(args []string) error {
+	strict := false
+	verbose := false
+	for _, arg := range args {
+		switch arg {
+		case "-h", "--help":
+			fmt.Println("usage: debi health [--strict] [-v|--verbose]\n\nCheck Devora dependencies and report their status.\n\nFlags:\n  --strict      Exit with code 1 if any dependency (including optional) is missing\n  -v, --verbose  Show dependency locations")
+			return nil
+		case "--strict":
+			strict = true
+		case "-v", "--verbose":
+			verbose = true
+		default:
+			return &UsageError{Message: fmt.Sprintf("unknown flag: %s\nusage: debi health [--strict] [-v|--verbose]", arg)}
+		}
+	}
+	return health.Run(os.Stdout, strict, verbose)
 }
 
 func runRename(newName string) error {

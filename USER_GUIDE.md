@@ -5,7 +5,8 @@
 1. Install [Claude Code](https://code.claude.com/docs/en/quickstart#step-1-install-claude-code)
 2. Go over this user guide to understand the core concepts and workflow
 	- Setup anything in [Optional Additions](#optional-additions) that catches your eye
-3. Start Devora and create your first profile
+3. Run `debi health` to verify that all required dependencies are installed (use `--strict` to also check optional ones)
+4. Start Devora and create your first profile
 
 ### MacOS
 
