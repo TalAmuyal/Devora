@@ -13,9 +13,11 @@ func stubHealthDeps(t *testing.T) {
 	t.Helper()
 	origLookPath := lookPath
 	origGetVersion := getVersion
+	origCheckGitHub := checkGitHub
 	t.Cleanup(func() {
 		lookPath = origLookPath
 		getVersion = origGetVersion
+		checkGitHub = origCheckGitHub
 	})
 }
 
@@ -193,6 +195,9 @@ func TestRun_AllFound(t *testing.T) {
 	getVersion = func(command []string) (string, error) {
 		return "v1.0.0", nil
 	}
+	checkGitHub = func() (string, error) {
+		return "Test User", nil
+	}
 
 	var buf bytes.Buffer
 	err := Run(&buf, false, false)
@@ -219,8 +224,14 @@ func TestRun_AllFound(t *testing.T) {
 	if !strings.Contains(output, "Required met:") || !strings.Contains(output, "(6/6)") {
 		t.Fatalf("expected required summary line with count, got:\n%s", output)
 	}
-	if !strings.Contains(output, "Optional met:") || !strings.Contains(output, "(3/3)") {
+	if !strings.Contains(output, "Optional met:") || !strings.Contains(output, "(4/4)") {
 		t.Fatalf("expected optional summary line with count, got:\n%s", output)
+	}
+	if !strings.Contains(output, "Credentials:") {
+		t.Fatal("expected output to contain 'Credentials:' header")
+	}
+	if !strings.Contains(output, "Credentials met:") || !strings.Contains(output, "(1/1)") {
+		t.Fatalf("expected credentials summary with (1/1), got:\n%s", output)
 	}
 }
 
@@ -232,6 +243,9 @@ func TestRun_DefaultHidesPath(t *testing.T) {
 	}
 	getVersion = func(command []string) (string, error) {
 		return "1.0.0", nil
+	}
+	checkGitHub = func() (string, error) {
+		return "Test User", nil
 	}
 
 	var buf bytes.Buffer
@@ -254,6 +268,9 @@ func TestRun_VerboseShowsPath(t *testing.T) {
 	}
 	getVersion = func(command []string) (string, error) {
 		return "1.0.0", nil
+	}
+	checkGitHub = func() (string, error) {
+		return "Test User", nil
 	}
 
 	var buf bytes.Buffer
@@ -279,6 +296,9 @@ func TestRun_RequiredMissing(t *testing.T) {
 	}
 	getVersion = func(command []string) (string, error) {
 		return "v1.0.0", nil
+	}
+	checkGitHub = func() (string, error) {
+		return "Test User", nil
 	}
 
 	var buf bytes.Buffer
@@ -308,6 +328,9 @@ func TestRun_OnlyOptionalMissing(t *testing.T) {
 	getVersion = func(command []string) (string, error) {
 		return "v1.0.0", nil
 	}
+	checkGitHub = func() (string, error) {
+		return "Test User", nil
+	}
 
 	var buf bytes.Buffer
 	err := Run(&buf, false, false)
@@ -328,6 +351,9 @@ func TestRun_Strict_OptionalMissing(t *testing.T) {
 	}
 	getVersion = func(command []string) (string, error) {
 		return "v1.0.0", nil
+	}
+	checkGitHub = func() (string, error) {
+		return "Test User", nil
 	}
 
 	var buf bytes.Buffer
@@ -354,11 +380,214 @@ func TestRun_Strict_AllFound(t *testing.T) {
 	getVersion = func(command []string) (string, error) {
 		return "v1.0.0", nil
 	}
+	checkGitHub = func() (string, error) {
+		return "Test User", nil
+	}
 
 	var buf bytes.Buffer
 	err := Run(&buf, true, false)
 
 	if err != nil {
 		t.Fatalf("expected no error in strict mode when all found, got: %s", err.Error())
+	}
+}
+
+func TestCheckCredentials_GhFound_AuthOK(t *testing.T) {
+	stubHealthDeps(t)
+	checkGitHub = func() (string, error) {
+		return "Tal Amuyal", nil
+	}
+
+	results := checkCredentials(true)
+
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	r := results[0]
+	if r.Name != "GitHub" {
+		t.Fatalf("expected name 'GitHub', got %q", r.Name)
+	}
+	if r.Status != CredentialOK {
+		t.Fatalf("expected status CredentialOK, got %d", r.Status)
+	}
+	if r.Message != "Logged in as Tal Amuyal" {
+		t.Fatalf("expected message 'Logged in as Tal Amuyal', got %q", r.Message)
+	}
+}
+
+func TestCheckCredentials_GhFound_AuthFailed(t *testing.T) {
+	stubHealthDeps(t)
+	checkGitHub = func() (string, error) {
+		return "", errors.New("auth token expired")
+	}
+
+	results := checkCredentials(true)
+
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	r := results[0]
+	if r.Status != CredentialFailed {
+		t.Fatalf("expected status CredentialFailed, got %d", r.Status)
+	}
+	if r.Message != "auth token expired" {
+		t.Fatalf("expected message 'auth token expired', got %q", r.Message)
+	}
+}
+
+func TestCheckCredentials_GhMissing(t *testing.T) {
+	stubHealthDeps(t)
+
+	results := checkCredentials(false)
+
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	r := results[0]
+	if r.Status != CredentialUnchecked {
+		t.Fatalf("expected status CredentialUnchecked, got %d", r.Status)
+	}
+	if r.Message != "gh not detected" {
+		t.Fatalf("expected message 'gh not detected', got %q", r.Message)
+	}
+}
+
+func TestRun_CredentialSection_GhMissing(t *testing.T) {
+	stubHealthDeps(t)
+
+	lookPath = func(file string) (string, error) {
+		if file == "gh" {
+			return "", errors.New("not found")
+		}
+		return "/usr/local/bin/" + file, nil
+	}
+	getVersion = func(command []string) (string, error) {
+		return "v1.0.0", nil
+	}
+	checkGitHub = func() (string, error) {
+		t.Fatal("checkGitHub should not be called when gh is not found")
+		return "", nil
+	}
+
+	var buf bytes.Buffer
+	err := Run(&buf, false, false)
+
+	if err != nil {
+		t.Fatalf("expected no error, got: %s", err.Error())
+	}
+	output := buf.String()
+	if !strings.Contains(output, "Credentials:") {
+		t.Fatal("expected output to contain 'Credentials:' header")
+	}
+	if !strings.Contains(output, "gh not detected") {
+		t.Fatalf("expected output to contain 'gh not detected', got:\n%s", output)
+	}
+	if !strings.Contains(output, "?") {
+		t.Fatalf("expected output to contain '?' marker for unchecked credential, got:\n%s", output)
+	}
+}
+
+func TestRun_CredentialSection_GhFound_AuthOK(t *testing.T) {
+	stubHealthDeps(t)
+
+	lookPath = func(file string) (string, error) {
+		return "/usr/local/bin/" + file, nil
+	}
+	getVersion = func(command []string) (string, error) {
+		return "v1.0.0", nil
+	}
+	checkGitHub = func() (string, error) {
+		return "Tal Amuyal", nil
+	}
+
+	var buf bytes.Buffer
+	err := Run(&buf, false, false)
+
+	if err != nil {
+		t.Fatalf("expected no error, got: %s", err.Error())
+	}
+	output := buf.String()
+	if !strings.Contains(output, "Logged in as Tal Amuyal") {
+		t.Fatalf("expected output to contain 'Logged in as Tal Amuyal', got:\n%s", output)
+	}
+	if !strings.Contains(output, "Credentials met:") || !strings.Contains(output, "(1/1)") {
+		t.Fatalf("expected credentials summary with (1/1), got:\n%s", output)
+	}
+}
+
+func TestRun_CredentialSection_GhFound_AuthFailed(t *testing.T) {
+	stubHealthDeps(t)
+
+	lookPath = func(file string) (string, error) {
+		return "/usr/local/bin/" + file, nil
+	}
+	getVersion = func(command []string) (string, error) {
+		return "v1.0.0", nil
+	}
+	checkGitHub = func() (string, error) {
+		return "", errors.New("auth token expired")
+	}
+
+	var buf bytes.Buffer
+	err := Run(&buf, false, false)
+
+	if err != nil {
+		t.Fatalf("expected no error, got: %s", err.Error())
+	}
+	output := buf.String()
+	if !strings.Contains(output, "auth token expired") {
+		t.Fatalf("expected output to contain 'auth token expired', got:\n%s", output)
+	}
+	if !strings.Contains(output, "Credentials met:") || !strings.Contains(output, "(0/1)") {
+		t.Fatalf("expected credentials summary with (0/1), got:\n%s", output)
+	}
+}
+
+func TestRun_CredentialFailure_DoesNotAffectExitCode(t *testing.T) {
+	stubHealthDeps(t)
+
+	lookPath = func(file string) (string, error) {
+		return "/usr/local/bin/" + file, nil
+	}
+	getVersion = func(command []string) (string, error) {
+		return "v1.0.0", nil
+	}
+	checkGitHub = func() (string, error) {
+		return "", errors.New("not authenticated")
+	}
+
+	var buf bytes.Buffer
+	err := Run(&buf, false, false)
+
+	if err != nil {
+		t.Fatalf("expected no error even with credential failure, got: %s", err.Error())
+	}
+}
+
+func TestRun_Strict_CredentialFailure_CausesExitCode1(t *testing.T) {
+	stubHealthDeps(t)
+
+	lookPath = func(file string) (string, error) {
+		return "/usr/local/bin/" + file, nil
+	}
+	getVersion = func(command []string) (string, error) {
+		return "v1.0.0", nil
+	}
+	checkGitHub = func() (string, error) {
+		return "", errors.New("not authenticated")
+	}
+
+	var buf bytes.Buffer
+	err := Run(&buf, true, false)
+
+	if err == nil {
+		t.Fatal("expected error in strict mode when credential check fails")
+	}
+	var passErr *process.PassthroughError
+	if !errors.As(err, &passErr) {
+		t.Fatalf("expected PassthroughError, got %T: %s", err, err.Error())
+	}
+	if passErr.Code != 1 {
+		t.Fatalf("expected exit code 1, got: %d", passErr.Code)
 	}
 }
