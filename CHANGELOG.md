@@ -16,6 +16,7 @@ Types of changes:
 
 ### Added
 
+- Add health command to Debi (`debi health`) for checking Devora dependencies
 - `-h`/`--help` flag support in the debi CLI
 - 23 git shortcut commands (`gaa`, `gaac`, `gaacp`, `gaaa`, `gaaap`, `gb`, `gbd`, `gbdc`, `gcl`, `gcom`, `gd`, `gfo`, `gg`, `gl`, `gpo`, `gpof`, `gpop`, `gri`, `grl`, `grlp`, `grom`, `gst`, `gstash`) for common git workflows
 - `PassthroughError` and `RunPassthrough` in the process package for terminal-connected command execution

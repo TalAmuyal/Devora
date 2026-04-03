@@ -143,6 +143,53 @@ func TestRun_Add_Alias(t *testing.T) {
 	}
 }
 
+func TestRun_Health_Recognized(t *testing.T) {
+	err := Run([]string{"health"})
+	// May fail due to missing deps, but should not return "unknown command"
+	if err != nil && strings.Contains(err.Error(), "unknown command") {
+		t.Fatalf("health should be recognized, got: %s", err.Error())
+	}
+}
+
+func TestRun_Health_Help(t *testing.T) {
+	old := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdout = w
+
+	runErr := Run([]string{"health", "--help"})
+
+	w.Close()
+	os.Stdout = old
+
+	if runErr != nil {
+		t.Fatalf("expected no error for health --help, got: %s", runErr.Error())
+	}
+
+	var buf bytes.Buffer
+	io.Copy(&buf, r)
+	output := buf.String()
+	if !strings.Contains(output, "usage: debi health") {
+		t.Fatalf("expected health usage message on stdout, got: %q", output)
+	}
+}
+
+func TestRun_Health_UnknownFlag(t *testing.T) {
+	err := Run([]string{"health", "--foo"})
+	if err == nil {
+		t.Fatal("expected error for unknown flag")
+	}
+	var usageErr *UsageError
+	if !errors.As(err, &usageErr) {
+		t.Fatalf("expected UsageError, got %T: %s", err, err.Error())
+	}
+	if !strings.Contains(err.Error(), "--foo") {
+		t.Fatalf("expected error to mention the flag, got: %s", err.Error())
+	}
+}
+
 func TestRun_GitCommands_Recognized(t *testing.T) {
 	origDir, err := os.Getwd()
 	if err != nil {

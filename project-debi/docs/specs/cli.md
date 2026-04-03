@@ -8,7 +8,7 @@ Define and dispatch the CLI commands. This is the entry point that wires togethe
 
 ## Commands
 
-The CLI has 3 workspace commands (each with a hidden short alias) and 23 git shortcuts:
+The CLI has 3 workspace commands (each with a hidden short alias), a health command, and 23 git shortcuts:
 
 ### Workspace Commands
 
@@ -17,6 +17,12 @@ The CLI has 3 workspace commands (each with a hidden short alias) and 23 git sho
 | `workspace-ui` | `w` | none | Open the workspace management TUI |
 | `add` | `a` | none | Open the add-repo TUI (must be inside a workspace) |
 | `rename` | `r` | `<new-name>` (positional, required) | Rename the current terminal session |
+
+### Health
+
+| Command | Args | Description |
+|---------|------|-------------|
+| `health` | `[--strict] [-v\|--verbose]` | Check Devora dependencies and report their status |
 
 ### Git Shortcuts
 
@@ -91,6 +97,9 @@ Workspace Commands:
   add (a)           Add a repo to the current workspace
   rename (r)        Rename the current terminal session
 
+Health:
+  health [flags]        Check Devora dependencies
+
 Git Shortcuts:
   gaa               Stage all changes
   gaac <msg>        Stage all and commit with message
@@ -160,6 +169,20 @@ Renames the current Kitty tab and, if running inside a workspace, updates the ta
 
 The workspace detection is best-effort: if the CWD cannot be resolved or the task file is absent, the rename still succeeds (only the tab title is changed).
 
+### health
+
+```go
+func runHealth(args []string) error
+```
+
+Parses the provided args for flags:
+- `-h` or `--help`: prints usage information and returns nil.
+- `--strict`: enables strict mode.
+- `-v` or `--verbose`: enables verbose mode (shows dependency locations).
+- Any other argument: returns a `UsageError` with the unknown flag and usage hint.
+
+Delegates to `health.Run(os.Stdout, strict, verbose)`.
+
 ## Binary Name
 
 The built binary should be named `debi`.
@@ -203,4 +226,6 @@ func main() {
 - Test that empty args print usage.
 - Test that `gaac`, `gaacp`, and `gbd` without required args return `UsageError`.
 - Test that all 23 git commands are recognized (do not return "unknown command").
+- Test that `health` is recognized as a command.
+- Test that `health` with an unknown flag returns a `UsageError`.
 - Command handler integration tests are better handled at a higher level (testing the actual TUI behavior or workspace operations).
