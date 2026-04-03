@@ -17,6 +17,7 @@ Types of changes:
 ### Added
 
 - Add health command to Debi (`debi health`) for checking Devora dependencies
+- Add GitHub credential checking to `debi health` with `gh` as optional dependency
 - `-h`/`--help` flag support in the debi CLI
 - 23 git shortcut commands (`gaa`, `gaac`, `gaacp`, `gaaa`, `gaaap`, `gb`, `gbd`, `gbdc`, `gcl`, `gcom`, `gd`, `gfo`, `gg`, `gl`, `gpo`, `gpof`, `gpop`, `gri`, `grl`, `grlp`, `grom`, `gst`, `gstash`) for common git workflows
 - `PassthroughError` and `RunPassthrough` in the process package for terminal-connected command execution
@@ -28,6 +29,7 @@ Types of changes:
 
 ### Changed
 
+- `debi health --strict` now treats credential failures as missing optional dependencies (exit code 1)
 - Include version in DMG filename (e.g., `Devora_2026-03-28.0.dmg`)
 
 ### Added

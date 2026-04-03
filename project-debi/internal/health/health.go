@@ -3,6 +3,7 @@ package health
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -31,6 +32,20 @@ type CheckResult struct {
 	Version string
 }
 
+type CredentialStatus int
+
+const (
+	CredentialOK CredentialStatus = iota
+	CredentialFailed
+	CredentialUnchecked
+)
+
+type CredentialResult struct {
+	Name    string
+	Status  CredentialStatus
+	Message string
+}
+
 var lookPath = exec.LookPath
 
 var getVersion = defaultGetVersion
@@ -49,6 +64,49 @@ func defaultGetVersion(command []string) (string, error) {
 	return strings.TrimSpace(stdout.String()), nil
 }
 
+var checkGitHub = defaultCheckGitHub
+
+func defaultCheckGitHub() (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "gh", "api", "user", "--jq", ".name // .login")
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		errMsg := strings.TrimSpace(stderr.String())
+		if firstLine, _, ok := strings.Cut(errMsg, "\n"); ok {
+			errMsg = firstLine
+		}
+		if errMsg == "" {
+			errMsg = err.Error()
+		}
+		return "", errors.New(errMsg)
+	}
+	return strings.TrimSpace(stdout.String()), nil
+}
+
+func checkCredentials(ghFound bool) []CredentialResult {
+	result := CredentialResult{Name: "GitHub"}
+	if !ghFound {
+		result.Status = CredentialUnchecked
+		result.Message = "gh not detected"
+	} else {
+		displayName, err := checkGitHub()
+		if err != nil {
+			result.Status = CredentialFailed
+			result.Message = err.Error()
+		} else {
+			result.Status = CredentialOK
+			result.Message = fmt.Sprintf("Logged in as %s", displayName)
+		}
+	}
+	return []CredentialResult{result}
+}
+
+const ghDepName = "gh"
+
 var dependencies = []Dependency{
 	{Name: "kitty", Required: true, VersionCommand: []string{"kitty", "--version"}},
 	{Name: "claude", Required: true, VersionCommand: []string{"claude", "--version"}},
@@ -59,6 +117,7 @@ var dependencies = []Dependency{
 	{Name: "nvim", Required: false, VersionCommand: []string{"nvim", "--version"}},
 	{Name: "mise", Required: false, VersionCommand: []string{"mise", "--version"}},
 	{Name: "jq", Required: false, VersionCommand: []string{"jq", "--version"}},
+	{Name: ghDepName, Required: false, VersionCommand: []string{"gh", "--version"}},
 }
 
 var versionPattern = regexp.MustCompile(`v?\d+(?:\.\d+)+`)
@@ -122,6 +181,36 @@ func renderSection(w io.Writer, results []CheckResult, nameWidth, versionWidth i
 	return found
 }
 
+func renderCredentials(w io.Writer, results []CredentialResult, nameWidth int, greenStyle, redStyle, yellowStyle lipgloss.Style) int {
+	ok := 0
+	for _, r := range results {
+		switch r.Status {
+		case CredentialOK:
+			ok++
+			prefix := greenStyle.Render(fmt.Sprintf("  ✓ %-*s", nameWidth, r.Name))
+			fmt.Fprintf(w, "%s  %s\n", prefix, r.Message)
+		case CredentialFailed:
+			prefix := redStyle.Render(fmt.Sprintf("  ✗ %-*s", nameWidth, r.Name))
+			fmt.Fprintf(w, "%s  %s\n", prefix, r.Message)
+		case CredentialUnchecked:
+			prefix := yellowStyle.Render(fmt.Sprintf("  ? %-*s", nameWidth, r.Name))
+			fmt.Fprintf(w, "%s  %s\n", prefix, r.Message)
+		}
+	}
+	return ok
+}
+
+func renderSummaryLine(w io.Writer, labelWidth int, label string, found, total int, style lipgloss.Style) {
+	pct := 0
+	if total > 0 {
+		pct = found * 100 / total
+	}
+	fmt.Fprintf(w, "%-*s %s (%d/%d)\n",
+		labelWidth, label,
+		style.Render(fmt.Sprintf("%3d%%", pct)),
+		found, total)
+}
+
 func Run(w io.Writer, strict bool, verbose bool) error {
 	var required []CheckResult
 	var optional []CheckResult
@@ -168,18 +257,40 @@ func Run(w io.Writer, strict bool, verbose bool) error {
 	fmt.Fprintln(w, "Optional:")
 	optionalFound := renderSection(w, optional, nameWidth, versionWidth, verbose, greenStyle, redStyle)
 
-	fmt.Fprintln(w)
-
+	// Credential checks
 	yellowStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#F9E2AF"))
 
-	requiredPct := 0
-	if len(required) > 0 {
-		requiredPct = requiredFound * 100 / len(required)
+	ghFound := false
+	for _, r := range optional {
+		if r.Name == ghDepName {
+			ghFound = r.Found
+			break
+		}
 	}
-	optionalPct := 0
-	if len(optional) > 0 {
-		optionalPct = optionalFound * 100 / len(optional)
+
+	credResults := checkCredentials(ghFound)
+
+	credNameWidth := 0
+	for _, r := range credResults {
+		if len(r.Name) > credNameWidth {
+			credNameWidth = len(r.Name)
+		}
 	}
+
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Credentials:")
+	credFound := renderCredentials(w, credResults, credNameWidth, greenStyle, redStyle, yellowStyle)
+
+	// Summary - align all labels to the longest one
+	const (
+		requiredLabel    = "Required met:"
+		optionalLabel    = "Optional met:"
+		credentialsLabel = "Credentials met:"
+	)
+
+	summaryLabelWidth := len(credentialsLabel) // longest label
+
+	fmt.Fprintln(w)
 
 	requiredPctStyle := greenStyle
 	if requiredFound < len(required) {
@@ -190,20 +301,35 @@ func Run(w io.Writer, strict bool, verbose bool) error {
 		optionalPctStyle = yellowStyle
 	}
 
-	fmt.Fprintf(w, "Required met: %s (%d/%d)\n",
-		requiredPctStyle.Render(fmt.Sprintf("%3d%%", requiredPct)),
-		requiredFound, len(required))
-	fmt.Fprintf(w, "Optional met: %s (%d/%d)\n",
-		optionalPctStyle.Render(fmt.Sprintf("%3d%%", optionalPct)),
-		optionalFound, len(optional))
+	renderSummaryLine(w, summaryLabelWidth, requiredLabel, requiredFound, len(required), requiredPctStyle)
+	renderSummaryLine(w, summaryLabelWidth, optionalLabel, optionalFound, len(optional), optionalPctStyle)
+
+	credPctStyle := greenStyle
+	if credFound < len(credResults) {
+		hasFailed := false
+		for _, r := range credResults {
+			if r.Status == CredentialFailed {
+				hasFailed = true
+				break
+			}
+		}
+		if hasFailed {
+			credPctStyle = redStyle
+		} else {
+			credPctStyle = yellowStyle
+		}
+	}
+
+	renderSummaryLine(w, summaryLabelWidth, credentialsLabel, credFound, len(credResults), credPctStyle)
 
 	requiredMissing := len(required) - requiredFound
 	optionalMissing := len(optional) - optionalFound
+	credentialsMissing := len(credResults) - credFound
 
 	if requiredMissing > 0 {
 		return &process.PassthroughError{Code: 1}
 	}
-	if strict && optionalMissing > 0 {
+	if strict && (optionalMissing > 0 || credentialsMissing > 0) {
 		return &process.PassthroughError{Code: 1}
 	}
 
