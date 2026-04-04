@@ -16,6 +16,7 @@ Types of changes:
 
 ### Added
 
+- `mac-install` mise task for building and installing Devora.app to /Applications
 - Add health command to Debi (`debi health`) for checking Devora dependencies
 - Add GitHub credential checking to `debi health` with `gh` as optional dependency
 - `-h`/`--help` flag support in the debi CLI
