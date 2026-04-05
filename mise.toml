@@ -1,0 +1,9 @@
+[tasks.mac-install]
+run = """
+set -e
+./bundler/macos/bundle.sh
+rm -rf /Applications/Devora.app
+mv bin/macOS/Devora/Devora.app /Applications/Devora.app
+rm -rf bin/macOS/Devora
+"""
+description = "Build and install Devora.app to /Applications (close Devora first)"
