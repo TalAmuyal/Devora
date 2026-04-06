@@ -1,0 +1,31 @@
+{
+  "dependencies": [
+    {
+      "name": "kitty",
+      "version": "0.46.2",
+      "license": "GPL-3.0",
+      "source_repo": "https://github.com/kovidgoyal/kitty",
+      "commit": "4483a6c110275d5603e48337ba533a322781efe2",
+      "source_tree_url": "https://github.com/kovidgoyal/kitty/tree/4483a6c110275d5603e48337ba533a322781efe2",
+      "tag": "v0.46.2",
+      "download_url": "https://github.com/kovidgoyal/kitty/releases/download/v0.46.2/kitty-0.46.2.dmg"
+    },
+    {
+      "name": "uv",
+      "version": "0.10.12",
+      "license": "MIT AND Apache-2.0",
+      "source_repo": "https://github.com/astral-sh/uv",
+      "commit": "00d72dac7",
+      "tag": "0.10.12",
+      "download_url": "https://github.com/astral-sh/uv/releases/download/0.10.12/uv-aarch64-apple-darwin.tar.gz"
+    },
+    {
+      "name": "glow",
+      "version": "2.1.1",
+      "license": "MIT",
+      "source_repo": "https://github.com/charmbracelet/glow",
+      "tag": "v2.1.1",
+      "download_url": "https://github.com/charmbracelet/glow/releases/download/v2.1.1/glow_2.1.1_Darwin_arm64.tar.gz"
+    }
+  ]
+}

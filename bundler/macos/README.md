@@ -6,7 +6,7 @@ Devora/                           (DMG root)
 ├─ CHANGELOG.md
 ├─ USER_GUIDE.md
 ├─ cc-simple-statusline
-└─ devora.app/
+└─ Devora.app/
    └─ Contents/
       ├─ Info.plist
       ├─ MacOS/
@@ -29,6 +29,7 @@ Devora/                           (DMG root)
          │  ├─ current-theme.conf
          │  ├─ glow-theme.json
          │  └─ kitty.conf
+         ├─ kitty-license.txt
          ├─ kitty.app/
          │  └─ ...
          └─ uv

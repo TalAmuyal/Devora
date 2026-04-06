@@ -16,24 +16,38 @@ Types of changes:
 
 ### Added
 
+- MIT LICENSE file
+- THIRD_PARTY_LICENSES.md documenting bundled tools and their licenses
+- `bundler/3rd-party-deps.json` as source of truth for bundled third-party binaries
+- `build` and `test` mise tasks to root `mise.toml`
+- Kitty license file (`kitty-license.txt`) bundled into DMG for GPL-3.0 compliance
+- Prerequisites, getting started, supported platform, Anthropic disclaimer, and license sections to README.md
 - `mac-install` mise task for building and installing Devora.app to /Applications
-- Add health command to Debi (`debi health`) for checking Devora dependencies
-- Add GitHub credential checking to `debi health` with `gh` as optional dependency
+- Health command to Debi (`debi health`) for checking Devora dependencies
+- GitHub credential checking to `debi health` with `gh` as optional dependency
 - `-h`/`--help` flag support in the debi CLI
 - 23 git shortcut commands (`gaa`, `gaac`, `gaacp`, `gaaa`, `gaaap`, `gb`, `gbd`, `gbdc`, `gcl`, `gcom`, `gd`, `gfo`, `gg`, `gl`, `gpo`, `gpof`, `gpop`, `gri`, `grl`, `grlp`, `grom`, `gst`, `gstash`) for common git workflows
 - `PassthroughError` and `RunPassthrough` in the process package for terminal-connected command execution
 - Enhanced redaction for Judge test cases: path segment hashing, git hash replacement, commit message/PR title redaction, timestamp zeroing, description removal, and audit mode (`--audit`)
-
-### Fixed
-
-- Footer now stays attached to the bottom of the screen even when content is short
+- Changelog file to track future changes between releases
+- Version tracking (displayed in the settings page)
 
 ### Changed
 
+- Replaced hardcoded personal data in health tests and spec with generic test values
+- Updated bundler README to reflect `kitty-license.txt` in app structure
 - `debi health --strict` now treats credential failures as missing optional dependencies (exit code 1)
 - Include version in DMG filename (e.g., `Devora_2026-03-28.0.dmg`)
 
-### Added
+### Removed
 
-- Changelog file to track future changes between releases
-- Version tracking (displayed in the settings page)
+- `.claude/settings.local.json` from version control (added to `.gitignore`)
+- Legacy `cc-simple-statusline.sh` (superseded by Go binary in project-status-line)
+- `project-judge/debug.sh`
+- "Backlog" sections from project-judge README and project-debi docs
+- Dead `BACKLOG.md` references from project-debi docs
+
+### Fixed
+
+- Broken placeholder links in README.md
+- Footer now stays attached to the bottom of the screen even when content is short

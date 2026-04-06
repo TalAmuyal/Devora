@@ -47,9 +47,3 @@ It redacts home directory paths, path segments (hashed to `project-XXXXX`), git 
 ./redact.py --apply   # Redact test-cases.json in place
 ./redact.py --audit   # Verify no suspicious content remains
 ```
-
-## Backlog
-
-## Next steps
-
-Setup `/sandbox`: TBD

@@ -1,6 +1,8 @@
 debi
 cc-simple-statusline
 
+.claude/settings.local.json
+
 bin/
 3rd-party-apps/
 devora.app/Contents/Resources

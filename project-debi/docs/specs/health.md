@@ -62,7 +62,7 @@ type CredentialResult struct {
 }
 ```
 
-The result of checking a single credential. `Name` is the service name (e.g., "GitHub"). `Status` indicates whether the check succeeded, failed, or was skipped. `Message` provides human-readable detail (e.g., "Logged in as Tal Amuyal", "auth token expired", or "gh not detected").
+The result of checking a single credential. `Name` is the service name (e.g., "GitHub"). `Status` indicates whether the check succeeded, failed, or was skipped. `Message` provides human-readable detail (e.g., "Logged in as Jane Doe", "auth token expired", or "gh not detected").
 
 ## Dependency List
 
@@ -136,7 +136,7 @@ Optional:
   ✗ jq                  not found
 
 Credentials:
-  ✓ GitHub  Logged in as Tal Amuyal
+  ✓ GitHub  Logged in as Jane Doe
 
 Required met:    100% (6/6)
 Optional met:      75% (3/4)
