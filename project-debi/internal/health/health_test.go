@@ -52,14 +52,14 @@ func TestCleanVersion(t *testing.T) {
 func TestShortenPath(t *testing.T) {
 	origHome := homeDir
 	t.Cleanup(func() { homeDir = origHome })
-	homeDir = "/Users/talamuyal"
+	homeDir = "/home/testuser"
 
 	tests := []struct {
 		input string
 		want  string
 	}{
-		{"/Users/talamuyal/bin/kitty", "~/bin/kitty"},
-		{"/Users/talamuyal", "~"},
+		{"/home/testuser/bin/kitty", "~/bin/kitty"},
+		{"/home/testuser", "~"},
 		{"/usr/local/bin/git", "/usr/local/bin/git"},
 		{"", ""},
 	}
@@ -395,7 +395,7 @@ func TestRun_Strict_AllFound(t *testing.T) {
 func TestCheckCredentials_GhFound_AuthOK(t *testing.T) {
 	stubHealthDeps(t)
 	checkGitHub = func() (string, error) {
-		return "Tal Amuyal", nil
+		return "Test User", nil
 	}
 
 	results := checkCredentials(true)
@@ -410,8 +410,8 @@ func TestCheckCredentials_GhFound_AuthOK(t *testing.T) {
 	if r.Status != CredentialOK {
 		t.Fatalf("expected status CredentialOK, got %d", r.Status)
 	}
-	if r.Message != "Logged in as Tal Amuyal" {
-		t.Fatalf("expected message 'Logged in as Tal Amuyal', got %q", r.Message)
+	if r.Message != "Logged in as Test User" {
+		t.Fatalf("expected message 'Logged in as Test User', got %q", r.Message)
 	}
 }
 
@@ -497,7 +497,7 @@ func TestRun_CredentialSection_GhFound_AuthOK(t *testing.T) {
 		return "v1.0.0", nil
 	}
 	checkGitHub = func() (string, error) {
-		return "Tal Amuyal", nil
+		return "Test User", nil
 	}
 
 	var buf bytes.Buffer
@@ -507,8 +507,8 @@ func TestRun_CredentialSection_GhFound_AuthOK(t *testing.T) {
 		t.Fatalf("expected no error, got: %s", err.Error())
 	}
 	output := buf.String()
-	if !strings.Contains(output, "Logged in as Tal Amuyal") {
-		t.Fatalf("expected output to contain 'Logged in as Tal Amuyal', got:\n%s", output)
+	if !strings.Contains(output, "Logged in as Test User") {
+		t.Fatalf("expected output to contain 'Logged in as Test User', got:\n%s", output)
 	}
 	if !strings.Contains(output, "Credentials met:") || !strings.Contains(output, "(1/1)") {
 		t.Fatalf("expected credentials summary with (1/1), got:\n%s", output)

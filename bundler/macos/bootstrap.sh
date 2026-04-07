@@ -42,10 +42,3 @@ export DEVORA_RESOURCES_DIR="$RESOURCES_DIR"
 $KITTY_EXECUTABLE_PATH \
 	--title "Devora" \
 	zsh --login --interactive -c "debi workspace-ui"
-
-#$KITTY_EXECUTABLE_PATH \
-#	--title "Devora" \
-#	debi \
-#	workspace-ui
-#	--working-directory "$RESOURCES_DIR" \
-#	zsh --login --interactive #-c "echo \$ABCDE; sleep 5"
