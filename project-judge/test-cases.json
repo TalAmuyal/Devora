@@ -368,16 +368,52 @@
         {
             "cwd": "/home/user/project-461B7/project-6E8D7/project-76944/project-A4E73",
             "tool_input": {
-                "command": "cd /home/user/project-461B7/project-6E8D7/project-76944/project-A4E73/project-5369A && go doc charm.land/bubbletea/v2 View 2>&1 | head -40"
+                "command": "submit-pr \"<redacted>\""
             }
         },
         "approved"
     ],
     [
         {
-            "cwd": "/home/user/project-461B7/project-6E8D7/project-76944/project-A4E73",
+            "cwd": "/home/user/project-461B7/project-6E8D7/project-1C053/project-D902F",
             "tool_input": {
-                "command": "submit-pr \"<redacted>\""
+                "command": "for d in /home/user/project-461B7/project-6E8D7/project-1C053 /home/user/project-461B7/project-6E8D7 /home/user/project-461B7 /home/user; do echo \"=== $d ===\"; ls -a \"$d\" 2>/dev/null | grep -E 'mise|\\.tool-versions'; done"
+            }
+        },
+        "approved"
+    ],
+    [
+        {
+            "cwd": "/home/user/project-69E7F/project-6E8D7/project-3AF0F/project-EEF54",
+            "tool_input": {
+                "command": "npx vitest run 2>&1 | tail -30"
+            }
+        },
+        "declined"
+    ],
+    [
+        {
+            "cwd": "/home/user/project-69E7F/project-6E8D7/project-3AF0F",
+            "tool_input": {
+                "command": "which helm && helm version 2>&1"
+            }
+        },
+        "approved"
+    ],
+    [
+        {
+            "cwd": "/home/user/project-69E7F/project-6E8D7/project-3AF0F",
+            "tool_input": {
+                "command": "which helm 2>&1 && helm version 2>&1"
+            }
+        },
+        "approved"
+    ],
+    [
+        {
+            "cwd": "/home/user/project-69E7F/project-6E8D7/project-3AF0F/project-CF6EC",
+            "tool_input": {
+                "command": "echo $PATH | tr ':' '\\n' | head -20"
             }
         },
         "approved"
