@@ -30,6 +30,7 @@ Devora/                           (DMG root)
          │  ├─ glow-theme.json
          │  └─ kitty.conf
          ├─ kitty-license.txt
+         ├─ uv-license.txt
          ├─ kitty.app/
          │  └─ ...
          └─ uv

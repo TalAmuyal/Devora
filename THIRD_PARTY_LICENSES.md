@@ -16,6 +16,7 @@ Devora bundles and depends on the following third-party software and assets.
 - **License:** MIT AND Apache-2.0
 - **Author:** Astral
 - **Source:** https://github.com/astral-sh/uv/tree/00d72dac7
+- **Full license text:** See `bundler/uv-license.txt`
 
 ### glow v2.1.1
 

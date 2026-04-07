@@ -10,9 +10,8 @@ description = "Build all sub-projects (debi, cc-simple-statusline)"
 run = """
 set -e
 mise run -C project-debi test
+mise run -C project-judge test
 mise run -C project-status-line test
-uv run project-judge/run-tests.py
-uv run project-judge/test_redact.py
 """
 description = "Run tests for all sub-projects"
 

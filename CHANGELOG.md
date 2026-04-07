@@ -16,6 +16,9 @@ Types of changes:
 
 ### Added
 
+- SECURITY.md with vulnerability reporting instructions and scope definition
+- CONTRIBUTING.md with development setup and PR guidelines
+- uv license file (`uv-license.txt`) bundled into DMG for Apache-2.0 compliance
 - Startup error page: `debi workspace-ui` now shows a diagnostic page when Devora's bundled tools are missing from PATH
 - MIT LICENSE file
 - THIRD_PARTY_LICENSES.md documenting bundled tools and their licenses

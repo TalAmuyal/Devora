@@ -73,7 +73,7 @@ def detect_home_dir(entry: dict) -> str | None:
 def encode_as_claude_project_path(path: str) -> str:
     """Encode a path the way Claude Code does for project directory names.
 
-    /Users/tal_amuyal → Users-tal-amuyal
+    /Users/jane_doe → Users-jane-doe
     """
     return path.lstrip("/").replace("/", "-").replace("_", "-").replace(".", "")
 

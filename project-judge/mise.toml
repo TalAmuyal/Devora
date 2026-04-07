@@ -1,0 +1,25 @@
+[tools]
+uv = "latest"
+
+[tasks.classify]
+run = "./classify-cases.py"
+description = "Classify use-cases into test-cases"
+
+[tasks.redact]
+run = "./redact.py"
+description = "Redact sensitive information from test-cases"
+
+[tasks.test]
+run = "./run-tests.py && uv run ./test_redact.py"
+description = "Run all tests"
+
+[tasks.submit]
+depends = ["test"]
+run = """
+set -e
+git add .
+git commit -m 'Add Judge rules'
+git checkout -b add-judge-rules
+git push -u origin add-judge-rules
+"""
+description = "Submit the Judge rules by pushing a new branch to GitHub"
