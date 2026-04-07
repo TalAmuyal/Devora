@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -268,5 +269,88 @@ func TestRun_Gbd_MissingArg_ReturnsUsageError(t *testing.T) {
 	var usageErr *UsageError
 	if !errors.As(err, &usageErr) {
 		t.Fatalf("expected UsageError, got %T: %s", err, err.Error())
+	}
+}
+
+func TestCheckBundledAppsInPath_EmptyResourcesDir_ReturnsEmpty(t *testing.T) {
+	result := checkBundledAppsInPath("", "/usr/bin:/usr/local/bin")
+	if result != "" {
+		t.Fatalf("expected empty string for empty resourcesDir, got: %q", result)
+	}
+}
+
+func TestCheckBundledAppsInPath_BundledAppsPresent_ReturnsEmpty(t *testing.T) {
+	resourcesDir := "/Applications/Devora.app/Contents/Resources"
+	bundledApps := filepath.Join(resourcesDir, "bundled-apps")
+	pathEnv := "/usr/bin:" + bundledApps + ":/usr/local/bin"
+
+	result := checkBundledAppsInPath(resourcesDir, pathEnv)
+	if result != "" {
+		t.Fatalf("expected empty string when bundled-apps is in PATH, got: %q", result)
+	}
+}
+
+func TestCheckBundledAppsInPath_BundledAppsMissing_ReturnsWarning(t *testing.T) {
+	resourcesDir := "/Applications/Devora.app/Contents/Resources"
+	pathEnv := "/usr/bin:/usr/local/bin"
+
+	result := checkBundledAppsInPath(resourcesDir, pathEnv)
+	if result == "" {
+		t.Fatal("expected non-empty warning when bundled-apps is not in PATH")
+	}
+}
+
+func TestCheckBundledAppsInPath_TrailingSlash_ReturnsEmpty(t *testing.T) {
+	resourcesDir := "/Applications/Devora.app/Contents/Resources"
+	bundledAppsWithSlash := filepath.Join(resourcesDir, "bundled-apps") + "/"
+	pathEnv := "/usr/bin:" + bundledAppsWithSlash + ":/usr/local/bin"
+
+	result := checkBundledAppsInPath(resourcesDir, pathEnv)
+	if result != "" {
+		t.Fatalf("expected empty string when bundled-apps with trailing slash is in PATH, got: %q", result)
+	}
+}
+
+func TestCheckBundledAppsInPath_MultipleEntries_BundledAppsPresent_ReturnsEmpty(t *testing.T) {
+	resourcesDir := "/Applications/Devora.app/Contents/Resources"
+	bundledApps := filepath.Join(resourcesDir, "bundled-apps")
+	pathEnv := "/usr/bin:/opt/homebrew/bin:" + bundledApps + ":/usr/local/bin:/home/user/.local/bin"
+
+	result := checkBundledAppsInPath(resourcesDir, pathEnv)
+	if result != "" {
+		t.Fatalf("expected empty string when bundled-apps is among multiple PATH entries, got: %q", result)
+	}
+}
+
+func TestFormatStartupError_ContainsExpectedDirectory(t *testing.T) {
+	expectedDir := "/Applications/Devora.app/Contents/Resources/bundled-apps"
+	pathEnv := "/usr/bin:/usr/local/bin"
+
+	result := formatStartupError(expectedDir, pathEnv)
+	if !strings.Contains(result, expectedDir) {
+		t.Fatalf("expected output to contain the expected directory %q, got: %q", expectedDir, result)
+	}
+}
+
+func TestFormatStartupError_ContainsPathEntries(t *testing.T) {
+	expectedDir := "/Applications/Devora.app/Contents/Resources/bundled-apps"
+	pathEnv := "/usr/bin:/usr/local/bin"
+
+	result := formatStartupError(expectedDir, pathEnv)
+	if !strings.Contains(result, "/usr/bin") {
+		t.Fatalf("expected output to contain PATH entry /usr/bin, got: %q", result)
+	}
+	if !strings.Contains(result, "/usr/local/bin") {
+		t.Fatalf("expected output to contain PATH entry /usr/local/bin, got: %q", result)
+	}
+}
+
+func TestFormatStartupError_ContainsDiagnosticDataOnly(t *testing.T) {
+	expectedDir := "/Applications/Devora.app/Contents/Resources/bundled-apps"
+	pathEnv := "/usr/bin:/usr/local/bin"
+
+	result := formatStartupError(expectedDir, pathEnv)
+	if strings.Contains(result, ".zprofile") || strings.Contains(result, ".zshrc") {
+		t.Fatalf("formatStartupError should not contain fix instructions (owned by TUI layer), got: %q", result)
 	}
 }

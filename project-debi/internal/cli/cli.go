@@ -11,6 +11,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 )
 
 // UsageError represents a user-facing error caused by incorrect CLI usage
@@ -165,10 +167,16 @@ func runWorkspaceUI() error {
 		}
 	}
 
+	startupError := checkBundledAppsInPath(
+		os.Getenv("DEVORA_RESOURCES_DIR"),
+		os.Getenv("PATH"),
+	)
+
 	result, err := tui.RunWorkspaceUI(
 		tui.DefaultThemePath(),
 		repoNames,
 		showProfileRegistration,
+		startupError,
 	)
 	if err != nil {
 		return err
@@ -268,4 +276,28 @@ func runRename(newName string) error {
 		return nil
 	}
 	return err
+}
+
+func checkBundledAppsInPath(resourcesDir, pathEnv string) string {
+	if resourcesDir == "" {
+		return ""
+	}
+	expected := filepath.Join(resourcesDir, "bundled-apps")
+	for _, dir := range filepath.SplitList(pathEnv) {
+		if filepath.Clean(dir) == filepath.Clean(expected) {
+			return ""
+		}
+	}
+	return formatStartupError(expected, pathEnv)
+}
+
+func formatStartupError(expectedDir, pathEnv string) string {
+	var b strings.Builder
+	b.WriteString("Expected directory in PATH:\n")
+	b.WriteString("  " + expectedDir + "\n\n")
+	b.WriteString("Current PATH:\n")
+	for _, entry := range filepath.SplitList(pathEnv) {
+		b.WriteString("  " + entry + "\n")
+	}
+	return b.String()
 }

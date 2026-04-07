@@ -31,6 +31,7 @@ func newTestAppModel() AppModel {
 		registerRepo:  NewRegisterRepoModel(&styles),
 		settings:      NewSettingsModel(&styles),
 		profileReg:    NewProfileRegModel(&styles, true),
+		startupError:  NewStartupErrorModel(&styles, ""),
 	}
 }
 
@@ -46,6 +47,7 @@ func TestCtrlC_QuitsFromAnyPage(t *testing.T) {
 		{"RegisterRepo", PageRegisterRepo},
 		{"Settings", PageSettings},
 		{"ProfileRegistration", PageProfileRegistration},
+		{"StartupError", PageStartupError},
 	}
 
 	for _, tc := range pages {
@@ -879,5 +881,37 @@ func TestView_EmptyFooter_NoExtraBlankLine(t *testing.T) {
 	// With no footer, the view should not exceed the window height
 	if viewHeight := lipgloss.Height(content); viewHeight > 24 {
 		t.Fatalf("expected view height <= 24, got %d", viewHeight)
+	}
+}
+
+func TestStartupError_CtrlDQuits(t *testing.T) {
+	m := newTestAppModel()
+	m.activePage = PageStartupError
+
+	_, cmd := m.Update(ctrlD())
+
+	if cmd == nil {
+		t.Fatal("expected a quit command, got nil")
+	}
+
+	msg := cmd()
+	if _, ok := msg.(tea.QuitMsg); !ok {
+		t.Fatalf("expected tea.QuitMsg, got %T", msg)
+	}
+}
+
+func TestNewAppModel_StartupError_TakesPriority(t *testing.T) {
+	palette := ThemePalette{}
+	m := NewAppModel(palette, nil, true, "test error")
+	if m.activePage != PageStartupError {
+		t.Fatalf("expected PageStartupError, got %d", m.activePage)
+	}
+}
+
+func TestNewAppModel_NoStartupError_ShowsProfileRegistration(t *testing.T) {
+	palette := ThemePalette{}
+	m := NewAppModel(palette, nil, true, "")
+	if m.activePage != PageProfileRegistration {
+		t.Fatalf("expected PageProfileRegistration, got %d", m.activePage)
 	}
 }

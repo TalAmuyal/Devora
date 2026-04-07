@@ -16,6 +16,7 @@ Types of changes:
 
 ### Added
 
+- Startup error page: `debi workspace-ui` now shows a diagnostic page when Devora's bundled tools are missing from PATH
 - MIT LICENSE file
 - THIRD_PARTY_LICENSES.md documenting bundled tools and their licenses
 - `bundler/3rd-party-deps.json` as source of truth for bundled third-party binaries
@@ -49,5 +50,6 @@ Types of changes:
 
 ### Fixed
 
+- Use full path for `debi` in macOS bootstrap script to prevent PATH manipulation by shell startup files from blocking launch
 - Broken placeholder links in README.md
 - Footer now stays attached to the bottom of the screen even when content is short

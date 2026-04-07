@@ -41,4 +41,4 @@ export DEVORA_RESOURCES_DIR="$RESOURCES_DIR"
 
 $KITTY_EXECUTABLE_PATH \
 	--title "Devora" \
-	zsh --login --interactive -c "debi workspace-ui"
+	zsh --login --interactive -c "\"$RESOURCES_DIR/bundled-apps/debi\" workspace-ui"
