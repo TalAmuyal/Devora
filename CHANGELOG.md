@@ -16,6 +16,7 @@ Types of changes:
 
 ### Added
 
+- Add CI GitHub Action that runs tests on every push to master and on pull requests
 - SECURITY.md with vulnerability reporting instructions and scope definition
 - CONTRIBUTING.md with development setup and PR guidelines
 - uv license file (`uv-license.txt`) bundled into DMG for Apache-2.0 compliance
