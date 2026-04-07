@@ -49,6 +49,7 @@ Types of changes:
 - Legacy `cc-simple-statusline.sh` (superseded by Go binary in project-status-line)
 - `project-judge/debug.sh`
 - "Backlog" sections from project-judge README and project-debi docs
+- `jq` as an optional dependency from health check
 - Dead `BACKLOG.md` references from project-debi docs
 
 ### Fixed

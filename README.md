@@ -31,7 +31,6 @@ macOS (Apple Silicon) only.
 ### Optional
 
 - [mise](https://mise.jdx.dev/) -- dev tool and task manager
-- [jq](https://jqlang.github.io/jq/) -- JSON processor
 - [GitHub CLI](https://cli.github.com/) (`gh`) -- GitHub integration and credential checking
 
 Run `debi health` to verify that all required dependencies are installed.
