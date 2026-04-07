@@ -46,32 +46,21 @@ DECLINED_COMMANDS = (
         "Command 'eval' is not allowed.",
     ),
     (
-        ["go", "build"],
+        ["go"],
         MSG_USE_MISE_TASK,
     ),
     (
-        ["go", "run"],
+        ["npm"],
         MSG_USE_MISE_TASK,
     ),
     (
-        ["go", "test"],
-        MSG_USE_MISE_TASK,
-    ),
-    (
-        ["go", "mod"],
-        MSG_USE_MISE_TASK,
-    ),
-    (
-        ["go", "vet"],
-        MSG_USE_MISE_TASK,
-    ),
-    (
-        ["npm", "install"],
+        ["npx"],
         MSG_USE_MISE_TASK,
     ),
 )
 
 ALLOWED_COMMANDS = {
+    "for",
     "cat",
     "echo",
     "mise",
@@ -81,6 +70,8 @@ ALLOWED_COMMANDS = {
     "basename",
     "ls",
     "tree",
+    "tr",
+    "which",
     "make",
     "cp",
     "mkdir",
@@ -195,6 +186,7 @@ class Detectors:
                 ["git", "rev-parse"],
                 ["go", "doc"],
                 ["helm", "dependency"],
+                ["helm", "version"],
                 ["mise", "help"],
                 ["mise", "ls"],
                 ["mise", "usage"],
@@ -206,11 +198,14 @@ class Detectors:
         lambda cmd, _: cmd[0] == "find" and not (RISKY_FIND_FLAGS & set(cmd)),
         lambda cmd, _: bool(frozenset(cmd[1:]) & DERISKING_FLAGS),
         validate_sed,
+        lambda cmd, _: cmd == ["done"],  # Allow "done" to close loops like "for x in ...; do ...; done"
     ]
 
 
 IRRELEVANT_PREFIXES = {
-    "xargs",  # Redirects to another command
+    # Redirects to another command
+    "xargs",
+    "do",
     #
     # A harmless env-vars
     "MISE_VERBOSE=1",

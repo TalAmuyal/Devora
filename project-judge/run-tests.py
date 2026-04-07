@@ -59,7 +59,7 @@ def main():
             passed += 1
         else:
             if failed > 0:
-                print("==========")
+                print("\n\n==========\n\n")
             failed += 1
             command = case_input.get("tool_input", {}).get("command", "<no command>")
             print(f"FAIL: {command}")
