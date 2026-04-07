@@ -116,7 +116,6 @@ var dependencies = []Dependency{
 	{Name: "zsh", Required: true, VersionCommand: []string{"zsh", "--version"}},
 	{Name: "nvim", Required: false, VersionCommand: []string{"nvim", "--version"}},
 	{Name: "mise", Required: false, VersionCommand: []string{"mise", "--version"}},
-	{Name: "jq", Required: false, VersionCommand: []string{"jq", "--version"}},
 	{Name: ghDepName, Required: false, VersionCommand: []string{"gh", "--version"}},
 }
 

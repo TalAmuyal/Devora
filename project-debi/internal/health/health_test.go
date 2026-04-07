@@ -34,7 +34,6 @@ func TestCleanVersion(t *testing.T) {
 		{"zsh 5.9 (arm64-apple-darwin25.0)", "5.9"},
 		{"NVIM v0.12.0", "0.12.0"},
 		{"2026.3.17 macos-arm64 (2026-03-27)", "2026.3.17"},
-		{"jq-1.7.1-apple", "1.7.1"},
 		{"v1.0.0", "1.0.0"},
 		{"", ""},
 		{"no version here", "no version here"},
@@ -224,7 +223,7 @@ func TestRun_AllFound(t *testing.T) {
 	if !strings.Contains(output, "Required met:") || !strings.Contains(output, "(6/6)") {
 		t.Fatalf("expected required summary line with count, got:\n%s", output)
 	}
-	if !strings.Contains(output, "Optional met:") || !strings.Contains(output, "(4/4)") {
+	if !strings.Contains(output, "Optional met:") || !strings.Contains(output, "(3/3)") {
 		t.Fatalf("expected optional summary line with count, got:\n%s", output)
 	}
 	if !strings.Contains(output, "Credentials:") {

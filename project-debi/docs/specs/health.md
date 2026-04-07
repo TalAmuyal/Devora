@@ -66,7 +66,7 @@ The result of checking a single credential. `Name` is the service name (e.g., "G
 
 ## Dependency List
 
-Six required and four optional dependencies:
+Six required and three optional dependencies:
 
 | Name | Required | Version Command |
 |------|----------|-----------------|
@@ -78,7 +78,6 @@ Six required and four optional dependencies:
 | `zsh` | yes | `zsh --version` |
 | `nvim` | no | `nvim --version` |
 | `mise` | no | `mise --version` |
-| `jq` | no | `jq --version` |
 | `gh` | no | `gh --version` |
 
 ## Functions
@@ -132,14 +131,14 @@ Required:
 
 Optional:
   ✓ nvim    v0.12.0     /opt/homebrew/bin/nvim
+  ✓ mise    2025.4.6    ~/.local/bin/mise
   ✓ gh      2.74.0      /opt/homebrew/bin/gh
-  ✗ jq                  not found
 
 Credentials:
   ✓ GitHub  Logged in as Jane Doe
 
 Required met:    100% (6/6)
-Optional met:      75% (3/4)
+Optional met:    100% (3/3)
 Credentials met: 100% (1/1)
 ```
 
@@ -156,7 +155,6 @@ The summary percentages are colored: required is green (100%) or red; optional i
 | `kitty 0.44.0 created by Kovid Goyal` | `0.44.0` |
 | `git version 2.50.1 (Apple Git-155)` | `2.50.1` |
 | `NVIM v0.12.0` | `0.12.0` |
-| `jq-1.7.1-apple` | `1.7.1` |
 
 ## Path Shortening
 
@@ -188,7 +186,7 @@ Tests can replace `lookPath` and `getVersion` to simulate dependency presence/ab
 
 ## Testing
 
-- Test `cleanVersion` with various real-world version strings (kitty, claude, git, uv, glow, zsh, nvim, mise, jq) and edge cases (empty, no match).
+- Test `cleanVersion` with various real-world version strings (kitty, claude, git, uv, glow, zsh, nvim, mise) and edge cases (empty, no match).
 - Test `shortenPath` with paths under `$HOME`, paths outside `$HOME`, and empty string.
 - Test `Check` with a dependency that is found (mock `lookPath` to return a path and `getVersion` to return version output); verify version is cleaned.
 - Test `Check` with a dependency that is not found (mock `lookPath` to return an error).
