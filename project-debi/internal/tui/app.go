@@ -30,6 +30,7 @@ const (
 	PageRegisterRepo
 	PageSettings
 	PageProfileRegistration
+	PageStartupError
 )
 
 // AppResult is returned when the app exits with a result.
@@ -49,6 +50,7 @@ type AppModel struct {
 	registerRepo  RegisterRepoModel
 	settings      SettingsModel
 	profileReg    ProfileRegModel
+	startupError  StartupErrorModel
 
 	styles      Styles
 	palette     ThemePalette
@@ -70,6 +72,7 @@ func NewAppModel(
 	palette ThemePalette,
 	repoNames []string,
 	showProfileRegistration bool,
+	startupError string,
 ) AppModel {
 	styles := NewStyles(palette)
 
@@ -93,9 +96,12 @@ func NewAppModel(
 		registerRepo:  NewRegisterRepoModel(&styles),
 		settings:      NewSettingsModel(&styles),
 		profileReg:    NewProfileRegModel(&styles, !showProfileRegistration),
+		startupError:  NewStartupErrorModel(&styles, startupError),
 	}
 
-	if showProfileRegistration {
+	if startupError != "" {
+		m.activePage = PageStartupError
+	} else if showProfileRegistration {
 		m.activePage = PageProfileRegistration
 	}
 
@@ -103,7 +109,7 @@ func NewAppModel(
 }
 
 func (m AppModel) Init() tea.Cmd {
-	if m.activePage == PageProfileRegistration {
+	if m.activePage == PageStartupError || m.activePage == PageProfileRegistration {
 		return nil
 	}
 	return m.loadWorkspacesCmd()
@@ -126,6 +132,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.registerRepo.SetSize(m.width, contentHeight)
 		m.settings.SetSize(m.width, contentHeight)
 		m.profileReg.SetSize(m.width, contentHeight)
+		m.startupError.SetSize(m.width, contentHeight)
 		return m, nil
 
 	// Page transitions
@@ -304,6 +311,8 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmd = m.settings.Update(msg)
 		case PageProfileRegistration:
 			cmd = m.profileReg.Update(msg)
+		case PageStartupError:
+			cmd = m.startupError.Update(msg)
 		}
 		return m, cmd
 	}
@@ -345,6 +354,10 @@ func (m AppModel) View() tea.View {
 		content = m.profileReg.View()
 		pageTitle = m.profileReg.borderTitle()
 		actionBindings = m.profileReg.ActionBindings()
+	case PageStartupError:
+		content = m.startupError.View()
+		pageTitle = m.startupError.borderTitle()
+		actionBindings = m.startupError.ActionBindings()
 	}
 
 	// Header: DEVORA · PageTitle                    profile
@@ -729,9 +742,10 @@ func RunWorkspaceUI(
 	themePath string,
 	repoNames []string,
 	showProfileRegistration bool,
+	startupError string,
 ) (*AppResult, error) {
 	palette := LoadTheme(themePath)
-	model := NewAppModel(palette, repoNames, showProfileRegistration)
+	model := NewAppModel(palette, repoNames, showProfileRegistration, startupError)
 	p := tea.NewProgram(model)
 	finalModel, err := p.Run()
 	if err != nil {

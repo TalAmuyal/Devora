@@ -25,7 +25,7 @@ Returns the path to the Kitty current-theme config file (`~/.config/kitty/curren
 ### RunWorkspaceUI
 
 ```go
-func RunWorkspaceUI(themePath string, repoNames []string, showProfileRegistration bool) (*AppResult, error)
+func RunWorkspaceUI(themePath string, repoNames []string, showProfileRegistration bool, startupError string) (*AppResult, error)
 ```
 
 Main entry point. Creates a `tea.Program` with `AppModel`, runs it, and returns the result.
@@ -33,16 +33,17 @@ Main entry point. Creates a `tea.Program` with `AppModel`, runs it, and returns 
 - `themePath`: path to a Kitty theme file for palette extraction (empty string uses defaults)
 - `repoNames`: registered repo names for the active profile
 - `showProfileRegistration`: if true, starts on the profile registration page (first-run flow)
+- `startupError`: if non-empty, starts on the startup error page (takes priority over `showProfileRegistration`)
 
 Returns `*AppResult` with either `SelectedWorkspace` (user picked an existing workspace) or `NewWorkspace` (user created a new workspace). Returns `nil` if the user quit without selection.
 
 ### NewAppModel
 
 ```go
-func NewAppModel(palette ThemePalette, repoNames []string, showProfileRegistration bool) AppModel
+func NewAppModel(palette ThemePalette, repoNames []string, showProfileRegistration bool, startupError string) AppModel
 ```
 
-Constructs the main app model. Initializes all page models, loads the active profile name, and sets the starting page (`PageProfileRegistration` if `showProfileRegistration` is true, `PageWorkspaceList` otherwise). Called by `RunWorkspaceUI`.
+Constructs the main app model. Initializes all page models, loads the active profile name, and sets the starting page. Starting page priority: `PageStartupError` if `startupError` is non-empty, then `PageProfileRegistration` if `showProfileRegistration` is true, then `PageWorkspaceList` otherwise. Called by `RunWorkspaceUI`.
 
 ### AppModel.Result
 
@@ -83,6 +84,7 @@ The app uses a `Page` enum with switch-based dispatch (no polymorphic interface)
 ```
 Page = PageWorkspaceList | PageNewTask | PageCreation | PageDeleteConfirm
      | PageRegisterRepo | PageSettings | PageProfileRegistration
+     | PageStartupError
 ```
 
 ### Transitions
@@ -135,6 +137,7 @@ type AppModel struct {
     registerRepo  RegisterRepoModel
     settings      SettingsModel
     profileReg    ProfileRegModel
+    startupError  StartupErrorModel
 
     // Shared state
     styles      Styles
@@ -391,6 +394,21 @@ Validates that path is provided, and name is required for uninitialized profiles
 **Messages handled:** `tea.KeyPressMsg` only.
 
 **Transitions:** Emits `profileActivatedMsg` on success. On cancel: emits `showSettingsMsg` (when `returnToSettings` is true), `showWorkspaceListMsg` (when `hasBack` is true), or `tea.Quit` (first-run).
+
+### StartupErrorModel
+
+```go
+func NewStartupErrorModel(styles *Styles, message string) StartupErrorModel
+```
+
+Full-screen error page shown when PATH is misconfigured (bundled tools directory missing from PATH). Displays the provided error message. Only handles quit keys (`ctrl+c`, `q`).
+
+**Key bindings:**
+- Navigation keys: see [tui-navigation.md](tui-navigation.md)
+
+**Messages handled:** `tea.KeyPressMsg` only.
+
+**Transitions:** Emits `tea.Quit` on quit keys.
 
 ## Standalone Models
 
