@@ -10,3 +10,7 @@ devora.app/Contents/Resources
 .mise
 src.egg-info/
 build/
+
+*.env
+.env*
+__pycache__/

@@ -157,6 +157,7 @@ echo -n "$EFFECTIVE_VERSION"          >     "$RESOURCES_DIR/VERSION"
 bundle "$SCRIPT_DIR/Info.plist"             "$OUTPUT_DIR/Contents/."          overwrite
 bundle "$THIRD_PARTY_APPS_DIR/kitty.app"    "$RESOURCES_DIR/kitty.app"        check
 bundle "$BUNDLER_DIR/kitty-license.txt"     "$RESOURCES_DIR/."                overwrite
+bundle "$BUNDLER_DIR/uv-license.txt"        "$RESOURCES_DIR/."                overwrite
 bundle "$THIRD_PARTY_APPS_DIR/uv"           "$RESOURCES_DIR/uv"               check
 bundle "$THIRD_PARTY_APPS_DIR/glow"          "$BUNDLED_APPS_DIR/glow"         check
 bundle "$REPO_ROOT/kitty-configs"           "$RESOURCES_DIR/."                overwrite
