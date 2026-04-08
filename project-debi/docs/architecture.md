@@ -19,6 +19,8 @@ main.go
   └── crash      (panic/error logging)
 
 cli
+  ├── cmdinfo    (shared command metadata types)
+  ├── completion (shell completion script generation)
   ├── config     (profiles, repos, settings)
   ├── git        (git shortcut commands)
   ├── process    (shell command execution)
@@ -46,7 +48,10 @@ terminal
 git
   └── process    (command execution)
 
-config, process, task, crash
+completion
+  └── cmdinfo    (command metadata)
+
+config, process, task, crash, cmdinfo
   └── (stdlib only)
 
 tui/components

@@ -1,8 +1,8 @@
 package cli
 
 import (
+	"devora/internal/completion"
 	"devora/internal/config"
-	"devora/internal/git"
 	"devora/internal/health"
 	"devora/internal/process"
 	"devora/internal/task"
@@ -26,129 +26,27 @@ func (e *UsageError) Error() string {
 	return e.Message
 }
 
-const usageMessage = `usage: debi <command> [args]
-
-Workspace Commands:
-  workspace-ui (w)  Open the workspace management UI
-  add (a)           Add a repo to the current workspace
-  rename (r)        Rename the current terminal session
-
-Health:
-  health [flags]        Check Devora dependencies
-
-Git Shortcuts:
-  gaa               Stage all changes
-  gaac <msg>        Stage all and commit with message
-  gaacp <msg>       Stage all, commit, and push to origin
-  gaaa              Stage all and amend last commit
-  gaaap             Stage all, amend, and force-push
-  gb [args]         git branch
-  gbd <branch>...   Force-delete branches
-  gbdc              Delete current branch (detach first)
-  gcl               Fetch origin and checkout default branch
-  gcom [args]       Checkout default branch from origin
-  gd [args]         git diff
-  gfo [args]        Fetch from origin
-  gg [args]         git grep
-  gl [args]         git log
-  gpo [args]        Push to origin
-  gpof [args]       Force-push to origin
-  gpop [args]       Pop git stash
-  gri [N]           Interactive rebase (N commits or since branch)
-  grl               Fetch and rebase on default branch
-  grlp              Fetch, rebase, and force-push
-  grom              Rebase on origin default branch
-  gst [args]        git status
-  gstash [args]     git stash`
-
 func Run(args []string) error {
 	if len(args) < 1 {
-		return &UsageError{Message: usageMessage}
+		return &UsageError{Message: usageMessage()}
 	}
 
 	if args[0] == "-h" || args[0] == "--help" {
-		fmt.Println(usageMessage)
+		fmt.Println(usageMessage())
 		return nil
 	}
 
-	switch args[0] {
-	case "workspace-ui", "w":
-		return runWorkspaceUI()
-	case "add", "a":
-		return runAddRepo()
-	case "rename", "r":
-		if len(args) < 2 {
-			return &UsageError{Message: "usage: debi rename <new-name>"}
-		}
-		return runRename(args[1])
-
-	case "health":
-		return runHealth(args[1:])
-
-	// Git shortcuts — no args
-	case "gaa":
-		return git.Gaa()
-	case "gaaa":
-		return git.Gaaa()
-	case "gaaap":
-		return git.Gaaap()
-	case "gbdc":
-		return git.Gbdc()
-	case "gcl":
-		return git.Gcl()
-	case "grl":
-		return git.Grl()
-	case "grlp":
-		return git.Grlp()
-	case "grom":
-		return git.Grom()
-
-	// Git shortcuts — required args
-	case "gaac":
-		if len(args) < 2 {
-			return &UsageError{Message: "usage: debi gaac <msg>"}
-		}
-		return git.Gaac(args[1:])
-	case "gaacp":
-		if len(args) < 2 {
-			return &UsageError{Message: "usage: debi gaacp <msg>"}
-		}
-		return git.Gaacp(args[1:])
-	case "gbd":
-		if len(args) < 2 {
-			return &UsageError{Message: "usage: debi gbd <branch>..."}
-		}
-		return git.Gbd(args[1:])
-
-	// Git shortcuts — optional args
-	case "gb":
-		return git.Gb(args[1:])
-	case "gcom":
-		return git.Gcom(args[1:])
-	case "gd":
-		return git.Gd(args[1:])
-	case "gfo":
-		return git.Gfo(args[1:])
-	case "gg":
-		return git.Gg(args[1:])
-	case "gl":
-		return git.Gl(args[1:])
-	case "gpo":
-		return git.Gpo(args[1:])
-	case "gpof":
-		return git.Gpof(args[1:])
-	case "gpop":
-		return git.Gpop(args[1:])
-	case "gri":
-		return git.Gri(args[1:])
-	case "gst":
-		return git.Gst(args[1:])
-	case "gstash":
-		return git.Gstash(args[1:])
-
-	default:
+	cmd, ok := commandIndex[args[0]]
+	if !ok {
 		return &UsageError{Message: fmt.Sprintf("unknown command: %s", args[0])}
 	}
+
+	cmdArgs := args[1:]
+	if len(cmdArgs) < cmd.MinArgs {
+		return usageErrorForCommand(cmd)
+	}
+
+	return cmd.Run(cmdArgs)
 }
 
 func runWorkspaceUI() error {
@@ -300,4 +198,97 @@ func formatStartupError(expectedDir, pathEnv string) string {
 		b.WriteString("  " + entry + "\n")
 	}
 	return b.String()
+}
+
+const completionHelp = `Generate shell completion script.
+
+Usage: debi completion <bash|zsh|fish>
+
+Run "debi completion <shell> -h" for shell-specific installation instructions.`
+
+const completionHelpBash = `Generate bash completion script.
+
+To load completions in the current session:
+  source <(debi completion bash)
+
+To load completions for every session (macOS):
+  debi completion bash > $(brew --prefix)/etc/bash_completion.d/debi
+
+To load completions for every session (Linux):
+  debi completion bash > /etc/bash_completion.d/debi`
+
+const completionHelpZsh = `Generate zsh completion script.
+
+To load completions in the current session:
+  source <(debi completion zsh)
+
+To load completions for every session, create a completions directory
+and add it to fpath in ~/.zshrc (before compinit):
+  fpath=(~/.zsh/completions $fpath)
+  autoload -U compinit; compinit
+
+Then generate the completion file:
+  mkdir -p ~/.zsh/completions
+  debi completion zsh > ~/.zsh/completions/_debi
+
+You may need to start a new shell for this setup to take effect.`
+
+const completionHelpFish = `Generate fish completion script.
+
+To load completions in the current session:
+  debi completion fish | source
+
+To load completions for every session:
+  debi completion fish > ~/.config/fish/completions/debi.fish`
+
+var shellHelp = map[string]string{
+	"bash": completionHelpBash,
+	"zsh":  completionHelpZsh,
+	"fish": completionHelpFish,
+}
+
+func runCompletion(args []string) error {
+	helpRequested := false
+	shell := ""
+	for _, arg := range args {
+		switch arg {
+		case "-h", "--help":
+			helpRequested = true
+		default:
+			if shell == "" {
+				shell = arg
+			}
+		}
+	}
+
+	if shell != "" {
+		if _, ok := shellHelp[shell]; !ok {
+			return &UsageError{Message: fmt.Sprintf("unsupported shell: %s\nusage: debi completion <bash|zsh|fish>", shell)}
+		}
+	}
+
+	if helpRequested {
+		if shell == "" {
+			fmt.Println(completionHelp)
+		} else {
+			fmt.Println(shellHelp[shell])
+		}
+		return nil
+	}
+
+	if shell == "" {
+		return &UsageError{Message: "usage: debi completion <bash|zsh|fish>"}
+	}
+
+	cmds := CommandInfos()
+	switch shell {
+	case "bash":
+		return completion.GenerateBash(os.Stdout, "debi", cmds)
+	case "zsh":
+		return completion.GenerateZsh(os.Stdout, "debi", cmds)
+	case "fish":
+		return completion.GenerateFish(os.Stdout, "debi", cmds)
+	default:
+		return &UsageError{Message: fmt.Sprintf("unsupported shell: %s\nusage: debi completion <bash|zsh|fish>", shell)}
+	}
 }

@@ -354,3 +354,222 @@ func TestFormatStartupError_ContainsDiagnosticDataOnly(t *testing.T) {
 		t.Fatalf("formatStartupError should not contain fix instructions (owned by TUI layer), got: %q", result)
 	}
 }
+
+func TestUsageMessage_ContainsAllCommands(t *testing.T) {
+	msg := usageMessage()
+
+	// Verify header
+	if !strings.HasPrefix(msg, "usage: debi <command> [args]") {
+		t.Fatalf("usage message should start with header, got: %q", msg[:50])
+	}
+
+	// Verify all group headers
+	for _, group := range groupOrder {
+		if !strings.Contains(msg, group+":") {
+			t.Fatalf("usage message should contain group header %q", group+":")
+		}
+	}
+
+	// Verify all command names appear
+	for _, cmd := range commands {
+		if !strings.Contains(msg, cmd.Name) {
+			t.Fatalf("usage message should contain command %q", cmd.Name)
+		}
+	}
+}
+
+func TestRun_Completion_Recognized(t *testing.T) {
+	old := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdout = w
+
+	runErr := Run([]string{"completion", "bash"})
+
+	w.Close()
+	os.Stdout = old
+	io.Copy(io.Discard, r)
+
+	if runErr != nil && strings.Contains(runErr.Error(), "unknown command") {
+		t.Fatalf("completion should be recognized, got: %s", runErr.Error())
+	}
+	if runErr != nil {
+		t.Fatalf("expected no error for completion bash, got: %s", runErr.Error())
+	}
+}
+
+func TestRun_Completion_MissingArg_ReturnsUsageError(t *testing.T) {
+	err := Run([]string{"completion"})
+	if err == nil {
+		t.Fatal("expected error for completion without arg")
+	}
+	var usageErr *UsageError
+	if !errors.As(err, &usageErr) {
+		t.Fatalf("expected UsageError, got %T: %s", err, err.Error())
+	}
+}
+
+func TestRun_Completion_InvalidShell_ReturnsUsageError(t *testing.T) {
+	err := Run([]string{"completion", "powershell"})
+	if err == nil {
+		t.Fatal("expected error for unsupported shell")
+	}
+	var usageErr *UsageError
+	if !errors.As(err, &usageErr) {
+		t.Fatalf("expected UsageError, got %T: %s", err, err.Error())
+	}
+	if !strings.Contains(err.Error(), "unsupported shell") {
+		t.Fatalf("expected error to mention 'unsupported shell', got: %s", err.Error())
+	}
+}
+
+func TestRun_Completion_ProducesOutput(t *testing.T) {
+	tests := []struct {
+		shell    string
+		contains string
+	}{
+		{shell: "bash", contains: ""},
+		{shell: "zsh", contains: "#compdef"},
+		{shell: "fish", contains: "complete -c"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.shell, func(t *testing.T) {
+			old := os.Stdout
+			r, w, err := os.Pipe()
+			if err != nil {
+				t.Fatal(err)
+			}
+			os.Stdout = w
+
+			runErr := Run([]string{"completion", tc.shell})
+
+			w.Close()
+			os.Stdout = old
+
+			if runErr != nil {
+				t.Fatalf("expected no error, got: %s", runErr.Error())
+			}
+
+			var buf bytes.Buffer
+			io.Copy(&buf, r)
+			output := buf.String()
+			if len(output) == 0 {
+				t.Fatalf("expected non-empty %s completion output", tc.shell)
+			}
+			if tc.contains != "" && !strings.Contains(output, tc.contains) {
+				t.Fatalf("expected %s completion output to contain %q, got: %q", tc.shell, tc.contains, output)
+			}
+		})
+	}
+}
+
+func TestRun_Completion_Help_PrintsGeneralHelp(t *testing.T) {
+	for _, flag := range []string{"-h", "--help"} {
+		t.Run(flag, func(t *testing.T) {
+			old := os.Stdout
+			r, w, err := os.Pipe()
+			if err != nil {
+				t.Fatal(err)
+			}
+			os.Stdout = w
+
+			runErr := Run([]string{"completion", flag})
+
+			w.Close()
+			os.Stdout = old
+
+			if runErr != nil {
+				t.Fatalf("expected no error for completion %s, got: %s", flag, runErr.Error())
+			}
+
+			var buf bytes.Buffer
+			io.Copy(&buf, r)
+			output := buf.String()
+			if !strings.Contains(output, "Usage: debi completion <bash|zsh|fish>") {
+				t.Fatalf("expected general usage line in output, got: %q", output)
+			}
+			if !strings.Contains(output, "shell-specific installation instructions") {
+				t.Fatalf("expected shell-specific hint in output, got: %q", output)
+			}
+		})
+	}
+}
+
+func TestRun_Completion_ShellHelp_PrintsShellSpecificHelp(t *testing.T) {
+	tests := []struct {
+		args     []string
+		contains string
+	}{
+		{args: []string{"completion", "bash", "-h"}, contains: "source <(debi completion bash)"},
+		{args: []string{"completion", "-h", "bash"}, contains: "source <(debi completion bash)"},
+		{args: []string{"completion", "bash", "--help"}, contains: "source <(debi completion bash)"},
+		{args: []string{"completion", "zsh", "-h"}, contains: "source <(debi completion zsh)"},
+		{args: []string{"completion", "zsh", "--help"}, contains: `~/.zsh/completions/_debi`},
+		{args: []string{"completion", "fish", "-h"}, contains: "debi completion fish | source"},
+		{args: []string{"completion", "fish", "--help"}, contains: "completions/debi.fish"},
+	}
+	for _, tc := range tests {
+		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {
+			old := os.Stdout
+			r, w, err := os.Pipe()
+			if err != nil {
+				t.Fatal(err)
+			}
+			os.Stdout = w
+
+			runErr := Run(tc.args)
+
+			w.Close()
+			os.Stdout = old
+
+			if runErr != nil {
+				t.Fatalf("expected no error, got: %s", runErr.Error())
+			}
+
+			var buf bytes.Buffer
+			io.Copy(&buf, r)
+			output := buf.String()
+			if !strings.Contains(output, tc.contains) {
+				t.Fatalf("expected output to contain %q, got: %q", tc.contains, output)
+			}
+		})
+	}
+}
+
+func TestRun_Completion_InvalidShellWithHelp_ReturnsUsageError(t *testing.T) {
+	err := Run([]string{"completion", "powershell", "-h"})
+	if err == nil {
+		t.Fatal("expected error for unsupported shell with help flag")
+	}
+	var usageErr *UsageError
+	if !errors.As(err, &usageErr) {
+		t.Fatalf("expected UsageError, got %T: %s", err, err.Error())
+	}
+	if !strings.Contains(err.Error(), "unsupported shell") {
+		t.Fatalf("expected error to mention 'unsupported shell', got: %s", err.Error())
+	}
+}
+
+func TestCommandIndex_AllCommandsAndAliasesResolvable(t *testing.T) {
+	for _, cmd := range commands {
+		resolved, ok := commandIndex[cmd.Name]
+		if !ok {
+			t.Fatalf("command %q not found in commandIndex", cmd.Name)
+		}
+		if resolved.Name != cmd.Name {
+			t.Fatalf("commandIndex[%q] resolved to %q", cmd.Name, resolved.Name)
+		}
+
+		if cmd.Alias != "" {
+			resolved, ok := commandIndex[cmd.Alias]
+			if !ok {
+				t.Fatalf("alias %q for command %q not found in commandIndex", cmd.Alias, cmd.Name)
+			}
+			if resolved.Name != cmd.Name {
+				t.Fatalf("commandIndex[%q] resolved to %q, expected %q", cmd.Alias, resolved.Name, cmd.Name)
+			}
+		}
+	}
+}
