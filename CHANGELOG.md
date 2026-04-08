@@ -16,6 +16,7 @@ Types of changes:
 
 ### Added
 
+- `debi completion <bash|zsh|fish>` command for generating shell completion scripts
 - Add CI GitHub Action that runs tests on every push to master and on pull requests
 - SECURITY.md with vulnerability reporting instructions and scope definition
 - CONTRIBUTING.md with development setup and PR guidelines
@@ -39,6 +40,7 @@ Types of changes:
 
 ### Changed
 
+- Refactored debi CLI dispatch from switch statement to a data-driven command registry
 - Replaced hardcoded personal data in health tests and spec with generic test values
 - Updated bundler README to reflect `kitty-license.txt` in app structure
 - `debi health --strict` now treats credential failures as missing optional dependencies (exit code 1)
