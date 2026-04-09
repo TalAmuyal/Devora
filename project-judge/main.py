@@ -57,6 +57,14 @@ DECLINED_COMMANDS = (
         ["npx"],
         MSG_USE_MISE_TASK,
     ),
+    (
+        ["poetry"],
+        MSG_USE_MISE_TASK,
+    ),
+    (
+        ["helm"],
+        MSG_USE_MISE_TASK,
+    ),
 )
 
 ALLOWED_COMMANDS = {
@@ -195,6 +203,7 @@ class Detectors:
                 [".venv/bin/ruff", "check"],
                 [".venv/bin/ruff", "format"],
                 ["jar", "tf"],
+                ["brew", "list"],
             ]
         ),
         lambda cmd, _: cmd[0] == "find" and not (RISKY_FIND_FLAGS & set(cmd)),

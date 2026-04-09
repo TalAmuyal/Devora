@@ -214,7 +214,7 @@
                 "timeout": 60000
             }
         },
-        "approved"
+        "declined"
     ],
     [
         {
@@ -398,7 +398,7 @@
                 "command": "which helm && helm version 2>&1"
             }
         },
-        "approved"
+        "declined"
     ],
     [
         {
@@ -407,7 +407,7 @@
                 "command": "which helm 2>&1 && helm version 2>&1"
             }
         },
-        "approved"
+        "declined"
     ],
     [
         {
@@ -417,5 +417,15 @@
             }
         },
         "approved"
+    ],
+    [
+        {
+            "cwd": "/home/user/project-69E7F/project-6E8D7/project-3AF0F/project-CF6EC",
+            "tool_input": {
+                "command": "poetry install --no-interaction 2>&1",
+                "timeout": 120000
+            }
+        },
+        "declined"
     ]
 ]
