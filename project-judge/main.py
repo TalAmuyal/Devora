@@ -105,6 +105,7 @@ ALLOWED_COMMANDS = {
 
 ALLOWED_EXACT_MATCHES = {
     ("git", "branch"),
+    ("git", "branch", "-r"),
     ("git", "branch", "-a"),
     ("git", "branch", "--all"),
 }
