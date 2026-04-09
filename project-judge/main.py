@@ -69,6 +69,7 @@ DECLINED_COMMANDS = (
 
 ALLOWED_COMMANDS = {
     "for",
+    "done",  # Allow "done" to close loops like "for x in ...; do ...; done"
     "cat",
     "echo",
     "mise",
@@ -100,6 +101,12 @@ ALLOWED_COMMANDS = {
     ".venv/bin/python",
     "./.venv/bin/python",
     "submit-pr",
+}
+
+ALLOWED_EXACT_MATCHES = {
+    ("git", "branch"),
+    ("git", "branch", "-a"),
+    ("git", "branch", "--all"),
 }
 
 DERISKING_FLAGS = {
@@ -209,7 +216,7 @@ class Detectors:
         lambda cmd, _: cmd[0] == "find" and not (RISKY_FIND_FLAGS & set(cmd)),
         lambda cmd, _: bool(frozenset(cmd[1:]) & DERISKING_FLAGS),
         validate_sed,
-        lambda cmd, _: cmd == ["done"],  # Allow "done" to close loops like "for x in ...; do ...; done"
+        lambda cmd, _: tuple(cmd) in ALLOWED_EXACT_MATCHES,
     ]
 
 
