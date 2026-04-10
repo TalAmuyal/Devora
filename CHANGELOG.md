@@ -14,58 +14,30 @@ Types of changes:
 
 ## Unreleased
 
+## 2026-04-10.0
+
 ### Added
 
-- `debi completion <bash|zsh|fish>` command for generating shell completion scripts
-- `download-deps.sh` script for downloading and verifying third-party dependencies with SHA-256 checksum validation
-- CD GitHub Action for automated nightly and stable release builds
-- Nightly releases published daily with dated tags (`nightly-YYYY-MM-DD`) and a rolling `nightly-latest` alias
-- Stable releases triggered by `v*` tag pushes with changelog-extracted release notes
-- Smoke tests in CD pipeline verifying arm64 binaries and Info.plist validity
-- SHA-256 checksums and archive metadata added to `bundler/3rd-party-deps.json`
-- `download-deps` mise task for fetching third-party dependencies
-- CI and CD pipeline documentation (`bundler/docs/CI.md`, `bundler/docs/CD.md`)
-- Add CI GitHub Action that runs tests on every push to master and on pull requests
-- SECURITY.md with vulnerability reporting instructions and scope definition
-- CONTRIBUTING.md with development setup and PR guidelines
-- uv license file (`uv-license.txt`) bundled into DMG for Apache-2.0 compliance
-- Startup error page: `debi workspace-ui` now shows a diagnostic page when Devora's bundled tools are missing from PATH
-- MIT LICENSE file
-- THIRD_PARTY_LICENSES.md documenting bundled tools and their licenses
-- `bundler/3rd-party-deps.json` as source of truth for bundled third-party binaries
-- `build` and `test` mise tasks to root `mise.toml`
-- Kitty license file (`kitty-license.txt`) bundled into DMG for GPL-3.0 compliance
-- Prerequisites, getting started, supported platform, Anthropic disclaimer, and license sections to README.md
-- `mac-install` mise task for building and installing Devora.app to /Applications
-- Health command to Debi (`debi health`) for checking Devora dependencies
-- GitHub credential checking to `debi health` with `gh` as optional dependency
+- CI/CD pipelines with automated nightly releases (`nightly-YYYY-MM-DD`), stable releases on `v*` tags, smoke tests, and changelog-extracted release notes
+- 23 git shortcut commands for common workflows (`gaa`, `gb`, `gd`, `gl`, `gst`, and more)
+- Version tracking displayed in the settings page
+- `debi health` command for verifying Devora dependencies, with optional GitHub credential checking via `gh`
+- Diagnostic error page when bundled tools are missing from PATH
+- Shell completion scripts via `debi completion <bash|zsh|fish>`
 - `-h`/`--help` flag support in the debi CLI
-- 23 git shortcut commands (`gaa`, `gaac`, `gaacp`, `gaaa`, `gaaap`, `gb`, `gbd`, `gbdc`, `gcl`, `gcom`, `gd`, `gfo`, `gg`, `gl`, `gpo`, `gpof`, `gpop`, `gri`, `grl`, `grlp`, `grom`, `gst`, `gstash`) for common git workflows
-- `PassthroughError` and `RunPassthrough` in the process package for terminal-connected command execution
-- Enhanced redaction for Judge test cases: path segment hashing, git hash replacement, commit message/PR title redaction, timestamp zeroing, description removal, and audit mode (`--audit`)
-- Changelog file to track future changes between releases
-- Version tracking (displayed in the settings page)
+- Project documentation: MIT LICENSE, SECURITY.md, CONTRIBUTING.md, THIRD_PARTY_LICENSES.md, bundled third-party license files, and updated README with getting started guide and prerequisites
 
 ### Changed
 
-- Refactored debi CLI dispatch from switch statement to a data-driven command registry
-- Full commit hash for uv dependency in `3rd-party-deps.json` (was truncated)
-- Replaced hardcoded personal data in health tests and spec with generic test values
-- Updated bundler README to reflect `kitty-license.txt` in app structure
 - `debi health --strict` now treats credential failures as missing optional dependencies (exit code 1)
-- Include version in DMG filename (e.g., `Devora_2026-03-28.0.dmg`)
+- DMG filename now includes the version (e.g., `Devora_2026-03-28.0.dmg`)
 
 ### Removed
 
-- `.claude/settings.local.json` from version control (added to `.gitignore`)
 - Legacy `cc-simple-statusline.sh` (superseded by Go binary in project-status-line)
-- `project-judge/debug.sh`
-- "Backlog" sections from project-judge README and project-debi docs
 - `jq` as an optional dependency from health check
-- Dead `BACKLOG.md` references from project-debi docs
 
 ### Fixed
 
-- Use full path for `debi` in macOS bootstrap script to prevent PATH manipulation by shell startup files from blocking launch
-- Broken placeholder links in README.md
-- Footer now stays attached to the bottom of the screen even when content is short
+- Launch failure caused by PATH manipulation in shell startup files overriding `debi` location
+- Footer now stays attached to the bottom of the screen when content is short
