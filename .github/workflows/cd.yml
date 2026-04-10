@@ -1,0 +1,143 @@
+name: CD
+
+on:
+  schedule:
+    # Daily at midnight UTC-3 (= 03:00 UTC)
+    - cron: '0 3 * * *'
+  push:
+    tags:
+      - 'v*'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: jdx/mise-action@v4
+        with:
+          experimental: true
+
+      - run: mise run test
+
+  build-and-release:
+    runs-on: macos-15
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: jdx/mise-action@v4
+        with:
+          experimental: true
+
+      - uses: actions/cache@v4
+        with:
+          path: bundler/macos/3rd-party-apps
+          key: 3rd-party-deps-macos-${{ hashFiles('bundler/3rd-party-deps.json', 'bundler/download-deps.sh') }}
+
+      - name: Download third-party dependencies
+        run: ./bundler/download-deps.sh
+
+      - name: Build DMG
+        run: ./bundler/macos/bundle.sh --dmg
+
+      - name: Smoke test
+        run: |
+          # Verify DMG was created
+          DMG_FILE=$(ls bin/macOS/Devora/Devora_*.dmg)
+          echo "DMG: $DMG_FILE"
+
+          # Verify binaries are arm64
+          file bin/macOS/Devora/Devora.app/Contents/Resources/bundled-apps/debi | grep -q "arm64"
+          file bin/macOS/Devora/Devora.app/Contents/Resources/uv | grep -q "arm64"
+          file bin/macOS/Devora/Devora.app/Contents/Resources/bundled-apps/glow | grep -q "arm64"
+
+          # Validate Info.plist
+          plutil -lint bin/macOS/Devora/Devora.app/Contents/Info.plist
+
+          # Verify version was patched (should not contain "1.0")
+          VERSION_IN_PLIST=$(plutil -extract CFBundleShortVersionString raw bin/macOS/Devora/Devora.app/Contents/Info.plist)
+          echo "Version in plist: $VERSION_IN_PLIST"
+          if [ "$VERSION_IN_PLIST" = "1.0" ]; then
+            echo "Error: version was not patched in Info.plist"
+            exit 1
+          fi
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          DMG_FILE=$(ls bin/macOS/Devora/Devora_*.dmg)
+
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            # Stable release
+            TAG="${GITHUB_REF#refs/tags/}"
+            VERSION="${TAG#v}"
+
+            # Extract release notes from CHANGELOG.md for this version
+            # Get content between "## VERSION" and the next "## " header
+            NOTES=$(awk -v ver="## ${VERSION}" '$0 == ver { found=1; next } /^## / { found=0 } found { print }' CHANGELOG.md)
+
+            if [ -z "$NOTES" ]; then
+              NOTES="Release ${VERSION}"
+            fi
+
+            gh release create "$TAG" "$DMG_FILE" \
+              --title "Devora $VERSION" \
+              --notes "$NOTES"
+          else
+            # Nightly release
+            DATE=$(date -u +%Y-%m-%d)
+            NIGHTLY_TAG="nightly-${DATE}"
+            SHORT_SHA="${GITHUB_SHA:0:7}"
+
+            NIGHTLY_NOTES=$(cat <<EOF
+          Automated nightly build from master.
+
+          **Commit:** ${SHORT_SHA}
+          **Date:** ${DATE}
+
+          > This is a pre-release build and may be unstable.
+          EOF
+            )
+
+            # Create dated nightly release
+            # Delete if it already exists (e.g., re-run on same day)
+            gh release delete "$NIGHTLY_TAG" --cleanup-tag --yes 2>/dev/null || true
+
+            gh release create "$NIGHTLY_TAG" "$DMG_FILE" \
+              --prerelease \
+              --title "Nightly Build ($DATE)" \
+              --target "$GITHUB_SHA" \
+              --latest=false \
+              --notes "$NIGHTLY_NOTES"
+
+            LATEST_NOTES=$(cat <<EOF
+          Rolling nightly build — always points to the latest nightly.
+
+          **Commit:** ${SHORT_SHA}
+          **Date:** ${DATE}
+
+          > This is a pre-release build and may be unstable.
+          EOF
+            )
+
+            # Update rolling nightly-latest alias
+            gh release delete nightly-latest --cleanup-tag --yes 2>/dev/null || true
+
+            gh release create nightly-latest "$DMG_FILE" \
+              --prerelease \
+              --title "Nightly Build (Latest)" \
+              --target "$GITHUB_SHA" \
+              --latest=false \
+              --notes "$LATEST_NOTES"
+          fi

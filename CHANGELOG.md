@@ -17,6 +17,14 @@ Types of changes:
 ### Added
 
 - `debi completion <bash|zsh|fish>` command for generating shell completion scripts
+- `download-deps.sh` script for downloading and verifying third-party dependencies with SHA-256 checksum validation
+- CD GitHub Action for automated nightly and stable release builds
+- Nightly releases published daily with dated tags (`nightly-YYYY-MM-DD`) and a rolling `nightly-latest` alias
+- Stable releases triggered by `v*` tag pushes with changelog-extracted release notes
+- Smoke tests in CD pipeline verifying arm64 binaries and Info.plist validity
+- SHA-256 checksums and archive metadata added to `bundler/3rd-party-deps.json`
+- `download-deps` mise task for fetching third-party dependencies
+- CI and CD pipeline documentation (`bundler/docs/CI.md`, `bundler/docs/CD.md`)
 - Add CI GitHub Action that runs tests on every push to master and on pull requests
 - SECURITY.md with vulnerability reporting instructions and scope definition
 - CONTRIBUTING.md with development setup and PR guidelines
@@ -41,6 +49,7 @@ Types of changes:
 ### Changed
 
 - Refactored debi CLI dispatch from switch statement to a data-driven command registry
+- Full commit hash for uv dependency in `3rd-party-deps.json` (was truncated)
 - Replaced hardcoded personal data in health tests and spec with generic test values
 - Updated bundler README to reflect `kitty-license.txt` in app structure
 - `debi health --strict` now treats credential failures as missing optional dependencies (exit code 1)
