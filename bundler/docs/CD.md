@@ -13,6 +13,8 @@ There are two release types: **nightly** builds that run daily, and **stable** r
 |---|---|---|
 | Cron | Daily at 03:00 UTC (midnight UTC-3) | Nightly |
 | Tag push | `v*` (e.g. `v2026-03-28.0`) | Stable |
+| PR merge | Release PR merged to `master` (auto-tag workflow) | Creates `v*` tag |
+| Manual dispatch | `workflow_dispatch` via GitHub Actions UI or CLI | Depends on ref (tag → stable, branch → nightly) |
 
 ## Build process
 
@@ -60,30 +62,39 @@ Stable releases are **not** marked as pre-release and use the default `latest` b
 
 ## How to cut a stable release
 
-Use the `cut-release.sh` script at the repo root:
+Run the release script via mise (or directly):
 
 ```bash
-./cut-release.sh          # auto-generates a date-based version (YYYY-MM-DD.N)
-./cut-release.sh 1.2.3    # or provide an explicit version
+mise release                        # auto-generates a date-based version (YYYY-MM-DD.N)
+mise release -- <version>           # provide an explicit version
+mise release -- --no-ai             # skip the Claude Code editorial cleanup step
+mise release -- <version> --no-ai   # both
+```
+
+Or equivalently:
+
+```bash
+./cut-release.sh
+./cut-release.sh <version>
+./cut-release.sh --no-ai
+./cut-release.sh <version> --no-ai
 ```
 
 The script:
-1. Reads the current version from `VERSION`
-2. Generates a new version (date-based by default, with an incrementing patch number for same-day releases)
+1. Validates the working tree (clean, on `master`, up to date with remote)
+2. Computes the new version (date-based by default, with an incrementing patch number for same-day releases)
 3. Validates that the `## Unreleased` section in `CHANGELOG.md` has content
 4. Moves unreleased changelog entries under a new `## <version>` header
-5. Writes the new version to `VERSION`
+5. Runs editorial cleanup on the changelog entries via Claude Code (unless `--no-ai` is passed)
+6. Pauses for manual review -- edit `CHANGELOG.md` as needed, then press Enter to continue
+7. Creates a `release/<version>` branch, commits, pushes, and opens a PR
 
-After running the script, review the changes, commit, tag, and push:
+After the script completes:
+1. Review and squash-merge the PR on GitHub
+2. The auto-tag workflow automatically creates the `v<version>` tag and triggers the CD pipeline
+3. The CD pipeline builds the DMG and publishes the GitHub Release
 
-```bash
-git add VERSION CHANGELOG.md
-git commit -m 'Release <version>'
-git tag v<version>
-git push origin master --tags
-```
-
-The tag push triggers the CD pipeline, which builds and publishes the stable release.
+If the auto-tag workflow fails, run `./cut-release.sh --tag-only` to manually create and push the tag (reads the version from the `VERSION` file).
 
 ## Dependency management
 

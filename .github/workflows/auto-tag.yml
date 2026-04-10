@@ -1,0 +1,45 @@
+name: Auto-tag release
+
+on:
+  push:
+    branches: [master]
+
+jobs:
+  auto-tag:
+    # Only run for release commits. The "Release 20" prefix matches our YYYY-MM-DD.N
+    # version format while avoiding false matches on other "Release"-prefixed commits.
+    # Squash-merged PRs use the PR title as commit message.
+    if: startsWith(github.event.head_commit.message, 'Release 20')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read version
+        id: version
+        run: |
+          VERSION=$(cat VERSION)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Create and push tag
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+          SHA: ${{ github.sha }}
+        run: |
+          if git ls-remote --tags origin | grep -q "refs/tags/${TAG}$"; then
+            echo "Tag ${TAG} already exists -- skipping push"
+          else
+            git tag "$TAG" "$SHA"
+            git push origin "$TAG"
+          fi
+
+      - name: Trigger CD pipeline
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          gh workflow run cd.yml --ref "$TAG"

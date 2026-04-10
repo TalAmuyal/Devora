@@ -19,6 +19,11 @@ description = "Run tests for all sub-projects"
 run = "./bundler/download-deps.sh"
 description = "Download 3rd-party dependencies for bundling"
 
+[tasks.release]
+run = "./cut-release.sh"
+raw = true
+description = "Cut a new release (interactive)"
+
 [tasks.mac-install]
 run = """
 set -e
