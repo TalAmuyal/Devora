@@ -191,6 +191,134 @@ func TestRun_Health_UnknownFlag(t *testing.T) {
 	}
 }
 
+func TestRun_PR_MissingSubcommand_ReturnsUsageError(t *testing.T) {
+	err := Run([]string{"pr"})
+	if err == nil {
+		t.Fatal("expected error for pr without subcommand")
+	}
+	var usageErr *UsageError
+	if !errors.As(err, &usageErr) {
+		t.Fatalf("expected UsageError, got %T: %s", err, err.Error())
+	}
+}
+
+func TestRun_PR_UnknownSubcommand_ReturnsUsageError(t *testing.T) {
+	err := Run([]string{"pr", "foo"})
+	if err == nil {
+		t.Fatal("expected error for unknown pr subcommand")
+	}
+	var usageErr *UsageError
+	if !errors.As(err, &usageErr) {
+		t.Fatalf("expected UsageError, got %T: %s", err, err.Error())
+	}
+	if !strings.Contains(err.Error(), "foo") {
+		t.Fatalf("expected error to mention subcommand name, got: %s", err.Error())
+	}
+}
+
+func TestRun_PR_Help_PrintsUsage(t *testing.T) {
+	old := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdout = w
+
+	runErr := Run([]string{"pr", "-h"})
+
+	w.Close()
+	os.Stdout = old
+
+	if runErr != nil {
+		t.Fatalf("expected no error for pr -h, got: %s", runErr.Error())
+	}
+
+	var buf bytes.Buffer
+	io.Copy(&buf, r)
+	output := buf.String()
+	if !strings.Contains(output, "usage: debi pr") {
+		t.Fatalf("expected pr usage message on stdout, got: %q", output)
+	}
+}
+
+func TestRun_PRStatus_Help_PrintsUsage(t *testing.T) {
+	old := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdout = w
+
+	runErr := Run([]string{"pr", "status", "-h"})
+
+	w.Close()
+	os.Stdout = old
+
+	if runErr != nil {
+		t.Fatalf("expected no error for pr status -h, got: %s", runErr.Error())
+	}
+
+	var buf bytes.Buffer
+	io.Copy(&buf, r)
+	output := buf.String()
+	if !strings.Contains(output, "usage: debi pr status") {
+		t.Fatalf("expected pr status usage message on stdout, got: %q", output)
+	}
+}
+
+func TestRun_PRStatus_UnknownFlag_ReturnsUsageError(t *testing.T) {
+	err := Run([]string{"pr", "status", "--foo"})
+	if err == nil {
+		t.Fatal("expected error for unknown flag")
+	}
+	var usageErr *UsageError
+	if !errors.As(err, &usageErr) {
+		t.Fatalf("expected UsageError, got %T: %s", err, err.Error())
+	}
+	if !strings.Contains(err.Error(), "--foo") {
+		t.Fatalf("expected error to mention the flag, got: %s", err.Error())
+	}
+}
+
+func TestRun_PRS_UnknownFlag_ReturnsUsageError(t *testing.T) {
+	err := Run([]string{"prs", "--foo"})
+	if err == nil {
+		t.Fatal("expected error for unknown flag")
+	}
+	var usageErr *UsageError
+	if !errors.As(err, &usageErr) {
+		t.Fatalf("expected UsageError, got %T: %s", err, err.Error())
+	}
+	if !strings.Contains(err.Error(), "--foo") {
+		t.Fatalf("expected error to mention the flag, got: %s", err.Error())
+	}
+}
+
+func TestRun_PRS_Help_PrintsUsage(t *testing.T) {
+	old := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdout = w
+
+	runErr := Run([]string{"prs", "-h"})
+
+	w.Close()
+	os.Stdout = old
+
+	if runErr != nil {
+		t.Fatalf("expected no error for prs -h, got: %s", runErr.Error())
+	}
+
+	var buf bytes.Buffer
+	io.Copy(&buf, r)
+	output := buf.String()
+	if !strings.Contains(output, "usage: debi pr status") {
+		t.Fatalf("expected pr status usage message on stdout, got: %q", output)
+	}
+}
+
 func TestRun_GitCommands_Recognized(t *testing.T) {
 	origDir, err := os.Getwd()
 	if err != nil {

@@ -24,6 +24,7 @@ cli
   ├── config     (profiles, repos, settings)
   ├── git        (git shortcut commands)
   ├── process    (shell command execution)
+  ├── prstatus   (PR status checking)
   ├── tui        (UI entry points)
   └── workspace  (workspace detection from CWD)
 
@@ -50,6 +51,9 @@ git
 
 completion
   └── cmdinfo    (command metadata)
+
+prstatus
+  └── process    (gh CLI execution)
 
 config, process, task, crash, cmdinfo
   └── (stdlib only)

@@ -14,6 +14,10 @@ Types of changes:
 
 ## Unreleased
 
+### Added
+
+- `debi pr status` command (alias: `debi prs`) for checking GitHub PR status, CI checks, and code reviews for the current branch
+
 ### Changed
 
 - Automated release-cutting process: `cut-release.sh` now handles pre-flight checks, optional AI-powered changelog cleanup, interactive review pause, and PR creation in a single script

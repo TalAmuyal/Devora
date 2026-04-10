@@ -30,6 +30,7 @@ Specifications for the domain packages. These define the intended behavior of ea
 | [specs/tui-components.md](specs/tui-components.md) | `internal/tui/components` | Reusable UI widgets: list, checkbox, text input, vim navigation, footer |
 | [specs/health.md](specs/health.md) | `internal/health` | Dependency health checking |
 | [specs/git.md](specs/git.md) | `internal/git` | Git shortcut commands |
+| [specs/prstatus.md](specs/prstatus.md) | `internal/prstatus` | PR status checking via gh CLI |
 
 ## Spec Conventions
 

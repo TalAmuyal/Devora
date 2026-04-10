@@ -8,7 +8,7 @@ Define and dispatch the CLI commands. This is the entry point that wires togethe
 
 ## Commands
 
-The CLI has 3 workspace commands (each with a hidden short alias), a health command, 23 git shortcuts, and a utility command:
+The CLI has 3 workspace commands (each with a hidden short alias), a health command, PR commands, 23 git shortcuts, and a utility command:
 
 ### Workspace Commands
 
@@ -23,6 +23,13 @@ The CLI has 3 workspace commands (each with a hidden short alias), a health comm
 | Command | Args | Description |
 |---------|------|-------------|
 | `health` | `[--strict] [-v\|--verbose]` | Check Devora dependencies and report their status |
+
+### PR Commands
+
+| Command | Args | Description |
+|---------|------|-------------|
+| `pr <subcommand>` | subcommand (required) | Pull request commands. Dispatches to subcommands |
+| `prs [flags]` | `[--json]` | Check the status of the PR for the current branch. Alias shortcut for `pr status` |
 
 ### Git Shortcuts
 
@@ -110,6 +117,10 @@ Workspace Commands:
 
 Health:
   health [flags]        Check Devora dependencies
+
+PR Commands:
+  pr <subcommand>       Pull request commands
+  prs [flags]           Check the status of the PR for the current branch
 
 Git Shortcuts:
   gaa               Stage all changes
@@ -215,6 +226,32 @@ Without a help flag and without a shell argument, returns a `UsageError` with th
 
 Delegates to `completion.GenerateBash`, `completion.GenerateZsh`, or `completion.GenerateFish` based on the shell argument.
 
+### pr
+
+```go
+func runPR(args []string) error
+```
+
+Dispatches on `args[0]`:
+- `-h` or `--help`: prints the subcommand list and returns nil.
+- `"status"`: delegates to `runPRStatus(args[1:])`.
+- Unknown subcommand: returns a `UsageError`.
+
+If `args` is empty, returns a `UsageError`.
+
+### prs (alias for `pr status`)
+
+```go
+func runPRStatus(args []string) error
+```
+
+Parses the provided args for flags:
+- `-h` or `--help`: prints usage information and returns nil.
+- `--json`: enables JSON output mode.
+- Any other argument: returns a `UsageError` with the unknown flag and usage hint.
+
+Delegates to `prstatus.Run(os.Stdout, jsonOutput)`.
+
 ## Binary Name
 
 The built binary should be named `debi`.
@@ -266,4 +303,10 @@ func main() {
 - Test that `completion -h` and `completion --help` print general help (contains usage line and shell-specific hint).
 - Test that `completion <shell> -h` prints shell-specific installation instructions (table-driven for bash/zsh/fish, both flag positions).
 - Test that `completion <invalid-shell> -h` returns a `UsageError` mentioning "unsupported shell".
+- Test that `pr` without a subcommand returns a `UsageError`.
+- Test that `pr` with an unknown subcommand returns a `UsageError`.
+- Test that `pr status` is recognized and dispatches correctly.
+- Test that `prs` is recognized as an alias for `pr status`.
+- Test that `prs --json` enables JSON output mode.
+- Test that `prs` with an unknown flag returns a `UsageError`.
 - Command handler integration tests are better handled at a higher level (testing the actual TUI behavior or workspace operations).
