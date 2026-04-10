@@ -8,16 +8,22 @@
       "commit": "4483a6c110275d5603e48337ba533a322781efe2",
       "source_tree_url": "https://github.com/kovidgoyal/kitty/tree/4483a6c110275d5603e48337ba533a322781efe2",
       "tag": "v0.46.2",
-      "download_url": "https://github.com/kovidgoyal/kitty/releases/download/v0.46.2/kitty-0.46.2.dmg"
+      "download_url": "https://github.com/kovidgoyal/kitty/releases/download/v0.46.2/kitty-0.46.2.dmg",
+      "sha256": "e4e19cb8aef816dd64862e013d2b83cc1e3c0f37ed6398f3cda221004c2240d2",
+      "archive_type": "dmg",
+      "extract_path": "kitty.app"
     },
     {
       "name": "uv",
       "version": "0.10.12",
       "license": "MIT AND Apache-2.0",
       "source_repo": "https://github.com/astral-sh/uv",
-      "commit": "00d72dac7",
+      "commit": "00d72dac7b789d1c64ed21626175b80f4a1b8f2b",
       "tag": "0.10.12",
-      "download_url": "https://github.com/astral-sh/uv/releases/download/0.10.12/uv-aarch64-apple-darwin.tar.gz"
+      "download_url": "https://github.com/astral-sh/uv/releases/download/0.10.12/uv-aarch64-apple-darwin.tar.gz",
+      "sha256": "ae738b5661a900579ec621d3918c0ef17bdec0da2a8a6d8b161137cd15f25414",
+      "archive_type": "tar.gz",
+      "extract_path": "uv"
     },
     {
       "name": "glow",
@@ -25,7 +31,10 @@
       "license": "MIT",
       "source_repo": "https://github.com/charmbracelet/glow",
       "tag": "v2.1.1",
-      "download_url": "https://github.com/charmbracelet/glow/releases/download/v2.1.1/glow_2.1.1_Darwin_arm64.tar.gz"
+      "download_url": "https://github.com/charmbracelet/glow/releases/download/v2.1.1/glow_2.1.1_Darwin_arm64.tar.gz",
+      "sha256": "234a20a7d0cebc775cdc77ecd62d28da9479364a122b52d8bac9adf1312b860d",
+      "archive_type": "tar.gz",
+      "extract_path": "glow"
     }
   ]
 }

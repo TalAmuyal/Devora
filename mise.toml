@@ -15,6 +15,10 @@ mise run -C project-status-line test
 """
 description = "Run tests for all sub-projects"
 
+[tasks.download-deps]
+run = "./bundler/download-deps.sh"
+description = "Download 3rd-party dependencies for bundling"
+
 [tasks.mac-install]
 run = """
 set -e
