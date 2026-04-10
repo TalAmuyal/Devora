@@ -1,6 +1,7 @@
 name: CD
 
 on:
+  workflow_dispatch:
   schedule:
     # Daily at midnight UTC-3 (= 03:00 UTC)
     - cron: '0 3 * * *'

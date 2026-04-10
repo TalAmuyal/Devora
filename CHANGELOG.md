@@ -14,6 +14,11 @@ Types of changes:
 
 ## Unreleased
 
+### Changed
+
+- Automated release-cutting process: `cut-release.sh` now handles pre-flight checks, optional AI-powered changelog cleanup, interactive review pause, and PR creation in a single script
+- Release tagging is now automated via GitHub Actions when release PRs are merged
+
 ## 2026-04-10.1
 
 ### Fixed
