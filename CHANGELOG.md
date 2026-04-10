@@ -18,6 +18,7 @@ Types of changes:
 
 - Automated release-cutting process: `cut-release.sh` now handles pre-flight checks, optional AI-powered changelog cleanup, interactive review pause, and PR creation in a single script
 - Release tagging is now automated via GitHub Actions when release PRs are merged
+- `ccc` now sets Claude Code's effort level to "max"
 
 ## 2026-04-10.1
 
