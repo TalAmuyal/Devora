@@ -14,6 +14,12 @@ Types of changes:
 
 ## Unreleased
 
+## 2026-04-10.1
+
+### Fixed
+
+- Fix DMG file path in CD workflow smoke test and publish steps
+
 ## 2026-04-10.0
 
 ### Added
