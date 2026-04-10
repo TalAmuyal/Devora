@@ -53,7 +53,7 @@ jobs:
       - name: Smoke test
         run: |
           # Verify DMG was created
-          DMG_FILE=$(ls bin/macOS/Devora/Devora_*.dmg)
+          DMG_FILE=$(ls bin/macOS/Devora_*.dmg)
           echo "DMG: $DMG_FILE"
 
           # Verify binaries are arm64
@@ -76,7 +76,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          DMG_FILE=$(ls bin/macOS/Devora/Devora_*.dmg)
+          DMG_FILE=$(ls bin/macOS/Devora_*.dmg)
 
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             # Stable release
