@@ -29,6 +29,23 @@ func testCommands() []cmdinfo.Command {
 			},
 		},
 		{
+			Name:        "pr",
+			Description: "Pull request commands",
+			ArgsHint:    "<subcommand>",
+			Group:       "PR",
+			MinArgs:     1,
+			ValidArgs:   []string{"status"},
+		},
+		{
+			Name:        "prs",
+			Description: "Check the status of the PR for the current branch",
+			ArgsHint:    "[flags]",
+			Group:       "PR",
+			Flags: []cmdinfo.Flag{
+				{Name: "--json", Description: "Output status as JSON"},
+			},
+		},
+		{
 			Name:        "gaa",
 			Description: "Stage all changes",
 			Group:       "Git Shortcuts",
@@ -295,5 +312,33 @@ func TestGenerateZsh_ValidArgsInArgsState(t *testing.T) {
 		if !strings.Contains(output, arg) {
 			t.Fatalf("zsh output should contain %s in the args state section", arg)
 		}
+	}
+}
+
+func TestGenerate_PRStatusSubcommandCompletion(t *testing.T) {
+	for _, tc := range shellGenerators() {
+		t.Run(tc.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			tc.generate(&buf, "debi", testCommands())
+			output := buf.String()
+
+			if !strings.Contains(output, "status") {
+				t.Fatalf("%s output should contain 'status' as a completion option for pr", tc.name)
+			}
+		})
+	}
+}
+
+func TestGenerate_PRSJsonFlagCompletion(t *testing.T) {
+	for _, tc := range shellGenerators() {
+		t.Run(tc.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			tc.generate(&buf, "debi", testCommands())
+			output := buf.String()
+
+			if !strings.Contains(output, "--json") {
+				t.Fatalf("%s output should contain '--json' as a completion option for prs", tc.name)
+			}
+		})
 	}
 }

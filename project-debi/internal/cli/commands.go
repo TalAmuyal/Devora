@@ -23,6 +23,7 @@ type Command struct {
 var groupOrder = []string{
 	"Workspace Commands",
 	"Health",
+	"PR",
 	"Git Shortcuts",
 	"Utility",
 }
@@ -64,6 +65,27 @@ var commands = []Command{
 			{Name: "--strict", Description: "Exit with code 1 if any dependency (including optional) is missing"},
 			{Name: "-v", Description: "Show dependency locations"},
 			{Name: "--verbose", Description: "Show dependency locations"},
+		},
+	},
+
+	// PR commands
+	{
+		Name:        "pr",
+		Description: "Pull request commands",
+		ArgsHint:    "<subcommand>",
+		Group:       "PR",
+		MinArgs:     1,
+		Run:         func(args []string) error { return runPR(args) },
+		ValidArgs:   []string{"status"},
+	},
+	{
+		Name:        "prs",
+		Description: "Check the status of the PR for the current branch",
+		ArgsHint:    "[flags]",
+		Group:       "PR",
+		Run:         func(args []string) error { return runPRStatus(args) },
+		Flags: []cmdinfo.Flag{
+			{Name: "--json", Description: "Output status as JSON"},
 		},
 	},
 

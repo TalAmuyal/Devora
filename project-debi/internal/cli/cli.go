@@ -5,6 +5,7 @@ import (
 	"devora/internal/config"
 	"devora/internal/health"
 	"devora/internal/process"
+	"devora/internal/prstatus"
 	"devora/internal/task"
 	"devora/internal/tui"
 	"devora/internal/workspace"
@@ -150,6 +151,37 @@ func runHealth(args []string) error {
 		}
 	}
 	return health.Run(os.Stdout, strict, verbose)
+}
+
+func runPR(args []string) error {
+	subcommand := args[0]
+	subArgs := args[1:]
+
+	switch subcommand {
+	case "-h", "--help":
+		fmt.Println("usage: debi pr <subcommand>\n\nSubcommands:\n  status    Check the status of the PR for the current branch")
+		return nil
+	case "status":
+		return runPRStatus(subArgs)
+	default:
+		return &UsageError{Message: fmt.Sprintf("unknown pr subcommand: %s\nusage: debi pr <subcommand>", subcommand)}
+	}
+}
+
+func runPRStatus(args []string) error {
+	jsonOutput := false
+	for _, arg := range args {
+		switch arg {
+		case "-h", "--help":
+			fmt.Println("usage: debi pr status [--json]\n\nCheck the status of the PR for the current branch.\n\nFlags:\n  --json    Output status as JSON")
+			return nil
+		case "--json":
+			jsonOutput = true
+		default:
+			return &UsageError{Message: fmt.Sprintf("unknown flag: %s\nusage: debi pr status [--json]", arg)}
+		}
+	}
+	return prstatus.Run(os.Stdout, jsonOutput)
 }
 
 func runRename(newName string) error {
