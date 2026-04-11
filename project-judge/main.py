@@ -34,11 +34,6 @@ BooleanDetector: typing.TypeAlias = typing.Callable[[Command, str], bool]
 DeclineDetector: typing.TypeAlias = typing.Callable[[Command, str], str | None]
 
 
-ASK_USER = {
-    "chmod",
-    "rm",
-}
-
 MSG_USE_MISE_TASK = "Please use a mise task or `mise exec -- ...` instead (create a generic task if needed)."
 
 DECLINED_COMMANDS = (
@@ -102,6 +97,8 @@ ALLOWED_COMMANDS = {
     ".venv/bin/python",
     "./.venv/bin/python",
     "submit-pr",
+    "man",
+    "ruff",
 }
 
 ALLOWED_EXACT_MATCHES = {
@@ -182,13 +179,16 @@ class Detectors:
         words_decliner,
     ]
     KNOWN_TO_NOT_HANDLE: list[BooleanDetector] = [
-        lambda cmd, _: cmd[0] in ASK_USER,
         lambda cmd, _: cmd[0].startswith("./"),
         lambda cmd, _: cmd[0] == "find" and RISKY_FIND_FLAGS & set(cmd),
         lambda cmd, _: any(
             cmd[0:len(cmd_start)] == cmd_start
             for cmd_start in [
+                ["chmod"],
+                ["rm"],
+                ["bash"],
                 ["git", "add"],
+                ["git", "checkout"],
                 ["git", "reset"],
             ]
         ),
@@ -205,11 +205,12 @@ class Detectors:
                 ["git", "tag" "-l"],
                 ["git", "tag", "--list"],
                 ["git", "config", "--list"],
+                ["git", "notes", "list"],
                 ["git", "ls-files"],
                 ["git", "status"],
                 ["git", "ls-tree"],
                 ["git", "rm"],
-                ["git" ,"mv"],
+                ["git", "mv"],
                 ["git", "remote", "get-url"],
                 ["git", "remote", "-v"],
                 ["git", "rev-parse"],
@@ -225,7 +226,6 @@ class Detectors:
                 [".venv/bin/ruff", "format"],
                 ["jar", "tf"],
                 ["brew", "list"],
-                ["man"],
             ]
         ),
         lambda cmd, _: cmd[0] == "find" and not (RISKY_FIND_FLAGS & set(cmd)),
