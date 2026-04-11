@@ -18,6 +18,7 @@ type Command struct {
 	Run         func(args []string) error
 	Flags       []cmdinfo.Flag
 	ValidArgs   []string
+	SubCommands []cmdinfo.SubCommand
 }
 
 var groupOrder = []string{
@@ -76,7 +77,15 @@ var commands = []Command{
 		Group:       "PR",
 		MinArgs:     1,
 		Run:         func(args []string) error { return runPR(args) },
-		ValidArgs:   []string{"status"},
+		SubCommands: []cmdinfo.SubCommand{
+			{
+				Name:        "status",
+				Description: "Check the status of the PR for the current branch",
+				Flags: []cmdinfo.Flag{
+					{Name: "--json", Description: "Output status as JSON"},
+				},
+			},
+		},
 	},
 	{
 		Name:        "prs",
@@ -246,6 +255,23 @@ var commands = []Command{
 		Group:       "Git Shortcuts",
 		Run:         func(args []string) error { return git.Gstash(args) },
 	},
+
+	// Utility
+	{
+		Name:        "util",
+		Description: "Developer utility commands",
+		ArgsHint:    "<subcommand>",
+		Group:       "Utility",
+		MinArgs:     1,
+		Run:         func(args []string) error { return runUtil(args) },
+		SubCommands: []cmdinfo.SubCommand{
+			{
+				Name:           "json-validate",
+				Description:    "Validate a JSON file",
+				CompletesFiles: true,
+			},
+		},
+	},
 }
 
 var commandIndex map[string]*Command
@@ -286,6 +312,7 @@ func CommandInfos() []cmdinfo.Command {
 			MinArgs:     cmd.MinArgs,
 			Flags:       cmd.Flags,
 			ValidArgs:   cmd.ValidArgs,
+			SubCommands: cmd.SubCommands,
 		}
 	}
 	return result

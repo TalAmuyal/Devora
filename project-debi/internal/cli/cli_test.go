@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"devora/internal/process"
 	"errors"
 	"io"
 	"os"
@@ -503,6 +504,208 @@ func TestUsageMessage_ContainsAllCommands(t *testing.T) {
 		if !strings.Contains(msg, cmd.Name) {
 			t.Fatalf("usage message should contain command %q", cmd.Name)
 		}
+	}
+}
+
+func TestRun_Util_MissingSubcommand_ReturnsUsageError(t *testing.T) {
+	err := Run([]string{"util"})
+	if err == nil {
+		t.Fatal("expected error for util without subcommand")
+	}
+	var usageErr *UsageError
+	if !errors.As(err, &usageErr) {
+		t.Fatalf("expected UsageError, got %T: %s", err, err.Error())
+	}
+}
+
+func TestRun_Util_UnknownSubcommand_ReturnsUsageError(t *testing.T) {
+	err := Run([]string{"util", "foo"})
+	if err == nil {
+		t.Fatal("expected error for unknown util subcommand")
+	}
+	var usageErr *UsageError
+	if !errors.As(err, &usageErr) {
+		t.Fatalf("expected UsageError, got %T: %s", err, err.Error())
+	}
+	if !strings.Contains(err.Error(), "foo") {
+		t.Fatalf("expected error to mention subcommand name, got: %s", err.Error())
+	}
+}
+
+func TestRun_Util_Help_PrintsUsage(t *testing.T) {
+	old := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdout = w
+
+	runErr := Run([]string{"util", "-h"})
+
+	w.Close()
+	os.Stdout = old
+
+	if runErr != nil {
+		t.Fatalf("expected no error for util -h, got: %s", runErr.Error())
+	}
+
+	var buf bytes.Buffer
+	io.Copy(&buf, r)
+	output := buf.String()
+	if !strings.Contains(output, "usage: debi util") {
+		t.Fatalf("expected util usage message on stdout, got: %q", output)
+	}
+}
+
+func TestRun_JSONValidate_NoArgs_ReturnsPassthroughError2(t *testing.T) {
+	// Capture stderr since runJSONValidate prints usage there
+	oldStderr := os.Stderr
+	_, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stderr = w
+	defer func() {
+		w.Close()
+		os.Stderr = oldStderr
+	}()
+
+	runErr := Run([]string{"util", "json-validate"})
+	if runErr == nil {
+		t.Fatal("expected error for json-validate without args")
+	}
+	var ptErr *process.PassthroughError
+	if !errors.As(runErr, &ptErr) {
+		t.Fatalf("expected PassthroughError, got %T: %s", runErr, runErr.Error())
+	}
+	if ptErr.Code != 2 {
+		t.Fatalf("expected exit code 2, got: %d", ptErr.Code)
+	}
+}
+
+func TestRun_JSONValidate_ValidFile_PrintsValidJSON(t *testing.T) {
+	tmpFile := filepath.Join(t.TempDir(), "valid.json")
+	if err := os.WriteFile(tmpFile, []byte(`{"key": "value"}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	old := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdout = w
+
+	runErr := Run([]string{"util", "json-validate", tmpFile})
+
+	w.Close()
+	os.Stdout = old
+
+	if runErr != nil {
+		t.Fatalf("expected no error for valid JSON file, got: %s", runErr.Error())
+	}
+
+	var buf bytes.Buffer
+	io.Copy(&buf, r)
+	output := buf.String()
+	if !strings.Contains(output, "Valid JSON") {
+		t.Fatalf("expected 'Valid JSON' on stdout, got: %q", output)
+	}
+}
+
+func TestRun_JSONValidate_InvalidFile_ReturnsPassthroughError1(t *testing.T) {
+	tmpFile := filepath.Join(t.TempDir(), "invalid.json")
+	if err := os.WriteFile(tmpFile, []byte(`{"bad": }`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	old := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdout = w
+
+	runErr := Run([]string{"util", "json-validate", tmpFile})
+
+	w.Close()
+	os.Stdout = old
+
+	var ptErr *process.PassthroughError
+	if !errors.As(runErr, &ptErr) {
+		t.Fatalf("expected PassthroughError, got %T: %v", runErr, runErr)
+	}
+	if ptErr.Code != 1 {
+		t.Fatalf("expected exit code 1, got: %d", ptErr.Code)
+	}
+
+	var buf bytes.Buffer
+	io.Copy(&buf, r)
+	output := buf.String()
+	if !strings.Contains(output, "Invalid JSON") {
+		t.Fatalf("expected 'Invalid JSON' on stdout, got: %q", output)
+	}
+}
+
+func TestRun_JSONValidate_Stdin_ValidJSON(t *testing.T) {
+	stdinR, stdinW, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stdinW.Write([]byte(`{"key": "value"}`))
+	stdinW.Close()
+
+	oldStdin := os.Stdin
+	os.Stdin = stdinR
+	defer func() { os.Stdin = oldStdin }()
+
+	old := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdout = w
+
+	runErr := Run([]string{"util", "json-validate", "-"})
+
+	w.Close()
+	os.Stdout = old
+
+	if runErr != nil {
+		t.Fatalf("expected no error for valid JSON on stdin, got: %s", runErr.Error())
+	}
+
+	var buf bytes.Buffer
+	io.Copy(&buf, r)
+	output := buf.String()
+	if !strings.Contains(output, "Valid JSON") {
+		t.Fatalf("expected 'Valid JSON' on stdout, got: %q", output)
+	}
+}
+
+func TestRun_JSONValidate_NonexistentFile_ReturnsPassthroughError2(t *testing.T) {
+	// Capture stderr since runJSONValidate prints the error there
+	oldStderr := os.Stderr
+	_, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stderr = w
+	defer func() {
+		w.Close()
+		os.Stderr = oldStderr
+	}()
+
+	runErr := Run([]string{"util", "json-validate", "/tmp/nonexistent-json-validate-test-file.json"})
+	if runErr == nil {
+		t.Fatal("expected error for nonexistent file")
+	}
+	var ptErr *process.PassthroughError
+	if !errors.As(runErr, &ptErr) {
+		t.Fatalf("expected PassthroughError, got %T: %s", runErr, runErr.Error())
+	}
+	if ptErr.Code != 2 {
+		t.Fatalf("expected exit code 2, got: %d", ptErr.Code)
 	}
 }
 
