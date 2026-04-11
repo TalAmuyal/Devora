@@ -4,6 +4,7 @@ import (
 	"devora/internal/completion"
 	"devora/internal/config"
 	"devora/internal/health"
+	"devora/internal/jsonvalidate"
 	"devora/internal/process"
 	"devora/internal/prstatus"
 	"devora/internal/task"
@@ -323,4 +324,52 @@ func runCompletion(args []string) error {
 	default:
 		return &UsageError{Message: fmt.Sprintf("unsupported shell: %s\nusage: debi completion <bash|zsh|fish>", shell)}
 	}
+}
+
+func runUtil(args []string) error {
+	subcommand := args[0]
+	subArgs := args[1:]
+
+	switch subcommand {
+	case "-h", "--help":
+		fmt.Println("usage: debi util <subcommand>\n\nSubcommands:\n  json-validate <file|->  Validate a JSON file (use - for stdin)")
+		return nil
+	case "json-validate":
+		return runJSONValidate(subArgs)
+	default:
+		return &UsageError{Message: fmt.Sprintf("unknown util subcommand: %s\nusage: debi util <subcommand>", subcommand)}
+	}
+}
+
+func runJSONValidate(args []string) error {
+	if len(args) != 1 {
+		fmt.Fprintln(os.Stderr, "usage: debi util json-validate <file|->")
+		return &process.PassthroughError{Code: 2}
+	}
+
+	var reader *os.File
+	if args[0] == "-" {
+		reader = os.Stdin
+	} else {
+		f, err := os.Open(args[0])
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: %s\n", err.Error())
+			return &process.PassthroughError{Code: 2}
+		}
+		defer f.Close()
+		reader = f
+	}
+
+	valid, errMsg, err := jsonvalidate.Validate(reader)
+	if err != nil {
+		return err
+	}
+
+	if valid {
+		fmt.Println("Valid JSON")
+		return nil
+	}
+
+	fmt.Printf("Invalid JSON: %s\n", errMsg)
+	return &process.PassthroughError{Code: 1}
 }

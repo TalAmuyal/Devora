@@ -10,6 +10,16 @@ type Command struct {
 	MinArgs     int
 	Flags       []Flag
 	ValidArgs   []string
+	SubCommands []SubCommand
+}
+
+// SubCommand describes a sub-command accepted by a parent command.
+type SubCommand struct {
+	Name           string
+	Description    string
+	Flags          []Flag
+	ValidArgs      []string
+	CompletesFiles bool
 }
 
 // Flag describes a flag accepted by a command.

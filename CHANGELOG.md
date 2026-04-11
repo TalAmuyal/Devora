@@ -17,6 +17,7 @@ Types of changes:
 ### Added
 
 - `debi pr status` command (alias: `debi prs`) for checking GitHub PR status, CI checks, and code reviews for the current branch
+- `debi util json-validate` subcommand for validating JSON files with line:column error positions
 
 ### Changed
 

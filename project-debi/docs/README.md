@@ -29,6 +29,7 @@ Specifications for the domain packages. These define the intended behavior of ea
 | [specs/tui-theme.md](specs/tui-theme.md) | `internal/tui` | Theme loading, palette, color mapping, styles |
 | [specs/tui-components.md](specs/tui-components.md) | `internal/tui/components` | Reusable UI widgets: list, checkbox, text input, vim navigation, footer |
 | [specs/health.md](specs/health.md) | `internal/health` | Dependency health checking |
+| [specs/jsonvalidate.md](specs/jsonvalidate.md) | `internal/jsonvalidate` | JSON validation with line:column error positions |
 | [specs/git.md](specs/git.md) | `internal/git` | Git shortcut commands |
 | [specs/prstatus.md](specs/prstatus.md) | `internal/prstatus` | PR status checking via gh CLI |
 
