@@ -83,6 +83,7 @@ ALLOWED_COMMANDS = {
     "mkdir",
     "wc",
     "nm",
+    "otool",
     "true",
     "head",
     "tail",
