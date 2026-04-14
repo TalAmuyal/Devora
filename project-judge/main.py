@@ -82,6 +82,7 @@ ALLOWED_COMMANDS = {
     "cp",
     "mkdir",
     "wc",
+    "nm",
     "true",
     "head",
     "tail",
