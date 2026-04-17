@@ -10,7 +10,7 @@
 
 ### MacOS
 
-For the first usage, you might need to:
+For the first usage, you might need to work around macOS Gatekeeper (see also [Troubleshooting](#troubleshooting)):
 1. "Right-click > Open" the app
 2. Press "Done" on the warning dialog
 3. Open the "security & privacy" settings
@@ -75,6 +75,9 @@ The actual directory on disk is not affected.
 
 ### Workspaces
 
+Workspaces can span multiple repositories simultaneously.
+Devora manages a separate git worktree for each selected repo, so you can work across repos within a single workspace without affecting other tasks.
+
 From the workspace list:
 
 1. Press `n` to start a new task
@@ -110,6 +113,38 @@ Info section:
 
 - **View Changelog**: Opens the full changelog in a new kitty tab using glow
 
+## The `ccc` Command
+
+`ccc` (Customized Claude Code) is a launcher that wraps Claude Code with Devora-specific configuration.
+Run it from within a workspace to start a Claude Code session with all Devora integrations active.
+
+What it does:
+
+- **Model upgrades**: Default models are upgraded -- Sonnet is replaced with Opus, and Haiku with Sonnet. This provides stronger reasoning out of the box but does affect billing accordingly
+- **Effort level**: Sets the effort level to "max" by default, so that Claude Code always tries to give the best answer it can (instead of trying to be fast or cost-efficient)
+- **Privacy**: Disables telemetry and nonessential network traffic
+- **Agent teams**: Enables experimental agent teams support
+- **Plugins**: Auto-loads Devora plugins (including Judge -- see below)
+
+### Judge
+
+Judge is a permission auto-manager plugin for Claude Code.
+It automatically handles Claude Code's permission requests to reduce permission fatigue during development.
+Known-safe commands (like `cat`, `ls`, `git diff`, etc.) are approved automatically, disallowed commands are declined with a reason, and anything unrecognized is deferred to the user for manual review.
+Judge runs automatically when using `ccc` -- no additional setup is needed.
+
+## The `debi` CLI
+
+`debi` is Devora's command-line tool for workspace management and utilities.
+Run `debi` with no arguments or `debi --help` to see all available commands.
+
+Highlights:
+
+- **Git shortcuts**: A collection of short aliases for common git workflows (e.g., `debi gst` for `git status`, `debi gd` for `git diff`, `debi gaa` for staging all changes). Run `debi --help` for the full list
+- **PR status**: `debi pr status` (or the shorthand `debi prs`) shows the CI/review status of the current branch's pull request
+- **Health check**: `debi health` verifies that all required dependencies are installed
+- **Shell completions**: See [Shell Completions](#shell-completions) under Optional Additions
+
 ## Optional Additions
 
 ### Simple Status Line
@@ -126,6 +161,25 @@ To enable it, copy `cc-simple-statusline` to your `~/.claude/` directory and add
     "padding": 0
   }
 }
+```
+
+### Shell Completions
+
+`debi` supports tab-completion for bash, zsh, and fish.
+Run `debi completion <shell>` to generate the completion script, and `debi completion <shell> -h` for shell-specific installation instructions.
+
+For zsh (add to `~/.zshrc` before `compinit`):
+
+```zsh
+fpath=(~/.zsh/completions $fpath)
+autoload -U compinit; compinit
+```
+
+Then generate the completion file:
+
+```
+mkdir -p ~/.zsh/completions
+debi completion zsh > ~/.zsh/completions/_debi
 ```
 
 ### Mise en place
@@ -156,13 +210,18 @@ To view the full changelog, go to Settings and select "View Changelog".
 
 - `ctrl + s`: Open workspace manager in a new tab
 - `ctrl + shift + s`: Open shell in a new tab
-- `ctrl + 1 / 2 / 3`: Set test size to small / medium / large (respectively)
+- `ctrl + left / right`: Navigate between tabs (workspeces)
+- `ctrl + shift + left / right`: Reorder tabs
+- `ctrl + 1 / 2 / 3`: Set font size to small (12pt) / medium (15pt) / large (26pt)
+- `ctrl + equal / minus`: Increase / decrease font size
+- `ctrl + shift + v` or `cmd + v`: Paste from clipboard
+- `ctrl + shift + r`: Reload configuration
 - `F1`: Open this User Guide
 
 ### Workspace List
 
 - `<enter>`: Open selected workspace (closes the current UI and opens a terminal session)
-- `n`: New task (reuses or creates a workspace on opens it)
+- `n`: New task (reuses or creates a workspace and opens it in a dedicated tab)
 - `d`: Deactivate workspace (active only)
 - `D`: Delete workspace (inactive/invalid only)
 - `r`: Refresh workspace list
@@ -172,3 +231,21 @@ To view the full changelog, go to Settings and select "View Changelog".
 - `p`: Cycle active profile
 - `q`: Quit (or back in other pages)
 - `esc`: Same as `q`, and also "unfocuses" on text inputs
+
+## Troubleshooting
+
+### Crash Logs
+
+If Devora crashes, a log file is written to your system's temp directory with the name `devora_crash_<YYYYMMDD_HHMMSS>.log`.
+On macOS, the temp directory is typically under `/var/folders/`.
+The crash output also prints the exact file path to stderr.
+
+### Dependency Issues
+
+Run `debi health --verbose` to see the status and location of each dependency.
+Use `--strict` to also check optional dependencies.
+
+### macOS Gatekeeper
+
+On first launch, macOS may block Devora because it is not signed by an identified developer.
+To work around this: right-click the app and select "Open", press "Done" on the warning dialog, then open "Security & Privacy" in System Settings and allow the app to run.
