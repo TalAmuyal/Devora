@@ -18,6 +18,11 @@ Types of changes:
 
 - `debi pr status` command (alias: `debi prs`) for checking GitHub PR status, CI checks, and code reviews for the current branch
 - `debi util json-validate` subcommand for validating JSON files with line:column error positions
+- User guide: sections for `ccc` command, Judge plugin, `debi` CLI, shell completions, and troubleshooting
+
+### Fixed
+
+- User guide: cheatsheet now includes all keyboard shortcuts and fixes mislabeled ctrl+1/2/3 description
 
 ### Changed
 
