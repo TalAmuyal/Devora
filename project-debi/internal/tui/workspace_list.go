@@ -9,6 +9,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"devora/internal/tui/components"
 	"devora/internal/workspace"
+	"github.com/charmbracelet/x/ansi"
 )
 
 type FilterMode int
@@ -271,17 +272,24 @@ func (m *WorkspaceListModel) renderCard(ws WorkspaceInfo, isSelected bool, inner
 
 	if len(repoNames) > 0 {
 		lines = append(lines, "")
+		nameWidth := innerWidth - 33
+		if nameWidth > 51 {
+			nameWidth = 51
+		}
+		if nameWidth < 0 {
+			nameWidth = 0
+		}
 		for _, name := range repoNames {
 			status := ws.RepoGitStatuses[name]
-			repoCol := m.styles.RepoName.Width(16).Render(name)
-			branchCol := m.styles.RepoBranch.Width(14).Render(status.Branch)
+			repoCol := m.styles.RepoName.Width(nameWidth).Render(ansi.Truncate(name, nameWidth, "…"))
+			branchCol := m.styles.RepoBranch.Width(14).Render(ansi.Truncate(status.Branch, 14, "…"))
 			var cleanCol string
 			if status.IsClean {
 				cleanCol = m.styles.RepoClean.Render("\u2713 clean")
 			} else {
 				cleanCol = m.styles.RepoDirty.Render("\u2717 dirty")
 			}
-			lines = append(lines, "  "+repoCol+branchCol+cleanCol)
+			lines = append(lines, "  "+cleanCol+"  "+branchCol+"  "+repoCol)
 		}
 	}
 

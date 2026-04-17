@@ -27,6 +27,11 @@ Types of changes:
 
 ### Changed
 
+- Debi workspace-ui UI improvement
+	- Repo rows in workspace cards no longer wrap or push the clean/dirty status off-screen when a branch or worktree name is long
+	- Long values are tail-truncated with `…`
+	- Columns are separated by a single-cell gap
+	- Dirty status is now bold
 - `debi health` now performs a two-stage credential check, distinguishing between missing tokens and authentication failures
 - Automated release-cutting process: `cut-release.sh` now handles pre-flight checks, optional AI-powered changelog cleanup, interactive review pause, and PR creation in a single script
 - Release tagging is now automated via GitHub Actions when release PRs are merged
