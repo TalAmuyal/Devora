@@ -1,0 +1,59 @@
+name: Changelog
+
+on:
+  pull_request:
+    branches: [master]
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+concurrency:
+  group: changelog-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify CHANGELOG.md was updated
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          IS_BOT: ${{ github.event.pull_request.user.type == 'Bot' }}
+          HAS_SKIP_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'skip-changelog') }}
+        run: |
+          set -euo pipefail
+
+          if [ "$IS_BOT" = "true" ]; then
+            echo "::notice::Skipping changelog check for bot-authored PR."
+            exit 0
+          fi
+
+          if [ "$HAS_SKIP_LABEL" = "true" ]; then
+            echo "::notice::Skipping changelog check due to 'skip-changelog' label."
+            exit 0
+          fi
+
+          if git diff --name-only "$BASE_SHA...$HEAD_SHA" | grep -Fxq 'CHANGELOG.md'; then
+            echo "CHANGELOG.md was updated in this PR."
+            exit 0
+          fi
+
+          cat >&2 <<'MSG'
+          ::error::CHANGELOG.md was not updated in this PR.
+
+          Update the '## Unreleased' section in CHANGELOG.md with a brief description of this change,
+          under the right category (Added / Changed / Fixed / Removed / Deprecated / Security).
+
+          See CONTRIBUTING.md for details.
+
+          If this PR legitimately has no user-visible impact, ask a maintainer to add the
+          'skip-changelog' label.
+          MSG
+          exit 1

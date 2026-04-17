@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if git diff --cached --name-only | grep -Fxq 'CHANGELOG.md'; then
+	exit 0
+fi
+
+cat >&2 <<'MSG'
+CHANGELOG.md is not staged for this commit.
+
+Update the '## Unreleased' section in CHANGELOG.md with a brief description of this change,
+under the right category (Added / Changed / Fixed / Removed / Deprecated / Security).
+
+Options:
+  - Stage CHANGELOG.md (`git add CHANGELOG.md`) and retry.
+  - For WIP / experimental commits, bypass with: git commit --no-verify
+MSG
+exit 1

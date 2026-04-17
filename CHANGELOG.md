@@ -21,6 +21,8 @@ Types of changes:
 - User guide: sections for `ccc` command, Judge plugin, `debi` CLI, shell completions, and troubleshooting
 - Version display and config file status in `debi health` output
 - debi health: reports whether zsh completion is installed (optional; fails under `--strict` if missing).
+- GitHub Actions workflow to enforce CHANGELOG.md updates on pull requests
+- Optional pre-commit hook for local CHANGELOG.md reminders, installed via `mise run install-hooks`
 
 ### Fixed
 

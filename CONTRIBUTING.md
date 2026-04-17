@@ -28,6 +28,16 @@ mise handles Go and Python toolchain installations automatically.
 4. Ensure tests pass: `mise test`
 5. Submit the pull request
 
+## Changelog enforcement
+
+A `Changelog` GitHub Actions workflow verifies that every PR touches `CHANGELOG.md`. PRs that don't will fail the check.
+
+Exemptions:
+- PRs authored by bot accounts (e.g. Dependabot) are skipped automatically
+- Maintainers can add a `skip-changelog` label to exempt a specific PR that has no user-visible impact (typo fixes, CI-only changes, etc.)
+
+An optional local pre-commit hook is available. Install it once with `mise run install-hooks`. It blocks commits when `CHANGELOG.md` is not staged; bypass with `git commit --no-verify` for WIP commits.
+
 ## Code style
 
 Match the style of surrounding code. Consistency within a file is more important than external style guides.
