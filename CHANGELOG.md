@@ -37,6 +37,7 @@ Types of changes:
 - Automated release-cutting process: `cut-release.sh` now handles pre-flight checks, optional AI-powered changelog cleanup, interactive review pause, and PR creation in a single script
 - Release tagging is now automated via GitHub Actions when release PRs are merged
 - `ccc` now sets Claude Code's effort level to "max"
+- `ccc` now uses `claude-opus-4-7` for Opus and Sonnet tasks
 - mac-install: automatically installs zsh completion to `~/.zsh/completions/_debi`. Prints a notice if `.zshrc` is not configured to source that directory.
 - USER_GUIDE: promoted Shell Completions from Optional Additions to a Recommended section.
 
