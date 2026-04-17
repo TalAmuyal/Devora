@@ -136,6 +136,7 @@ func NewStyles(palette ThemePalette) Styles {
 			Foreground(palette.Success),
 
 		RepoDirty: lipgloss.NewStyle().
+			Bold(true).
 			Foreground(palette.Warning),
 
 		// Footer
