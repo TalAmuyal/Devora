@@ -3,6 +3,7 @@ package health
 import (
 	"bytes"
 	"errors"
+	"os"
 	"strings"
 	"testing"
 
@@ -14,11 +15,23 @@ func stubHealthDeps(t *testing.T) {
 	origLookPath := lookPath
 	origGetVersion := getVersion
 	origCheckGitHub := checkGitHub
+	origCheckGitHubToken := checkGitHubToken
+	origGetAppVersion := getAppVersion
+	origGetConfigPath := getConfigPath
+	origStatFile := statFile
 	t.Cleanup(func() {
 		lookPath = origLookPath
 		getVersion = origGetVersion
 		checkGitHub = origCheckGitHub
+		checkGitHubToken = origCheckGitHubToken
+		getAppVersion = origGetAppVersion
+		getConfigPath = origGetConfigPath
+		statFile = origStatFile
 	})
+	getAppVersion = func() string { return "test-version" }
+	getConfigPath = func() string { return "/home/testuser/.config/devora/config.json" }
+	statFile = func(name string) (os.FileInfo, error) { return nil, os.ErrNotExist }
+	checkGitHubToken = func() bool { return true }
 }
 
 func TestCleanVersion(t *testing.T) {
@@ -182,6 +195,121 @@ func TestCheck_MultiLineVersionOutput(t *testing.T) {
 	}
 	if result.Version != "0.10.0" {
 		t.Fatalf("expected Version to be '0.10.0', got: %s", result.Version)
+	}
+}
+
+func TestRun_VersionBanner(t *testing.T) {
+	stubHealthDeps(t)
+
+	lookPath = func(file string) (string, error) {
+		return "/usr/local/bin/" + file, nil
+	}
+	getVersion = func(command []string) (string, error) {
+		return "v1.0.0", nil
+	}
+	checkGitHub = func() (string, error) {
+		return "Test User", nil
+	}
+
+	var buf bytes.Buffer
+	err := Run(&buf, false, false)
+
+	if err != nil {
+		t.Fatalf("expected no error, got: %s", err.Error())
+	}
+	output := buf.String()
+	expectedBanner := "Devora Health Check (version: test-version)"
+	if !strings.Contains(output, expectedBanner) {
+		t.Fatalf("expected output to contain %q, got:\n%s", expectedBanner, output)
+	}
+}
+
+func TestRun_ConfigFileExists(t *testing.T) {
+	stubHealthDeps(t)
+	origHome := homeDir
+	t.Cleanup(func() { homeDir = origHome })
+	homeDir = "/home/testuser"
+
+	lookPath = func(file string) (string, error) {
+		return "/usr/local/bin/" + file, nil
+	}
+	getVersion = func(command []string) (string, error) {
+		return "v1.0.0", nil
+	}
+	checkGitHub = func() (string, error) {
+		return "Test User", nil
+	}
+	getConfigPath = func() string { return "/home/testuser/.config/devora/config.json" }
+	statFile = func(name string) (os.FileInfo, error) { return nil, nil }
+
+	var buf bytes.Buffer
+	err := Run(&buf, false, false)
+
+	if err != nil {
+		t.Fatalf("expected no error, got: %s", err.Error())
+	}
+	output := buf.String()
+	if !strings.Contains(output, "Config:") {
+		t.Fatalf("expected output to contain 'Config:', got:\n%s", output)
+	}
+	if !strings.Contains(output, "~/.config/devora/config.json") {
+		t.Fatalf("expected output to contain shortened config path, got:\n%s", output)
+	}
+	if !strings.Contains(output, "✓") {
+		t.Fatalf("expected output to contain checkmark for existing config, got:\n%s", output)
+	}
+}
+
+func TestRun_ConfigFileNotFound(t *testing.T) {
+	stubHealthDeps(t)
+
+	lookPath = func(file string) (string, error) {
+		return "/usr/local/bin/" + file, nil
+	}
+	getVersion = func(command []string) (string, error) {
+		return "v1.0.0", nil
+	}
+	checkGitHub = func() (string, error) {
+		return "Test User", nil
+	}
+	getConfigPath = func() string { return "/home/testuser/.config/devora/config.json" }
+	statFile = func(name string) (os.FileInfo, error) { return nil, os.ErrNotExist }
+
+	var buf bytes.Buffer
+	err := Run(&buf, false, false)
+
+	if err != nil {
+		t.Fatalf("expected no error, got: %s", err.Error())
+	}
+	output := buf.String()
+	if !strings.Contains(output, "Config:") {
+		t.Fatalf("expected output to contain 'Config:', got:\n%s", output)
+	}
+	if !strings.Contains(output, "(not found)") {
+		t.Fatalf("expected output to contain '(not found)' for missing config, got:\n%s", output)
+	}
+}
+
+func TestRun_ConfigFileNotFound_DoesNotAffectExitCode(t *testing.T) {
+	stubHealthDeps(t)
+
+	lookPath = func(file string) (string, error) {
+		return "/usr/local/bin/" + file, nil
+	}
+	getVersion = func(command []string) (string, error) {
+		return "v1.0.0", nil
+	}
+	checkGitHub = func() (string, error) {
+		return "Test User", nil
+	}
+	getConfigPath = func() string { return "/home/testuser/.config/devora/config.json" }
+	statFile = func(name string) (os.FileInfo, error) { return nil, os.ErrNotExist }
+
+	var buf bytes.Buffer
+	err := Run(&buf, true, false)
+
+	if err != nil {
+		t.Fatalf("expected no error even in strict mode with missing config, got: %s", err.Error())
 	}
 }
 
@@ -391,8 +519,62 @@ func TestRun_Strict_AllFound(t *testing.T) {
 	}
 }
 
-func TestCheckCredentials_GhFound_AuthOK(t *testing.T) {
+func TestCheckCredentials_GhMissing(t *testing.T) {
 	stubHealthDeps(t)
+	checkGitHubToken = func() bool {
+		t.Fatal("checkGitHubToken should not be called when gh is not found")
+		return false
+	}
+	checkGitHub = func() (string, error) {
+		t.Fatal("checkGitHub should not be called when gh is not found")
+		return "", nil
+	}
+
+	results := checkCredentials(false)
+
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	r := results[0]
+	if r.Status != CredentialUnchecked {
+		t.Fatalf("expected status CredentialUnchecked, got %d", r.Status)
+	}
+	if r.Message != "gh not detected" {
+		t.Fatalf("expected message 'gh not detected', got %q", r.Message)
+	}
+}
+
+func TestCheckCredentials_GhFound_NoToken(t *testing.T) {
+	stubHealthDeps(t)
+	checkGitHubToken = func() bool { return false }
+	checkGitHub = func() (string, error) {
+		t.Fatal("checkGitHub should not be called when no token is stored")
+		return "", nil
+	}
+
+	results := checkCredentials(true)
+
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	r := results[0]
+	if r.Name != "GitHub" {
+		t.Fatalf("expected name 'GitHub', got %q", r.Name)
+	}
+	if r.Status != CredentialFailed {
+		t.Fatalf("expected status CredentialFailed, got %d", r.Status)
+	}
+	if !strings.Contains(r.Message, "no token stored") {
+		t.Fatalf("expected message to contain 'no token stored', got %q", r.Message)
+	}
+	if !strings.Contains(r.Message, "gh auth login") {
+		t.Fatalf("expected message to contain 'gh auth login', got %q", r.Message)
+	}
+}
+
+func TestCheckCredentials_GhFound_TokenExists_AuthOK(t *testing.T) {
+	stubHealthDeps(t)
+	checkGitHubToken = func() bool { return true }
 	checkGitHub = func() (string, error) {
 		return "Test User", nil
 	}
@@ -414,8 +596,9 @@ func TestCheckCredentials_GhFound_AuthOK(t *testing.T) {
 	}
 }
 
-func TestCheckCredentials_GhFound_AuthFailed(t *testing.T) {
+func TestCheckCredentials_GhFound_TokenExists_AuthFailed(t *testing.T) {
 	stubHealthDeps(t)
+	checkGitHubToken = func() bool { return true }
 	checkGitHub = func() (string, error) {
 		return "", errors.New("auth token expired")
 	}
@@ -431,23 +614,6 @@ func TestCheckCredentials_GhFound_AuthFailed(t *testing.T) {
 	}
 	if r.Message != "auth token expired" {
 		t.Fatalf("expected message 'auth token expired', got %q", r.Message)
-	}
-}
-
-func TestCheckCredentials_GhMissing(t *testing.T) {
-	stubHealthDeps(t)
-
-	results := checkCredentials(false)
-
-	if len(results) != 1 {
-		t.Fatalf("expected 1 result, got %d", len(results))
-	}
-	r := results[0]
-	if r.Status != CredentialUnchecked {
-		t.Fatalf("expected status CredentialUnchecked, got %d", r.Status)
-	}
-	if r.Message != "gh not detected" {
-		t.Fatalf("expected message 'gh not detected', got %q", r.Message)
 	}
 }
 

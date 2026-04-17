@@ -55,7 +55,12 @@ completion
 prstatus
   └── process    (gh CLI execution)
 
-config, process, task, crash, cmdinfo
+health
+  ├── process    (exit-code signalling)
+  ├── config     (config file path)
+  └── version    (app version string)
+
+config, process, task, crash, cmdinfo, version
   └── (stdlib only)
 
 tui/components
