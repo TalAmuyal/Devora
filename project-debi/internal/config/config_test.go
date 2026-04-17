@@ -1701,6 +1701,17 @@ func TestGetExplicitRepoEntries_DoesNotIncludeAutoDiscovered(t *testing.T) {
 	}
 }
 
+func TestConfigPath_ReturnsConfigPathValue(t *testing.T) {
+	tmpDir := setupTest(t)
+	customPath := filepath.Join(tmpDir, "custom", "config.json")
+	setConfigPathForTesting(customPath)
+
+	got := ConfigPath()
+	if got != customPath {
+		t.Fatalf("expected %q, got %q", customPath, got)
+	}
+}
+
 func TestExpandTilde_BareTilde(t *testing.T) {
 	home, err := os.UserHomeDir()
 	if err != nil {

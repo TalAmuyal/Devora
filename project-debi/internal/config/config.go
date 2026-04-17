@@ -39,6 +39,10 @@ func defaultConfigPath() string {
 	return filepath.Join(home, ".config", "devora", "config.json")
 }
 
+func ConfigPath() string {
+	return configPathValue
+}
+
 func setConfigPathForTesting(path string) {
 	configPathValue = path
 	resetGlobalConfigCache()

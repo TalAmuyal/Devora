@@ -311,6 +311,14 @@ Returns an error if any filesystem or JSON operation fails.
 
 ## Convenience Getters
 
+### ConfigPath
+
+```go
+func ConfigPath() string
+```
+
+Returns the global config file path (`~/.config/devora/config.json`). The path is computed once at package init from `os.UserHomeDir()` and cached in a package-level variable.
+
 ### GetPrepareCommand
 
 ```go

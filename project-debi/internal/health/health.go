@@ -14,7 +14,9 @@ import (
 
 	"charm.land/lipgloss/v2"
 
+	"devora/internal/config"
 	"devora/internal/process"
+	"devora/internal/version"
 )
 
 var homeDir = os.Getenv("HOME")
@@ -46,6 +48,12 @@ type CredentialResult struct {
 	Message string
 }
 
+var getAppVersion = version.Get
+
+var getConfigPath = config.ConfigPath
+
+var statFile = os.Stat
+
 var lookPath = exec.LookPath
 
 var getVersion = defaultGetVersion
@@ -62,6 +70,13 @@ func defaultGetVersion(command []string) (string, error) {
 		return "", err
 	}
 	return strings.TrimSpace(stdout.String()), nil
+}
+
+var checkGitHubToken = defaultCheckGitHubToken
+
+func defaultCheckGitHubToken() bool {
+	_, err := process.GetOutput([]string{"gh", "auth", "token"})
+	return err == nil
 }
 
 var checkGitHub = defaultCheckGitHub
@@ -93,13 +108,19 @@ func checkCredentials(ghFound bool) []CredentialResult {
 		result.Status = CredentialUnchecked
 		result.Message = "gh not detected"
 	} else {
-		displayName, err := checkGitHub()
-		if err != nil {
+		hasToken := checkGitHubToken()
+		if !hasToken {
 			result.Status = CredentialFailed
-			result.Message = err.Error()
+			result.Message = "no token stored (run: gh auth login)"
 		} else {
-			result.Status = CredentialOK
-			result.Message = fmt.Sprintf("Logged in as %s", displayName)
+			displayName, err := checkGitHub()
+			if err != nil {
+				result.Status = CredentialFailed
+				result.Message = err.Error()
+			} else {
+				result.Status = CredentialOK
+				result.Message = fmt.Sprintf("Logged in as %s", displayName)
+			}
 		}
 	}
 	return []CredentialResult{result}
@@ -244,8 +265,18 @@ func Run(w io.Writer, strict bool, verbose bool) error {
 
 	greenStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#A6E3A1"))
 	redStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#F38BA8"))
+	yellowStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#F9E2AF"))
 
-	fmt.Fprintln(w, "Devora Health Check")
+	fmt.Fprintf(w, "Devora Health Check (version: %s)\n", getAppVersion())
+	fmt.Fprintln(w)
+
+	configPath := getConfigPath()
+	_, configErr := statFile(configPath)
+	if configErr == nil {
+		fmt.Fprintf(w, "Config: %s %s\n", shortenPath(configPath), greenStyle.Render("✓"))
+	} else {
+		fmt.Fprintf(w, "Config: %s %s\n", shortenPath(configPath), yellowStyle.Render("(not found)"))
+	}
 	fmt.Fprintln(w)
 
 	fmt.Fprintln(w, "Required:")
@@ -257,8 +288,6 @@ func Run(w io.Writer, strict bool, verbose bool) error {
 	optionalFound := renderSection(w, optional, nameWidth, versionWidth, verbose, greenStyle, redStyle)
 
 	// Credential checks
-	yellowStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#F9E2AF"))
-
 	ghFound := false
 	for _, r := range optional {
 		if r.Name == ghDepName {

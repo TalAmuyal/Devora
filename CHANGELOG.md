@@ -19,6 +19,7 @@ Types of changes:
 - `debi pr status` command (alias: `debi prs`) for checking GitHub PR status, CI checks, and code reviews for the current branch
 - `debi util json-validate` subcommand for validating JSON files with line:column error positions
 - User guide: sections for `ccc` command, Judge plugin, `debi` CLI, shell completions, and troubleshooting
+- Version display and config file status in `debi health` output
 
 ### Fixed
 
@@ -26,6 +27,7 @@ Types of changes:
 
 ### Changed
 
+- `debi health` now performs a two-stage credential check, distinguishing between missing tokens and authentication failures
 - Automated release-cutting process: `cut-release.sh` now handles pre-flight checks, optional AI-powered changelog cleanup, interactive review pause, and PR creation in a single script
 - Release tagging is now automated via GitHub Actions when release PRs are merged
 - `ccc` now sets Claude Code's effort level to "max"

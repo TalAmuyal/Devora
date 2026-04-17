@@ -9,6 +9,8 @@ Check and report on Devora IDE dependency availability and credential status. Ea
 ## Dependencies
 
 - `devora/internal/process` -- `PassthroughError` for exit-code signalling
+- `devora/internal/version` -- application version string
+- `devora/internal/config` -- config file path
 - `charm.land/lipgloss/v2` -- colored output
 
 ## Types
@@ -109,21 +111,24 @@ Runs the full health check and prints a report.
 Behavior:
 1. Iterate over all dependencies, calling `Check` for each. Separate results into required and optional lists.
 2. Calculate column widths for aligned output.
-3. Print the header: `Devora Health Check`.
-4. Print the `Required:` section. Each dependency is shown with a colored status prefix (green checkmark or red cross + name) followed by version in default color. In verbose mode, the shortened path is also shown.
-5. Print the `Optional:` section in the same format.
-6. Check credentials. If `gh` was found in the optional results, run `checkGitHub` to verify GitHub authentication via `gh api user --jq ".name // .login"`. If `gh` was not found, mark the credential as unchecked.
-7. Print the `Credentials:` section. Each credential is shown with a colored status prefix: green checkmark for OK, red cross for failed, yellow question mark for unchecked.
-8. Print a three-line summary: `Required met:`, `Optional met:`, and `Credentials met:`, each with `<pct>% (<found>/<total>)`. Labels are right-padded to align. The required percentage is green or red; the optional percentage is green or yellow; the credentials percentage is green, red (if any failed), or yellow (if only unchecked).
-9. In strict mode, credential failures are treated like missing optional dependencies (exit code 1).
-10. Return `&process.PassthroughError{Code: 1}` if any required dependency is missing.
-11. In strict mode, also return `&process.PassthroughError{Code: 1}` if any optional dependency is missing or any credential check is not OK.
-12. Otherwise, return nil.
+3. Print a version banner: `Devora Health Check (version: <version>)` using `getAppVersion()`.
+4. Print the config file path via `getConfigPath()`. If `statFile` reports the file exists, show a green checkmark after the path. If the file does not exist, show a yellow `(not found)` marker. This is informational only and never affects the exit code.
+5. Print the `Required:` section. Each dependency is shown with a colored status prefix (green checkmark or red cross + name) followed by version in default color. In verbose mode, the shortened path is also shown.
+6. Print the `Optional:` section in the same format.
+7. Check credentials. If `gh` was found in the optional results, first run `checkGitHubToken()` to check for a locally stored token via `gh auth token`. If no token is found, report `CredentialFailed` with the message `"no token stored (run: gh auth login)"` and skip the network call. If a token is found, run `checkGitHub()` to verify GitHub authentication via `gh api user --jq ".name // .login"`. If `gh` was not found, mark the credential as unchecked.
+8. Print the `Credentials:` section. Each credential is shown with a colored status prefix: green checkmark for OK, red cross for failed, yellow question mark for unchecked.
+9. Print a three-line summary: `Required met:`, `Optional met:`, and `Credentials met:`, each with `<pct>% (<found>/<total>)`. Labels are right-padded to align. The required percentage is green or red; the optional percentage is green or yellow; the credentials percentage is green, red (if any failed), or yellow (if only unchecked).
+10. In strict mode, credential failures are treated like missing optional dependencies (exit code 1).
+11. Return `&process.PassthroughError{Code: 1}` if any required dependency is missing.
+12. In strict mode, also return `&process.PassthroughError{Code: 1}` if any optional dependency is missing or any credential check is not OK.
+13. Otherwise, return nil.
 
 ## Output Format
 
 ```
-Devora Health Check
+Devora Health Check (version: 1.2.0)
+
+Config: ~/.config/devora/config.json ✓
 
 Required:
   ✓ kitty   0.44.0      /opt/homebrew/bin/kitty
@@ -174,15 +179,19 @@ Credential failures are treated like missing optional dependencies for exit code
 
 ## Testability
 
-The package exposes three package-level variables for test injection:
+The package exposes seven package-level variables for test injection:
 
 ```go
+var getAppVersion = version.Get
+var getConfigPath = config.ConfigPath
+var statFile = os.Stat
+var checkGitHubToken = defaultCheckGitHubToken
 var lookPath = exec.LookPath
 var getVersion = defaultGetVersion
 var checkGitHub = defaultCheckGitHub
 ```
 
-Tests can replace `lookPath` and `getVersion` to simulate dependency presence/absence and version output without relying on the actual system `PATH`. `checkGitHub` can be replaced to simulate GitHub authentication results without calling the real `gh` CLI. `homeDir` can also be overridden for `shortenPath` tests.
+Tests can replace `lookPath` and `getVersion` to simulate dependency presence/absence and version output without relying on the actual system `PATH`. `checkGitHub` can be replaced to simulate GitHub authentication results without calling the real `gh` CLI. `getAppVersion` can be replaced to control the version string in the banner. `getConfigPath` and `statFile` can be replaced to simulate config file presence/absence. `checkGitHubToken` can be replaced to simulate the local token check independently of the network API call. `homeDir` can also be overridden for `shortenPath` tests.
 
 ## Testing
 
@@ -192,13 +201,26 @@ Tests can replace `lookPath` and `getVersion` to simulate dependency presence/ab
 - Test `Check` with a dependency that is not found (mock `lookPath` to return an error).
 - Test `Check` when the binary is found but the version command fails (mock `getVersion` to return an error); verify `Found` is true and `Version` is empty.
 - Test `Check` with multi-line version output; verify only the first line is used and version is cleaned.
+
+**Version banner:**
+- Test `Run` output starts with `Devora Health Check (version: <version>)` where `<version>` comes from `getAppVersion`.
+
+**Config existence check:**
+- Test `Run` when config file exists (mock `statFile` to return nil error); verify output contains the config path with a green checkmark.
+- Test `Run` when config file does not exist (mock `statFile` to return an error); verify output contains the config path with `(not found)`.
+- Test that config file absence does not affect exit code (all required found, config missing, return nil).
+
+**Two-stage credential check:**
+- Test `checkCredentials` with `gh` found and `checkGitHubToken` returning no token; verify `CredentialFailed` status with message `"no token stored (run: gh auth login)"` and `checkGitHub` is not called.
+- Test `checkCredentials` with `gh` found, `checkGitHubToken` returning a token, and `checkGitHub` failing; verify `CredentialFailed` status with the API error message.
+- Test `checkCredentials` with `gh` found, `checkGitHubToken` returning a token, and `checkGitHub` succeeding; verify `CredentialOK` status and "Logged in as ..." message.
+- Test `checkCredentials` with `gh` not found; verify `CredentialUnchecked` status, "gh not detected" message, and `checkGitHubToken` is not called.
+
+**Run integration:**
 - Test `Run` with all dependencies found; verify output contains section headers (including Credentials), summary lines with counts, and return value is nil.
 - Test `Run` with a missing required dependency; verify it returns `*process.PassthroughError` with code 1.
 - Test `Run` with all required found but a missing optional dependency (strict off); verify it returns nil.
 - Test `Run` with all required found but a missing optional dependency (strict on); verify it returns `*process.PassthroughError` with code 1.
-- Test `checkCredentials` with `gh` found and auth succeeding; verify `CredentialOK` status and "Logged in as ..." message.
-- Test `checkCredentials` with `gh` found and auth failing; verify `CredentialFailed` status and error message.
-- Test `checkCredentials` with `gh` not found; verify `CredentialUnchecked` status and "gh not detected" message.
 - Test `Run` with `gh` not found; verify credentials section shows "?" marker and "gh not detected", and `checkGitHub` is not called.
 - Test `Run` with `gh` found and auth succeeding; verify credentials section shows login name and summary "(1/1)".
 - Test `Run` with `gh` found and auth failing; verify credentials section shows error message and summary "(0/1)".
