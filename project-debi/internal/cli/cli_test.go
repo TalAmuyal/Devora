@@ -82,17 +82,6 @@ func TestRun_RenameMissingArg_ReturnsUsageError(t *testing.T) {
 	}
 }
 
-func TestRun_RenameAlias_MissingArg_ReturnsUsageError(t *testing.T) {
-	err := Run([]string{"r"})
-	if err == nil {
-		t.Fatal("expected error for rename alias without arg")
-	}
-	var usageErr *UsageError
-	if !errors.As(err, &usageErr) {
-		t.Fatalf("expected UsageError, got %T: %s", err, err.Error())
-	}
-}
-
 // workspace-ui and add commands attempt real operations.
 // In test environments (no TTY, not inside a workspace), they produce
 // expected errors rather than "not yet implemented" messages.
@@ -102,13 +91,6 @@ func TestRun_WorkspaceUI_Recognized(t *testing.T) {
 	// May fail due to TTY not available in tests, but should not return "unknown command"
 	if err != nil && strings.Contains(err.Error(), "unknown command") {
 		t.Fatalf("workspace-ui should be recognized, got: %s", err.Error())
-	}
-}
-
-func TestRun_WorkspaceUI_Alias(t *testing.T) {
-	err := Run([]string{"w"})
-	if err != nil && strings.Contains(err.Error(), "unknown command") {
-		t.Fatalf("w alias should be recognized, got: %s", err.Error())
 	}
 }
 
@@ -128,20 +110,6 @@ func TestRun_Add_Recognized(t *testing.T) {
 	// Expected: "not inside a known workspace" since tests don't run from a workspace
 	if err != nil && !strings.Contains(err.Error(), "workspace") {
 		t.Fatalf("expected workspace-related error, got: %s", err.Error())
-	}
-}
-
-func TestRun_Add_Alias(t *testing.T) {
-	origDir, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { os.Chdir(origDir) })
-	os.Chdir(t.TempDir())
-
-	err = Run([]string{"a"})
-	if err != nil && strings.Contains(err.Error(), "unknown command") {
-		t.Fatalf("a alias should be recognized, got: %s", err.Error())
 	}
 }
 
@@ -883,7 +851,7 @@ func TestRun_Completion_InvalidShellWithHelp_ReturnsUsageError(t *testing.T) {
 	}
 }
 
-func TestCommandIndex_AllCommandsAndAliasesResolvable(t *testing.T) {
+func TestCommandIndex_AllCommandsResolvable(t *testing.T) {
 	for _, cmd := range commands {
 		resolved, ok := commandIndex[cmd.Name]
 		if !ok {

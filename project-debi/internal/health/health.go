@@ -54,6 +54,10 @@ var getConfigPath = config.ConfigPath
 
 var statFile = os.Stat
 
+func zshCompletionPath() string {
+	return homeDir + "/.zsh/completions/_debi"
+}
+
 var lookPath = exec.LookPath
 
 var getVersion = defaultGetVersion
@@ -309,6 +313,23 @@ func Run(w io.Writer, strict bool, verbose bool) error {
 	fmt.Fprintln(w, "Credentials:")
 	credFound := renderCredentials(w, credResults, credNameWidth, greenStyle, redStyle, yellowStyle)
 
+	completionPath := zshCompletionPath()
+	_, completionErr := statFile(completionPath)
+	completionFound := completionErr == nil
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Completion:")
+	if completionFound {
+		prefix := greenStyle.Render("  ✓ zsh completion")
+		if verbose {
+			fmt.Fprintf(w, "%s  %s\n", prefix, shortenPath(completionPath))
+		} else {
+			fmt.Fprintln(w, prefix)
+		}
+	} else {
+		prefix := redStyle.Render("  ✗ zsh completion")
+		fmt.Fprintf(w, "%s  run: debi completion zsh > ~/.zsh/completions/_debi\n", prefix)
+	}
+
 	// Summary - align all labels to the longest one
 	const (
 		requiredLabel    = "Required met:"
@@ -357,7 +378,7 @@ func Run(w io.Writer, strict bool, verbose bool) error {
 	if requiredMissing > 0 {
 		return &process.PassthroughError{Code: 1}
 	}
-	if strict && (optionalMissing > 0 || credentialsMissing > 0) {
+	if strict && (optionalMissing > 0 || credentialsMissing > 0 || !completionFound) {
 		return &process.PassthroughError{Code: 1}
 	}
 

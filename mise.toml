@@ -30,6 +30,7 @@ set -e
 ./bundler/macos/bundle.sh
 rm -rf /Applications/Devora.app
 mv bin/macOS/Devora/Devora.app /Applications/Devora.app
+./bundler/macos/install-completions.sh
 rm -rf bin/macOS/Devora
 """
-description = "Build and install Devora.app to /Applications (close Devora first)"
+description = "Build and install Devora.app to /Applications, plus zsh completion (close Devora first)"
