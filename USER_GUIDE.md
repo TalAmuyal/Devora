@@ -143,7 +143,30 @@ Highlights:
 - **Git shortcuts**: A collection of short aliases for common git workflows (e.g., `debi gst` for `git status`, `debi gd` for `git diff`, `debi gaa` for staging all changes). Run `debi --help` for the full list
 - **PR status**: `debi pr status` (or the shorthand `debi prs`) shows the CI/review status of the current branch's pull request
 - **Health check**: `debi health` verifies that all required dependencies are installed
-- **Shell completions**: See [Shell Completions](#shell-completions) under Optional Additions
+- **Shell completions**: See [Recommended: Shell Completions](#recommended-shell-completions)
+
+## Recommended: Shell Completions
+
+Shell completion makes `debi` much faster to use by expanding unique command prefixes (for example, typing `debi w` and pressing Tab runs `workspace-ui`).
+
+`debi` supports tab-completion for bash, zsh, and fish.
+Run `debi completion <shell>` to generate the completion script, and `debi completion <shell> -h` for shell-specific installation instructions.
+
+For zsh (add to `~/.zshrc` before `compinit`):
+
+```zsh
+fpath=(~/.zsh/completions $fpath)
+autoload -U compinit; compinit
+```
+
+Then generate the completion file:
+
+```
+mkdir -p ~/.zsh/completions
+debi completion zsh > ~/.zsh/completions/_debi
+```
+
+On macOS, `mise mac-install` automatically generates the zsh completion file for you; you still need to add the `fpath` line above to your `~/.zshrc`.
 
 ## Optional Additions
 
@@ -161,25 +184,6 @@ To enable it, copy `cc-simple-statusline` to your `~/.claude/` directory and add
     "padding": 0
   }
 }
-```
-
-### Shell Completions
-
-`debi` supports tab-completion for bash, zsh, and fish.
-Run `debi completion <shell>` to generate the completion script, and `debi completion <shell> -h` for shell-specific installation instructions.
-
-For zsh (add to `~/.zshrc` before `compinit`):
-
-```zsh
-fpath=(~/.zsh/completions $fpath)
-autoload -U compinit; compinit
-```
-
-Then generate the completion file:
-
-```
-mkdir -p ~/.zsh/completions
-debi completion zsh > ~/.zsh/completions/_debi
 ```
 
 ### Mise en place

@@ -33,21 +33,18 @@ var commands = []Command{
 	// Workspace Commands
 	{
 		Name:        "workspace-ui",
-		Alias:       "w",
 		Description: "Open the workspace management UI",
 		Group:       "Workspace Commands",
 		Run:         func(args []string) error { return runWorkspaceUI() },
 	},
 	{
 		Name:        "add",
-		Alias:       "a",
 		Description: "Add a repo to the current workspace",
 		Group:       "Workspace Commands",
 		Run:         func(args []string) error { return runAddRepo() },
 	},
 	{
 		Name:        "rename",
-		Alias:       "r",
 		Description: "Rename the current terminal session",
 		ArgsHint:    "<new-name>",
 		Group:       "Workspace Commands",

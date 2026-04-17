@@ -8,15 +8,15 @@ Define and dispatch the CLI commands. This is the entry point that wires togethe
 
 ## Commands
 
-The CLI has 3 workspace commands (each with a hidden short alias), a health command, PR commands, a util command, 23 git shortcuts, and utility commands:
+The CLI has 3 workspace commands, a health command, PR commands, a util command, 23 git shortcuts, and utility commands:
 
 ### Workspace Commands
 
-| Command | Alias | Args | Description |
-|---------|-------|------|-------------|
-| `workspace-ui` | `w` | none | Open the workspace management TUI |
-| `add` | `a` | none | Open the add-repo TUI (must be inside a workspace) |
-| `rename` | `r` | `<new-name>` (positional, required) | Rename the current terminal session |
+| Command | Args | Description |
+|---------|------|-------------|
+| `workspace-ui` | none | Open the workspace management TUI |
+| `add` | none | Open the add-repo TUI (must be inside a workspace) |
+| `rename` | `<new-name>` (positional, required) | Rename the current terminal session |
 
 ### Health
 
@@ -123,9 +123,9 @@ Behavior:
 usage: debi <command> [args]
 
 Workspace Commands:
-  workspace-ui (w)  Open the workspace management UI
-  add (a)           Add a repo to the current workspace
-  rename (r) <new-name>  Rename the current terminal session
+  workspace-ui          Open the workspace management UI
+  add                   Add a repo to the current workspace
+  rename <new-name>     Rename the current terminal session
 
 Health:
   health [flags]        Check Devora dependencies
@@ -166,7 +166,7 @@ Utility:
 
 ## Command Handlers
 
-### workspace-ui / w
+### workspace-ui
 
 ```go
 func runWorkspaceUI() error
@@ -182,7 +182,7 @@ func runWorkspaceUI() error
    - If `result.NewWorkspace` is set, delegate to `tui.CreateAndAttachSession(ws.WorkspacePath, ws.SessionName)`.
    - If the user quit without selection (`result == nil`), return nil.
 
-### add / a
+### add
 
 ```go
 func runAddRepo() error
@@ -194,7 +194,7 @@ func runAddRepo() error
 4. Get registered repo names. If none, return a `UsageError`: `"no repos registered in the active profile"`.
 5. Launch the add-repo TUI via `tui.RunAddRepo(themePath, wsPath, repoNames)`.
 
-### rename / r
+### rename
 
 ```go
 func runRename(newName string) error
@@ -251,6 +251,8 @@ Parses the provided args for flags:
 - Any other argument: returns a `UsageError` with the unknown flag and usage hint.
 
 Delegates to `health.Run(os.Stdout, strict, verbose)`.
+
+In addition to required and optional dependencies, the health check also reports whether the zsh completion file exists at `~/.zsh/completions/_debi`. The check is optional: missing completion prints a ✗ and an install hint (`run: debi completion zsh > ~/.zsh/completions/_debi`) but does not affect the exit code in default mode. Under `--strict`, a missing completion file causes exit code 1 (same as any other optional dependency).
 
 ### completion
 

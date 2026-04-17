@@ -302,8 +302,14 @@ func TestRun_ConfigFileNotFound_DoesNotAffectExitCode(t *testing.T) {
 	checkGitHub = func() (string, error) {
 		return "Test User", nil
 	}
-	getConfigPath = func() string { return "/home/testuser/.config/devora/config.json" }
-	statFile = func(name string) (os.FileInfo, error) { return nil, os.ErrNotExist }
+	configPath := "/home/testuser/.config/devora/config.json"
+	getConfigPath = func() string { return configPath }
+	statFile = func(name string) (os.FileInfo, error) {
+		if name == configPath {
+			return nil, os.ErrNotExist
+		}
+		return nil, nil
+	}
 
 	var buf bytes.Buffer
 	err := Run(&buf, true, false)
@@ -325,6 +331,7 @@ func TestRun_AllFound(t *testing.T) {
 	checkGitHub = func() (string, error) {
 		return "Test User", nil
 	}
+	statFile = func(name string) (os.FileInfo, error) { return nil, nil }
 
 	var buf bytes.Buffer
 	err := Run(&buf, false, false)
@@ -510,6 +517,7 @@ func TestRun_Strict_AllFound(t *testing.T) {
 	checkGitHub = func() (string, error) {
 		return "Test User", nil
 	}
+	statFile = func(name string) (os.FileInfo, error) { return nil, nil }
 
 	var buf bytes.Buffer
 	err := Run(&buf, true, false)
@@ -726,6 +734,143 @@ func TestRun_CredentialFailure_DoesNotAffectExitCode(t *testing.T) {
 
 	if err != nil {
 		t.Fatalf("expected no error even with credential failure, got: %s", err.Error())
+	}
+}
+
+func TestRun_CompletionInstalled(t *testing.T) {
+	stubHealthDeps(t)
+	origHome := homeDir
+	t.Cleanup(func() { homeDir = origHome })
+	homeDir = "/home/testuser"
+
+	lookPath = func(file string) (string, error) {
+		return "/usr/local/bin/" + file, nil
+	}
+	getVersion = func(command []string) (string, error) {
+		return "v1.0.0", nil
+	}
+	checkGitHub = func() (string, error) {
+		return "Test User", nil
+	}
+	statFile = func(name string) (os.FileInfo, error) {
+		if name == "/home/testuser/.zsh/completions/_debi" {
+			return nil, nil
+		}
+		return nil, os.ErrNotExist
+	}
+
+	var buf bytes.Buffer
+	err := Run(&buf, false, false)
+
+	if err != nil {
+		t.Fatalf("expected no error, got: %s", err.Error())
+	}
+	output := buf.String()
+	if !strings.Contains(output, "Completion:") {
+		t.Fatalf("expected output to contain 'Completion:', got:\n%s", output)
+	}
+	if !strings.Contains(output, "zsh completion") {
+		t.Fatalf("expected output to contain 'zsh completion', got:\n%s", output)
+	}
+	if !strings.Contains(output, "✓") {
+		t.Fatalf("expected output to contain checkmark for installed completion, got:\n%s", output)
+	}
+}
+
+func TestRun_CompletionInstalled_StrictExitCodeZero(t *testing.T) {
+	stubHealthDeps(t)
+	origHome := homeDir
+	t.Cleanup(func() { homeDir = origHome })
+	homeDir = "/home/testuser"
+
+	lookPath = func(file string) (string, error) {
+		return "/usr/local/bin/" + file, nil
+	}
+	getVersion = func(command []string) (string, error) {
+		return "v1.0.0", nil
+	}
+	checkGitHub = func() (string, error) {
+		return "Test User", nil
+	}
+	statFile = func(name string) (os.FileInfo, error) {
+		if name == "/home/testuser/.zsh/completions/_debi" {
+			return nil, nil
+		}
+		return nil, os.ErrNotExist
+	}
+
+	var buf bytes.Buffer
+	err := Run(&buf, true, false)
+
+	if err != nil {
+		t.Fatalf("expected no error in strict mode when completion is installed, got: %s", err.Error())
+	}
+}
+
+func TestRun_CompletionMissing_DefaultModeExitCodeZero(t *testing.T) {
+	stubHealthDeps(t)
+	origHome := homeDir
+	t.Cleanup(func() { homeDir = origHome })
+	homeDir = "/home/testuser"
+
+	lookPath = func(file string) (string, error) {
+		return "/usr/local/bin/" + file, nil
+	}
+	getVersion = func(command []string) (string, error) {
+		return "v1.0.0", nil
+	}
+	checkGitHub = func() (string, error) {
+		return "Test User", nil
+	}
+	statFile = func(name string) (os.FileInfo, error) { return nil, os.ErrNotExist }
+
+	var buf bytes.Buffer
+	err := Run(&buf, false, false)
+
+	if err != nil {
+		t.Fatalf("expected no error in default mode when completion missing, got: %s", err.Error())
+	}
+	output := buf.String()
+	if !strings.Contains(output, "Completion:") {
+		t.Fatalf("expected output to contain 'Completion:', got:\n%s", output)
+	}
+	if !strings.Contains(output, "✗") {
+		t.Fatalf("expected output to contain ✗ for missing completion, got:\n%s", output)
+	}
+	if !strings.Contains(output, "debi completion zsh > ~/.zsh/completions/_debi") {
+		t.Fatalf("expected output to contain install hint, got:\n%s", output)
+	}
+}
+
+func TestRun_CompletionMissing_StrictModeExitCode1(t *testing.T) {
+	stubHealthDeps(t)
+	origHome := homeDir
+	t.Cleanup(func() { homeDir = origHome })
+	homeDir = "/home/testuser"
+
+	lookPath = func(file string) (string, error) {
+		return "/usr/local/bin/" + file, nil
+	}
+	getVersion = func(command []string) (string, error) {
+		return "v1.0.0", nil
+	}
+	checkGitHub = func() (string, error) {
+		return "Test User", nil
+	}
+	statFile = func(name string) (os.FileInfo, error) { return nil, os.ErrNotExist }
+
+	var buf bytes.Buffer
+	err := Run(&buf, true, false)
+
+	if err == nil {
+		t.Fatal("expected error in strict mode when completion missing")
+	}
+	var passErr *process.PassthroughError
+	if !errors.As(err, &passErr) {
+		t.Fatalf("expected PassthroughError, got %T: %s", err, err.Error())
+	}
+	if passErr.Code != 1 {
+		t.Fatalf("expected exit code 1, got: %d", passErr.Code)
 	}
 }
 

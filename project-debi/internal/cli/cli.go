@@ -141,7 +141,7 @@ func runHealth(args []string) error {
 	for _, arg := range args {
 		switch arg {
 		case "-h", "--help":
-			fmt.Println("usage: debi health [--strict] [-v|--verbose]\n\nCheck Devora dependencies and report their status.\n\nFlags:\n  --strict      Exit with code 1 if any dependency (including optional) is missing\n  -v, --verbose  Show dependency locations")
+			fmt.Println("usage: debi health [--strict] [-v|--verbose]\n\nCheck Devora dependencies and report their status. Also reports whether zsh\ncompletion is installed at ~/.zsh/completions/_debi.\n\nFlags:\n  --strict      Exit with code 1 if any dependency (including optional) is missing\n  -v, --verbose  Show dependency locations")
 			return nil
 		case "--strict":
 			strict = true
