@@ -24,6 +24,7 @@ Types of changes:
 - GitHub Actions workflow to enforce CHANGELOG.md updates on pull requests
 - Optional pre-commit hook for local CHANGELOG.md reminders, installed via `mise run install-hooks`
 - `ccc` now supports `update`, `-u`, and `--update` to update Claude Code via `claude --update`
+- Bla
 
 ### Fixed
 

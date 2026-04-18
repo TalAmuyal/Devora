@@ -6,3 +6,5 @@ It supports file paths and stdin (-), and reports errors with precise line and c
 Exit codes: 0 = valid, 1 = invalid, 2 = usage/file error.
 
 When a JSON file (or string) needs to be validated, using `debi util json-validate` is the preferred method.
+
+TEST
