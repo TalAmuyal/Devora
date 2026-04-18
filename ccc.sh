@@ -12,7 +12,20 @@ set -e
 SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
 SCRIPT_DIR_PARENT=$(dirname "$SCRIPT_DIR")
 
-ARGS=("$@")
+ARGS=()
+while [[ $# -gt 0 ]]; do
+	case "$1" in
+		-u|--update|update)
+			claude --update
+			exit 0
+		;;
+
+		*)
+			ARGS+=("$1")
+			;;
+	esac
+	shift
+done
 
 # ccc --debug hooks
 PLUGINS_DIR="$SCRIPT_DIR_PARENT/cc-plugins"
