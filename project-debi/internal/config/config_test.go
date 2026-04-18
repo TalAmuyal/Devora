@@ -1117,6 +1117,239 @@ func TestTerminalSessionCreationTimeoutSeconds_WrongType_ReturnsFallback(t *test
 	}
 }
 
+// --- Task-tracker getter tests ---
+
+func TestGetTaskTrackerProvider_GlobalOnly(t *testing.T) {
+	tmpDir := setupTest(t)
+	writeJSON(t, filepath.Join(tmpDir, "config.json"), map[string]any{
+		"task-tracker": map[string]any{
+			"provider": "asana",
+		},
+	})
+	resetGlobalConfigCache()
+
+	if got := GetTaskTrackerProvider(); got != "asana" {
+		t.Fatalf("expected \"asana\", got %q", got)
+	}
+}
+
+func TestGetTaskTrackerProvider_ProfileOnly(t *testing.T) {
+	tmpDir := setupTest(t)
+	profileDir := filepath.Join(tmpDir, "profile")
+	profileCfg := map[string]any{
+		"name": "p",
+		"task-tracker": map[string]any{
+			"provider": "asana",
+		},
+	}
+	createProfile(t, profileDir, profileCfg)
+	SetActiveProfile(&Profile{Name: "p", RootPath: profileDir, Config: profileCfg})
+
+	if got := GetTaskTrackerProvider(); got != "asana" {
+		t.Fatalf("expected \"asana\", got %q", got)
+	}
+}
+
+func TestGetTaskTrackerProvider_ProfileOverridesGlobal(t *testing.T) {
+	tmpDir := setupTest(t)
+	writeJSON(t, filepath.Join(tmpDir, "config.json"), map[string]any{
+		"task-tracker": map[string]any{
+			"provider": "asana",
+		},
+	})
+	resetGlobalConfigCache()
+
+	profileDir := filepath.Join(tmpDir, "profile")
+	profileCfg := map[string]any{
+		"name": "p",
+		"task-tracker": map[string]any{
+			"provider": "linear",
+		},
+	}
+	createProfile(t, profileDir, profileCfg)
+	SetActiveProfile(&Profile{Name: "p", RootPath: profileDir, Config: profileCfg})
+
+	if got := GetTaskTrackerProvider(); got != "linear" {
+		t.Fatalf("expected \"linear\" (profile wins), got %q", got)
+	}
+}
+
+func TestGetTaskTrackerProvider_Unset_ReturnsEmpty(t *testing.T) {
+	setupTest(t)
+	if got := GetTaskTrackerProvider(); got != "" {
+		t.Fatalf("expected empty string, got %q", got)
+	}
+}
+
+func TestGetTaskTrackerProvider_WrongType_ReturnsEmpty(t *testing.T) {
+	tmpDir := setupTest(t)
+	writeJSON(t, filepath.Join(tmpDir, "config.json"), map[string]any{
+		"task-tracker": map[string]any{
+			"provider": 42,
+		},
+	})
+	resetGlobalConfigCache()
+
+	if got := GetTaskTrackerProvider(); got != "" {
+		t.Fatalf("expected empty string for wrong type, got %q", got)
+	}
+}
+
+// Verifies the Section 4.4 merge example: global provides provider,
+// workspace-id and cli-tag; profile provides project-id. All leaves must
+// resolve correctly, and a missing leaf returns "".
+func TestGetTaskTrackerString_PerLeafProfileGlobalMerge(t *testing.T) {
+	tmpDir := setupTest(t)
+	writeJSON(t, filepath.Join(tmpDir, "config.json"), map[string]any{
+		"task-tracker": map[string]any{
+			"provider": "asana",
+			"asana": map[string]any{
+				"workspace-id": "W1",
+				"cli-tag":      "T1",
+			},
+		},
+	})
+	resetGlobalConfigCache()
+
+	profileDir := filepath.Join(tmpDir, "profile")
+	profileCfg := map[string]any{
+		"name": "p",
+		"task-tracker": map[string]any{
+			"asana": map[string]any{
+				"project-id": "P1",
+			},
+		},
+	}
+	createProfile(t, profileDir, profileCfg)
+	SetActiveProfile(&Profile{Name: "p", RootPath: profileDir, Config: profileCfg})
+
+	if got := GetTaskTrackerProvider(); got != "asana" {
+		t.Fatalf("expected provider \"asana\", got %q", got)
+	}
+	if got := GetTaskTrackerString("asana", "workspace-id"); got != "W1" {
+		t.Fatalf("expected workspace-id \"W1\" (global), got %q", got)
+	}
+	if got := GetTaskTrackerString("asana", "cli-tag"); got != "T1" {
+		t.Fatalf("expected cli-tag \"T1\" (global), got %q", got)
+	}
+	if got := GetTaskTrackerString("asana", "project-id"); got != "P1" {
+		t.Fatalf("expected project-id \"P1\" (profile), got %q", got)
+	}
+	if got := GetTaskTrackerString("asana", "section-id"); got != "" {
+		t.Fatalf("expected section-id \"\" (unset), got %q", got)
+	}
+}
+
+func TestGetTaskTrackerString_ProfileOverridesGlobalAtLeaf(t *testing.T) {
+	tmpDir := setupTest(t)
+	writeJSON(t, filepath.Join(tmpDir, "config.json"), map[string]any{
+		"task-tracker": map[string]any{
+			"asana": map[string]any{
+				"workspace-id": "W-global",
+			},
+		},
+	})
+	resetGlobalConfigCache()
+
+	profileDir := filepath.Join(tmpDir, "profile")
+	profileCfg := map[string]any{
+		"name": "p",
+		"task-tracker": map[string]any{
+			"asana": map[string]any{
+				"workspace-id": "W-profile",
+			},
+		},
+	}
+	createProfile(t, profileDir, profileCfg)
+	SetActiveProfile(&Profile{Name: "p", RootPath: profileDir, Config: profileCfg})
+
+	if got := GetTaskTrackerString("asana", "workspace-id"); got != "W-profile" {
+		t.Fatalf("expected profile value \"W-profile\", got %q", got)
+	}
+}
+
+func TestGetTaskTrackerString_Unset_ReturnsEmpty(t *testing.T) {
+	setupTest(t)
+	if got := GetTaskTrackerString("asana", "workspace-id"); got != "" {
+		t.Fatalf("expected empty string, got %q", got)
+	}
+}
+
+func TestGetTaskTrackerString_WrongType_ReturnsEmpty(t *testing.T) {
+	tmpDir := setupTest(t)
+	writeJSON(t, filepath.Join(tmpDir, "config.json"), map[string]any{
+		"task-tracker": map[string]any{
+			"asana": map[string]any{
+				"workspace-id": 123,
+			},
+		},
+	})
+	resetGlobalConfigCache()
+
+	if got := GetTaskTrackerString("asana", "workspace-id"); got != "" {
+		t.Fatalf("expected empty string for wrong type, got %q", got)
+	}
+}
+
+func TestGetBranchPrefix_Global(t *testing.T) {
+	tmpDir := setupTest(t)
+	writeJSON(t, filepath.Join(tmpDir, "config.json"), map[string]any{
+		"feature": map[string]any{
+			"branch-prefix": "feat",
+		},
+	})
+	resetGlobalConfigCache()
+
+	if got := GetBranchPrefix("fallback"); got != "feat" {
+		t.Fatalf("expected \"feat\", got %q", got)
+	}
+}
+
+func TestGetBranchPrefix_ProfileOverridesGlobal(t *testing.T) {
+	tmpDir := setupTest(t)
+	writeJSON(t, filepath.Join(tmpDir, "config.json"), map[string]any{
+		"feature": map[string]any{
+			"branch-prefix": "feat",
+		},
+	})
+	resetGlobalConfigCache()
+
+	profileDir := filepath.Join(tmpDir, "profile")
+	profileCfg := map[string]any{
+		"name": "p",
+		"feature": map[string]any{
+			"branch-prefix": "work",
+		},
+	}
+	createProfile(t, profileDir, profileCfg)
+	SetActiveProfile(&Profile{Name: "p", RootPath: profileDir, Config: profileCfg})
+
+	if got := GetBranchPrefix("fallback"); got != "work" {
+		t.Fatalf("expected \"work\" (profile wins), got %q", got)
+	}
+}
+
+func TestGetBranchPrefix_Unset_ReturnsFallback(t *testing.T) {
+	setupTest(t)
+	if got := GetBranchPrefix("fallback"); got != "fallback" {
+		t.Fatalf("expected \"fallback\", got %q", got)
+	}
+}
+
+func TestGetBranchPrefix_WrongType_ReturnsFallback(t *testing.T) {
+	tmpDir := setupTest(t)
+	writeJSON(t, filepath.Join(tmpDir, "config.json"), map[string]any{
+		"feature": map[string]any{
+			"branch-prefix": 42,
+		},
+	})
+	resetGlobalConfigCache()
+
+	if got := GetBranchPrefix("fallback"); got != "fallback" {
+		t.Fatalf("expected \"fallback\" for wrong type, got %q", got)
+	}
+}
+
 // --- Profile unregistration tests ---
 
 func TestUnregisterProfile_RemovesFromGlobalConfig(t *testing.T) {

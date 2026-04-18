@@ -36,7 +36,7 @@ func testCommands() []cmdinfo.Command {
 			MinArgs:     1,
 			SubCommands: []cmdinfo.SubCommand{
 				{
-					Name:        "status",
+					Name:        "check",
 					Description: "Check the status of the PR for the current branch",
 					Flags: []cmdinfo.Flag{
 						{Name: "--json", Description: "Output status as JSON"},
@@ -45,7 +45,7 @@ func testCommands() []cmdinfo.Command {
 			},
 		},
 		{
-			Name:        "prs",
+			Name:        "check",
 			Description: "Check the status of the PR for the current branch",
 			ArgsHint:    "[flags]",
 			Group:       "PR",
@@ -337,21 +337,21 @@ func TestGenerateZsh_ValidArgsInArgsState(t *testing.T) {
 	}
 }
 
-func TestGenerate_PRStatusSubcommandCompletion(t *testing.T) {
+func TestGenerate_PRCheckSubcommandCompletion(t *testing.T) {
 	for _, tc := range shellGenerators() {
 		t.Run(tc.name, func(t *testing.T) {
 			var buf bytes.Buffer
 			tc.generate(&buf, "debi", testCommands())
 			output := buf.String()
 
-			if !strings.Contains(output, "status") {
-				t.Fatalf("%s output should contain 'status' as a completion option for pr", tc.name)
+			if !strings.Contains(output, "check") {
+				t.Fatalf("%s output should contain 'check' as a completion option for pr", tc.name)
 			}
 		})
 	}
 }
 
-func TestGenerate_PRSJsonFlagCompletion(t *testing.T) {
+func TestGenerate_PRCheckJsonFlagCompletion(t *testing.T) {
 	for _, tc := range shellGenerators() {
 		t.Run(tc.name, func(t *testing.T) {
 			var buf bytes.Buffer
@@ -359,7 +359,7 @@ func TestGenerate_PRSJsonFlagCompletion(t *testing.T) {
 			output := buf.String()
 
 			if !strings.Contains(output, "--json") {
-				t.Fatalf("%s output should contain '--json' as a completion option for prs", tc.name)
+				t.Fatalf("%s output should contain '--json' as a completion option for check", tc.name)
 			}
 		})
 	}
@@ -376,8 +376,8 @@ func TestGenerate_SubCommandNamesAtSecondLevel(t *testing.T) {
 			if !strings.Contains(output, "json-validate") {
 				t.Fatalf("%s output should contain 'json-validate' as a sub-command of util", tc.name)
 			}
-			if !strings.Contains(output, "status") {
-				t.Fatalf("%s output should contain 'status' as a sub-command of pr", tc.name)
+			if !strings.Contains(output, "check") {
+				t.Fatalf("%s output should contain 'check' as a sub-command of pr", tc.name)
 			}
 		})
 	}
@@ -388,12 +388,12 @@ func TestGenerateBash_SubCommandFlags(t *testing.T) {
 	GenerateBash(&buf, "debi", testCommands())
 	output := buf.String()
 
-	// Third-level: pr:status should offer --json
-	if !strings.Contains(output, "pr:status)") {
-		t.Fatal("bash output should contain 'pr:status)' case for third-level completion")
+	// Third-level: pr:check should offer --json
+	if !strings.Contains(output, "pr:check)") {
+		t.Fatal("bash output should contain 'pr:check)' case for third-level completion")
 	}
 	if !strings.Contains(output, `compgen -W "--json`) {
-		t.Fatal("bash output should contain compgen -W with --json for pr:status")
+		t.Fatal("bash output should contain compgen -W with --json for pr:check")
 	}
 }
 
@@ -402,9 +402,9 @@ func TestGenerateZsh_SubCommandFlags(t *testing.T) {
 	GenerateZsh(&buf, "debi", testCommands())
 	output := buf.String()
 
-	// pr's args section should dispatch on status and offer --json
+	// pr's args section should dispatch on check and offer --json
 	if !strings.Contains(output, "--json") {
-		t.Fatal("zsh output should contain '--json' in pr status context")
+		t.Fatal("zsh output should contain '--json' in pr check context")
 	}
 }
 
@@ -418,7 +418,7 @@ func TestGenerateFish_SubCommandFlags(t *testing.T) {
 		t.Fatal("fish output should contain '__debi_seen_subcmd' helper function")
 	}
 	if !strings.Contains(output, "--json") {
-		t.Fatal("fish output should contain '--json' for pr status")
+		t.Fatal("fish output should contain '--json' for pr check")
 	}
 }
 
@@ -527,12 +527,88 @@ func TestGenerateBash_SubCommandSecondLevelFromSubCommands(t *testing.T) {
 	GenerateBash(&buf, "debi", testCommands())
 	output := buf.String()
 
-	// pr should offer "status" at second level
+	// pr should offer "check" at second level
 	if !strings.Contains(output, "pr)") {
 		t.Fatal("bash output should contain 'pr)' case entry for second-level completion")
 	}
 	// util should offer "json-validate" at second level
 	if !strings.Contains(output, "util)") {
 		t.Fatal("bash output should contain 'util)' case entry for second-level completion")
+	}
+}
+
+// --- Shell-quoting regression tests ---
+
+// spicyCommands returns a single command whose flag descriptions contain the
+// exact shell-special characters that have historically broken the generated
+// scripts: an apostrophe (breaks zsh '...' strings) and a double-quoted word
+// (breaks fish "..." -d arguments). Keep this in sync with real-world flag
+// descriptions on `debi close` that surfaced these bugs.
+func spicyCommands() []cmdinfo.Command {
+	return []cmdinfo.Command{
+		{
+			Name:        "victim",
+			Description: "Do the thing",
+			Group:       "Test",
+			Flags: []cmdinfo.Flag{
+				{Name: "--apos", Description: "Contains branch's apostrophe"},
+				{Name: "--dquote", Description: `Prints "Closed" literal`},
+			},
+		},
+	}
+}
+
+func TestGenerateZsh_EscapesApostropheInDescription(t *testing.T) {
+	var buf bytes.Buffer
+	if err := GenerateZsh(&buf, "debi", spicyCommands()); err != nil {
+		t.Fatalf("GenerateZsh failed: %v", err)
+	}
+	output := buf.String()
+
+	// Raw apostrophe directly between two single-quoted letters is forbidden —
+	// it would close the '...' string early. The canonical escape '\'' MUST
+	// appear instead.
+	if !strings.Contains(output, `branch'\''s apostrophe`) {
+		t.Fatalf("expected zsh output to escape apostrophe as '\\'', got:\n%s", output)
+	}
+}
+
+func TestGenerateFish_EscapesDoubleQuoteInDescription(t *testing.T) {
+	var buf bytes.Buffer
+	if err := GenerateFish(&buf, "debi", spicyCommands()); err != nil {
+		t.Fatalf("GenerateFish failed: %v", err)
+	}
+	output := buf.String()
+
+	// The literal `"Closed"` inside a -d "..." arg would close the quoted
+	// string early. The generator must escape each " as \".
+	if !strings.Contains(output, `\"Closed\"`) {
+		t.Fatalf("expected fish output to escape embedded double quotes, got:\n%s", output)
+	}
+}
+
+// TestGenerateZsh_RealFlagsParsesCleanly is a structural sanity check that
+// the full generated script, including the real `debi close --task-url`
+// description with its apostrophe, is not obviously broken. We can't invoke
+// `zsh -n` from the test without introducing a shell dependency, but we can
+// verify the danger pattern (an odd number of ' chars on a single flag line)
+// does not appear.
+func TestGenerateZsh_RealFlagsHasBalancedQuotes(t *testing.T) {
+	var buf bytes.Buffer
+	if err := GenerateZsh(&buf, "debi", spicyCommands()); err != nil {
+		t.Fatalf("GenerateZsh failed: %v", err)
+	}
+	for _, line := range strings.Split(buf.String(), "\n") {
+		// Only check lines that are a completion tuple ('name:desc').
+		if !strings.Contains(line, ":") || !strings.Contains(line, "'") {
+			continue
+		}
+		// Count ' outside of the \''  escape sequence. Replace the escape
+		// with a placeholder, then count remaining apostrophes; must be even.
+		stripped := strings.ReplaceAll(line, `'\''`, "")
+		count := strings.Count(stripped, "'")
+		if count%2 != 0 {
+			t.Fatalf("unbalanced apostrophes on line %q (count=%d)", line, count)
+		}
 	}
 }

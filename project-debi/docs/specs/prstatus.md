@@ -2,6 +2,8 @@
 
 Package: `internal/prstatus`
 
+Exposed as the `debi check` CLI command (also available as `debi pr check`). The package name kept its historical `prstatus` form because it's an internal implementation detail; the public-facing CLI verb is `check`.
+
 ## Purpose
 
 Check and report on the GitHub PR status for the current branch. The current branch is determined via `git symbolic-ref`, and the PR data is fetched by invoking the `gh` CLI (`gh pr view --json ...`). Results are printed either as human-readable colored output or as structured JSON.

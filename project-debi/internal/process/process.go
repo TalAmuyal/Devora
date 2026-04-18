@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -32,7 +33,8 @@ func (e *VerboseExecError) Unwrap() error {
 }
 
 type execConfig struct {
-	cwd string
+	cwd    string
+	silent bool
 }
 
 type ExecOption func(*execConfig)
@@ -40,6 +42,15 @@ type ExecOption func(*execConfig)
 func WithCwd(cwd string) ExecOption {
 	return func(cfg *execConfig) {
 		cfg.cwd = cwd
+	}
+}
+
+// WithSilent routes RunPassthrough's stdout and stderr to io.Discard. Has no
+// effect on GetOutput/GetShellOutput (which always capture). stdin is left
+// unchanged.
+func WithSilent() ExecOption {
+	return func(cfg *execConfig) {
+		cfg.silent = true
 	}
 }
 
@@ -63,8 +74,13 @@ func RunPassthrough(command []string, opts ...ExecOption) error {
 	}
 
 	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	if cfg.silent {
+		cmd.Stdout = io.Discard
+		cmd.Stderr = io.Discard
+	} else {
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+	}
 
 	err := cmd.Run()
 	if err != nil {

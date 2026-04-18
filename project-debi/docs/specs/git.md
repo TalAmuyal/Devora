@@ -10,6 +10,10 @@ Provides git shortcut command implementations and shared git utilities. All comm
 
 - `devora/internal/process` -- command execution (`RunPassthrough`, `GetOutput`)
 
+## Minimum git version
+
+Some helpers rely on git 2.18+ (released 2018-06-21). Specifically, `GetBranchConfig` uses `git config --get --default "" ...`, which exits 0 with empty output when the key is missing; earlier git versions exit non-zero.
+
 ## Utility Functions
 
 ### DefaultBranchName
@@ -21,6 +25,40 @@ func DefaultBranchName(opts ...process.ExecOption) (string, error)
 Returns the default branch name for the repository by querying `git symbolic-ref refs/remotes/origin/HEAD` and stripping the `refs/remotes/origin/` prefix.
 
 Also used by `internal/workspace` to avoid duplicating the logic.
+
+### DefaultBranchNameWithFallback
+
+```go
+func DefaultBranchNameWithFallback(opts ...process.ExecOption) (string, error)
+```
+
+Resolves origin's default branch via `DefaultBranchName`; on failure, falls back to `git rev-parse --verify main` and then `git rev-parse --verify master`, returning the first that succeeds. Returns an error when `origin/HEAD` is unset and neither `main` nor `master` exists.
+
+Used by `internal/close` so that close can proceed even when `origin/HEAD` is not configured.
+
+### Submit / close helpers (`submit_close.go`)
+
+Separate file from `commands.go` because these helpers return captured output or structured results rather than pure passthrough. Used by `internal/submit` and `internal/close`.
+
+| Function | Purpose |
+|----------|---------|
+| `CurrentBranchOrDetached(opts ...process.ExecOption) (string, error)` | Returns the current branch name, or `""` when HEAD is detached. Uses `git symbolic-ref --short HEAD`; the "ref HEAD is not a symbolic ref" stderr is treated as `("", nil)`. |
+| `IsProtectedBranch(branch string) bool` | Reports whether the branch is in `ProtectedBranches`. |
+| `ProtectedBranches []string` | Fixed list: `main`, `master`, `develop`. Exported so tests can reference it directly. |
+| `AddAllAndCommit(message string, opts ...process.ExecOption) error` | Passthrough `git add .` then `git commit -m <message>`. Opts forwarded to both calls. |
+| `CreateAndCheckoutBranch(name string, opts ...process.ExecOption) error` | Passthrough `git checkout -b <name>`. |
+| `PushSetUpstream(branch string, opts ...process.ExecOption) error` | Passthrough `git push --set-upstream origin <branch>`. |
+| `DeleteRemoteBranch(branch string, opts ...process.ExecOption) error` | Passthrough `git push origin --delete <branch>`. |
+| `DeleteLocalBranch(branch string, opts ...process.ExecOption) error` | Passthrough `git branch -D <branch>`. |
+| `HasLocalBranch(branch string, opts ...process.ExecOption) bool` | True when `git rev-parse --verify <branch>` succeeds. |
+| `HasRemoteBranch(branch string, opts ...process.ExecOption) bool` | True when `git ls-remote --exit-code --heads origin <branch>` succeeds. |
+| `SetBranchConfig(branch, key, value string, opts ...process.ExecOption) error` | Writes `branch.<branch>.<key>=<value>` via `git config --local`. |
+| `GetBranchConfig(branch, key string, opts ...process.ExecOption) (string, error)` | Reads `branch.<branch>.<key>` via `git config --get --default "" ...`. Returns `""` (not an error) when the key is missing. Requires git 2.18+. |
+| `FetchOrigin(opts ...process.ExecOption) error` | Passthrough `git fetch origin`. |
+| `CheckoutDetach(ref string, opts ...process.ExecOption) error` | Passthrough `git checkout <ref>`. Callers typically pass `origin/<default>` to land in detached HEAD. |
+| `GenerateBranchName(prefix, taskName string) string` | Produces `<prefix>-<slug>` where `<slug>` is a dash-separated, lowercase, ASCII-alphanumeric distillation of `taskName`. Non-alphanumerics collapse to a single `-`; leading/trailing dashes trimmed; capped at 70 characters with trailing `-` trimmed after truncation. When the distilled slug is empty (e.g., all non-ASCII input), falls back to the constant `"unnamed"`. |
+
+All passthrough helpers accept variadic `process.ExecOption`; callers pass `process.WithSilent()` to route stdout/stderr to `io.Discard` (used by submit/close in Normal and Quiet modes).
 
 ## Command Functions
 
@@ -145,16 +183,17 @@ Runs `git rebase origin/<default-branch>`.
 
 | File | Contents |
 |------|----------|
-| `default_branch.go` | `DefaultBranchName` utility |
+| `default_branch.go` | `DefaultBranchName`, `DefaultBranchNameWithFallback` |
 | `commands.go` | All 23 command functions and the `passthrough` helper |
+| `submit_close.go` | Submit/close helpers (`CurrentBranchOrDetached`, `IsProtectedBranch`, `GenerateBranchName`, branch-config helpers, etc.) |
 
 ## Testing
 
 ### default_branch_test.go
 
-Integration test using a real temp git repo:
-- Set up a git repo with a commit, remote, and `refs/remotes/origin/HEAD` pointing to `main`.
-- Verify `DefaultBranchName` returns `"main"`.
+Integration tests using a real temp git repo:
+- `DefaultBranchName`: repo with `refs/remotes/origin/HEAD` pointing to `main` returns `"main"`.
+- `DefaultBranchNameWithFallback`: falls back to `main` when `origin/HEAD` is unset; falls back to `master` when only `master` exists; errors when neither `main` nor `master` exists and `origin/HEAD` is unset.
 
 ### commands_test.go
 
@@ -163,3 +202,7 @@ Integration test using a real temp git repo:
 - Test `Gri` with negative argument returns `*PassthroughError`.
 - Test `Gri` with `--help` flag prints usage and returns nil.
 - Test `Gri` with `-h` flag prints usage and returns nil.
+
+### submit_close_test.go
+
+Table-driven unit tests for `GenerateBranchName` (ASCII, mixed case, trailing dashes, 70-character cap, empty input, all-non-ASCII input falls back to `"unnamed"`), plus temp-repo integration tests for `CurrentBranchOrDetached`, `IsProtectedBranch`, `SetBranchConfig`/`GetBranchConfig` (including the `--default ""` missing-key behavior), `HasLocalBranch`, and `HasRemoteBranch`.

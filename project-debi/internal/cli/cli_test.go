@@ -2,8 +2,12 @@ package cli
 
 import (
 	"bytes"
+	closecmd "devora/internal/close"
+	"devora/internal/credentials"
 	"devora/internal/process"
+	"devora/internal/submit"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -114,6 +118,8 @@ func TestRun_Add_Recognized(t *testing.T) {
 }
 
 func TestRun_Health_Recognized(t *testing.T) {
+	stubResolveActiveProfile(t, func(string) (string, error) { return "", nil })
+	stubHealthRun(t, func(io.Writer, bool, bool) error { return nil })
 	err := Run([]string{"health"})
 	// May fail due to missing deps, but should not return "unknown command"
 	if err != nil && strings.Contains(err.Error(), "unknown command") {
@@ -157,6 +163,194 @@ func TestRun_Health_UnknownFlag(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "--foo") {
 		t.Fatalf("expected error to mention the flag, got: %s", err.Error())
+	}
+}
+
+func TestRun_Health_ProfileSpaceSyntax_PassedToResolver(t *testing.T) {
+	captured := ""
+	stubResolveActiveProfile(t, func(explicit string) (string, error) {
+		captured = explicit
+		return explicit, nil
+	})
+	stubHealthRun(t, func(io.Writer, bool, bool) error { return nil })
+
+	err := Run([]string{"health", "--profile", "work"})
+	if err != nil {
+		t.Fatalf("expected no error, got: %s", err.Error())
+	}
+	if captured != "work" {
+		t.Fatalf("expected resolver called with 'work', got %q", captured)
+	}
+}
+
+func TestRun_Health_ProfileEqualsSyntax_PassedToResolver(t *testing.T) {
+	captured := ""
+	stubResolveActiveProfile(t, func(explicit string) (string, error) {
+		captured = explicit
+		return explicit, nil
+	})
+	stubHealthRun(t, func(io.Writer, bool, bool) error { return nil })
+
+	err := Run([]string{"health", "--profile=work"})
+	if err != nil {
+		t.Fatalf("expected no error, got: %s", err.Error())
+	}
+	if captured != "work" {
+		t.Fatalf("expected resolver called with 'work', got %q", captured)
+	}
+}
+
+func TestRun_Health_ProfileShortFlag_PassedToResolver(t *testing.T) {
+	captured := ""
+	stubResolveActiveProfile(t, func(explicit string) (string, error) {
+		captured = explicit
+		return explicit, nil
+	})
+	stubHealthRun(t, func(io.Writer, bool, bool) error { return nil })
+
+	err := Run([]string{"health", "-p", "work"})
+	if err != nil {
+		t.Fatalf("expected no error, got: %s", err.Error())
+	}
+	if captured != "work" {
+		t.Fatalf("expected resolver called with 'work', got %q", captured)
+	}
+}
+
+func TestRun_Health_ProfileMissingValue_ReturnsUsageError(t *testing.T) {
+	err := Run([]string{"health", "--profile"})
+	if err == nil {
+		t.Fatal("expected error for --profile without value")
+	}
+	var usageErr *UsageError
+	if !errors.As(err, &usageErr) {
+		t.Fatalf("expected UsageError, got %T: %s", err, err.Error())
+	}
+	if !strings.Contains(err.Error(), "--profile") {
+		t.Fatalf("expected error to mention --profile, got: %s", err.Error())
+	}
+}
+
+func TestRun_Health_ProfileNotFound_ReturnsUsageError_SkipsHealthRun(t *testing.T) {
+	stubResolveActiveProfile(t, func(explicit string) (string, error) {
+		return "", &UsageError{Message: "profile not found: nope"}
+	})
+	stubHealthRun(t, func(io.Writer, bool, bool) error {
+		t.Fatal("healthRun should not run when resolver returns UsageError")
+		return nil
+	})
+
+	err := Run([]string{"health", "--profile", "nope"})
+	if err == nil {
+		t.Fatal("expected error for unknown profile")
+	}
+	var usageErr *UsageError
+	if !errors.As(err, &usageErr) {
+		t.Fatalf("expected UsageError, got %T: %s", err, err.Error())
+	}
+	if !strings.Contains(err.Error(), "profile not found") {
+		t.Fatalf("expected 'profile not found' message, got: %s", err.Error())
+	}
+}
+
+func TestRun_Health_ResolverInvokedBeforeRun(t *testing.T) {
+	// Guard against regressions where a future refactor calls healthRun
+	// before the profile resolver. The resolver must run first so profile-
+	// level tracker config becomes visible.
+	order := []string{}
+	stubResolveActiveProfile(t, func(explicit string) (string, error) {
+		order = append(order, "resolve")
+		return "", nil
+	})
+	stubHealthRun(t, func(io.Writer, bool, bool) error {
+		order = append(order, "health")
+		return nil
+	})
+
+	err := Run([]string{"health"})
+	if err != nil {
+		t.Fatalf("expected no error, got: %s", err.Error())
+	}
+	if len(order) != 2 || order[0] != "resolve" || order[1] != "health" {
+		t.Fatalf("expected resolver before health, got order: %v", order)
+	}
+}
+
+func TestRun_Submit_ResolverInvokedBeforeRun(t *testing.T) {
+	order := []string{}
+	stubResolveActiveProfile(t, func(explicit string) (string, error) {
+		order = append(order, "resolve")
+		return "", nil
+	})
+	stubSubmitRun(t, func(io.Writer, submit.Options) error {
+		order = append(order, "submit")
+		return nil
+	})
+
+	err := Run([]string{"submit", "-m", "msg"})
+	if err != nil {
+		t.Fatalf("expected no error, got: %s", err.Error())
+	}
+	if len(order) != 2 || order[0] != "resolve" || order[1] != "submit" {
+		t.Fatalf("expected resolver before submit, got order: %v", order)
+	}
+}
+
+func TestRun_Close_ResolverInvokedBeforeRun(t *testing.T) {
+	order := []string{}
+	stubResolveActiveProfile(t, func(explicit string) (string, error) {
+		order = append(order, "resolve")
+		return "", nil
+	})
+	stubCloseRun(t, func(io.Writer, closecmd.Options) error {
+		order = append(order, "close")
+		return nil
+	})
+
+	err := Run([]string{"close"})
+	if err != nil {
+		t.Fatalf("expected no error, got: %s", err.Error())
+	}
+	if len(order) != 2 || order[0] != "resolve" || order[1] != "close" {
+		t.Fatalf("expected resolver before close, got order: %v", order)
+	}
+}
+
+func TestRun_Submit_ResolverError_SkipsSubmit(t *testing.T) {
+	// If the resolver fails (e.g., an unknown explicit profile — not a
+	// submit path today, but guard the contract), submit must not run.
+	stubResolveActiveProfile(t, func(explicit string) (string, error) {
+		return "", errors.New("resolver failed")
+	})
+	stubSubmitRun(t, func(io.Writer, submit.Options) error {
+		t.Fatal("submit should not run after resolver error")
+		return nil
+	})
+
+	err := Run([]string{"submit", "-m", "msg"})
+	if err == nil {
+		t.Fatal("expected error when resolver fails")
+	}
+	if !strings.Contains(err.Error(), "resolver failed") {
+		t.Fatalf("expected resolver error to bubble, got: %s", err.Error())
+	}
+}
+
+func TestRun_Close_ResolverError_SkipsClose(t *testing.T) {
+	stubResolveActiveProfile(t, func(explicit string) (string, error) {
+		return "", errors.New("resolver failed")
+	})
+	stubCloseRun(t, func(io.Writer, closecmd.Options) error {
+		t.Fatal("close should not run after resolver error")
+		return nil
+	})
+
+	err := Run([]string{"close"})
+	if err == nil {
+		t.Fatal("expected error when resolver fails")
+	}
+	if !strings.Contains(err.Error(), "resolver failed") {
+		t.Fatalf("expected resolver error to bubble, got: %s", err.Error())
 	}
 }
 
@@ -210,7 +404,7 @@ func TestRun_PR_Help_PrintsUsage(t *testing.T) {
 	}
 }
 
-func TestRun_PRStatus_Help_PrintsUsage(t *testing.T) {
+func TestRun_PRCheck_Help_PrintsUsage(t *testing.T) {
 	old := os.Stdout
 	r, w, err := os.Pipe()
 	if err != nil {
@@ -218,25 +412,25 @@ func TestRun_PRStatus_Help_PrintsUsage(t *testing.T) {
 	}
 	os.Stdout = w
 
-	runErr := Run([]string{"pr", "status", "-h"})
+	runErr := Run([]string{"pr", "check", "-h"})
 
 	w.Close()
 	os.Stdout = old
 
 	if runErr != nil {
-		t.Fatalf("expected no error for pr status -h, got: %s", runErr.Error())
+		t.Fatalf("expected no error for pr check -h, got: %s", runErr.Error())
 	}
 
 	var buf bytes.Buffer
 	io.Copy(&buf, r)
 	output := buf.String()
-	if !strings.Contains(output, "usage: debi pr status") {
-		t.Fatalf("expected pr status usage message on stdout, got: %q", output)
+	if !strings.Contains(output, "usage: debi pr check") {
+		t.Fatalf("expected pr check usage message on stdout, got: %q", output)
 	}
 }
 
-func TestRun_PRStatus_UnknownFlag_ReturnsUsageError(t *testing.T) {
-	err := Run([]string{"pr", "status", "--foo"})
+func TestRun_PRCheck_UnknownFlag_ReturnsUsageError(t *testing.T) {
+	err := Run([]string{"pr", "check", "--foo"})
 	if err == nil {
 		t.Fatal("expected error for unknown flag")
 	}
@@ -249,8 +443,8 @@ func TestRun_PRStatus_UnknownFlag_ReturnsUsageError(t *testing.T) {
 	}
 }
 
-func TestRun_PRS_UnknownFlag_ReturnsUsageError(t *testing.T) {
-	err := Run([]string{"prs", "--foo"})
+func TestRun_Check_UnknownFlag_ReturnsUsageError(t *testing.T) {
+	err := Run([]string{"check", "--foo"})
 	if err == nil {
 		t.Fatal("expected error for unknown flag")
 	}
@@ -263,7 +457,7 @@ func TestRun_PRS_UnknownFlag_ReturnsUsageError(t *testing.T) {
 	}
 }
 
-func TestRun_PRS_Help_PrintsUsage(t *testing.T) {
+func TestRun_Check_Help_PrintsUsage(t *testing.T) {
 	old := os.Stdout
 	r, w, err := os.Pipe()
 	if err != nil {
@@ -271,20 +465,20 @@ func TestRun_PRS_Help_PrintsUsage(t *testing.T) {
 	}
 	os.Stdout = w
 
-	runErr := Run([]string{"prs", "-h"})
+	runErr := Run([]string{"check", "-h"})
 
 	w.Close()
 	os.Stdout = old
 
 	if runErr != nil {
-		t.Fatalf("expected no error for prs -h, got: %s", runErr.Error())
+		t.Fatalf("expected no error for check -h, got: %s", runErr.Error())
 	}
 
 	var buf bytes.Buffer
 	io.Copy(&buf, r)
 	output := buf.String()
-	if !strings.Contains(output, "usage: debi pr status") {
-		t.Fatalf("expected pr status usage message on stdout, got: %q", output)
+	if !strings.Contains(output, "usage: debi pr check") {
+		t.Fatalf("expected pr check usage message on stdout, got: %q", output)
 	}
 }
 
@@ -870,5 +1064,576 @@ func TestCommandIndex_AllCommandsResolvable(t *testing.T) {
 				t.Fatalf("commandIndex[%q] resolved to %q, expected %q", cmd.Alias, resolved.Name, cmd.Name)
 			}
 		}
+	}
+}
+
+// stubSubmitRun overrides submitRun for the duration of the test.
+func stubSubmitRun(t *testing.T, fn func(w io.Writer, opts submit.Options) error) {
+	t.Helper()
+	orig := submitRun
+	submitRun = fn
+	t.Cleanup(func() { submitRun = orig })
+}
+
+// stubCloseRun overrides closeRun for the duration of the test.
+func stubCloseRun(t *testing.T, fn func(w io.Writer, opts closecmd.Options) error) {
+	t.Helper()
+	orig := closeRun
+	closeRun = fn
+	t.Cleanup(func() { closeRun = orig })
+}
+
+// stubHealthRun overrides healthRun for the duration of the test.
+func stubHealthRun(t *testing.T, fn func(w io.Writer, strict bool, verbose bool) error) {
+	t.Helper()
+	orig := healthRun
+	healthRun = fn
+	t.Cleanup(func() { healthRun = orig })
+}
+
+// stubResolveActiveProfile overrides resolveActiveProfile so handler tests
+// don't touch the real user's config while still letting us assert that the
+// resolver is invoked (and with what argument).
+func stubResolveActiveProfile(t *testing.T, fn func(explicit string) (string, error)) {
+	t.Helper()
+	orig := resolveActiveProfile
+	resolveActiveProfile = fn
+	t.Cleanup(func() { resolveActiveProfile = orig })
+}
+
+func TestRun_Submit_Recognized(t *testing.T) {
+	stubResolveActiveProfile(t, func(string) (string, error) { return "", nil })
+	stubSubmitRun(t, func(io.Writer, submit.Options) error { return nil })
+	err := Run([]string{"submit", "-m", "msg"})
+	if err != nil && strings.Contains(err.Error(), "unknown command") {
+		t.Fatalf("submit should be recognized, got: %s", err.Error())
+	}
+	if err != nil {
+		t.Fatalf("expected no error, got: %s", err.Error())
+	}
+}
+
+func TestRun_Close_Recognized(t *testing.T) {
+	stubResolveActiveProfile(t, func(string) (string, error) { return "", nil })
+	stubCloseRun(t, func(io.Writer, closecmd.Options) error { return nil })
+	err := Run([]string{"close"})
+	if err != nil && strings.Contains(err.Error(), "unknown command") {
+		t.Fatalf("close should be recognized, got: %s", err.Error())
+	}
+	if err != nil {
+		t.Fatalf("expected no error, got: %s", err.Error())
+	}
+}
+
+func TestRun_PRSubmit_Recognized(t *testing.T) {
+	stubResolveActiveProfile(t, func(string) (string, error) { return "", nil })
+	stubSubmitRun(t, func(io.Writer, submit.Options) error { return nil })
+	err := Run([]string{"pr", "submit", "-m", "msg"})
+	if err != nil && strings.Contains(err.Error(), "unknown command") {
+		t.Fatalf("pr submit should be recognized, got: %s", err.Error())
+	}
+	if err != nil {
+		t.Fatalf("expected no error, got: %s", err.Error())
+	}
+}
+
+func TestRun_PRClose_Recognized(t *testing.T) {
+	stubResolveActiveProfile(t, func(string) (string, error) { return "", nil })
+	stubCloseRun(t, func(io.Writer, closecmd.Options) error { return nil })
+	err := Run([]string{"pr", "close"})
+	if err != nil && strings.Contains(err.Error(), "unknown command") {
+		t.Fatalf("pr close should be recognized, got: %s", err.Error())
+	}
+	if err != nil {
+		t.Fatalf("expected no error, got: %s", err.Error())
+	}
+}
+
+func TestRun_Submit_Help_PrintsUsage(t *testing.T) {
+	for _, flag := range []string{"-h", "--help"} {
+		t.Run(flag, func(t *testing.T) {
+			old := os.Stdout
+			r, w, err := os.Pipe()
+			if err != nil {
+				t.Fatal(err)
+			}
+			os.Stdout = w
+
+			runErr := Run([]string{"submit", flag})
+
+			w.Close()
+			os.Stdout = old
+
+			if runErr != nil {
+				t.Fatalf("expected no error for submit %s, got: %s", flag, runErr.Error())
+			}
+			var buf bytes.Buffer
+			io.Copy(&buf, r)
+			output := buf.String()
+			if !strings.Contains(output, "usage: debi submit") {
+				t.Fatalf("expected submit usage on stdout, got: %q", output)
+			}
+		})
+	}
+}
+
+func TestRun_Close_Help_PrintsUsage(t *testing.T) {
+	for _, flag := range []string{"-h", "--help"} {
+		t.Run(flag, func(t *testing.T) {
+			old := os.Stdout
+			r, w, err := os.Pipe()
+			if err != nil {
+				t.Fatal(err)
+			}
+			os.Stdout = w
+
+			runErr := Run([]string{"close", flag})
+
+			w.Close()
+			os.Stdout = old
+
+			if runErr != nil {
+				t.Fatalf("expected no error for close %s, got: %s", flag, runErr.Error())
+			}
+			var buf bytes.Buffer
+			io.Copy(&buf, r)
+			output := buf.String()
+			if !strings.Contains(output, "usage: debi close") {
+				t.Fatalf("expected close usage on stdout, got: %q", output)
+			}
+		})
+	}
+}
+
+func TestRun_PR_Help_MentionsSubmitAndClose(t *testing.T) {
+	old := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdout = w
+
+	runErr := Run([]string{"pr", "-h"})
+
+	w.Close()
+	os.Stdout = old
+
+	if runErr != nil {
+		t.Fatalf("expected no error, got: %s", runErr.Error())
+	}
+	var buf bytes.Buffer
+	io.Copy(&buf, r)
+	output := buf.String()
+	if !strings.Contains(output, "submit") {
+		t.Fatalf("pr -h should mention submit, got: %q", output)
+	}
+	if !strings.Contains(output, "close") {
+		t.Fatalf("pr -h should mention close, got: %q", output)
+	}
+}
+
+func TestRun_Submit_UnknownFlag_ReturnsUsageError(t *testing.T) {
+	err := Run([]string{"submit", "--foo"})
+	if err == nil {
+		t.Fatal("expected error for unknown flag")
+	}
+	var usageErr *UsageError
+	if !errors.As(err, &usageErr) {
+		t.Fatalf("expected UsageError, got %T: %s", err, err.Error())
+	}
+	if !strings.Contains(err.Error(), "--foo") {
+		t.Fatalf("expected error to mention the flag, got: %s", err.Error())
+	}
+}
+
+func TestRun_Submit_MissingMessage_ReturnsUsageError(t *testing.T) {
+	err := Run([]string{"submit"})
+	if err == nil {
+		t.Fatal("expected error for submit without --message")
+	}
+	var usageErr *UsageError
+	if !errors.As(err, &usageErr) {
+		t.Fatalf("expected UsageError, got %T: %s", err, err.Error())
+	}
+	if !strings.Contains(err.Error(), "--message") {
+		t.Fatalf("expected error to mention --message, got: %s", err.Error())
+	}
+}
+
+func TestRun_Submit_MessageEqualsSyntax(t *testing.T) {
+	captured := ""
+	stubSubmitRun(t, func(w io.Writer, opts submit.Options) error {
+		captured = opts.Message
+		return nil
+	})
+	err := Run([]string{"submit", "--message=hello world"})
+	if err != nil {
+		t.Fatalf("expected no error, got: %s", err.Error())
+	}
+	if captured != "hello world" {
+		t.Fatalf("expected captured message 'hello world', got: %q", captured)
+	}
+}
+
+func TestRun_Submit_MessageSpaceSyntax(t *testing.T) {
+	captured := ""
+	stubSubmitRun(t, func(w io.Writer, opts submit.Options) error {
+		captured = opts.Message
+		return nil
+	})
+	err := Run([]string{"submit", "--message", "hello world"})
+	if err != nil {
+		t.Fatalf("expected no error, got: %s", err.Error())
+	}
+	if captured != "hello world" {
+		t.Fatalf("expected captured message 'hello world', got: %q", captured)
+	}
+}
+
+func TestRun_Submit_AllFlagsParsed(t *testing.T) {
+	var captured submit.Options
+	stubSubmitRun(t, func(w io.Writer, opts submit.Options) error {
+		captured = opts
+		return nil
+	})
+	err := Run([]string{
+		"submit",
+		"-m", "title",
+		"-d", "body",
+		"--draft",
+		"-b",
+		"-o",
+		"--skip-tracker",
+		"--json",
+	})
+	if err != nil {
+		t.Fatalf("expected no error, got: %s", err.Error())
+	}
+	if captured.Message != "title" {
+		t.Fatalf("expected Message=title, got %q", captured.Message)
+	}
+	if captured.Description != "body" {
+		t.Fatalf("expected Description=body, got %q", captured.Description)
+	}
+	if !captured.Draft {
+		t.Fatal("expected Draft=true")
+	}
+	if !captured.Blocked {
+		t.Fatal("expected Blocked=true")
+	}
+	if !captured.OpenBrowser {
+		t.Fatal("expected OpenBrowser=true")
+	}
+	if !captured.SkipTracker {
+		t.Fatal("expected SkipTracker=true")
+	}
+	if !captured.JSONOutput {
+		t.Fatal("expected JSONOutput=true")
+	}
+}
+
+func TestRun_Close_UnknownFlag_ReturnsUsageError(t *testing.T) {
+	err := Run([]string{"close", "--foo"})
+	if err == nil {
+		t.Fatal("expected error for unknown flag")
+	}
+	var usageErr *UsageError
+	if !errors.As(err, &usageErr) {
+		t.Fatalf("expected UsageError, got %T: %s", err, err.Error())
+	}
+	if !strings.Contains(err.Error(), "--foo") {
+		t.Fatalf("expected error to mention the flag, got: %s", err.Error())
+	}
+}
+
+func TestRun_Close_AllFlagsParsed(t *testing.T) {
+	var captured closecmd.Options
+	stubCloseRun(t, func(w io.Writer, opts closecmd.Options) error {
+		captured = opts
+		return nil
+	})
+	err := Run([]string{
+		"close",
+		"-t", "https://tracker/task/1",
+		"--skip-tracker",
+		"-y",
+	})
+	if err != nil {
+		t.Fatalf("expected no error, got: %s", err.Error())
+	}
+	if captured.TaskURL != "https://tracker/task/1" {
+		t.Fatalf("expected TaskURL set, got %q", captured.TaskURL)
+	}
+	if !captured.SkipTracker {
+		t.Fatal("expected SkipTracker=true")
+	}
+	if !captured.Force {
+		t.Fatal("expected Force=true")
+	}
+}
+
+func TestRun_Submit_ErrNotDetached_ReturnsUsageError(t *testing.T) {
+	stubSubmitRun(t, func(io.Writer, submit.Options) error {
+		return fmt.Errorf("%w (currently on branch \"foo\")", submit.ErrNotDetached)
+	})
+	err := Run([]string{"submit", "-m", "msg"})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	var usageErr *UsageError
+	if !errors.As(err, &usageErr) {
+		t.Fatalf("expected UsageError, got %T: %s", err, err.Error())
+	}
+	if !strings.Contains(err.Error(), "detached HEAD") {
+		t.Fatalf("expected message to mention detached HEAD, got: %s", err.Error())
+	}
+}
+
+func TestRun_Submit_NotFoundError_PrintsHintAndReturnsEmptyUsageError(t *testing.T) {
+	stubSubmitRun(t, func(io.Writer, submit.Options) error {
+		return &credentials.NotFoundError{Provider: "asana", Service: "devora-asana", Account: "alice"}
+	})
+
+	oldStderr := os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stderr = w
+	defer func() { os.Stderr = oldStderr }()
+
+	runErr := Run([]string{"submit", "-m", "msg"})
+
+	w.Close()
+	os.Stderr = oldStderr
+
+	var buf bytes.Buffer
+	io.Copy(&buf, r)
+	stderr := buf.String()
+
+	if runErr == nil {
+		t.Fatal("expected error")
+	}
+	var usageErr *UsageError
+	if !errors.As(runErr, &usageErr) {
+		t.Fatalf("expected UsageError (empty message), got %T: %s", runErr, runErr.Error())
+	}
+	if usageErr.Message != "" {
+		t.Fatalf("expected empty UsageError message (stderr already printed), got: %q", usageErr.Message)
+	}
+	if !strings.Contains(stderr, "asana") {
+		t.Fatalf("expected stderr to mention provider 'asana', got: %q", stderr)
+	}
+	if !strings.Contains(stderr, "security add-generic-password") && !strings.Contains(stderr, "secret-tool") && !strings.Contains(stderr, "cmdkey") && !strings.Contains(stderr, "OS keychain") {
+		t.Fatalf("expected stderr to include a setup hint, got: %q", stderr)
+	}
+}
+
+func TestRun_Close_ErrDetached_ReturnsUsageError(t *testing.T) {
+	stubCloseRun(t, func(io.Writer, closecmd.Options) error { return closecmd.ErrDetached })
+	err := Run([]string{"close"})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	var usageErr *UsageError
+	if !errors.As(err, &usageErr) {
+		t.Fatalf("expected UsageError, got %T: %s", err, err.Error())
+	}
+	if !strings.Contains(err.Error(), "detached HEAD") {
+		t.Fatalf("expected message to mention detached HEAD, got: %s", err.Error())
+	}
+	if !strings.Contains(err.Error(), "checkout a feature branch first") {
+		t.Fatalf("expected message to include actionable suffix, got: %s", err.Error())
+	}
+}
+
+func TestRun_Close_ErrProtectedBranch_ReturnsUsageError(t *testing.T) {
+	stubCloseRun(t, func(io.Writer, closecmd.Options) error {
+		return fmt.Errorf("%w: %q", closecmd.ErrProtectedBranch, "main")
+	})
+	err := Run([]string{"close"})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	var usageErr *UsageError
+	if !errors.As(err, &usageErr) {
+		t.Fatalf("expected UsageError, got %T: %s", err, err.Error())
+	}
+	if !strings.Contains(err.Error(), "protected branch") {
+		t.Fatalf("expected message to mention protected branch, got: %s", err.Error())
+	}
+}
+
+func TestRun_Close_ErrNoTrackerForURL_ReturnsUsageError(t *testing.T) {
+	stubCloseRun(t, func(io.Writer, closecmd.Options) error { return closecmd.ErrNoTrackerForURL })
+	err := Run([]string{"close", "-t", "https://x"})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	var usageErr *UsageError
+	if !errors.As(err, &usageErr) {
+		t.Fatalf("expected UsageError, got %T: %s", err, err.Error())
+	}
+	if !strings.Contains(err.Error(), "task-tracker") {
+		t.Fatalf("expected message to mention task-tracker, got: %s", err.Error())
+	}
+}
+
+func TestRun_Close_ErrAborted_ReturnsPassthroughError1(t *testing.T) {
+	stubCloseRun(t, func(io.Writer, closecmd.Options) error { return closecmd.ErrAborted })
+	err := Run([]string{"close"})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	var ptErr *process.PassthroughError
+	if !errors.As(err, &ptErr) {
+		t.Fatalf("expected PassthroughError, got %T: %s", err, err.Error())
+	}
+	if ptErr.Code != 1 {
+		t.Fatalf("expected exit code 1, got: %d", ptErr.Code)
+	}
+}
+
+func TestRun_Close_NotFoundError_PrintsHintAndReturnsEmptyUsageError(t *testing.T) {
+	stubCloseRun(t, func(io.Writer, closecmd.Options) error {
+		return &credentials.NotFoundError{Provider: "asana", Service: "devora-asana", Account: "alice"}
+	})
+
+	oldStderr := os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stderr = w
+	defer func() { os.Stderr = oldStderr }()
+
+	runErr := Run([]string{"close"})
+
+	w.Close()
+	os.Stderr = oldStderr
+
+	var buf bytes.Buffer
+	io.Copy(&buf, r)
+	stderr := buf.String()
+
+	if runErr == nil {
+		t.Fatal("expected error")
+	}
+	var usageErr *UsageError
+	if !errors.As(runErr, &usageErr) {
+		t.Fatalf("expected UsageError (empty message), got %T: %s", runErr, runErr.Error())
+	}
+	if usageErr.Message != "" {
+		t.Fatalf("expected empty UsageError message, got: %q", usageErr.Message)
+	}
+	if !strings.Contains(stderr, "asana") {
+		t.Fatalf("expected stderr to mention provider 'asana', got: %q", stderr)
+	}
+}
+
+func TestRun_Submit_OtherError_BubblesUp(t *testing.T) {
+	stubSubmitRun(t, func(io.Writer, submit.Options) error { return errors.New("something weird") })
+	err := Run([]string{"submit", "-m", "msg"})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	var usageErr *UsageError
+	if errors.As(err, &usageErr) {
+		t.Fatalf("did not expect UsageError for generic error, got: %s", err.Error())
+	}
+	if err.Error() != "something weird" {
+		t.Fatalf("expected original error to bubble, got: %s", err.Error())
+	}
+}
+
+func TestRun_Close_OtherError_BubblesUp(t *testing.T) {
+	stubCloseRun(t, func(io.Writer, closecmd.Options) error { return errors.New("network down") })
+	err := Run([]string{"close"})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	var usageErr *UsageError
+	if errors.As(err, &usageErr) {
+		t.Fatalf("did not expect UsageError for generic error, got: %s", err.Error())
+	}
+	if err.Error() != "network down" {
+		t.Fatalf("expected original error to bubble, got: %s", err.Error())
+	}
+}
+
+func TestRun_Submit_VerboseQuietCombined_ReturnsUsageError(t *testing.T) {
+	stubResolveActiveProfile(t, func(string) (string, error) { return "", nil })
+	stubSubmitRun(t, func(io.Writer, submit.Options) error { return nil })
+	err := Run([]string{"submit", "-m", "msg", "-v", "-q"})
+	if err == nil {
+		t.Fatal("expected error when -v and -q are combined")
+	}
+	var usageErr *UsageError
+	if !errors.As(err, &usageErr) {
+		t.Fatalf("expected *UsageError, got: %T", err)
+	}
+	if !strings.Contains(err.Error(), "cannot use both") {
+		t.Fatalf("expected usage message about combining flags, got: %s", err.Error())
+	}
+}
+
+func TestRun_Close_VerboseQuietCombined_ReturnsUsageError(t *testing.T) {
+	stubResolveActiveProfile(t, func(string) (string, error) { return "", nil })
+	stubCloseRun(t, func(io.Writer, closecmd.Options) error { return nil })
+	err := Run([]string{"close", "--verbose", "--quiet"})
+	if err == nil {
+		t.Fatal("expected error when -v and -q are combined")
+	}
+	var usageErr *UsageError
+	if !errors.As(err, &usageErr) {
+		t.Fatalf("expected *UsageError, got: %T", err)
+	}
+	if !strings.Contains(err.Error(), "cannot use both") {
+		t.Fatalf("expected usage message about combining flags, got: %s", err.Error())
+	}
+}
+
+func TestRun_Submit_VerboseFlag_SetsOption(t *testing.T) {
+	stubResolveActiveProfile(t, func(string) (string, error) { return "", nil })
+	var gotOpts submit.Options
+	stubSubmitRun(t, func(_ io.Writer, opts submit.Options) error {
+		gotOpts = opts
+		return nil
+	})
+	if err := Run([]string{"submit", "-m", "msg", "-v"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !gotOpts.Verbose || gotOpts.Quiet {
+		t.Fatalf("expected Verbose=true Quiet=false, got %+v", gotOpts)
+	}
+}
+
+func TestRun_Submit_QuietFlag_SetsOption(t *testing.T) {
+	stubResolveActiveProfile(t, func(string) (string, error) { return "", nil })
+	var gotOpts submit.Options
+	stubSubmitRun(t, func(_ io.Writer, opts submit.Options) error {
+		gotOpts = opts
+		return nil
+	})
+	if err := Run([]string{"submit", "-m", "msg", "--quiet"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gotOpts.Verbose || !gotOpts.Quiet {
+		t.Fatalf("expected Verbose=false Quiet=true, got %+v", gotOpts)
+	}
+}
+
+func TestRun_Close_QuietFlag_SetsOption(t *testing.T) {
+	stubResolveActiveProfile(t, func(string) (string, error) { return "", nil })
+	var gotOpts closecmd.Options
+	stubCloseRun(t, func(_ io.Writer, opts closecmd.Options) error {
+		gotOpts = opts
+		return nil
+	})
+	if err := Run([]string{"close", "-q"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !gotOpts.Quiet {
+		t.Fatalf("expected Quiet=true, got %+v", gotOpts)
 	}
 }

@@ -29,6 +29,30 @@ var groupOrder = []string{
 	"Utility",
 }
 
+// submitFlags are the flags shared by the top-level `submit` command and the
+// `pr submit` subcommand entry.
+var submitFlags = []cmdinfo.Flag{
+	{Name: "-m, --message", Description: "Commit message, task title, and PR title (required)"},
+	{Name: "-d, --description", Description: "PR body description"},
+	{Name: "--draft", Description: "Create draft PR"},
+	{Name: "-b, --blocked", Description: "Skip auto-merge"},
+	{Name: "-o, --open-browser", Description: "Open PR in browser after creation"},
+	{Name: "--skip-tracker", Description: "Skip tracker task creation even if configured"},
+	{Name: "--json", Description: "Output result as JSON"},
+	{Name: "-v, --verbose", Description: "Show live git/gh subprocess output"},
+	{Name: "-q, --quiet", Description: "Print only the final PR URL"},
+}
+
+// closeFlags are the flags shared by the top-level `close` command and the
+// `pr close` subcommand entry.
+var closeFlags = []cmdinfo.Flag{
+	{Name: "-t, --task-url", Description: "Tracker task URL (overrides branch's stored ID)"},
+	{Name: "--skip-tracker", Description: "Skip marking tracker task as complete"},
+	{Name: "-y, --force", Description: "Skip confirmation prompt for open PRs"},
+	{Name: "-v, --verbose", Description: "Show live git/gh subprocess output"},
+	{Name: "-q, --quiet", Description: `Print only "Closed" on success`},
+}
+
 var commands = []Command{
 	// Workspace Commands
 	{
@@ -63,6 +87,7 @@ var commands = []Command{
 			{Name: "--strict", Description: "Exit with code 1 if any dependency (including optional) is missing"},
 			{Name: "-v", Description: "Show dependency locations"},
 			{Name: "--verbose", Description: "Show dependency locations"},
+			{Name: "-p, --profile", Description: "Check a specific profile (defaults to CWD-based resolution)"},
 		},
 	},
 
@@ -76,23 +101,49 @@ var commands = []Command{
 		Run:         func(args []string) error { return runPR(args) },
 		SubCommands: []cmdinfo.SubCommand{
 			{
-				Name:        "status",
+				Name:        "check",
 				Description: "Check the status of the PR for the current branch",
 				Flags: []cmdinfo.Flag{
 					{Name: "--json", Description: "Output status as JSON"},
 				},
 			},
+			{
+				Name:        "submit",
+				Description: "Commit, create tracker task and GitHub PR",
+				Flags:       submitFlags,
+			},
+			{
+				Name:        "close",
+				Description: "Complete tracker task, delete branches",
+				Flags:       closeFlags,
+			},
 		},
 	},
 	{
-		Name:        "prs",
+		Name:        "check",
 		Description: "Check the status of the PR for the current branch",
 		ArgsHint:    "[flags]",
 		Group:       "PR",
-		Run:         func(args []string) error { return runPRStatus(args) },
+		Run:         func(args []string) error { return runPRCheck(args) },
 		Flags: []cmdinfo.Flag{
 			{Name: "--json", Description: "Output status as JSON"},
 		},
+	},
+	{
+		Name:        "submit",
+		Description: "Commit, create tracker task and GitHub PR (from detached HEAD)",
+		ArgsHint:    "[flags]",
+		Group:       "PR",
+		Run:         func(args []string) error { return runSubmit(args) },
+		Flags:       submitFlags,
+	},
+	{
+		Name:        "close",
+		Description: "Complete tracker task, delete branches, return to detached HEAD",
+		ArgsHint:    "[flags]",
+		Group:       "PR",
+		Run:         func(args []string) error { return runClose(args) },
+		Flags:       closeFlags,
 	},
 
 	// Git Shortcuts — no args

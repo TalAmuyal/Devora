@@ -3,8 +3,31 @@ package completion
 import (
 	"devora/internal/cmdinfo"
 	"io"
+	"strings"
 	"text/template"
 )
+
+// templateFuncs provides per-shell escaping so flag descriptions containing
+// shell-special characters (apostrophes for zsh, double quotes / backslashes
+// / `$` / backticks for fish) don't break the generated script.
+var templateFuncs = template.FuncMap{
+	// zshSingleQuote escapes apostrophes inside a '...'-quoted zsh string.
+	// Zsh has no escape inside '...' — the only way to include a literal
+	// apostrophe is to close the string, add a backslash-escaped '\'', and
+	// reopen: 'don'\''t'.
+	"zshSingleQuote": func(s string) string {
+		return strings.ReplaceAll(s, "'", `'\''`)
+	},
+	// fishDoubleQuote escapes the characters that break a fish "..."-quoted
+	// argument: backslash (must go first), double quote, `$`, and backtick.
+	"fishDoubleQuote": func(s string) string {
+		s = strings.ReplaceAll(s, `\`, `\\`)
+		s = strings.ReplaceAll(s, `"`, `\"`)
+		s = strings.ReplaceAll(s, `$`, `\$`)
+		s = strings.ReplaceAll(s, "`", "\\`")
+		return s
+	},
+}
 
 // templateData holds the data passed to each shell completion template.
 type templateData struct {
@@ -29,9 +52,9 @@ func newTemplateData(binaryName string, commands []cmdinfo.Command) templateData
 	}
 }
 
-var bashTemplate = template.Must(template.New("bash").Parse(bashScript))
-var zshTemplate = template.Must(template.New("zsh").Parse(zshScript))
-var fishTemplate = template.Must(template.New("fish").Parse(fishScript))
+var bashTemplate = template.Must(template.New("bash").Funcs(templateFuncs).Parse(bashScript))
+var zshTemplate = template.Must(template.New("zsh").Funcs(templateFuncs).Parse(zshScript))
+var fishTemplate = template.Must(template.New("fish").Funcs(templateFuncs).Parse(fishScript))
 
 // GenerateBash writes a bash completion script to w.
 func GenerateBash(w io.Writer, binaryName string, commands []cmdinfo.Command) error {
@@ -110,9 +133,9 @@ _{{.BinaryName}}() {
     local -a commands
     commands=(
 {{- range .Commands}}
-        '{{.Name}}:{{.Description}}'
+        '{{.Name}}:{{.Description | zshSingleQuote}}'
 {{- if .Alias}}
-        '{{.Alias}}:{{.Description}}'
+        '{{.Alias}}:{{.Description | zshSingleQuote}}'
 {{- end}}
 {{- end}}
     )
@@ -140,7 +163,7 @@ _{{.BinaryName}}() {
                     local -a subcmd_completions
                     subcmd_completions=(
 {{- range .Flags}}
-                        '{{.Name}}:{{.Description}}'
+                        '{{.Name}}:{{.Description | zshSingleQuote}}'
 {{- end}}
                         '-h:Show help'
                         '--help:Show help'
@@ -153,7 +176,7 @@ _{{.BinaryName}}() {
                     local -a subcmds
                     subcmds=(
 {{- range .SubCommands}}
-                        '{{.Name}}:{{.Description}}'
+                        '{{.Name}}:{{.Description | zshSingleQuote}}'
 {{- end}}
                         '-h:Show help'
                         '--help:Show help'
@@ -170,7 +193,7 @@ _{{.BinaryName}}() {
                     '{{.}}'
 {{- end}}
 {{- range .Flags}}
-                    '{{.Name}}:{{.Description}}'
+                    '{{.Name}}:{{.Description | zshSingleQuote}}'
 {{- end}}
                     '-h:Show help'
                     '--help:Show help'
@@ -214,16 +237,16 @@ end
 {{- end}}
 
 {{range .Commands -}}
-complete -c {{$.BinaryName}} -f -n "__fish_use_subcommand" -a "{{.Name}}" -d "{{.Description}}"
+complete -c {{$.BinaryName}} -f -n "__fish_use_subcommand" -a "{{.Name}}" -d "{{.Description | fishDoubleQuote}}"
 {{if .Alias -}}
-complete -c {{$.BinaryName}} -f -n "__fish_use_subcommand" -a "{{.Alias}}" -d "{{.Description}}"
+complete -c {{$.BinaryName}} -f -n "__fish_use_subcommand" -a "{{.Alias}}" -d "{{.Description | fishDoubleQuote}}"
 {{end -}}
 {{end -}}
 {{- range .Commands -}}
 {{- if .SubCommands -}}
 {{- $cmd := . -}}
 {{- range .SubCommands}}
-complete -c {{$.BinaryName}} -f -n "__{{$.BinaryName}}_needs_subcmd_of {{$cmd.Name}}{{if $cmd.Alias}} {{$cmd.Alias}}{{end}}" -a "{{.Name}}" -d "{{.Description}}"
+complete -c {{$.BinaryName}} -f -n "__{{$.BinaryName}}_needs_subcmd_of {{$cmd.Name}}{{if $cmd.Alias}} {{$cmd.Alias}}{{end}}" -a "{{.Name}}" -d "{{.Description | fishDoubleQuote}}"
 {{- end}}
 complete -c {{$.BinaryName}} -f -n "__{{$.BinaryName}}_needs_subcmd_of {{$cmd.Name}}{{if $cmd.Alias}} {{$cmd.Alias}}{{end}}" -a "-h" -d "Show help"
 complete -c {{$.BinaryName}} -f -n "__{{$.BinaryName}}_needs_subcmd_of {{$cmd.Name}}{{if $cmd.Alias}} {{$cmd.Alias}}{{end}}" -a "--help" -d "Show help"
@@ -233,7 +256,7 @@ complete -c {{$.BinaryName}} -f -n "__{{$.BinaryName}}_needs_subcmd_of {{$cmd.Na
 complete -c {{$.BinaryName}} -F -n "__{{$.BinaryName}}_seen_subcmd {{$cmd.Name}} {{.Name}}"
 {{- else if .Flags}}
 {{- range .Flags}}
-complete -c {{$.BinaryName}} -f -n "__{{$.BinaryName}}_seen_subcmd {{$cmd.Name}} {{$sub.Name}}" -a "{{.Name}}" -d "{{.Description}}"
+complete -c {{$.BinaryName}} -f -n "__{{$.BinaryName}}_seen_subcmd {{$cmd.Name}} {{$sub.Name}}" -a "{{.Name}}" -d "{{.Description | fishDoubleQuote}}"
 {{- end}}
 complete -c {{$.BinaryName}} -f -n "__{{$.BinaryName}}_seen_subcmd {{$cmd.Name}} {{$sub.Name}}" -a "-h" -d "Show help"
 complete -c {{$.BinaryName}} -f -n "__{{$.BinaryName}}_seen_subcmd {{$cmd.Name}} {{$sub.Name}}" -a "--help" -d "Show help"
@@ -245,7 +268,7 @@ complete -c {{$.BinaryName}} -f -n "__{{$.BinaryName}}_seen_subcmd {{$cmd.Name}}
 complete -c {{$.BinaryName}} -f -n "__fish_seen_subcommand_from {{$cmd.Name}}{{if $cmd.Alias}} {{$cmd.Alias}}{{end}}" -a "{{.}}"
 {{- end}}
 {{- range .Flags}}
-complete -c {{$.BinaryName}} -f -n "__fish_seen_subcommand_from {{$cmd.Name}}{{if $cmd.Alias}} {{$cmd.Alias}}{{end}}" -a "{{.Name}}" -d "{{.Description}}"
+complete -c {{$.BinaryName}} -f -n "__fish_seen_subcommand_from {{$cmd.Name}}{{if $cmd.Alias}} {{$cmd.Alias}}{{end}}" -a "{{.Name}}" -d "{{.Description | fishDoubleQuote}}"
 {{- end}}
 complete -c {{$.BinaryName}} -f -n "__fish_seen_subcommand_from {{$cmd.Name}}{{if $cmd.Alias}} {{$cmd.Alias}}{{end}}" -a "-h" -d "Show help"
 complete -c {{$.BinaryName}} -f -n "__fish_seen_subcommand_from {{$cmd.Name}}{{if $cmd.Alias}} {{$cmd.Alias}}{{end}}" -a "--help" -d "Show help"

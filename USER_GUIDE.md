@@ -141,7 +141,9 @@ Run `debi` with no arguments or `debi --help` to see all available commands.
 Highlights:
 
 - **Git shortcuts**: A collection of short aliases for common git workflows (e.g., `debi gst` for `git status`, `debi gd` for `git diff`, `debi gaa` for staging all changes). Run `debi --help` for the full list
-- **PR status**: `debi pr status` (or the shorthand `debi prs`) shows the CI/review status of the current branch's pull request
+- **PR status**: `debi pr check` (or the shorthand `debi check`) shows the CI/review status of the current branch's pull request
+- **Submit a PR**: `debi submit` (from detached HEAD) creates a commit, optionally a tracker task, a feature branch, and a GitHub PR in one step
+- **Close a PR**: `debi close` completes the tracker task (if any), deletes the remote and local branches, and returns the working tree to detached HEAD on the default branch
 - **Health check**: `debi health` verifies that all required dependencies are installed
 - **Shell completions**: See [Recommended: Shell Completions](#recommended-shell-completions)
 

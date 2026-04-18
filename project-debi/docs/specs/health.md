@@ -10,8 +10,21 @@ Check and report on Devora IDE dependency availability and credential status. Ea
 
 - `devora/internal/process` -- `PassthroughError` for exit-code signalling
 - `devora/internal/version` -- application version string
-- `devora/internal/config` -- config file path
+- `devora/internal/config` -- config file path, task-tracker provider lookup
+- `devora/internal/credentials` -- task-tracker token lookup and `SetupHint`
 - `charm.land/lipgloss/v2` -- colored output
+
+## Profile Resolution
+
+`debi health` resolves an active profile before reading config so that profile-scoped keys (most notably `task-tracker.provider`) are visible. Resolution happens in the CLI layer via `cli.ResolveActiveProfile` (see [cli.md](./cli.md)); when it succeeds, `config.SetActiveProfile` is called and the profile-aware config reader picks up profile-level overrides.
+
+Resolution order, stopping at the first hit:
+
+1. Explicit `-p, --profile <name>` flag — looked up by name in `config.GetProfiles()`. An unknown name returns a `*cli.UsageError` before `health.Run` is called.
+2. CWD-based — `workspace.ResolveWorkspaceFromCWD(cwd)`. When the CWD falls inside a profile's workspaces root, that profile becomes active. A failure from `os.Getwd` is treated as "no CWD match" and falls through to global.
+3. No active profile — all reads fall back to global config.
+
+This mirrors the `debi add` pattern. The flag is exposed only on `health`; `submit` and `close` auto-resolve from CWD without a matching flag.
 
 ## Types
 
@@ -49,10 +62,11 @@ const (
     CredentialOK CredentialStatus = iota
     CredentialFailed
     CredentialUnchecked
+    CredentialInfo
 )
 ```
 
-Enum for the status of a credential check. `CredentialOK` means the credential is valid, `CredentialFailed` means authentication failed, and `CredentialUnchecked` means the prerequisite tool was not found so the check was skipped.
+Enum for the status of a credential check. `CredentialOK` means the credential is valid, `CredentialFailed` means authentication failed, `CredentialUnchecked` means the prerequisite tool was not found so the check was skipped, and `CredentialInfo` marks an informational row that does not count toward the "Credentials met: X/Y" denominator (e.g., an optional feature that is not configured).
 
 ### CredentialResult
 
@@ -115,10 +129,10 @@ Behavior:
 4. Print the config file path via `getConfigPath()`. If `statFile` reports the file exists, show a green checkmark after the path. If the file does not exist, show a yellow `(not found)` marker. This is informational only and never affects the exit code.
 5. Print the `Required:` section. Each dependency is shown with a colored status prefix (green checkmark or red cross + name) followed by version in default color. In verbose mode, the shortened path is also shown.
 6. Print the `Optional:` section in the same format.
-7. Check credentials. If `gh` was found in the optional results, first run `checkGitHubToken()` to check for a locally stored token via `gh auth token`. If no token is found, report `CredentialFailed` with the message `"no token stored (run: gh auth login)"` and skip the network call. If a token is found, run `checkGitHub()` to verify GitHub authentication via `gh api user --jq ".name // .login"`. If `gh` was not found, mark the credential as unchecked.
-8. Print the `Credentials:` section. Each credential is shown with a colored status prefix: green checkmark for OK, red cross for failed, yellow question mark for unchecked.
-9. Print a three-line summary: `Required met:`, `Optional met:`, and `Credentials met:`, each with `<pct>% (<found>/<total>)`. Labels are right-padded to align. The required percentage is green or red; the optional percentage is green or yellow; the credentials percentage is green, red (if any failed), or yellow (if only unchecked).
-10. In strict mode, credential failures are treated like missing optional dependencies (exit code 1).
+7. Check credentials. If `gh` was found in the optional results, first run `checkGitHubToken()` to check for a locally stored token via `gh auth token`. If no token is found, report `CredentialFailed` with the message `"no token stored (run: gh auth login)"` and skip the network call. If a token is found, run `checkGitHub()` to verify GitHub authentication via `gh api user --jq ".name // .login"`. If `gh` was not found, mark the credential as unchecked. Then call `checkTrackerCredential()`; it always returns a row (info row when no tracker is configured), which is appended to the credential list.
+8. Print the `Credentials:` section. Each credential is shown with a colored status prefix: green checkmark for OK, red cross for failed, yellow question mark for unchecked, muted circle (`○`) for info.
+9. Print a three-line summary: `Required met:`, `Optional met:`, and `Credentials met:`, each with `<pct>% (<found>/<total>)`. Labels are right-padded to align. The required percentage is green or red; the optional percentage is green or yellow; the credentials percentage is green, red (if any failed), or yellow (if only unchecked). Info rows do NOT count toward the credentials denominator (see `countedCredentials`).
+10. In strict mode, credential failures are treated like missing optional dependencies (exit code 1). Info rows are ignored by strict mode because they are not "met or not met".
 11. Return `&process.PassthroughError{Code: 1}` if any required dependency is missing.
 12. In strict mode, also return `&process.PassthroughError{Code: 1}` if any optional dependency is missing or any credential check is not OK.
 13. Otherwise, return nil.
@@ -140,7 +154,8 @@ Optional:
   ✓ gh      2.74.0      /opt/homebrew/bin/gh
 
 Credentials:
-  ✓ GitHub  Logged in as Jane Doe
+  ✓ GitHub        Logged in as Jane Doe
+  ○ task-tracker  not configured (optional)
 
 Required met:    100% (6/6)
 Optional met:    100% (3/3)
@@ -148,6 +163,8 @@ Credentials met: 100% (1/1)
 ```
 
 Only the status indicator and dependency name are colored (green for found, red for missing). Version and path columns use the default terminal color. Paths under `$HOME` are shortened with `~`. Version strings are cleaned to extract just the version number (e.g., `"git version 2.50.1 (Apple Git-155)"` becomes `"2.50.1"`). Column widths are dynamically calculated to align all entries.
+
+Credential rows use four markers: green `✓` for OK, red `✗` for failed, yellow `?` for unchecked, muted `○` for info. The muted color is Catppuccin overlay0 (`#6C7086`), matching `tui.theme.go`'s `TextMuted`.
 
 The summary percentages are colored: required is green (100%) or red; optional is green (100%) or yellow; credentials is green (100%), red (if any failed), or yellow (if only unchecked). Summary labels are right-padded to align to the longest label ("Credentials met:").
 
@@ -167,15 +184,17 @@ The summary percentages are colored: required is green (100%) or red; optional i
 
 ## Exit Code Behavior
 
-Credential failures are treated like missing optional dependencies for exit code purposes.
+Credential failures are treated like missing optional dependencies for exit code purposes. Info rows are ignored.
 
 | Condition | Exit Code |
 |-----------|-----------|
 | All required found, strict off | 0 |
-| All required found, strict on, all optional found, all credentials OK | 0 |
+| All required found, strict on, all optional found, all counted credentials OK | 0 |
 | Any required missing | 1 |
 | All required found, strict on, any optional missing | 1 |
-| All required found, strict on, any credential check not OK | 1 |
+| All required found, strict on, any counted credential check not OK | 1 |
+
+"Counted credentials" excludes info rows (`CredentialInfo`).
 
 ## Testability
 
@@ -215,6 +234,33 @@ Tests can replace `lookPath` and `getVersion` to simulate dependency presence/ab
 - Test `checkCredentials` with `gh` found, `checkGitHubToken` returning a token, and `checkGitHub` failing; verify `CredentialFailed` status with the API error message.
 - Test `checkCredentials` with `gh` found, `checkGitHubToken` returning a token, and `checkGitHub` succeeding; verify `CredentialOK` status and "Logged in as ..." message.
 - Test `checkCredentials` with `gh` not found; verify `CredentialUnchecked` status, "gh not detected" message, and `checkGitHubToken` is not called.
+
+**Tracker credential row:**
+
+Always appended to the credential list. The row is named `task-tracker` when unconfigured, or `<provider> token` when a provider is configured.
+
+- When `task-tracker.provider` is `""`: `CredentialInfo`, message `"not configured (optional)"`. The row uses the name `task-tracker`.
+- When `credentials.GetToken(provider)` succeeds with a non-empty token: `CredentialOK`, message `"stored in keychain"`.
+- When `GetToken` returns a `*credentials.NotFoundError` (detected via `errors.As`): `CredentialFailed`, message is the multi-line output of `credentials.SetupHint(provider)`.
+- When `GetToken` returns any other error: `CredentialFailed`, message is `err.Error()`.
+- When `GetToken` returns an empty token with no error (defensive): `CredentialFailed`, message is `credentials.SetupHint(provider)`.
+
+Implemented via two stubbable vars:
+
+```go
+var (
+    getTrackerProvider = config.GetTaskTrackerProvider
+    getTrackerToken    = credentials.GetToken
+)
+```
+
+- Test `checkTrackerCredential` with no provider configured; verify `CredentialInfo` row with the "not configured" message.
+- Test with provider configured and token returned; verify `CredentialOK` and `"stored in keychain"`.
+- Test with `*credentials.NotFoundError`; verify `CredentialFailed` and message equal to `SetupHint(provider)`.
+- Test with generic error; verify `CredentialFailed` and message equal to the error text.
+- Test with `GetToken` returning `"", nil` (defensive); verify `CredentialFailed` and message equal to `SetupHint(provider)`.
+- Test `Run` includes the tracker row when a provider is set.
+- Test `Run` renders the info row and keeps the credentials summary at `(1/1)` (GitHub only) when no tracker is configured.
 
 **Run integration:**
 - Test `Run` with all dependencies found; verify output contains section headers (including Credentials), summary lines with counts, and return value is nil.
