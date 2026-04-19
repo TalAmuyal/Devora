@@ -45,6 +45,12 @@ func TestHandleError_WritesFile(t *testing.T) {
 	if !strings.Contains(stderrOut, files[0]) {
 		t.Fatalf("expected stderr to contain crash file path, got: %s", stderrOut)
 	}
+	if !strings.Contains(stderrOut, "---") {
+		t.Fatalf("expected stderr to contain separator '---', got: %s", stderrOut)
+	}
+	if !strings.Contains(stderrOut, "something broke") {
+		t.Fatalf("expected stderr to echo error content, got: %s", stderrOut)
+	}
 }
 
 func TestHandleError_CrashFileNameFormat(t *testing.T) {
@@ -75,8 +81,9 @@ func TestHandlePanic_IncludesStackTrace(t *testing.T) {
 	crashDir = dir
 	t.Cleanup(func() { crashDir = origDir })
 
+	var stderrBuf bytes.Buffer
 	origStderr := stderrWriter
-	stderrWriter = &bytes.Buffer{}
+	stderrWriter = &stderrBuf
 	t.Cleanup(func() { stderrWriter = origStderr })
 
 	HandlePanic("oh no")
@@ -97,5 +104,22 @@ func TestHandlePanic_IncludesStackTrace(t *testing.T) {
 	}
 	if !strings.Contains(contentStr, "goroutine") {
 		t.Fatalf("expected crash file to contain stack trace, got: %s", contentStr)
+	}
+
+	stderrOut := stderrBuf.String()
+	if !strings.Contains(stderrOut, "Devora crashed unexpectedly") {
+		t.Fatalf("expected stderr to contain crash message, got: %s", stderrOut)
+	}
+	if !strings.Contains(stderrOut, files[0]) {
+		t.Fatalf("expected stderr to contain crash file path, got: %s", stderrOut)
+	}
+	if !strings.Contains(stderrOut, "---") {
+		t.Fatalf("expected stderr to contain separator '---', got: %s", stderrOut)
+	}
+	if !strings.Contains(stderrOut, "oh no") {
+		t.Fatalf("expected stderr to echo panic content, got: %s", stderrOut)
+	}
+	if !strings.Contains(stderrOut, "goroutine") {
+		t.Fatalf("expected stderr to echo stack trace, got: %s", stderrOut)
 	}
 }

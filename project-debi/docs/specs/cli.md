@@ -383,6 +383,8 @@ Parses the provided args for flags:
 - `--json`: enables JSON output mode.
 - Any other argument: returns a `UsageError` with the unknown flag and usage hint.
 
+After flag parsing (so `-h` still works outside a git repo), calls `git.EnsureInRepo()`. A `git.ErrNotInGitRepo` result is translated via `handleNotInGitRepo` to `*UsageError{Message: git.NotInRepoMessage}` so the command exits 1 with a friendly message instead of crashing.
+
 Delegates to `prstatus.Run(os.Stdout, jsonOutput)`. The underlying domain package is still named `prstatus` because the CLI rename from `pr status` to `pr check` is a presentation-layer change; the package that implements the check continues to be `internal/prstatus`.
 
 ### submit (also `pr submit`)
@@ -392,9 +394,10 @@ func runSubmit(args []string) error
 ```
 
 1. `parseSubmitFlags(args)` walks the args and populates a `submit.Options`. Accepts `-h`/`--help` (prints usage and returns nil), `--draft`, `-b`/`--blocked`, `-o`/`--open-browser`, `--skip-tracker`, `--json`, `-v`/`--verbose`, `-q`/`--quiet`, `-m`/`--message <val>`, `-d`/`--description <val>`. Both `--flag=value` and `--flag value` forms are supported. Unknown flags, missing `--message`, and combining `--verbose` with `--quiet` all return `*UsageError`.
-2. Calls `ResolveActiveProfile("")` so profile-scoped config (notably `task-tracker.provider`) is visible to `submit.Run`. Errors from the resolver propagate.
-3. Calls `submitRun(os.Stdout, opts)` (a stubbable var pointing at `submit.Run`).
-4. Error translation:
+2. Calls `git.EnsureInRepo()`. `git.ErrNotInGitRepo` is translated via `handleNotInGitRepo` to `*UsageError{Message: git.NotInRepoMessage}`; any other error bubbles up.
+3. Calls `ResolveActiveProfile("")` so profile-scoped config (notably `task-tracker.provider`) is visible to `submit.Run`. Errors from the resolver propagate.
+4. Calls `submitRun(os.Stdout, opts)` (a stubbable var pointing at `submit.Run`).
+5. Error translation:
    - `errors.Is(err, submit.ErrNotDetached)` -> `*UsageError{Message: err.Error()}`.
    - `errors.As(err, &*credentials.NotFoundError)` -> prints the error message and `credentials.SetupHint(provider)` to stderr, returns `*UsageError{Message: ""}` (suppresses the crash log; main.go prints nothing and exits 1).
    - Any other error bubbles up to `main.go`, which runs `crash.HandleError` unless the error is a `*process.PassthroughError`.
@@ -406,9 +409,10 @@ func runClose(args []string) error
 ```
 
 1. `parseCloseFlags(args)` walks the args and populates a `closecmd.Options`. Accepts `-h`/`--help` (prints usage and returns nil), `--skip-tracker`, `-y`/`--force`, `-v`/`--verbose`, `-q`/`--quiet`, `-t`/`--task-url <val>`. Unknown flags and combining `--verbose` with `--quiet` return `*UsageError`. Both `--task-url=value` and `--task-url value` forms are supported.
-2. Calls `ResolveActiveProfile("")` so profile-scoped config (notably `task-tracker.provider`) is visible to `closecmd.Run`. Errors from the resolver propagate.
-3. Calls `closeRun(os.Stdout, opts)` (a stubbable var pointing at `closecmd.Run`).
-4. Error translation:
+2. Calls `git.EnsureInRepo()`. `git.ErrNotInGitRepo` is translated via `handleNotInGitRepo` to `*UsageError{Message: git.NotInRepoMessage}`; any other error bubbles up.
+3. Calls `ResolveActiveProfile("")` so profile-scoped config (notably `task-tracker.provider`) is visible to `closecmd.Run`. Errors from the resolver propagate.
+4. Calls `closeRun(os.Stdout, opts)` (a stubbable var pointing at `closecmd.Run`).
+5. Error translation:
    - `errors.Is(err, closecmd.ErrDetached)` -> `*UsageError{Message: err.Error()}`.
    - `errors.Is(err, closecmd.ErrProtectedBranch)` -> `*UsageError{Message: err.Error()}` (the error wraps the branch name).
    - `errors.Is(err, closecmd.ErrNoTrackerForURL)` -> `*UsageError{Message: err.Error()}`.
@@ -422,6 +426,7 @@ func runClose(args []string) error
 |-----------|-----:|
 | Success | 0 |
 | Any `*cli.UsageError` (including the `{Message: ""}` "already printed" form) | 1 |
+| PR command (`submit`/`close`/`check`) run outside a git repository (`git.ErrNotInGitRepo`) | 1 (friendly `NotInRepoMessage`, no crash log) |
 | `submit`/`close` domain sentinel (not-detached, protected branch, aborted, `--task-url` without tracker, missing required flag) | 1 |
 | `*credentials.NotFoundError` | 1 |
 | `gh.PRAlreadyExistsError`, other domain errors | 1 (crash log printed) |
@@ -493,4 +498,5 @@ func main() {
 - Test that `submit` accepts both `-m value` and `--message=value` forms.
 - Test that `submit` and `close` map their domain sentinels to the correct `UsageError` / `PassthroughError` forms.
 - Test that `submit` and `close` translate `*credentials.NotFoundError` by printing the setup hint and returning `*UsageError{Message: ""}`.
+- Test that `pr submit`, `pr close`, and `pr check` return `*UsageError{Message: git.NotInRepoMessage}` when run from a directory that is not inside a git repository (and never invoke `resolveActiveProfile` or the domain runner).
 - Command handler integration tests are better handled at a higher level (testing the actual TUI behavior or workspace operations).
