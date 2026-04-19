@@ -19,8 +19,6 @@ macOS (Apple Silicon) only.
 
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) (`claude`) -- agentic coding tool (requires a subscription)
 - [git](https://git-scm.com/)
-- [Neovim](https://neovim.io/) (`nvim`) -- code exploration, editing, and terminal multiplexing
-	- Overridable in configs
 
 ### Bundled
 
@@ -30,6 +28,7 @@ macOS (Apple Silicon) only.
 
 ### Optional
 
+- [Neovim](https://neovim.io/) (`nvim`) -- recommended editor/terminal multiplexer; configurable via `terminal.default-app` (defaults to a bare login shell)
 - [mise](https://mise.jdx.dev/) -- dev tool and task manager
 - [GitHub CLI](https://cli.github.com/) (`gh`) -- GitHub integration and credential checking
 
@@ -61,9 +60,10 @@ Devora builds upon the following tools:
 - Kitty, as:
 	- The main UI container (which means this IDE is terminal-based)
 	- A multi-session manager (each Kitty tab holds an active session of the IDE)
-- Neovim, as a multi-purpose tool for:
+- Neovim, as the recommended multi-purpose tool for:
 	- Code exploration and editing
 	- Terminal multiplexer: It can multiplex files, scratch buffers, and terminals in the same session over different Neovim tabs and Neovim windows (splits)
+	- Configurable via `terminal.default-app`: by default each workspace session opens a bare login/interactive shell; set `terminal.default-app` to `nvim` (or any other command) to launch a wrapped app instead
 - Debi (`./project-debi/`), a UI tool for workspace and session management
 - Judge (`./project-judge/`), a Claude Code plugin for auto-approving/rejecting permission requests aiming to reduce permission fatigue and speed up the development process
 - CCC (`./ccc.sh`), a launcher script for Claude Code that customizes its behavior and integrates it with the rest of the IDE

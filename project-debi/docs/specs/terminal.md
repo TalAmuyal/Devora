@@ -12,7 +12,7 @@ Each terminal "session" corresponds to a workspace: a Kitty tab. Sessions are id
 
 Configuration values are read by the caller (CLI or TUI layer) and passed as parameters:
 - `terminal.session-creation-timeout-seconds` (global-only): integer, default `3`
-- `terminal.default-app`: arbitrary shell command string (e.g. `"nvim"`)
+- `terminal.default-app`: arbitrary shell command string (e.g. `"nvim"`). The value `"shell"` is a reserved sentinel meaning "launch a bare login/interactive shell without wrapping a command". Supplying a value that equals `$SHELL` (e.g. `/bin/zsh`) is detected and treated the same way.
 
 ## Prerequisites
 
@@ -224,17 +224,19 @@ The `sessionID` is the tab ID as a string. The command is constructed as a singl
 Execute via `process.GetOutput` with an argument list:
 
 ```go
-[]string{
+args := []string{
     "kitty", "@", "launch",
     "--type=tab",
     "--tab-title", sessionName,
     fmt.Sprintf("--cwd=%s", workingDirectory),
-    shell, "--login", "--interactive",
-    "-c", app,
+    shell, "-l", "-i",
+}
+if app != "shell" && app != shell {
+    args = append(args, "-c", app)
 }
 ```
 
-The shell is read from the `SHELL` environment variable (falling back to `/bin/sh` if unset). It is invoked with `--login --interactive` to ensure the user's shell profile is loaded before executing the app command. The `app` parameter is an arbitrary command string passed as the argument to `<shell> -c`.
+The shell is read from the `SHELL` environment variable (falling back to `/bin/sh` if unset). It is invoked with `-l -i` to ensure the user's shell profile is loaded. `-c <app>` is appended unless `app == "shell"` or `app == $SHELL`; in those two cases the shell is launched bare (no wrapped command) to avoid a redundant shell-in-shell. Otherwise the `app` parameter is an arbitrary command string passed as the argument to `<shell> -c`.
 
 ---
 

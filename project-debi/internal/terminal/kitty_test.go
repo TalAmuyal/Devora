@@ -297,8 +297,111 @@ func TestKittyCreateAndAttach(t *testing.T) {
 		"--type=tab",
 		"--tab-title", "my-ws",
 		"--cwd=/home/user/ws",
-		"/bin/fish", "--login", "--interactive",
+		"/bin/fish", "-l", "-i",
 		"-c", "nvim",
+	}
+	if len(args) != len(expected) {
+		t.Fatalf("expected %d args, got %d: %v", len(expected), len(args), args)
+	}
+	for i, arg := range args {
+		if arg != expected[i] {
+			t.Errorf("arg %d: expected %q, got %q", i, expected[i], arg)
+		}
+	}
+}
+
+func TestKittyCreateAndAttach_ShellSentinel(t *testing.T) {
+	runner := newFakeCommandRunner()
+
+	backend := &KittyBackend{
+		Runner: runner,
+		GetEnv: fakeEnv(map[string]string{"SHELL": "/bin/fish"}),
+	}
+
+	err := backend.CreateAndAttach("my-ws", "/home/user/ws", "shell")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(runner.outputCalls) != 1 {
+		t.Fatalf("expected 1 GetOutput call, got %d", len(runner.outputCalls))
+	}
+	args := runner.outputCalls[0]
+	expected := []string{
+		"kitty", "@", "launch",
+		"--type=tab",
+		"--tab-title", "my-ws",
+		"--cwd=/home/user/ws",
+		"/bin/fish", "-l", "-i",
+	}
+	if len(args) != len(expected) {
+		t.Fatalf("expected %d args, got %d: %v", len(expected), len(args), args)
+	}
+	for i, arg := range args {
+		if arg != expected[i] {
+			t.Errorf("arg %d: expected %q, got %q", i, expected[i], arg)
+		}
+	}
+}
+
+func TestKittyCreateAndAttach_ShellMatchesEnvShell(t *testing.T) {
+	runner := newFakeCommandRunner()
+
+	backend := &KittyBackend{
+		Runner: runner,
+		GetEnv: fakeEnv(map[string]string{"SHELL": "/bin/zsh"}),
+	}
+
+	err := backend.CreateAndAttach("my-ws", "/home/user/ws", "/bin/zsh")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(runner.outputCalls) != 1 {
+		t.Fatalf("expected 1 GetOutput call, got %d", len(runner.outputCalls))
+	}
+	args := runner.outputCalls[0]
+	expected := []string{
+		"kitty", "@", "launch",
+		"--type=tab",
+		"--tab-title", "my-ws",
+		"--cwd=/home/user/ws",
+		"/bin/zsh", "-l", "-i",
+	}
+	if len(args) != len(expected) {
+		t.Fatalf("expected %d args, got %d: %v", len(expected), len(args), args)
+	}
+	for i, arg := range args {
+		if arg != expected[i] {
+			t.Errorf("arg %d: expected %q, got %q", i, expected[i], arg)
+		}
+	}
+}
+
+func TestKittyCreateAndAttach_NonShellAppStillWrapped(t *testing.T) {
+	runner := newFakeCommandRunner()
+
+	backend := &KittyBackend{
+		Runner: runner,
+		GetEnv: fakeEnv(map[string]string{"SHELL": "/bin/zsh"}),
+	}
+
+	err := backend.CreateAndAttach("my-ws", "/home/user/ws", "bash")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(runner.outputCalls) != 1 {
+		t.Fatalf("expected 1 GetOutput call, got %d", len(runner.outputCalls))
+	}
+	args := runner.outputCalls[0]
+	expected := []string{
+		"kitty", "@", "launch",
+		"--type=tab",
+		"--tab-title", "my-ws",
+		"--cwd=/home/user/ws",
+		"/bin/zsh", "-l", "-i",
+		"-c", "bash",
 	}
 	if len(args) != len(expected) {
 		t.Fatalf("expected %d args, got %d: %v", len(expected), len(args), args)

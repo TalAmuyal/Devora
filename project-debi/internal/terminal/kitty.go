@@ -91,13 +91,18 @@ func (k *KittyBackend) CreateAndAttach(sessionName, workingDirectory, app string
 	if shell == "" {
 		shell = "/bin/sh"
 	}
-	_, err := k.Runner.GetOutput([]string{
+	args := []string{
 		"kitty", "@", "launch",
 		"--type=tab",
 		"--tab-title", sessionName,
 		fmt.Sprintf("--cwd=%s", workingDirectory),
-		shell, "--login", "--interactive",
-		"-c", app,
-	})
+		shell, "-l", "-i",
+	}
+	// Skip the `-c <app>` wrapping if the requested app is already the shell,
+	// either via the explicit "shell" sentinel or by matching $SHELL directly.
+	if app != "shell" && app != shell {
+		args = append(args, "-c", app)
+	}
+	_, err := k.Runner.GetOutput(args)
 	return err
 }

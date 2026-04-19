@@ -1,12 +1,27 @@
 package tui
 
 import (
+	"encoding/json"
+	"os"
 	"path/filepath"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
 	"devora/internal/config"
 )
+
+func readJSONFile(t *testing.T, path string) map[string]any {
+	t.Helper()
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("failed to read %s: %v", path, err)
+	}
+	var data map[string]any
+	if err := json.Unmarshal(b, &data); err != nil {
+		t.Fatalf("failed to parse %s: %v", path, err)
+	}
+	return data
+}
 
 func setupSettingsConfig(t *testing.T) (config.Profile, string) {
 	t.Helper()
@@ -68,6 +83,7 @@ func TestSettings_SaveErrorEmitsErrorNotification(t *testing.T) {
 	})
 
 	m := newSettingsModel(t)
+	m.focused = fieldPrepareCmd
 
 	cmd := m.save()
 	if cmd == nil {
@@ -118,6 +134,7 @@ func TestSettings_EscInEditingModeExitsEditing(t *testing.T) {
 
 	m := newSettingsModel(t)
 	m.Activate("test")
+	m.focused = fieldPrepareCmd
 	m.editing = true
 	m.prepareCmd.Focus()
 
@@ -136,6 +153,7 @@ func TestSettings_EscInEditingModeExitsEditing(t *testing.T) {
 
 func TestSettings_QInEditingModeTypesLetter(t *testing.T) {
 	m := newSettingsModel(t)
+	m.focused = fieldPrepareCmd
 	m.editing = true
 	m.prepareCmd.Focus()
 
@@ -154,6 +172,7 @@ func TestSettings_EnterInEditingModeSaves(t *testing.T) {
 
 	m := newSettingsModel(t)
 	m.Activate("test")
+	m.focused = fieldPrepareCmd
 	m.editing = true
 	m.prepareCmd.Focus()
 	m.prepareCmd.HandleKey("m")
@@ -181,35 +200,45 @@ func TestSettings_EnterInEditingModeSaves(t *testing.T) {
 
 func TestSettings_JKNavigatesBetweenFields(t *testing.T) {
 	m := newSettingsModel(t)
-	// No explicit repos => fields: prepareCmd(0), addRepo(1), viewChangelog(2), addProfile(3), deleteProfile(4)
+	// No explicit repos => fields: defaultAppGlobal(0), defaultAppProfile(1), prepareCmd(2), addRepo(3), viewChangelog(4), addProfile(5), deleteProfile(6)
 
+	if m.focused != fieldDefaultAppGlobal {
+		t.Fatalf("expected initial focus on fieldDefaultAppGlobal, got %d", m.focused)
+	}
+
+	m.Update(settingsKeyMsg('j'))
+	if m.focused != fieldDefaultAppProfile {
+		t.Fatalf("expected fieldDefaultAppProfile after j, got %d", m.focused)
+	}
+
+	m.Update(settingsKeyMsg('j'))
 	if m.focused != fieldPrepareCmd {
-		t.Fatalf("expected initial focus on fieldPrepareCmd, got %d", m.focused)
+		t.Fatalf("expected fieldPrepareCmd after second j, got %d", m.focused)
 	}
 
 	m.Update(settingsKeyMsg('j'))
 	if m.focused != fieldAddRepo {
-		t.Fatalf("expected fieldAddRepo after j, got %d", m.focused)
+		t.Fatalf("expected fieldAddRepo after third j, got %d", m.focused)
 	}
 
 	m.Update(settingsKeyMsg('j'))
 	if m.focused != m.viewChangelogField() {
-		t.Fatalf("expected viewChangelogField after second j, got %d", m.focused)
+		t.Fatalf("expected viewChangelogField after fourth j, got %d", m.focused)
 	}
 
 	m.Update(settingsKeyMsg('j'))
 	if m.focused != m.addProfileField() {
-		t.Fatalf("expected addProfileField after third j, got %d", m.focused)
+		t.Fatalf("expected addProfileField after fifth j, got %d", m.focused)
 	}
 
 	m.Update(settingsKeyMsg('j'))
 	if m.focused != m.deleteProfileField() {
-		t.Fatalf("expected deleteProfileField after fourth j, got %d", m.focused)
+		t.Fatalf("expected deleteProfileField after sixth j, got %d", m.focused)
 	}
 
 	m.Update(settingsKeyMsg('j'))
-	if m.focused != fieldPrepareCmd {
-		t.Fatalf("expected fieldPrepareCmd after fifth j (wrap), got %d", m.focused)
+	if m.focused != fieldDefaultAppGlobal {
+		t.Fatalf("expected fieldDefaultAppGlobal after seventh j (wrap), got %d", m.focused)
 	}
 
 	m.Update(settingsKeyMsg('k'))
@@ -369,8 +398,8 @@ func TestSettings_ActivateResetsState(t *testing.T) {
 
 	m.Activate("test")
 
-	if m.focused != fieldPrepareCmd {
-		t.Fatalf("expected focused to be fieldPrepareCmd after Activate, got %d", m.focused)
+	if m.focused != fieldDefaultAppGlobal {
+		t.Fatalf("expected focused to be fieldDefaultAppGlobal after Activate, got %d", m.focused)
 	}
 	if m.editing {
 		t.Fatal("expected editing to be false after Activate")
@@ -482,46 +511,56 @@ func TestSettings_NavigationWithExplicitRepos(t *testing.T) {
 		{Name: "repo-a", Path: "/path/to/repo-a"},
 		{Name: "repo-b", Path: "/path/to/repo-b"},
 	}
-	// Fields: prepareCmd(0), addRepo(1), removeRepo-a(2), removeRepo-b(3), viewChangelog(4), addProfile(5), deleteProfile(6)
+	// Fields: defaultAppGlobal(0), defaultAppProfile(1), prepareCmd(2), addRepo(3), removeRepo-a(4), removeRepo-b(5), viewChangelog(6), addProfile(7), deleteProfile(8)
 
-	if m.fieldCount() != 7 {
-		t.Fatalf("expected fieldCount 7, got %d", m.fieldCount())
+	if m.fieldCount() != 9 {
+		t.Fatalf("expected fieldCount 9, got %d", m.fieldCount())
 	}
 
-	m.focused = fieldPrepareCmd
-	m.Update(settingsKeyMsg('j')) // -> addRepo (1)
+	m.focused = fieldDefaultAppGlobal
+	m.Update(settingsKeyMsg('j')) // -> defaultAppProfile (1)
+	if m.focused != fieldDefaultAppProfile {
+		t.Fatalf("expected fieldDefaultAppProfile, got %d", m.focused)
+	}
+
+	m.Update(settingsKeyMsg('j')) // -> prepareCmd (2)
+	if m.focused != fieldPrepareCmd {
+		t.Fatalf("expected fieldPrepareCmd, got %d", m.focused)
+	}
+
+	m.Update(settingsKeyMsg('j')) // -> addRepo (3)
 	if m.focused != fieldAddRepo {
 		t.Fatalf("expected fieldAddRepo, got %d", m.focused)
 	}
 
-	m.Update(settingsKeyMsg('j')) // -> removeRepo-a (2)
+	m.Update(settingsKeyMsg('j')) // -> removeRepo-a (4)
 	if m.focused != m.removeRepoBaseField() {
 		t.Fatalf("expected removeRepoBaseField, got %d", m.focused)
 	}
 
-	m.Update(settingsKeyMsg('j')) // -> removeRepo-b (3)
+	m.Update(settingsKeyMsg('j')) // -> removeRepo-b (5)
 	if m.focused != m.removeRepoBaseField()+1 {
 		t.Fatalf("expected removeRepoBaseField+1, got %d", m.focused)
 	}
 
-	m.Update(settingsKeyMsg('j')) // -> viewChangelog (4)
+	m.Update(settingsKeyMsg('j')) // -> viewChangelog (6)
 	if m.focused != m.viewChangelogField() {
 		t.Fatalf("expected viewChangelogField, got %d", m.focused)
 	}
 
-	m.Update(settingsKeyMsg('j')) // -> addProfile (5)
+	m.Update(settingsKeyMsg('j')) // -> addProfile (7)
 	if m.focused != m.addProfileField() {
 		t.Fatalf("expected addProfileField, got %d", m.focused)
 	}
 
-	m.Update(settingsKeyMsg('j')) // -> deleteProfile (6)
+	m.Update(settingsKeyMsg('j')) // -> deleteProfile (8)
 	if m.focused != m.deleteProfileField() {
 		t.Fatalf("expected deleteProfileField, got %d", m.focused)
 	}
 
-	m.Update(settingsKeyMsg('j')) // -> prepareCmd (0, wrap)
-	if m.focused != fieldPrepareCmd {
-		t.Fatalf("expected fieldPrepareCmd after wrap, got %d", m.focused)
+	m.Update(settingsKeyMsg('j')) // -> defaultAppGlobal (0, wrap)
+	if m.focused != fieldDefaultAppGlobal {
+		t.Fatalf("expected fieldDefaultAppGlobal after wrap, got %d", m.focused)
 	}
 }
 
@@ -635,9 +674,9 @@ func TestSettings_RemoveRepoClampsFocus(t *testing.T) {
 
 func TestSettings_FieldCountWithNoRepos(t *testing.T) {
 	m := newSettingsModel(t)
-	// No repos: prepareCmd + addRepo + viewChangelog + addProfile + deleteProfile = 5
-	if m.fieldCount() != 5 {
-		t.Fatalf("expected fieldCount 5 with no repos, got %d", m.fieldCount())
+	// No repos: defaultAppGlobal + defaultAppProfile + prepareCmd + addRepo + viewChangelog + addProfile + deleteProfile = 7
+	if m.fieldCount() != 7 {
+		t.Fatalf("expected fieldCount 7 with no repos, got %d", m.fieldCount())
 	}
 }
 
@@ -648,19 +687,257 @@ func TestSettings_IsRemoveRepoField(t *testing.T) {
 		{Name: "b", Path: "/b"},
 	}
 
+	if m.isRemoveRepoField(fieldDefaultAppGlobal) {
+		t.Fatal("fieldDefaultAppGlobal should not be a remove repo field")
+	}
+	if m.isRemoveRepoField(fieldDefaultAppProfile) {
+		t.Fatal("fieldDefaultAppProfile should not be a remove repo field")
+	}
 	if m.isRemoveRepoField(fieldPrepareCmd) {
 		t.Fatal("fieldPrepareCmd should not be a remove repo field")
 	}
 	if m.isRemoveRepoField(fieldAddRepo) {
 		t.Fatal("fieldAddRepo should not be a remove repo field")
 	}
-	if !m.isRemoveRepoField(2) {
-		t.Fatal("field 2 should be a remove repo field")
+	base := m.removeRepoBaseField()
+	if !m.isRemoveRepoField(base) {
+		t.Fatalf("field %d (base) should be a remove repo field", base)
 	}
-	if !m.isRemoveRepoField(3) {
-		t.Fatal("field 3 should be a remove repo field")
+	if !m.isRemoveRepoField(base + 1) {
+		t.Fatalf("field %d (base+1) should be a remove repo field", base+1)
 	}
 	if m.isRemoveRepoField(m.addProfileField()) {
 		t.Fatal("addProfileField should not be a remove repo field")
+	}
+}
+
+// --- Default app settings tests ---
+
+func TestSettings_EnterOnDefaultAppGlobalStartsEditing(t *testing.T) {
+	m := newSettingsModel(t)
+	m.focused = fieldDefaultAppGlobal
+
+	m.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
+
+	if !m.editing {
+		t.Fatal("expected editing to be true after enter on fieldDefaultAppGlobal")
+	}
+	if !m.defaultAppGlobal.Focused {
+		t.Fatal("expected defaultAppGlobal to be focused after enter on fieldDefaultAppGlobal")
+	}
+}
+
+func TestSettings_EnterOnDefaultAppProfileStartsEditing(t *testing.T) {
+	m := newSettingsModel(t)
+	m.focused = fieldDefaultAppProfile
+
+	m.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
+
+	if !m.editing {
+		t.Fatal("expected editing to be true after enter on fieldDefaultAppProfile")
+	}
+	if !m.defaultAppProfile.Focused {
+		t.Fatal("expected defaultAppProfile to be focused after enter on fieldDefaultAppProfile")
+	}
+}
+
+func TestSettings_SavesDefaultAppGlobal(t *testing.T) {
+	_, tmpDir := setupSettingsConfig(t)
+
+	m := newSettingsModel(t)
+	m.Activate("test")
+	m.focused = fieldDefaultAppGlobal
+	m.editing = true
+	m.defaultAppGlobal.Focus()
+	m.defaultAppGlobal.HandleKey("n")
+	m.defaultAppGlobal.HandleKey("v")
+	m.defaultAppGlobal.HandleKey("i")
+	m.defaultAppGlobal.HandleKey("m")
+
+	cmd := m.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
+
+	if m.editing {
+		t.Fatal("expected editing to be false after enter (save)")
+	}
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd from save")
+	}
+	msg := cmd()
+	notify, ok := msg.(notifyMsg)
+	if !ok {
+		t.Fatalf("expected notifyMsg, got %T", msg)
+	}
+	if notify.isError {
+		t.Fatalf("expected non-error notification, got error: %s", notify.text)
+	}
+
+	cfg := readJSONFile(t, filepath.Join(tmpDir, "config.json"))
+	terminal, ok := cfg["terminal"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected 'terminal' object in global config, got %v", cfg["terminal"])
+	}
+	if terminal["default-app"] != "nvim" {
+		t.Fatalf("expected 'nvim' in global terminal.default-app, got %v", terminal["default-app"])
+	}
+}
+
+func TestSettings_SavesDefaultAppProfile(t *testing.T) {
+	profile, _ := setupSettingsConfig(t)
+
+	m := newSettingsModel(t)
+	m.Activate("test")
+	m.focused = fieldDefaultAppProfile
+	m.editing = true
+	m.defaultAppProfile.Focus()
+	m.defaultAppProfile.HandleKey("n")
+	m.defaultAppProfile.HandleKey("v")
+	m.defaultAppProfile.HandleKey("i")
+	m.defaultAppProfile.HandleKey("m")
+
+	cmd := m.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
+
+	if m.editing {
+		t.Fatal("expected editing to be false after enter (save)")
+	}
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd from save")
+	}
+	msg := cmd()
+	notify, ok := msg.(notifyMsg)
+	if !ok {
+		t.Fatalf("expected notifyMsg, got %T", msg)
+	}
+	if notify.isError {
+		t.Fatalf("expected non-error notification, got error: %s", notify.text)
+	}
+
+	cfg := readJSONFile(t, filepath.Join(profile.RootPath, "config.json"))
+	terminal, ok := cfg["terminal"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected 'terminal' object in profile config, got %v", cfg["terminal"])
+	}
+	if terminal["default-app"] != "nvim" {
+		t.Fatalf("expected 'nvim' in profile terminal.default-app, got %v", terminal["default-app"])
+	}
+}
+
+func TestSettings_EmptyValueClearsProfileDefaultAppOverride(t *testing.T) {
+	profile, _ := setupSettingsConfig(t)
+
+	// Seed profile with an override
+	seeded := "nvim"
+	if err := config.SetDefaultTerminalAppProfile(&seeded); err != nil {
+		t.Fatalf("failed to seed profile default-app: %v", err)
+	}
+
+	m := newSettingsModel(t)
+	m.Activate("test")
+	m.focused = fieldDefaultAppProfile
+	m.editing = true
+	m.defaultAppProfile.Focus()
+	// Clear the value
+	m.defaultAppProfile.SetValue("")
+
+	cmd := m.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd from save")
+	}
+	msg := cmd()
+	notify, ok := msg.(notifyMsg)
+	if !ok {
+		t.Fatalf("expected notifyMsg, got %T", msg)
+	}
+	if notify.isError {
+		t.Fatalf("expected non-error notification, got error: %s", notify.text)
+	}
+
+	cfg := readJSONFile(t, filepath.Join(profile.RootPath, "config.json"))
+	if _, exists := cfg["terminal"]; exists {
+		t.Fatalf("expected 'terminal' key to be removed from profile config, got %v", cfg["terminal"])
+	}
+}
+
+func TestSettings_EmptyValueClearsGlobalDefaultApp(t *testing.T) {
+	_, tmpDir := setupSettingsConfig(t)
+
+	// Seed global with a value
+	seeded := "nvim"
+	if err := config.SetDefaultTerminalAppGlobal(&seeded); err != nil {
+		t.Fatalf("failed to seed global default-app: %v", err)
+	}
+
+	m := newSettingsModel(t)
+	m.Activate("test")
+	m.focused = fieldDefaultAppGlobal
+	m.editing = true
+	m.defaultAppGlobal.Focus()
+	m.defaultAppGlobal.SetValue("")
+
+	cmd := m.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd from save")
+	}
+	msg := cmd()
+	notify, ok := msg.(notifyMsg)
+	if !ok {
+		t.Fatalf("expected notifyMsg, got %T", msg)
+	}
+	if notify.isError {
+		t.Fatalf("expected non-error notification, got error: %s", notify.text)
+	}
+
+	cfg := readJSONFile(t, filepath.Join(tmpDir, "config.json"))
+	if _, exists := cfg["terminal"]; exists {
+		t.Fatalf("expected 'terminal' key to be removed from global config, got %v", cfg["terminal"])
+	}
+}
+
+func TestSettings_EscRevertsDefaultAppEdit(t *testing.T) {
+	setupSettingsConfig(t)
+
+	// Seed global with an initial value
+	seeded := "shell"
+	if err := config.SetDefaultTerminalAppGlobal(&seeded); err != nil {
+		t.Fatalf("failed to seed global default-app: %v", err)
+	}
+
+	m := newSettingsModel(t)
+	m.Activate("test")
+	m.focused = fieldDefaultAppGlobal
+	m.editing = true
+	m.defaultAppGlobal.Focus()
+	// Type a different value
+	m.defaultAppGlobal.SetValue("nvim")
+
+	m.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEscape}))
+
+	if m.editing {
+		t.Fatal("expected editing to be false after esc")
+	}
+	if m.defaultAppGlobal.Value != "shell" {
+		t.Fatalf("expected defaultAppGlobal value to revert to 'shell', got %q", m.defaultAppGlobal.Value)
+	}
+}
+
+func TestSettings_ActivateLoadsDefaultAppValues(t *testing.T) {
+	setupSettingsConfig(t)
+
+	globalValue := "shell"
+	if err := config.SetDefaultTerminalAppGlobal(&globalValue); err != nil {
+		t.Fatalf("failed to seed global default-app: %v", err)
+	}
+	profileValue := "nvim"
+	if err := config.SetDefaultTerminalAppProfile(&profileValue); err != nil {
+		t.Fatalf("failed to seed profile default-app: %v", err)
+	}
+
+	m := newSettingsModel(t)
+	m.Activate("test")
+
+	if m.defaultAppGlobal.Value != "shell" {
+		t.Fatalf("expected defaultAppGlobal to load 'shell', got %q", m.defaultAppGlobal.Value)
+	}
+	if m.defaultAppProfile.Value != "nvim" {
+		t.Fatalf("expected defaultAppProfile to load 'nvim', got %q", m.defaultAppProfile.Value)
 	}
 }

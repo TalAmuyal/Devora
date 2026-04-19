@@ -1983,3 +1983,250 @@ func TestExpandTilde_RelativePath(t *testing.T) {
 		t.Fatalf("expected some/path, got %q", result)
 	}
 }
+
+// --- Default-terminal-app setter/raw-getter tests ---
+
+func TestSetDefaultTerminalAppGlobal_Set(t *testing.T) {
+	tmpDir := setupTest(t)
+
+	val := "shell"
+	err := SetDefaultTerminalAppGlobal(&val)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	cfg := readJSON(t, filepath.Join(tmpDir, "config.json"))
+	terminal, ok := cfg["terminal"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected 'terminal' map, got %v", cfg["terminal"])
+	}
+	if terminal["default-app"] != "shell" {
+		t.Fatalf("expected 'shell', got %v", terminal["default-app"])
+	}
+}
+
+func TestSetDefaultTerminalAppGlobal_ClearWithNil(t *testing.T) {
+	tmpDir := setupTest(t)
+	writeJSON(t, filepath.Join(tmpDir, "config.json"), map[string]any{
+		"terminal": map[string]any{
+			"default-app": "nvim",
+		},
+	})
+	resetGlobalConfigCache()
+
+	err := SetDefaultTerminalAppGlobal(nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	cfg := readJSON(t, filepath.Join(tmpDir, "config.json"))
+	if _, exists := cfg["terminal"]; exists {
+		t.Fatalf("expected 'terminal' map to be removed, got %v", cfg["terminal"])
+	}
+}
+
+func TestSetDefaultTerminalAppGlobal_PreservesSiblings(t *testing.T) {
+	tmpDir := setupTest(t)
+	writeJSON(t, filepath.Join(tmpDir, "config.json"), map[string]any{
+		"terminal": map[string]any{
+			"default-app":                      "nvim",
+			"session-creation-timeout-seconds": float64(3),
+		},
+	})
+	resetGlobalConfigCache()
+
+	err := SetDefaultTerminalAppGlobal(nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	cfg := readJSON(t, filepath.Join(tmpDir, "config.json"))
+	terminal, ok := cfg["terminal"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected 'terminal' map to still exist, got %v", cfg["terminal"])
+	}
+	if _, exists := terminal["default-app"]; exists {
+		t.Fatalf("expected 'default-app' to be removed, got %v", terminal["default-app"])
+	}
+	if terminal["session-creation-timeout-seconds"] != float64(3) {
+		t.Fatalf("expected 'session-creation-timeout-seconds' to be preserved, got %v", terminal["session-creation-timeout-seconds"])
+	}
+}
+
+func TestSetDefaultTerminalAppProfile_Set(t *testing.T) {
+	tmpDir := setupTest(t)
+	profileDir := filepath.Join(tmpDir, "profile")
+	createProfile(t, profileDir, map[string]any{"name": "test"})
+
+	p := Profile{Name: "test", RootPath: profileDir, Config: map[string]any{"name": "test"}}
+	SetActiveProfile(&p)
+
+	val := "shell"
+	err := SetDefaultTerminalAppProfile(&val)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	cfg := readJSON(t, filepath.Join(profileDir, "config.json"))
+	terminal, ok := cfg["terminal"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected 'terminal' map, got %v", cfg["terminal"])
+	}
+	if terminal["default-app"] != "shell" {
+		t.Fatalf("expected 'shell' on disk, got %v", terminal["default-app"])
+	}
+
+	active := GetActiveProfile()
+	activeTerminal, ok := active.Config["terminal"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected in-memory 'terminal' map, got %v", active.Config["terminal"])
+	}
+	if activeTerminal["default-app"] != "shell" {
+		t.Fatalf("expected in-memory 'shell', got %v", activeTerminal["default-app"])
+	}
+}
+
+func TestSetDefaultTerminalAppProfile_ClearWithNil(t *testing.T) {
+	tmpDir := setupTest(t)
+	profileDir := filepath.Join(tmpDir, "profile")
+	profileCfg := map[string]any{
+		"name": "test",
+		"terminal": map[string]any{
+			"default-app": "nvim",
+		},
+	}
+	createProfile(t, profileDir, profileCfg)
+
+	p := Profile{Name: "test", RootPath: profileDir, Config: profileCfg}
+	SetActiveProfile(&p)
+
+	err := SetDefaultTerminalAppProfile(nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	cfg := readJSON(t, filepath.Join(profileDir, "config.json"))
+	if _, exists := cfg["terminal"]; exists {
+		t.Fatalf("expected 'terminal' map to be removed, got %v", cfg["terminal"])
+	}
+
+	active := GetActiveProfile()
+	if _, exists := active.Config["terminal"]; exists {
+		t.Fatalf("expected in-memory 'terminal' to be removed, got %v", active.Config["terminal"])
+	}
+}
+
+func TestSetDefaultTerminalAppProfile_NoActiveProfile(t *testing.T) {
+	setupTest(t)
+	val := "shell"
+	err := SetDefaultTerminalAppProfile(&val)
+	if err == nil {
+		t.Fatal("expected error when no active profile")
+	}
+}
+
+func TestGetDefaultTerminalAppGlobalRaw_UnsetReturnsNil(t *testing.T) {
+	setupTest(t)
+	result := GetDefaultTerminalAppGlobalRaw()
+	if result != nil {
+		t.Fatalf("expected nil, got %v", *result)
+	}
+}
+
+func TestGetDefaultTerminalAppGlobalRaw_SetReturnsPointer(t *testing.T) {
+	tmpDir := setupTest(t)
+	writeJSON(t, filepath.Join(tmpDir, "config.json"), map[string]any{
+		"terminal": map[string]any{
+			"default-app": "shell",
+		},
+	})
+	resetGlobalConfigCache()
+
+	result := GetDefaultTerminalAppGlobalRaw()
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if *result != "shell" {
+		t.Fatalf("expected 'shell', got %q", *result)
+	}
+}
+
+func TestGetDefaultTerminalAppGlobalRaw_IgnoresProfile(t *testing.T) {
+	tmpDir := setupTest(t)
+	profileDir := filepath.Join(tmpDir, "profile")
+	profileCfg := map[string]any{
+		"name": "test",
+		"terminal": map[string]any{
+			"default-app": "nvim",
+		},
+	}
+	createProfile(t, profileDir, profileCfg)
+	SetActiveProfile(&Profile{Name: "test", RootPath: profileDir, Config: profileCfg})
+
+	result := GetDefaultTerminalAppGlobalRaw()
+	if result != nil {
+		t.Fatalf("expected nil (should ignore profile), got %v", *result)
+	}
+}
+
+func TestGetDefaultTerminalAppProfileRaw_UnsetReturnsNil(t *testing.T) {
+	tmpDir := setupTest(t)
+	profileDir := filepath.Join(tmpDir, "profile")
+	profileCfg := map[string]any{"name": "test"}
+	createProfile(t, profileDir, profileCfg)
+	SetActiveProfile(&Profile{Name: "test", RootPath: profileDir, Config: profileCfg})
+
+	result := GetDefaultTerminalAppProfileRaw()
+	if result != nil {
+		t.Fatalf("expected nil, got %v", *result)
+	}
+}
+
+func TestGetDefaultTerminalAppProfileRaw_SetReturnsPointer(t *testing.T) {
+	tmpDir := setupTest(t)
+	profileDir := filepath.Join(tmpDir, "profile")
+	profileCfg := map[string]any{
+		"name": "test",
+		"terminal": map[string]any{
+			"default-app": "shell",
+		},
+	}
+	createProfile(t, profileDir, profileCfg)
+	SetActiveProfile(&Profile{Name: "test", RootPath: profileDir, Config: profileCfg})
+
+	result := GetDefaultTerminalAppProfileRaw()
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if *result != "shell" {
+		t.Fatalf("expected 'shell', got %q", *result)
+	}
+}
+
+func TestGetDefaultTerminalAppProfileRaw_IgnoresGlobal(t *testing.T) {
+	tmpDir := setupTest(t)
+	writeJSON(t, filepath.Join(tmpDir, "config.json"), map[string]any{
+		"terminal": map[string]any{
+			"default-app": "shell",
+		},
+	})
+	resetGlobalConfigCache()
+
+	profileDir := filepath.Join(tmpDir, "profile")
+	profileCfg := map[string]any{"name": "test"}
+	createProfile(t, profileDir, profileCfg)
+	SetActiveProfile(&Profile{Name: "test", RootPath: profileDir, Config: profileCfg})
+
+	result := GetDefaultTerminalAppProfileRaw()
+	if result != nil {
+		t.Fatalf("expected nil (should ignore global), got %v", *result)
+	}
+}
+
+func TestGetDefaultTerminalAppProfileRaw_NoActiveProfileReturnsNil(t *testing.T) {
+	setupTest(t)
+	result := GetDefaultTerminalAppProfileRaw()
+	if result != nil {
+		t.Fatalf("expected nil, got %v", *result)
+	}
+}

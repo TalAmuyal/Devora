@@ -112,6 +112,37 @@ func resolvePath(config map[string]any, path string) (any, bool) {
 	return current, true
 }
 
+// setNestedString sets (value non-nil) or deletes (value nil) a nested string
+// at the given dot-path segments. Prunes empty intermediate maps on delete.
+func setNestedString(cfg map[string]any, segments []string, value *string) map[string]any {
+	if len(segments) == 0 {
+		return cfg
+	}
+	if len(segments) == 1 {
+		if value == nil {
+			delete(cfg, segments[0])
+		} else {
+			cfg[segments[0]] = *value
+		}
+		return cfg
+	}
+	head := segments[0]
+	child, _ := cfg[head].(map[string]any)
+	if child == nil {
+		if value == nil {
+			return cfg
+		}
+		child = map[string]any{}
+	}
+	child = setNestedString(child, segments[1:], value)
+	if len(child) == 0 {
+		delete(cfg, head)
+	} else {
+		cfg[head] = child
+	}
+	return cfg
+}
+
 // --- Config resolution ---
 
 func get(path string) (any, bool) {
@@ -555,6 +586,21 @@ func SetPrepareCommand(value *string) error {
 	})
 }
 
+func SetDefaultTerminalAppGlobal(value *string) error {
+	cfg := loadFreshGlobalConfig()
+	cfg = setNestedString(cfg, []string{"terminal", "default-app"}, value)
+	return writeFreshGlobalConfig(cfg)
+}
+
+func SetDefaultTerminalAppProfile(value *string) error {
+	if activeProfile == nil {
+		return errors.New("no active profile set")
+	}
+	return updateProfileConfig(activeProfile, func(cfg map[string]any) map[string]any {
+		return setNestedString(cfg, []string{"terminal", "default-app"}, value)
+	})
+}
+
 // --- Workspace root ---
 
 func WorkspacesRootForProfile(p *Profile) string {
@@ -592,6 +638,33 @@ func GetDefaultTerminalApp(fallback string) string {
 		return fallback
 	}
 	return s
+}
+
+func GetDefaultTerminalAppGlobalRaw() *string {
+	val, ok := getGlobal("terminal.default-app")
+	if !ok {
+		return nil
+	}
+	s, ok := val.(string)
+	if !ok {
+		return nil
+	}
+	return &s
+}
+
+func GetDefaultTerminalAppProfileRaw() *string {
+	if activeProfile == nil {
+		return nil
+	}
+	val, ok := resolvePath(activeProfile.Config, "terminal.default-app")
+	if !ok {
+		return nil
+	}
+	s, ok := val.(string)
+	if !ok {
+		return nil
+	}
+	return &s
 }
 
 func TerminalSessionCreationTimeoutSeconds(fallback int) int {

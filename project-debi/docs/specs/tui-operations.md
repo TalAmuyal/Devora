@@ -377,7 +377,7 @@ func CreateAndAttachSession(wsPath, sessionName string) error
 ### Steps
 
 1. **Create backend**: `terminal.NewBackend()`.
-2. **Read default app**: `config.GetDefaultTerminalApp("nvim")`.
+2. **Read default app**: `config.GetDefaultTerminalApp("shell")`. The `"shell"` fallback is a reserved sentinel interpreted by the terminal layer as "launch a bare login/interactive shell" (see [terminal.md](terminal.md)).
 3. **Read timeout**: `config.TerminalSessionCreationTimeoutSeconds(3)`.
 4. **Determine working directory**: Call `workspace.GetSessionWorkingDirectory(wsPath)`.
 5. **Create and attach**: Delegate to `terminal.CreateAndAttach(backend, sessionName, workDir, app, timeout)`.

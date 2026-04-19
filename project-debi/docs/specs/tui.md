@@ -335,24 +335,26 @@ func NewSettingsModel(styles *Styles) SettingsModel
 Multi-item settings page with focusable fields navigated via `j`/`k` in navigation mode. Fields are organized into sections:
 
 **Configuration section:**
-1. **Prepare Command** (`fieldPrepareCmd`): Inline-editable text input for the shell command run after worktree creation. Press `enter` to start editing (enters editing mode); `enter` saves, `esc` cancels and restores the previous value.
+1. **Default App (Global)** (`fieldDefaultAppGlobal`): Inline-editable text input for `"terminal.default-app"` at the global scope. Press `enter` to start editing; `enter` saves, `esc` cancels and restores the previous value. An empty input on save clears the key (stores `nil`); a non-empty input stores the value. The reserved value `"shell"` means "bare login/interactive shell, no wrapped command".
+2. **Default App (Profile)** (`fieldDefaultAppProfile`): Same behavior as the global field, but writes to the active profile's config. An empty input on save clears the key so the global value takes effect. The reserved value `"shell"` means "bare login/interactive shell, no wrapped command".
+3. **Prepare Command** (`fieldPrepareCmd`): Inline-editable text input for the shell command run after worktree creation. Press `enter` to start editing (enters editing mode); `enter` saves, `esc` cancels and restores the previous value.
 
 **Repos section:**
-2. **Add Repo** (`fieldAddRepo`): Press `enter` to navigate to the register repo page.
-3. **Remove Repo** (dynamic, one per explicit repo): Press `enter` to show an inline y/n confirmation prompt.
+4. **Add Repo** (`fieldAddRepo`): Press `enter` to navigate to the register repo page.
+5. **Remove Repo** (dynamic, one per explicit repo): Press `enter` to show an inline y/n confirmation prompt.
 
 **Info section:**
-4. **View Changelog** (`viewChangelogField()`): Press `enter` to open the changelog in a new Kitty tab (emits `openChangelogMsg`).
+6. **View Changelog** (`viewChangelogField()`): Press `enter` to open the changelog in a new Kitty tab (emits `openChangelogMsg`).
 
 **Profiles section:**
-5. **Add Profile** (`addProfileField()`): Press `enter` to navigate to the profile registration page (emits `showProfileRegistrationMsg{fromSettings: true}`).
-6. **Delete Profile** (`deleteProfileField()`): Press `enter` to show an inline y/n confirmation prompt. `y` unregisters the active profile; if no profiles remain, quits the app. If other profiles remain, activates the first one and emits `profileActivatedMsg`. `n` or `esc` cancels.
+7. **Add Profile** (`addProfileField()`): Press `enter` to navigate to the profile registration page (emits `showProfileRegistrationMsg{fromSettings: true}`).
+8. **Delete Profile** (`deleteProfileField()`): Press `enter` to show an inline y/n confirmation prompt. `y` unregisters the active profile; if no profiles remain, quits the app. If other profiles remain, activates the first one and emits `profileActivatedMsg`. `n` or `esc` cancels.
 
-Loads the current prepare-command value on activation. Title includes profile name when available.
+Loads the current values for the three editable fields on activation: `GetDefaultTerminalAppGlobalRaw()`, `GetDefaultTerminalAppProfileRaw()`, and `GetPrepareCommand()`. Title includes profile name when available.
 
 The page has three modes:
 - **Navigation mode**: `j`/`k` moves focus between fields, `enter` activates the focused field, `esc`/`q` goes back.
-- **Editing mode** (prepare command): Text input is focused. `enter` saves, `esc` cancels and reverts.
+- **Editing mode** (default-app global, default-app profile, or prepare command): Text input is focused. `enter` saves, `esc` cancels and reverts.
 - **Confirm-delete mode**: Shows y/n prompt. `y` confirms, `n`/`esc` cancels.
 
 **Key bindings (navigation mode):**

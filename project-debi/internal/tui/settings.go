@@ -13,35 +13,46 @@ import (
 type settingsField int
 
 const (
-	fieldPrepareCmd settingsField = 0
-	fieldAddRepo    settingsField = 1
-	// Fields 2 through 2+len(explicitRepos)-1 are remove-repo fields.
+	fieldDefaultAppGlobal  settingsField = 0
+	fieldDefaultAppProfile settingsField = 1
+	fieldPrepareCmd        settingsField = 2
+	fieldAddRepo           settingsField = 3
+	// Fields 4 through 4+len(explicitRepos)-1 are remove-repo fields.
 	// fieldAddProfile and fieldDeleteProfile are computed dynamically.
 )
 
 type SettingsModel struct {
-	prepareCmd       components.TextInputModel
-	focused          settingsField
-	editing          bool
-	confirmDelete    bool
-	confirmRemoveIdx int
-	explicitRepos    []config.ExplicitRepoEntry
-	styles           *Styles
-	profileName      string
-	width            int
+	defaultAppGlobal  components.TextInputModel
+	defaultAppProfile components.TextInputModel
+	prepareCmd        components.TextInputModel
+	focused           settingsField
+	editing           bool
+	confirmDelete     bool
+	confirmRemoveIdx  int
+	explicitRepos     []config.ExplicitRepoEntry
+	styles            *Styles
+	profileName       string
+	width             int
 }
 
 func NewSettingsModel(styles *Styles) SettingsModel {
-	prepareCmd := components.NewTextInputModel(
-		lipgloss.NewStyle().Foreground(styles.AccentColor),
-		styles.Muted,
-	)
+	focusedStyle := lipgloss.NewStyle().Foreground(styles.AccentColor)
+
+	defaultAppGlobal := components.NewTextInputModel(focusedStyle, styles.Muted)
+	defaultAppGlobal.Placeholder = "shell, nvim, or any command (empty = inherit)"
+
+	defaultAppProfile := components.NewTextInputModel(focusedStyle, styles.Muted)
+	defaultAppProfile.Placeholder = "shell, nvim, or any command (empty = inherit)"
+
+	prepareCmd := components.NewTextInputModel(focusedStyle, styles.Muted)
 	prepareCmd.Placeholder = "Shell command to run after worktree creation..."
 
 	return SettingsModel{
-		prepareCmd:       prepareCmd,
-		confirmRemoveIdx: -1,
-		styles:           styles,
+		defaultAppGlobal:  defaultAppGlobal,
+		defaultAppProfile: defaultAppProfile,
+		prepareCmd:        prepareCmd,
+		confirmRemoveIdx:  -1,
+		styles:            styles,
 	}
 }
 
@@ -76,12 +87,16 @@ func (m *SettingsModel) removeRepoIndex(f settingsField) int {
 
 func (m *SettingsModel) Activate(profileName string) {
 	m.profileName = profileName
+	m.loadDefaultAppGlobalValue()
+	m.loadDefaultAppProfileValue()
 	m.loadPrepareCommandValue()
 	m.loadExplicitRepos()
-	m.focused = fieldPrepareCmd
+	m.focused = fieldDefaultAppGlobal
 	m.editing = false
 	m.confirmDelete = false
 	m.confirmRemoveIdx = -1
+	m.defaultAppGlobal.Blur()
+	m.defaultAppProfile.Blur()
 	m.prepareCmd.Blur()
 }
 
@@ -92,6 +107,45 @@ func (m *SettingsModel) loadPrepareCommandValue() {
 		m.prepareCmd.SetValue(*current)
 	} else {
 		m.prepareCmd.SetValue("")
+	}
+}
+
+func (m *SettingsModel) loadDefaultAppGlobalValue() {
+	if v := config.GetDefaultTerminalAppGlobalRaw(); v != nil {
+		m.defaultAppGlobal.SetValue(*v)
+	} else {
+		m.defaultAppGlobal.SetValue("")
+	}
+}
+
+func (m *SettingsModel) loadDefaultAppProfileValue() {
+	if v := config.GetDefaultTerminalAppProfileRaw(); v != nil {
+		m.defaultAppProfile.SetValue(*v)
+	} else {
+		m.defaultAppProfile.SetValue("")
+	}
+}
+
+func (m *SettingsModel) currentInput() *components.TextInputModel {
+	switch m.focused {
+	case fieldDefaultAppGlobal:
+		return &m.defaultAppGlobal
+	case fieldDefaultAppProfile:
+		return &m.defaultAppProfile
+	case fieldPrepareCmd:
+		return &m.prepareCmd
+	}
+	return nil
+}
+
+func (m *SettingsModel) reloadFocusedFieldValue() {
+	switch m.focused {
+	case fieldDefaultAppGlobal:
+		m.loadDefaultAppGlobalValue()
+	case fieldDefaultAppProfile:
+		m.loadDefaultAppProfileValue()
+	case fieldPrepareCmd:
+		m.loadPrepareCommandValue()
 	}
 }
 
@@ -147,16 +201,21 @@ func (m *SettingsModel) handleConfirmDeleteKey(key string) tea.Cmd {
 }
 
 func (m *SettingsModel) handleEditingKey(key string) tea.Cmd {
+	input := m.currentInput()
 	switch key {
 	case "esc":
 		m.editing = false
-		m.prepareCmd.Blur()
-		m.loadPrepareCommandValue()
+		if input != nil {
+			input.Blur()
+		}
+		m.reloadFocusedFieldValue()
 		return nil
 	case "enter":
 		return m.save()
 	default:
-		m.prepareCmd.HandleKey(key)
+		if input != nil {
+			input.HandleKey(key)
+		}
 		return nil
 	}
 }
@@ -171,11 +230,12 @@ func (m *SettingsModel) handleNavKey(key string) tea.Cmd {
 		m.focused = (m.focused - 1 + count) % count
 		return nil
 	case "enter":
-		switch {
-		case m.focused == fieldPrepareCmd:
+		if input := m.currentInput(); input != nil {
 			m.editing = true
-			m.prepareCmd.Focus()
+			input.Focus()
 			return nil
+		}
+		switch {
 		case m.focused == fieldAddRepo:
 			return func() tea.Msg { return showRegisterRepoMsg{fromSettings: true} }
 		case m.isRemoveRepoField(m.focused):
@@ -196,19 +256,32 @@ func (m *SettingsModel) handleNavKey(key string) tea.Cmd {
 }
 
 func (m *SettingsModel) save() tea.Cmd {
-	value := strings.TrimSpace(m.prepareCmd.Value)
+	input := m.currentInput()
+	if input == nil {
+		return nil
+	}
+	value := strings.TrimSpace(input.Value)
 	var valuePtr *string
 	if value != "" {
 		valuePtr = &value
 	}
-	err := config.SetPrepareCommand(valuePtr)
+
+	var err error
+	switch m.focused {
+	case fieldPrepareCmd:
+		err = config.SetPrepareCommand(valuePtr)
+	case fieldDefaultAppGlobal:
+		err = config.SetDefaultTerminalAppGlobal(valuePtr)
+	case fieldDefaultAppProfile:
+		err = config.SetDefaultTerminalAppProfile(valuePtr)
+	}
 	if err != nil {
 		return func() tea.Msg {
 			return notifyMsg{text: fmt.Sprintf("Error saving settings: %v", err), isError: true}
 		}
 	}
 	m.editing = false
-	m.prepareCmd.Blur()
+	input.Blur()
 	return func() tea.Msg { return notifyMsg{text: "Settings saved", isError: false} }
 }
 
@@ -273,6 +346,18 @@ func (m *SettingsModel) renderFieldBar(field settingsField, text string) (bar st
 	return bar, label
 }
 
+func (m *SettingsModel) renderTextInputField(b *strings.Builder, field settingsField, labelText string, input *components.TextInputModel) {
+	bar, label := m.renderFieldBar(field, labelText)
+	b.WriteString("  " + bar + label + "\n")
+	if m.editing && m.focused == field {
+		b.WriteString("  " + bar + input.View() + "\n")
+	} else if input.Value == "" {
+		b.WriteString("  " + bar + m.styles.Muted.Render(input.Placeholder) + "\n")
+	} else {
+		b.WriteString("  " + bar + input.Value + "\n")
+	}
+}
+
 func (m *SettingsModel) View() string {
 	var b strings.Builder
 
@@ -280,19 +365,9 @@ func (m *SettingsModel) View() string {
 	b.WriteString("\n")
 	b.WriteString("  " + m.styles.Title.Render("Configuration") + "\n")
 
-	// Prepare Command
-	bar, label := m.renderFieldBar(fieldPrepareCmd, "Prepare Command")
-	b.WriteString("  " + bar + label + "\n")
-	if m.editing {
-		b.WriteString("  " + bar + m.prepareCmd.View() + "\n")
-	} else {
-		value := m.prepareCmd.Value
-		if value == "" {
-			b.WriteString("  " + bar + m.styles.Muted.Render(m.prepareCmd.Placeholder) + "\n")
-		} else {
-			b.WriteString("  " + bar + value + "\n")
-		}
-	}
+	m.renderTextInputField(&b, fieldDefaultAppGlobal, "Default App (Global)", &m.defaultAppGlobal)
+	m.renderTextInputField(&b, fieldDefaultAppProfile, "Default App (Profile)", &m.defaultAppProfile)
+	m.renderTextInputField(&b, fieldPrepareCmd, "Prepare Command", &m.prepareCmd)
 
 	b.WriteString("\n")
 
@@ -300,7 +375,7 @@ func (m *SettingsModel) View() string {
 	b.WriteString("  " + m.styles.Title.Render("Repos") + "\n")
 
 	// Add Repo
-	bar, label = m.renderFieldBar(fieldAddRepo, "+ Add Repo")
+	bar, label := m.renderFieldBar(fieldAddRepo, "+ Add Repo")
 	b.WriteString("  " + bar + label + "\n")
 
 	// Remove Repo entries
