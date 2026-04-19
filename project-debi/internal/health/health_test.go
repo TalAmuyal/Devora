@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"devora/internal/credentials"
 	"devora/internal/process"
 )
 
@@ -19,6 +20,8 @@ func stubHealthDeps(t *testing.T) {
 	origGetAppVersion := getAppVersion
 	origGetConfigPath := getConfigPath
 	origStatFile := statFile
+	origGetTrackerProvider := getTrackerProvider
+	origGetTrackerToken := getTrackerToken
 	t.Cleanup(func() {
 		lookPath = origLookPath
 		getVersion = origGetVersion
@@ -27,11 +30,20 @@ func stubHealthDeps(t *testing.T) {
 		getAppVersion = origGetAppVersion
 		getConfigPath = origGetConfigPath
 		statFile = origStatFile
+		getTrackerProvider = origGetTrackerProvider
+		getTrackerToken = origGetTrackerToken
 	})
 	getAppVersion = func() string { return "test-version" }
 	getConfigPath = func() string { return "/home/testuser/.config/devora/config.json" }
 	statFile = func(name string) (os.FileInfo, error) { return nil, os.ErrNotExist }
 	checkGitHubToken = func() bool { return true }
+	// Default: no tracker configured. Tests that want a tracker credential
+	// row override these two vars.
+	getTrackerProvider = func() string { return "" }
+	getTrackerToken = func(provider string) (string, error) {
+		t.Fatalf("getTrackerToken should not be called when no tracker is configured")
+		return "", nil
+	}
 }
 
 func TestCleanVersion(t *testing.T) {
@@ -540,8 +552,9 @@ func TestCheckCredentials_GhMissing(t *testing.T) {
 
 	results := checkCredentials(false)
 
-	if len(results) != 1 {
-		t.Fatalf("expected 1 result, got %d", len(results))
+	// Expect GitHub row + tracker info row (unconfigured).
+	if len(results) != 2 {
+		t.Fatalf("expected 2 results (GitHub + tracker info), got %d", len(results))
 	}
 	r := results[0]
 	if r.Status != CredentialUnchecked {
@@ -549,6 +562,9 @@ func TestCheckCredentials_GhMissing(t *testing.T) {
 	}
 	if r.Message != "gh not detected" {
 		t.Fatalf("expected message 'gh not detected', got %q", r.Message)
+	}
+	if results[1].Status != CredentialInfo {
+		t.Fatalf("expected second result to be info row, got status %d", results[1].Status)
 	}
 }
 
@@ -562,8 +578,8 @@ func TestCheckCredentials_GhFound_NoToken(t *testing.T) {
 
 	results := checkCredentials(true)
 
-	if len(results) != 1 {
-		t.Fatalf("expected 1 result, got %d", len(results))
+	if len(results) != 2 {
+		t.Fatalf("expected 2 results (GitHub + tracker info), got %d", len(results))
 	}
 	r := results[0]
 	if r.Name != "GitHub" {
@@ -578,6 +594,9 @@ func TestCheckCredentials_GhFound_NoToken(t *testing.T) {
 	if !strings.Contains(r.Message, "gh auth login") {
 		t.Fatalf("expected message to contain 'gh auth login', got %q", r.Message)
 	}
+	if results[1].Status != CredentialInfo {
+		t.Fatalf("expected second result to be info row, got status %d", results[1].Status)
+	}
 }
 
 func TestCheckCredentials_GhFound_TokenExists_AuthOK(t *testing.T) {
@@ -589,8 +608,8 @@ func TestCheckCredentials_GhFound_TokenExists_AuthOK(t *testing.T) {
 
 	results := checkCredentials(true)
 
-	if len(results) != 1 {
-		t.Fatalf("expected 1 result, got %d", len(results))
+	if len(results) != 2 {
+		t.Fatalf("expected 2 results (GitHub + tracker info), got %d", len(results))
 	}
 	r := results[0]
 	if r.Name != "GitHub" {
@@ -601,6 +620,9 @@ func TestCheckCredentials_GhFound_TokenExists_AuthOK(t *testing.T) {
 	}
 	if r.Message != "Logged in as Test User" {
 		t.Fatalf("expected message 'Logged in as Test User', got %q", r.Message)
+	}
+	if results[1].Status != CredentialInfo {
+		t.Fatalf("expected second result to be info row, got status %d", results[1].Status)
 	}
 }
 
@@ -613,8 +635,8 @@ func TestCheckCredentials_GhFound_TokenExists_AuthFailed(t *testing.T) {
 
 	results := checkCredentials(true)
 
-	if len(results) != 1 {
-		t.Fatalf("expected 1 result, got %d", len(results))
+	if len(results) != 2 {
+		t.Fatalf("expected 2 results (GitHub + tracker info), got %d", len(results))
 	}
 	r := results[0]
 	if r.Status != CredentialFailed {
@@ -622,6 +644,9 @@ func TestCheckCredentials_GhFound_TokenExists_AuthFailed(t *testing.T) {
 	}
 	if r.Message != "auth token expired" {
 		t.Fatalf("expected message 'auth token expired', got %q", r.Message)
+	}
+	if results[1].Status != CredentialInfo {
+		t.Fatalf("expected second result to be info row, got status %d", results[1].Status)
 	}
 }
 
@@ -871,6 +896,222 @@ func TestRun_CompletionMissing_StrictModeExitCode1(t *testing.T) {
 	}
 	if passErr.Code != 1 {
 		t.Fatalf("expected exit code 1, got: %d", passErr.Code)
+	}
+}
+
+func TestCheckTrackerCredential_NoTrackerConfigured_ReturnsInfoRow(t *testing.T) {
+	stubHealthDeps(t)
+	// Default stubbed getTrackerProvider returns "".
+
+	got := checkTrackerCredential()
+	if got == nil {
+		t.Fatal("expected an info row when no tracker is configured, got nil")
+	}
+	if got.Status != CredentialInfo {
+		t.Fatalf("expected CredentialInfo status, got %d", got.Status)
+	}
+	if got.Name != "task-tracker" {
+		t.Fatalf("expected name 'task-tracker', got %q", got.Name)
+	}
+	if !strings.Contains(got.Message, "not configured") {
+		t.Fatalf("expected message to indicate 'not configured', got %q", got.Message)
+	}
+	if !strings.Contains(got.Message, "(optional)") {
+		t.Fatalf("expected message to indicate '(optional)', got %q", got.Message)
+	}
+}
+
+func TestCheckTrackerCredential_TrackerConfiguredTokenStored_ReturnsOK(t *testing.T) {
+	stubHealthDeps(t)
+	getTrackerProvider = func() string { return "asana" }
+	getTrackerToken = func(provider string) (string, error) {
+		if provider != "asana" {
+			t.Fatalf("expected provider 'asana', got %q", provider)
+		}
+		return "tok_xyz", nil
+	}
+
+	got := checkTrackerCredential()
+	if got == nil {
+		t.Fatal("expected a result, got nil")
+	}
+	if got.Status != CredentialOK {
+		t.Fatalf("expected CredentialOK, got %d", got.Status)
+	}
+	if !strings.Contains(got.Name, "asana") {
+		t.Fatalf("expected name to include provider, got %q", got.Name)
+	}
+	if got.Message == "" {
+		t.Fatal("expected non-empty message")
+	}
+}
+
+func TestCheckTrackerCredential_TrackerConfiguredTokenMissing_ReturnsFailedWithHint(t *testing.T) {
+	stubHealthDeps(t)
+	getTrackerProvider = func() string { return "asana" }
+	getTrackerToken = func(provider string) (string, error) {
+		return "", &credentials.NotFoundError{Provider: "asana", Service: "devora-asana", Account: "alice"}
+	}
+
+	got := checkTrackerCredential()
+	if got == nil {
+		t.Fatal("expected a result, got nil")
+	}
+	if got.Status != CredentialFailed {
+		t.Fatalf("expected CredentialFailed, got %d", got.Status)
+	}
+	// The message should contain a setup hint — on macOS this includes
+	// "security add-generic-password"; on linux it's "secret-tool"; on
+	// windows it's "cmdkey"; fall back to "OS keychain" text.
+	msg := got.Message
+	if !strings.Contains(msg, "security add-generic-password") &&
+		!strings.Contains(msg, "secret-tool") &&
+		!strings.Contains(msg, "cmdkey") &&
+		!strings.Contains(msg, "OS keychain") {
+		t.Fatalf("expected message to contain a setup hint, got: %q", msg)
+	}
+}
+
+func TestCheckTrackerCredential_TrackerConfiguredOtherError_ReturnsFailedWithError(t *testing.T) {
+	stubHealthDeps(t)
+	getTrackerProvider = func() string { return "asana" }
+	getTrackerToken = func(provider string) (string, error) {
+		return "", errors.New("keychain access timed out")
+	}
+
+	got := checkTrackerCredential()
+	if got == nil {
+		t.Fatal("expected a result, got nil")
+	}
+	if got.Status != CredentialFailed {
+		t.Fatalf("expected CredentialFailed, got %d", got.Status)
+	}
+	if !strings.Contains(got.Message, "timed out") {
+		t.Fatalf("expected message to surface the error, got: %q", got.Message)
+	}
+}
+
+func TestRun_NoTracker_ShowsInfoRow(t *testing.T) {
+	// When no tracker is configured, health renders an info row so users
+	// can see the feature exists, but the row does NOT count toward the
+	// "Credentials met: X/Y" denominator. With just GitHub counting, the
+	// summary should read (1/1).
+	stubHealthDeps(t)
+
+	lookPath = func(file string) (string, error) {
+		return "/usr/local/bin/" + file, nil
+	}
+	getVersion = func(command []string) (string, error) {
+		return "v1.0.0", nil
+	}
+	checkGitHub = func() (string, error) {
+		return "Test User", nil
+	}
+	// Default stub: getTrackerProvider returns "" (no tracker configured).
+
+	var buf bytes.Buffer
+	err := Run(&buf, false, false)
+	if err != nil {
+		t.Fatalf("expected no error, got: %s", err.Error())
+	}
+	output := buf.String()
+	if !strings.Contains(output, "task-tracker") {
+		t.Fatalf("expected output to contain 'task-tracker' info row, got:\n%s", output)
+	}
+	if !strings.Contains(output, "not configured") {
+		t.Fatalf("expected output to contain 'not configured', got:\n%s", output)
+	}
+	if !strings.Contains(output, "\u25CB") {
+		t.Fatalf("expected output to contain ○ marker for info row, got:\n%s", output)
+	}
+	if !strings.Contains(output, "Credentials met:") || !strings.Contains(output, "(1/1)") {
+		t.Fatalf("expected credentials summary (1/1) excluding info row, got:\n%s", output)
+	}
+}
+
+func TestRun_NoTracker_Strict_InfoRowDoesNotFailStrict(t *testing.T) {
+	// Info rows are not "missing" — strict mode should pass when the only
+	// non-OK credential row is an info row.
+	stubHealthDeps(t)
+
+	lookPath = func(file string) (string, error) {
+		return "/usr/local/bin/" + file, nil
+	}
+	getVersion = func(command []string) (string, error) {
+		return "v1.0.0", nil
+	}
+	checkGitHub = func() (string, error) {
+		return "Test User", nil
+	}
+	statFile = func(name string) (os.FileInfo, error) { return nil, nil }
+
+	var buf bytes.Buffer
+	err := Run(&buf, true, false)
+	if err != nil {
+		t.Fatalf("expected no error in strict mode with tracker info row, got: %s", err.Error())
+	}
+}
+
+func TestRun_TrackerConfigured_AddsTrackerRow(t *testing.T) {
+	stubHealthDeps(t)
+
+	lookPath = func(file string) (string, error) {
+		return "/usr/local/bin/" + file, nil
+	}
+	getVersion = func(command []string) (string, error) {
+		return "v1.0.0", nil
+	}
+	checkGitHub = func() (string, error) {
+		return "Test User", nil
+	}
+	getTrackerProvider = func() string { return "asana" }
+	getTrackerToken = func(provider string) (string, error) { return "tok", nil }
+
+	var buf bytes.Buffer
+	err := Run(&buf, false, false)
+	if err != nil {
+		t.Fatalf("expected no error, got: %s", err.Error())
+	}
+	output := buf.String()
+	if !strings.Contains(output, "asana") {
+		t.Fatalf("expected output to contain 'asana' tracker row, got:\n%s", output)
+	}
+	if !strings.Contains(output, "(2/2)") {
+		t.Fatalf("expected credentials summary (2/2), got:\n%s", output)
+	}
+}
+
+func TestRun_TrackerConfigured_TokenMissing_CredentialsRow(t *testing.T) {
+	stubHealthDeps(t)
+
+	lookPath = func(file string) (string, error) {
+		return "/usr/local/bin/" + file, nil
+	}
+	getVersion = func(command []string) (string, error) {
+		return "v1.0.0", nil
+	}
+	checkGitHub = func() (string, error) {
+		return "Test User", nil
+	}
+	getTrackerProvider = func() string { return "asana" }
+	getTrackerToken = func(provider string) (string, error) {
+		return "", &credentials.NotFoundError{Provider: "asana", Service: "devora-asana", Account: "alice"}
+	}
+
+	var buf bytes.Buffer
+	err := Run(&buf, false, false)
+	if err != nil {
+		t.Fatalf("expected no error (non-strict, credential failure), got: %s", err.Error())
+	}
+	output := buf.String()
+	if !strings.Contains(output, "asana") {
+		t.Fatalf("expected output to contain 'asana' tracker row, got:\n%s", output)
+	}
+	if !strings.Contains(output, "\u2717") {
+		t.Fatalf("expected ✗ marker for missing tracker token, got:\n%s", output)
+	}
+	if !strings.Contains(output, "(1/2)") {
+		t.Fatalf("expected credentials summary (1/2), got:\n%s", output)
 	}
 }
 

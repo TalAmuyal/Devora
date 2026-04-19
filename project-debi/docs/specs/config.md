@@ -47,9 +47,23 @@ type ExplicitRepoEntry struct {
     "session-creation-timeout-seconds": 3,
     "default-app": "nvim"
   },
-  "prepare-command": "prep"
+  "prepare-command": "prep",
+  "task-tracker": {
+    "provider": "asana",
+    "asana": {
+      "workspace-id": "YOUR-WORKSPACE-GID",
+      "project-id": "YOUR-PROJECT-GID",
+      "cli-tag": "YOUR-CLI-TAG-GID",
+      "section-id": "YOUR-SECTION-GID"
+    }
+  },
+  "feature": {
+    "branch-prefix": "feature"
+  }
 }
 ```
+
+`task-tracker.*` and `feature.branch-prefix` are profile-overridable. `task-tracker.<provider>.<key>` merges per leaf, so global and profile can each contribute different leaves under the same provider (e.g., global sets `workspace-id`, profile sets `project-id`).
 
 ### Loading and Caching
 
@@ -91,6 +105,9 @@ Resolves the path against the global config only. Skips profile lookup entirely.
 | `terminal.session-creation-timeout-seconds` | global-only |
 | `terminal.default-app` | profile-overridable |
 | `prepare-command` | profile-overridable |
+| `task-tracker.provider` | profile-overridable |
+| `task-tracker.<provider>.<key>` | profile-overridable (per-leaf merge: profile and global can each contribute different leaves) |
+| `feature.branch-prefix` | profile-overridable |
 | `name` | profile-only (read directly from `Profile.Config`) |
 | `repos` | profile-only (read directly from `Profile.Config`) |
 
@@ -345,6 +362,32 @@ func TerminalSessionCreationTimeoutSeconds(fallback int) int
 
 Returns the value of `"terminal.session-creation-timeout-seconds"` (global-only). If not found, returns `fallback`.
 
+### GetTaskTrackerProvider
+
+```go
+func GetTaskTrackerProvider() string
+```
+
+Returns the resolved value of `"task-tracker.provider"` (profile-overridable). Returns `""` when unset or when the stored value is not a string. An empty string signals "no task tracker configured".
+
+### GetTaskTrackerString
+
+```go
+func GetTaskTrackerString(provider, key string) string
+```
+
+Resolves `"task-tracker.<provider>.<key>"` (profile-overridable) via the standard per-leaf resolver: profile first, global fallback. Returns `""` when the leaf is unset at both levels or the value is not a string.
+
+Each leaf is queried independently, so profile and global can contribute different leaves under the same provider (e.g., global sets `workspace-id`, profile sets `project-id`).
+
+### GetBranchPrefix
+
+```go
+func GetBranchPrefix(fallback string) string
+```
+
+Returns the resolved value of `"feature.branch-prefix"` (profile-overridable). Returns `fallback` when the key is unset or the value is not a string.
+
 ## Path Utilities
 
 ### ExpandTilde
@@ -453,4 +496,13 @@ Clears the active profile and resets the global config cache. Must be called bet
 - Return correct type (string, int) from resolved config value.
 - Return fallback when key is absent.
 - Handle type mismatch gracefully (e.g., key exists but is wrong type: return fallback).
+
+**Task-tracker getters:**
+- `GetTaskTrackerProvider` returns `""` when unset.
+- `GetTaskTrackerProvider` returns the profile value when both profile and global are set (profile wins).
+- `GetTaskTrackerString` returns `""` when the leaf is unset at both levels.
+- `GetTaskTrackerString` resolves per leaf: a leaf set only globally is returned, and a leaf set only in the profile is returned, even when other sibling leaves come from the other level.
+- `GetTaskTrackerString` returns `""` when the stored value is not a string.
+- `GetBranchPrefix` returns the fallback when unset or the stored value is not a string.
+- `GetBranchPrefix` returns the profile value when both profile and global are set.
 

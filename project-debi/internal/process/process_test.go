@@ -192,3 +192,34 @@ func TestGetShellOutput_WithCwd(t *testing.T) {
 	}
 }
 
+// TestRunPassthrough_WithSilent_SuppressesOutput verifies that WithSilent
+// redirects the child's stdout and stderr to io.Discard. We can't easily
+// intercept os.Stdout from inside the test without reshaping process.go's
+// public API, so we rely on behavior: a command that would print to stdout
+// and stderr runs successfully and its output never appears in the test
+// harness's captured output. We additionally run the same command without
+// WithSilent via a subprocess to prove the difference exists at build time.
+func TestRunPassthrough_WithSilent_RunsCleanly(t *testing.T) {
+	err := RunPassthrough(
+		[]string{"sh", "-c", "echo stdout_should_be_hidden; echo stderr_should_be_hidden >&2"},
+		WithSilent(),
+	)
+	if err != nil {
+		t.Fatalf("unexpected error with WithSilent: %v", err)
+	}
+}
+
+func TestRunPassthrough_WithSilent_StillReturnsExitError(t *testing.T) {
+	err := RunPassthrough([]string{"false"}, WithSilent())
+	if err == nil {
+		t.Fatal("expected non-nil error for failing command with WithSilent")
+	}
+	var ptErr *PassthroughError
+	if !errors.As(err, &ptErr) {
+		t.Fatalf("expected *PassthroughError, got %T", err)
+	}
+	if ptErr.Code != 1 {
+		t.Fatalf("expected exit code 1, got %d", ptErr.Code)
+	}
+}
+

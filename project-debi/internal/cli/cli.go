@@ -1,13 +1,19 @@
 package cli
 
 import (
+	closecmd "devora/internal/close"
 	"devora/internal/completion"
 	"devora/internal/config"
+	"devora/internal/credentials"
 	"devora/internal/health"
 	"devora/internal/jsonvalidate"
 	"devora/internal/process"
 	"devora/internal/prstatus"
+	"devora/internal/submit"
 	"devora/internal/task"
+	// Register the Asana task-tracker provider. The blank import runs the
+	// package's init(), which calls tasktracker.Register("asana", New).
+	_ "devora/internal/tasktracker/asana"
 	"devora/internal/tui"
 	"devora/internal/workspace"
 	"errors"
@@ -135,23 +141,45 @@ func runAddRepo() error {
 	)
 }
 
+const healthUsage = `usage: debi health [--strict] [-v|--verbose] [-p|--profile <name>]
+
+Check Devora dependencies and report their status. Also reports whether zsh
+completion is installed at ~/.zsh/completions/_debi.
+
+Flags:
+  --strict               Exit with code 1 if any dependency (including optional) is missing
+  -v, --verbose          Show dependency locations
+  -p, --profile <name>   Check a specific profile (defaults to CWD-based resolution)`
+
 func runHealth(args []string) error {
 	strict := false
 	verbose := false
-	for _, arg := range args {
-		switch arg {
-		case "-h", "--help":
-			fmt.Println("usage: debi health [--strict] [-v|--verbose]\n\nCheck Devora dependencies and report their status. Also reports whether zsh\ncompletion is installed at ~/.zsh/completions/_debi.\n\nFlags:\n  --strict      Exit with code 1 if any dependency (including optional) is missing\n  -v, --verbose  Show dependency locations")
+	profile := ""
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		switch {
+		case arg == "-h" || arg == "--help":
+			fmt.Println(healthUsage)
 			return nil
-		case "--strict":
+		case arg == "--strict":
 			strict = true
-		case "-v", "--verbose":
+		case arg == "-v" || arg == "--verbose":
 			verbose = true
+		case arg == "-p" || arg == "--profile" || strings.HasPrefix(arg, "--profile="):
+			val, nextI, err := parseValue(args, i, arg, "--profile")
+			if err != nil {
+				return err
+			}
+			profile = val
+			i = nextI
 		default:
-			return &UsageError{Message: fmt.Sprintf("unknown flag: %s\nusage: debi health [--strict] [-v|--verbose]", arg)}
+			return &UsageError{Message: fmt.Sprintf("unknown flag: %s\n%s", arg, healthUsage)}
 		}
 	}
-	return health.Run(os.Stdout, strict, verbose)
+	if _, err := resolveActiveProfile(profile); err != nil {
+		return err
+	}
+	return healthRun(os.Stdout, strict, verbose)
 }
 
 func runPR(args []string) error {
@@ -160,29 +188,259 @@ func runPR(args []string) error {
 
 	switch subcommand {
 	case "-h", "--help":
-		fmt.Println("usage: debi pr <subcommand>\n\nSubcommands:\n  status    Check the status of the PR for the current branch")
+		fmt.Println("usage: debi pr <subcommand>\n\nSubcommands:\n  check     Check the status of the PR for the current branch\n  submit    Commit, create tracker task and GitHub PR\n  close     Complete tracker task, delete branches")
 		return nil
-	case "status":
-		return runPRStatus(subArgs)
+	case "check":
+		return runPRCheck(subArgs)
+	case "submit":
+		return runSubmit(subArgs)
+	case "close":
+		return runClose(subArgs)
 	default:
 		return &UsageError{Message: fmt.Sprintf("unknown pr subcommand: %s\nusage: debi pr <subcommand>", subcommand)}
 	}
 }
 
-func runPRStatus(args []string) error {
+func runPRCheck(args []string) error {
 	jsonOutput := false
 	for _, arg := range args {
 		switch arg {
 		case "-h", "--help":
-			fmt.Println("usage: debi pr status [--json]\n\nCheck the status of the PR for the current branch.\n\nFlags:\n  --json    Output status as JSON")
+			fmt.Println("usage: debi pr check [--json]\n\nCheck the status of the PR for the current branch.\n\nFlags:\n  --json    Output status as JSON")
 			return nil
 		case "--json":
 			jsonOutput = true
 		default:
-			return &UsageError{Message: fmt.Sprintf("unknown flag: %s\nusage: debi pr status [--json]", arg)}
+			return &UsageError{Message: fmt.Sprintf("unknown flag: %s\nusage: debi pr check [--json]", arg)}
 		}
 	}
 	return prstatus.Run(os.Stdout, jsonOutput)
+}
+
+// submitRun is the submit entry point; stubbable for tests.
+var submitRun = submit.Run
+
+// closeRun is the close entry point; stubbable for tests.
+var closeRun = closecmd.Run
+
+// healthRun is the health entry point; stubbable for tests.
+var healthRun = health.Run
+
+// resolveActiveProfile is the profile resolver entry point; stubbable for
+// tests so the three handlers (health/submit/close) can verify they invoke it.
+var resolveActiveProfile = ResolveActiveProfile
+
+const submitUsage = `usage: debi submit -m <message> [flags]
+
+Commit local changes, create a tracker task (if configured), create a feature
+branch, push it, open a GitHub PR, and optionally enable auto-merge. Must be
+run from a detached HEAD.
+
+Flags:
+  -m, --message <msg>    Commit message, task title, and PR title (required)
+  -d, --description <s>  PR body description
+      --draft            Create draft PR
+  -b, --blocked          Skip auto-merge
+  -o, --open-browser     Open PR in browser after creation
+      --skip-tracker     Skip tracker task creation even if configured
+      --json             Output result as JSON
+  -v, --verbose          Show live git/gh subprocess output
+  -q, --quiet            Print only the final PR URL
+  -h, --help             Show this help`
+
+const closeUsage = `usage: debi close [flags]
+
+Mark the tracker task (if any) as complete, delete the remote branch, return
+the working tree to detached HEAD on the default branch, and delete the local
+branch.
+
+Flags:
+  -t, --task-url <url>   Tracker task URL (overrides branch's stored ID)
+      --skip-tracker     Skip marking tracker task as complete
+  -y, --force            Skip confirmation prompt for open PRs
+  -v, --verbose          Show live git/gh subprocess output
+  -q, --quiet            Print only "Closed" on success
+  -h, --help             Show this help`
+
+// parseValue returns the value for a flag that may be provided as "--flag=val"
+// or "--flag val". It advances the caller's index when the value comes from
+// the next arg. flagToken is the token as parsed (e.g., "--message" or
+// "--message=value").
+func parseValue(args []string, i int, flagToken, flagName string) (string, int, error) {
+	if eq := strings.IndexByte(flagToken, '='); eq != -1 {
+		return flagToken[eq+1:], i, nil
+	}
+	if i+1 >= len(args) {
+		return "", i, &UsageError{Message: fmt.Sprintf("missing value for %s", flagName)}
+	}
+	return args[i+1], i + 1, nil
+}
+
+// parseSubmitFlags walks args and returns a populated submit.Options.
+// Returns *UsageError for invalid usage (unknown flag, missing -m, or both
+// --verbose and --quiet).
+func parseSubmitFlags(args []string) (submit.Options, bool, error) {
+	var opts submit.Options
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		switch {
+		case arg == "-h" || arg == "--help":
+			return opts, true, nil
+		case arg == "--draft":
+			opts.Draft = true
+		case arg == "-b" || arg == "--blocked":
+			opts.Blocked = true
+		case arg == "-o" || arg == "--open-browser":
+			opts.OpenBrowser = true
+		case arg == "--skip-tracker":
+			opts.SkipTracker = true
+		case arg == "--json":
+			opts.JSONOutput = true
+		case arg == "-v" || arg == "--verbose":
+			opts.Verbose = true
+		case arg == "-q" || arg == "--quiet":
+			opts.Quiet = true
+		case arg == "-m" || arg == "--message" || strings.HasPrefix(arg, "--message="):
+			val, nextI, err := parseValue(args, i, arg, "--message")
+			if err != nil {
+				return opts, false, err
+			}
+			opts.Message = val
+			i = nextI
+		case arg == "-d" || arg == "--description" || strings.HasPrefix(arg, "--description="):
+			val, nextI, err := parseValue(args, i, arg, "--description")
+			if err != nil {
+				return opts, false, err
+			}
+			opts.Description = val
+			i = nextI
+		default:
+			return opts, false, &UsageError{Message: fmt.Sprintf("unknown flag: %s\n%s", arg, submitUsage)}
+		}
+	}
+	if opts.Message == "" {
+		return opts, false, &UsageError{Message: "submit requires --message\n" + submitUsage}
+	}
+	if opts.Verbose && opts.Quiet {
+		return opts, false, &UsageError{Message: "cannot use both --verbose and --quiet"}
+	}
+	return opts, false, nil
+}
+
+// parseCloseFlags walks args and returns a populated closecmd.Options.
+// Returns *UsageError for invalid usage (unknown flag or both --verbose and
+// --quiet).
+func parseCloseFlags(args []string) (closecmd.Options, bool, error) {
+	var opts closecmd.Options
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		switch {
+		case arg == "-h" || arg == "--help":
+			return opts, true, nil
+		case arg == "--skip-tracker":
+			opts.SkipTracker = true
+		case arg == "-y" || arg == "--force":
+			opts.Force = true
+		case arg == "-v" || arg == "--verbose":
+			opts.Verbose = true
+		case arg == "-q" || arg == "--quiet":
+			opts.Quiet = true
+		case arg == "-t" || arg == "--task-url" || strings.HasPrefix(arg, "--task-url="):
+			val, nextI, err := parseValue(args, i, arg, "--task-url")
+			if err != nil {
+				return opts, false, err
+			}
+			opts.TaskURL = val
+			i = nextI
+		default:
+			return opts, false, &UsageError{Message: fmt.Sprintf("unknown flag: %s\n%s", arg, closeUsage)}
+		}
+	}
+	if opts.Verbose && opts.Quiet {
+		return opts, false, &UsageError{Message: "cannot use both --verbose and --quiet"}
+	}
+	return opts, false, nil
+}
+
+// handleCredentialNotFound detects *credentials.NotFoundError, prints the
+// error and setup hint to stderr, and returns *UsageError{""} to suppress the
+// crash log. Returns (nil, false) when err isn't a NotFoundError so the
+// caller can keep classifying.
+func handleCredentialNotFound(err error) (error, bool) {
+	var nfe *credentials.NotFoundError
+	if !errors.As(err, &nfe) {
+		return nil, false
+	}
+	fmt.Fprintln(os.Stderr, err.Error())
+	fmt.Fprintln(os.Stderr, credentials.SetupHint(nfe.Provider))
+	return &UsageError{Message: ""}, true
+}
+
+// runSubmit parses flags, invokes submit.Run, and translates domain sentinels
+// into user-facing CLI errors / exit codes.
+func runSubmit(args []string) error {
+	opts, helpRequested, err := parseSubmitFlags(args)
+	if err != nil {
+		return err
+	}
+	if helpRequested {
+		fmt.Println(submitUsage)
+		return nil
+	}
+
+	if _, err := resolveActiveProfile(""); err != nil {
+		return err
+	}
+
+	err = submitRun(os.Stdout, opts)
+	if err == nil {
+		return nil
+	}
+
+	if errors.Is(err, submit.ErrNotDetached) {
+		return &UsageError{Message: err.Error()}
+	}
+	if wrapped, ok := handleCredentialNotFound(err); ok {
+		return wrapped
+	}
+	return err
+}
+
+// runClose parses flags, invokes closecmd.Run, and translates domain sentinels
+// into user-facing CLI errors / exit codes.
+func runClose(args []string) error {
+	opts, helpRequested, err := parseCloseFlags(args)
+	if err != nil {
+		return err
+	}
+	if helpRequested {
+		fmt.Println(closeUsage)
+		return nil
+	}
+
+	if _, err := resolveActiveProfile(""); err != nil {
+		return err
+	}
+
+	err = closeRun(os.Stdout, opts)
+	if err == nil {
+		return nil
+	}
+
+	switch {
+	case errors.Is(err, closecmd.ErrDetached):
+		return &UsageError{Message: "close cannot run from detached HEAD; checkout a feature branch first"}
+	case errors.Is(err, closecmd.ErrProtectedBranch),
+		errors.Is(err, closecmd.ErrNoTrackerForURL):
+		return &UsageError{Message: err.Error()}
+	case errors.Is(err, closecmd.ErrAborted):
+		// "→ Aborted" already printed by closecmd.Run. Exit 1 silently.
+		return &process.PassthroughError{Code: 1}
+	}
+	if wrapped, ok := handleCredentialNotFound(err); ok {
+		return wrapped
+	}
+	return err
 }
 
 func runRename(newName string) error {

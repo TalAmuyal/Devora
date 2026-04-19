@@ -606,3 +606,51 @@ func TerminalSessionCreationTimeoutSeconds(fallback int) int {
 	}
 	return int(f)
 }
+
+// GetTaskTrackerProvider returns the value of "task-tracker.provider"
+// (profile-overridable). Returns "" when unset or when the stored value is
+// not a string.
+func GetTaskTrackerProvider() string {
+	val, ok := get("task-tracker.provider")
+	if !ok {
+		return ""
+	}
+	s, ok := val.(string)
+	if !ok {
+		return ""
+	}
+	return s
+}
+
+// GetTaskTrackerString resolves "task-tracker.<provider>.<key>" via the
+// standard profile-first / global-fallback resolver. Returns "" when the
+// leaf is unset at both levels or the value is not a string.
+//
+// Each leaf is queried independently, so profile and global can contribute
+// different leaves under the same provider (e.g., global sets workspace-id,
+// profile sets project-id).
+func GetTaskTrackerString(provider, key string) string {
+	val, ok := get("task-tracker." + provider + "." + key)
+	if !ok {
+		return ""
+	}
+	s, ok := val.(string)
+	if !ok {
+		return ""
+	}
+	return s
+}
+
+// GetBranchPrefix resolves "feature.branch-prefix" (profile-overridable)
+// with a fallback returned when the key is unset or not a string.
+func GetBranchPrefix(fallback string) string {
+	val, ok := get("feature.branch-prefix")
+	if !ok {
+		return fallback
+	}
+	s, ok := val.(string)
+	if !ok {
+		return fallback
+	}
+	return s
+}

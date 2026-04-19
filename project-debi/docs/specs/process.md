@@ -47,6 +47,14 @@ func WithCwd(cwd string) ExecOption
 
 Sets the working directory for the command.
 
+#### WithSilent
+
+```go
+func WithSilent() ExecOption
+```
+
+Routes `RunPassthrough`'s stdout and stderr to `io.Discard`. Has no effect on `GetOutput`/`GetShellOutput` (which always capture). `stdin` is left unchanged. Used by submit/close in Normal and Quiet modes to keep git/gh subprocess output off the user's terminal while still enforcing exit-code semantics (`*PassthroughError` is still returned on failure).
+
 ### PassthroughError
 
 ```go
@@ -71,8 +79,8 @@ Executes a command with stdin/stdout/stderr connected directly to the terminal (
 
 Behavior:
 1. Create `exec.Cmd` from `command[0]` (program) and `command[1:]` (args).
-2. Apply options (e.g., set `cmd.Dir` from `WithCwd`).
-3. Connect `cmd.Stdin = os.Stdin`, `cmd.Stdout = os.Stdout`, `cmd.Stderr = os.Stderr`.
+2. Apply options (e.g., set `cmd.Dir` from `WithCwd`, `silent` from `WithSilent`).
+3. Connect `cmd.Stdin = os.Stdin`. Connect `cmd.Stdout`/`cmd.Stderr` to `os.Stdout`/`os.Stderr` by default; route both to `io.Discard` when `WithSilent` is applied.
 4. Run the command.
 5. If the command fails with `*exec.ExitError`, return `&PassthroughError{Code: exitErr.ExitCode()}`.
 6. If the command fails with another error, return `fmt.Errorf("failed to run %v: %w", command, err)`.
@@ -116,6 +124,7 @@ This is needed for commands that use shell features (pipes, redirections) or are
 - Test `RunPassthrough` with a failing command (`false`) returns `*PassthroughError` with correct exit code.
 - Test `PassthroughError.Error()` returns the expected message format.
 - Test `RunPassthrough` with `WithCwd` sets the working directory correctly.
+- Test `RunPassthrough` with `WithSilent` runs cleanly (no terminal output; exit code still propagates as `*PassthroughError`).
 
 ## Notes
 

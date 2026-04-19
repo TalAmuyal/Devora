@@ -8,7 +8,7 @@ Define and dispatch the CLI commands. This is the entry point that wires togethe
 
 ## Commands
 
-The CLI has 3 workspace commands, a health command, PR commands, a util command, 23 git shortcuts, and utility commands:
+The CLI has 3 workspace commands, a health command, PR commands (including `submit` and `close`, also registered as `pr submit` and `pr close`), a util command, 23 git shortcuts, and utility commands:
 
 ### Workspace Commands
 
@@ -22,14 +22,61 @@ The CLI has 3 workspace commands, a health command, PR commands, a util command,
 
 | Command | Args | Description |
 |---------|------|-------------|
-| `health` | `[--strict] [-v\|--verbose]` | Check Devora dependencies and report their status |
+| `health` | `[--strict] [-v\|--verbose] [-p\|--profile <name>]` | Check Devora dependencies and report their status |
+
+#### health flags
+
+| Flag | Description |
+|------|-------------|
+| `--strict` | Exit with code 1 if any dependency (including optional) is missing |
+| `-v, --verbose` | Show dependency locations |
+| `-p, --profile <name>` | Check a specific profile's config (defaults to CWD-based resolution) |
+
+Flag syntax accepts both `--profile=foo` and `--profile foo`.
 
 ### PR
 
 | Command | Args | Description |
 |---------|------|-------------|
 | `pr <subcommand>` | subcommand (required) | Pull request commands. Dispatches to subcommands |
-| `prs [flags]` | `[--json]` | Check the status of the PR for the current branch. Alias shortcut for `pr status` |
+
+#### PR Subcommands
+
+| Subcommand | Args | Description |
+|------------|------|-------------|
+| `pr check` | `[--json]` | Same as top-level `check` |
+| `pr submit` | same flags as top-level `submit` | Same as top-level `submit` |
+| `pr close` | same flags as top-level `close` | Same as top-level `close` |
+
+All three verbs (`check`, `submit`, `close`) are exposed both as top-level commands and as `pr` subcommands. For `submit` and `close`, flag slices (`submitFlags`, `closeFlags`) are declared once at package scope in `commands.go` and referenced by both registrations so the two forms never drift.
+
+#### submit flags
+
+| Flag | Description |
+|------|-------------|
+| `-m, --message <msg>` | Commit message, task title, and PR title (required) |
+| `-d, --description <s>` | PR body description (appended after the tracker prefix) |
+| `--draft` | Create draft PR |
+| `-b, --blocked` | Skip auto-merge |
+| `-o, --open-browser` | Open PR in browser after creation |
+| `--skip-tracker` | Skip tracker task creation even if configured |
+| `--json` | Output result as a single JSON object |
+| `-v, --verbose` | Show live git/gh subprocess output |
+| `-q, --quiet` | Print only the final PR URL (no prefix, no styling) |
+
+Flag syntax accepts both `--message=foo` and `--message foo`. `-v` and `-q` are mutually exclusive; passing both returns `*UsageError`. See [submit.md](./submit.md) for the full verbosity-mode table.
+
+#### close flags
+
+| Flag | Description |
+|------|-------------|
+| `-t, --task-url <url>` | Tracker task URL (overrides `branch.<name>.task-id`) |
+| `--skip-tracker` | Skip marking tracker task as complete |
+| `-y, --force` | Skip confirmation prompt for open PRs |
+| `-v, --verbose` | Show live git/gh subprocess output |
+| `-q, --quiet` | Print only `✓ Closed` on success |
+
+`-v` and `-q` are mutually exclusive; passing both returns `*UsageError`. See [close.md](./close.md) for the full verbosity-mode table.
 
 ### Utility
 
@@ -87,7 +134,7 @@ No external CLI framework (cobra, etc.) is needed.
 
 Commands are defined in a data-driven registry (`[]Command` slice in `commands.go`). Each entry has `Name`, `Alias`, `Description`, `ArgsHint`, `Group`, `MinArgs`, `Run`, `Flags`, `ValidArgs`, and `SubCommands` fields. A `commandIndex` map provides O(1) lookup by name or alias. The usage message is generated from the registry.
 
-Shared command metadata types (`Command`, `Flag`, `SubCommand`) are extracted to the `internal/cmdinfo` package to break a circular import between `cli` and `completion`. The `cmdinfo.Command` struct includes a `ValidArgs` field (`[]string`) for commands that accept a fixed set of positional arguments (e.g., `completion` accepts `bash`, `zsh`, `fish`) and a `SubCommands` field (`[]SubCommand`) for commands that dispatch to named sub-commands (e.g., `pr` dispatches to `status`, `util` dispatches to `json-validate`). Each `SubCommand` has its own `Name`, `Description`, `Flags`, `ValidArgs`, and `CompletesFiles` fields. The `CommandInfos()` function converts the internal registry to `[]cmdinfo.Command` for use by external packages.
+Shared command metadata types (`Command`, `Flag`, `SubCommand`) are extracted to the `internal/cmdinfo` package to break a circular import between `cli` and `completion`. The `cmdinfo.Command` struct includes a `ValidArgs` field (`[]string`) for commands that accept a fixed set of positional arguments (e.g., `completion` accepts `bash`, `zsh`, `fish`) and a `SubCommands` field (`[]SubCommand`) for commands that dispatch to named sub-commands (e.g., `pr` dispatches to `check`, `util` dispatches to `json-validate`). Each `SubCommand` has its own `Name`, `Description`, `Flags`, `ValidArgs`, and `CompletesFiles` fields. The `CommandInfos()` function converts the internal registry to `[]cmdinfo.Command` for use by external packages.
 
 Shell completion scripts are generated by the `internal/completion` package, which uses `text/template` to produce bash, zsh, and fish scripts from the command metadata. Commands with `Flags` or `ValidArgs` get second-level completion blocks that offer their ValidArgs, Flags, and universal `-h`/`--help` flags together. Commands with `SubCommands` get second-level completion (sub-command names) and third-level completion (sub-command-specific flags or file completion). Commands with neither (e.g., git shortcuts) get no subcommand completion.
 
@@ -132,7 +179,9 @@ Health:
 
 PR:
   pr <subcommand>       Pull request commands
-  prs [flags]           Check the status of the PR for the current branch
+  pr check [flags]      Check the status of the PR for the current branch
+  pr submit [flags]     Commit, create tracker task and GitHub PR (from detached HEAD)
+  pr close [flags]      Complete tracker task, delete branches, return to detached HEAD
 
 Git Shortcuts:
   gaa               Stage all changes
@@ -163,6 +212,40 @@ Utility:
   util <subcommand>           Developer utility commands
   completion <bash|zsh|fish>  Generate shell completion script
 ```
+
+## Profile Resolution
+
+### ResolveActiveProfile
+
+```go
+func ResolveActiveProfile(explicitProfile string) (string, error)
+```
+
+Shared helper used by `runHealth`, `runSubmit`, and `runClose` to resolve and register an active profile before the domain layer reads config. Implemented in `internal/cli/profile.go`.
+
+Resolution order, stopping at the first hit:
+
+1. `explicitProfile != ""` — look up by name in `config.GetProfiles()`. An unknown name returns a `*UsageError` (`"profile not found: <name>"`) without modifying active-profile state.
+2. CWD-based — `workspace.ResolveWorkspaceFromCWD(cwd)`. When the CWD falls inside a profile's workspaces root, that profile becomes active.
+3. No match — leave `config.activeProfile` nil so reads fall back to global config.
+
+A failure from `os.Getwd` is treated as "no CWD match" (case 3 fallback), because an unreadable CWD is not a fatal error for a command that can still run against global config.
+
+On success (cases 1 and 2), `config.SetActiveProfile` is called. The returned string is the resolved profile name (empty when case 3).
+
+Three package-level stubbable vars support test injection:
+
+```go
+var (
+    resolveFromCWD = workspace.ResolveWorkspaceFromCWD
+    getProfiles    = config.GetProfiles
+    getCWD         = os.Getwd
+)
+```
+
+The handlers reach the resolver through `resolveActiveProfile`, a stubbable var pointing at `ResolveActiveProfile`, so tests can assert each handler invokes it.
+
+Only `runHealth` accepts an explicit `--profile <name>`; `runSubmit` and `runClose` always call `ResolveActiveProfile("")`.
 
 ## Command Handlers
 
@@ -248,7 +331,10 @@ Parses the provided args for flags:
 - `-h` or `--help`: prints usage information and returns nil.
 - `--strict`: enables strict mode.
 - `-v` or `--verbose`: enables verbose mode (shows dependency locations).
+- `-p` or `--profile <name>` (also `--profile=<name>`): selects a specific profile. Parsed via the shared `parseValue` helper.
 - Any other argument: returns a `UsageError` with the unknown flag and usage hint.
+
+Before delegating to the domain layer, calls `ResolveActiveProfile(profile)` (see below). A `*UsageError` from an unknown profile name short-circuits before `health.Run` runs.
 
 Delegates to `health.Run(os.Stdout, strict, verbose)`.
 
@@ -279,15 +365,17 @@ func runPR(args []string) error
 
 Dispatches on `args[0]`:
 - `-h` or `--help`: prints the subcommand list and returns nil.
-- `"status"`: delegates to `runPRStatus(args[1:])`.
+- `"check"`: delegates to `runPRCheck(args[1:])`.
+- `"submit"`: delegates to `runSubmit(args[1:])`.
+- `"close"`: delegates to `runClose(args[1:])`.
 - Unknown subcommand: returns a `UsageError`.
 
 If `args` is empty, returns a `UsageError`.
 
-### prs (alias for `pr status`)
+### check (also `pr check`)
 
 ```go
-func runPRStatus(args []string) error
+func runPRCheck(args []string) error
 ```
 
 Parses the provided args for flags:
@@ -295,7 +383,51 @@ Parses the provided args for flags:
 - `--json`: enables JSON output mode.
 - Any other argument: returns a `UsageError` with the unknown flag and usage hint.
 
-Delegates to `prstatus.Run(os.Stdout, jsonOutput)`.
+Delegates to `prstatus.Run(os.Stdout, jsonOutput)`. The underlying domain package is still named `prstatus` because the CLI rename from `pr status` to `pr check` is a presentation-layer change; the package that implements the check continues to be `internal/prstatus`.
+
+### submit (also `pr submit`)
+
+```go
+func runSubmit(args []string) error
+```
+
+1. `parseSubmitFlags(args)` walks the args and populates a `submit.Options`. Accepts `-h`/`--help` (prints usage and returns nil), `--draft`, `-b`/`--blocked`, `-o`/`--open-browser`, `--skip-tracker`, `--json`, `-v`/`--verbose`, `-q`/`--quiet`, `-m`/`--message <val>`, `-d`/`--description <val>`. Both `--flag=value` and `--flag value` forms are supported. Unknown flags, missing `--message`, and combining `--verbose` with `--quiet` all return `*UsageError`.
+2. Calls `ResolveActiveProfile("")` so profile-scoped config (notably `task-tracker.provider`) is visible to `submit.Run`. Errors from the resolver propagate.
+3. Calls `submitRun(os.Stdout, opts)` (a stubbable var pointing at `submit.Run`).
+4. Error translation:
+   - `errors.Is(err, submit.ErrNotDetached)` -> `*UsageError{Message: err.Error()}`.
+   - `errors.As(err, &*credentials.NotFoundError)` -> prints the error message and `credentials.SetupHint(provider)` to stderr, returns `*UsageError{Message: ""}` (suppresses the crash log; main.go prints nothing and exits 1).
+   - Any other error bubbles up to `main.go`, which runs `crash.HandleError` unless the error is a `*process.PassthroughError`.
+
+### close (also `pr close`)
+
+```go
+func runClose(args []string) error
+```
+
+1. `parseCloseFlags(args)` walks the args and populates a `closecmd.Options`. Accepts `-h`/`--help` (prints usage and returns nil), `--skip-tracker`, `-y`/`--force`, `-v`/`--verbose`, `-q`/`--quiet`, `-t`/`--task-url <val>`. Unknown flags and combining `--verbose` with `--quiet` return `*UsageError`. Both `--task-url=value` and `--task-url value` forms are supported.
+2. Calls `ResolveActiveProfile("")` so profile-scoped config (notably `task-tracker.provider`) is visible to `closecmd.Run`. Errors from the resolver propagate.
+3. Calls `closeRun(os.Stdout, opts)` (a stubbable var pointing at `closecmd.Run`).
+4. Error translation:
+   - `errors.Is(err, closecmd.ErrDetached)` -> `*UsageError{Message: err.Error()}`.
+   - `errors.Is(err, closecmd.ErrProtectedBranch)` -> `*UsageError{Message: err.Error()}` (the error wraps the branch name).
+   - `errors.Is(err, closecmd.ErrNoTrackerForURL)` -> `*UsageError{Message: err.Error()}`.
+   - `errors.Is(err, closecmd.ErrAborted)` -> `*process.PassthroughError{Code: 1}`. The `→ Aborted` line was already printed by `closecmd.Run`, and passthrough-error exits skip the crash log and the usage-error print.
+   - `errors.As(err, &*credentials.NotFoundError)` -> prints the error and `credentials.SetupHint` to stderr, returns `*UsageError{Message: ""}`.
+   - Any other error bubbles up.
+
+## Exit Codes
+
+| Situation | Exit |
+|-----------|-----:|
+| Success | 0 |
+| Any `*cli.UsageError` (including the `{Message: ""}` "already printed" form) | 1 |
+| `submit`/`close` domain sentinel (not-detached, protected branch, aborted, `--task-url` without tracker, missing required flag) | 1 |
+| `*credentials.NotFoundError` | 1 |
+| `gh.PRAlreadyExistsError`, other domain errors | 1 (crash log printed) |
+| `*process.PassthroughError{Code: N}` (raised by a git/gh subprocess via `internal/process`) | `N` (subprocess exit code propagates transparently) |
+
+`PassthroughError.Code` still propagates unchanged when git/gh subprocesses raise it; submit and close do not intercept it.
 
 ## Binary Name
 
@@ -350,12 +482,15 @@ func main() {
 - Test that `completion <invalid-shell> -h` returns a `UsageError` mentioning "unsupported shell".
 - Test that `pr` without a subcommand returns a `UsageError`.
 - Test that `pr` with an unknown subcommand returns a `UsageError`.
-- Test that `pr status` is recognized and dispatches correctly.
-- Test that `prs` is recognized as an alias for `pr status`.
-- Test that `prs --json` enables JSON output mode.
-- Test that `prs` with an unknown flag returns a `UsageError`.
+- Test that `pr check` is recognized and dispatches correctly.
+- Test that `check --json` enables JSON output mode.
+- Test that `check` with an unknown flag returns a `UsageError`.
 - Test that `util` without a subcommand returns a `UsageError`.
 - Test that `util` with an unknown subcommand returns a `UsageError`.
 - Test that `util json-validate` is recognized and dispatches correctly.
 - Test that `util json-validate` without an argument returns `PassthroughError{Code: 2}`.
+- Test that `submit` without `--message` returns a `UsageError`.
+- Test that `submit` accepts both `-m value` and `--message=value` forms.
+- Test that `submit` and `close` map their domain sentinels to the correct `UsageError` / `PassthroughError` forms.
+- Test that `submit` and `close` translate `*credentials.NotFoundError` by printing the setup hint and returning `*UsageError{Message: ""}`.
 - Command handler integration tests are better handled at a higher level (testing the actual TUI behavior or workspace operations).

@@ -16,7 +16,12 @@ Types of changes:
 
 ### Added
 
-- `debi pr status` command (alias: `debi prs`) for checking GitHub PR status, CI checks, and code reviews for the current branch
+- `debi pr submit` command for committing changes, creating a tracker task, pushing a feature branch, and opening a GitHub PR from detached HEAD
+- `debi pr close` command for marking the tracker task complete, deleting the branch, and returning to detached HEAD on the default branch
+- `process.WithSilent()` exec option that routes `RunPassthrough` stdout/stderr to `io.Discard`; used by submit/close in Normal and Quiet modes.
+- `debi health` now reports task-tracker credential status when a provider is configured
+- `debi health --profile <name>` explicitly selects a profile to check (defaults to CWD-based resolution)
+- `debi pr check` command (alias: `debi check`) for checking GitHub PR status, CI checks, and code reviews for the current branch
 - `debi util json-validate` subcommand for validating JSON files with line:column error positions
 - User guide: sections for `ccc` command, Judge plugin, `debi` CLI, shell completions, and troubleshooting
 - Version display and config file status in `debi health` output
@@ -37,6 +42,7 @@ Types of changes:
 	- Columns are separated by a single-cell gap
 	- Dirty status is now bold
 - `debi health` now performs a two-stage credential check, distinguishing between missing tokens and authentication failures
+- `debi health` always shows a task-tracker row; when unconfigured it is a neutral informational row (`○ task-tracker  not configured (optional)`), excluded from the "Credentials met: X/Y" denominator and from `--strict` accounting
 - Automated release-cutting process: `cut-release.sh` now handles pre-flight checks, optional AI-powered changelog cleanup, interactive review pause, and PR creation in a single script
 - Release tagging is now automated via GitHub Actions when release PRs are merged
 - `ccc` now sets Claude Code's effort level to "max"

@@ -15,6 +15,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"devora/internal/config"
+	"devora/internal/credentials"
 	"devora/internal/process"
 	"devora/internal/version"
 )
@@ -40,6 +41,10 @@ const (
 	CredentialOK CredentialStatus = iota
 	CredentialFailed
 	CredentialUnchecked
+	// CredentialInfo marks an informational row that doesn't count toward the
+	// "Credentials met: X/Y" denominator (e.g., an optional tracker that
+	// is not configured). Rendered with a neutral ○ marker.
+	CredentialInfo
 )
 
 type CredentialResult struct {
@@ -127,7 +132,54 @@ func checkCredentials(ghFound bool) []CredentialResult {
 			}
 		}
 	}
-	return []CredentialResult{result}
+	results := []CredentialResult{result}
+	results = append(results, *checkTrackerCredential())
+	return results
+}
+
+// Stubbable in tests so we can exercise the tracker-credential branches
+// without touching config or the OS keychain.
+var (
+	getTrackerProvider = config.GetTaskTrackerProvider
+	getTrackerToken    = credentials.GetToken
+)
+
+// checkTrackerCredential returns a credential row for the task-tracker. When
+// no tracker is configured, returns a neutral info row so users can see that
+// the feature exists but is unconfigured. When a tracker is configured but
+// the token is missing, the message points the user at credentials.SetupHint
+// so they know how to store one.
+func checkTrackerCredential() *CredentialResult {
+	provider := getTrackerProvider()
+	if provider == "" {
+		return &CredentialResult{
+			Name:    "task-tracker",
+			Status:  CredentialInfo,
+			Message: "not configured (optional)",
+		}
+	}
+	result := CredentialResult{Name: provider + " token"}
+	token, err := getTrackerToken(provider)
+	if err != nil {
+		var nfe *credentials.NotFoundError
+		if errors.As(err, &nfe) {
+			result.Status = CredentialFailed
+			result.Message = credentials.SetupHint(provider)
+			return &result
+		}
+		result.Status = CredentialFailed
+		result.Message = err.Error()
+		return &result
+	}
+	if token == "" {
+		// GetToken shouldn't return empty on success, but guard anyway.
+		result.Status = CredentialFailed
+		result.Message = credentials.SetupHint(provider)
+		return &result
+	}
+	result.Status = CredentialOK
+	result.Message = "stored in keychain"
+	return &result
 }
 
 const ghDepName = "gh"
@@ -205,7 +257,7 @@ func renderSection(w io.Writer, results []CheckResult, nameWidth, versionWidth i
 	return found
 }
 
-func renderCredentials(w io.Writer, results []CredentialResult, nameWidth int, greenStyle, redStyle, yellowStyle lipgloss.Style) int {
+func renderCredentials(w io.Writer, results []CredentialResult, nameWidth int, greenStyle, redStyle, yellowStyle, mutedStyle lipgloss.Style) int {
 	ok := 0
 	for _, r := range results {
 		switch r.Status {
@@ -219,9 +271,25 @@ func renderCredentials(w io.Writer, results []CredentialResult, nameWidth int, g
 		case CredentialUnchecked:
 			prefix := yellowStyle.Render(fmt.Sprintf("  ? %-*s", nameWidth, r.Name))
 			fmt.Fprintf(w, "%s  %s\n", prefix, r.Message)
+		case CredentialInfo:
+			prefix := mutedStyle.Render(fmt.Sprintf("  ○ %-*s", nameWidth, r.Name))
+			fmt.Fprintf(w, "%s  %s\n", prefix, r.Message)
 		}
 	}
 	return ok
+}
+
+// countedCredentials returns the number of credential rows that count toward
+// the "Credentials met: X/Y" denominator. Info rows (e.g., unconfigured
+// optional tracker) are excluded because they can't be "met" or "not met".
+func countedCredentials(results []CredentialResult) int {
+	n := 0
+	for _, r := range results {
+		if r.Status != CredentialInfo {
+			n++
+		}
+	}
+	return n
 }
 
 func renderSummaryLine(w io.Writer, labelWidth int, label string, found, total int, style lipgloss.Style) {
@@ -270,6 +338,9 @@ func Run(w io.Writer, strict bool, verbose bool) error {
 	greenStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#A6E3A1"))
 	redStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#F38BA8"))
 	yellowStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#F9E2AF"))
+	// Muted color for informational rows (e.g., unconfigured optional tracker).
+	// Matches tui.theme.go's TextMuted (Catppuccin overlay0).
+	mutedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6C7086"))
 
 	fmt.Fprintf(w, "Devora Health Check (version: %s)\n", getAppVersion())
 	fmt.Fprintln(w)
@@ -311,7 +382,8 @@ func Run(w io.Writer, strict bool, verbose bool) error {
 
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Credentials:")
-	credFound := renderCredentials(w, credResults, credNameWidth, greenStyle, redStyle, yellowStyle)
+	credFound := renderCredentials(w, credResults, credNameWidth, greenStyle, redStyle, yellowStyle, mutedStyle)
+	credTotal := countedCredentials(credResults)
 
 	completionPath := zshCompletionPath()
 	_, completionErr := statFile(completionPath)
@@ -354,7 +426,7 @@ func Run(w io.Writer, strict bool, verbose bool) error {
 	renderSummaryLine(w, summaryLabelWidth, optionalLabel, optionalFound, len(optional), optionalPctStyle)
 
 	credPctStyle := greenStyle
-	if credFound < len(credResults) {
+	if credFound < credTotal {
 		hasFailed := false
 		for _, r := range credResults {
 			if r.Status == CredentialFailed {
@@ -369,11 +441,11 @@ func Run(w io.Writer, strict bool, verbose bool) error {
 		}
 	}
 
-	renderSummaryLine(w, summaryLabelWidth, credentialsLabel, credFound, len(credResults), credPctStyle)
+	renderSummaryLine(w, summaryLabelWidth, credentialsLabel, credFound, credTotal, credPctStyle)
 
 	requiredMissing := len(required) - requiredFound
 	optionalMissing := len(optional) - optionalFound
-	credentialsMissing := len(credResults) - credFound
+	credentialsMissing := credTotal - credFound
 
 	if requiredMissing > 0 {
 		return &process.PassthroughError{Code: 1}
