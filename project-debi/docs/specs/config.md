@@ -45,7 +45,7 @@ type ExplicitRepoEntry struct {
   "profiles": ["/path/to/profile-1", "/path/to/profile-2"],
   "terminal": {
     "session-creation-timeout-seconds": 3,
-    "default-app": "nvim"
+    "default-app": "shell"
   },
   "prepare-command": "prep",
   "task-tracker": {
@@ -314,6 +314,32 @@ Writes the `"prepare-command"` key to the active profile's `config.json`.
 
 Uses the read-modify-write pattern (see [Profile Config Mutation](#profile-config-mutation)). Returns an error if no active profile is set.
 
+### SetDefaultTerminalAppGlobal
+
+```go
+func SetDefaultTerminalAppGlobal(value *string) error
+```
+
+Writes the `"terminal.default-app"` key to the global config.
+
+- If `value` is non-nil, sets `"terminal.default-app"` to `*value`, creating the `"terminal"` object if it does not already exist.
+- If `value` is nil, removes the `"default-app"` key. If the `"terminal"` object becomes empty as a result, it is pruned too.
+
+Operates on the global config only (does not touch profile config). Uses `loadFreshGlobalConfig` / `writeFreshGlobalConfig` to bypass the cache.
+
+### SetDefaultTerminalAppProfile
+
+```go
+func SetDefaultTerminalAppProfile(value *string) error
+```
+
+Writes the `"terminal.default-app"` key to the active profile's `config.json`.
+
+- If `value` is non-nil, sets `"terminal.default-app"` to `*value`, creating the `"terminal"` object if it does not already exist.
+- If `value` is nil, removes the `"default-app"` key. If the `"terminal"` object becomes empty as a result, it is pruned too.
+
+Uses the read-modify-write pattern (see [Profile Config Mutation](#profile-config-mutation)). Returns an error if no active profile is set.
+
 ### Profile Config Mutation
 
 Profile config changes use a read-modify-write pattern:
@@ -353,6 +379,24 @@ func GetDefaultTerminalApp(fallback string) string
 ```
 
 Returns the resolved value of `"terminal.default-app"` (profile-overridable). If not found at any level, returns `fallback`.
+
+The value `"shell"` is a reserved sentinel interpreted by the terminal layer as "launch a bare login/interactive shell without wrapping a command". A stored value that matches `$SHELL` is detected by the terminal layer and treated the same way. This package does not interpret the value -- it simply returns the string.
+
+### GetDefaultTerminalAppGlobalRaw
+
+```go
+func GetDefaultTerminalAppGlobalRaw() *string
+```
+
+Returns a pointer to the value of `"terminal.default-app"` stored in the global config, or `nil` if the key is unset or not a string. Reads only from the global config -- does not fall back to any other scope. Intended for UI code that needs to distinguish "unset at this scope" from "set to empty string".
+
+### GetDefaultTerminalAppProfileRaw
+
+```go
+func GetDefaultTerminalAppProfileRaw() *string
+```
+
+Returns a pointer to the value of `"terminal.default-app"` stored in the active profile's config, or `nil` if there is no active profile, the key is unset at the profile scope, or the value is not a string. Reads only from the active profile -- does not fall back to global. Intended for UI code that needs to distinguish "unset at this scope" from "set to empty string".
 
 ### TerminalSessionCreationTimeoutSeconds
 

@@ -493,7 +493,7 @@ func (m AppModel) openChangelogCmd() tea.Cmd {
 			"kitty", "@", "launch",
 			"--type=tab",
 			"--tab-title", "Changelog",
-			shell, "--login", "--interactive",
+			shell, "-l", "-i",
 			"-c", fmt.Sprintf("glow --style %s --pager %s", glowStylePath, changelogPath),
 		})
 		if err != nil {
@@ -758,7 +758,7 @@ func RunWorkspaceUI(
 func CreateAndAttachSession(wsPath, sessionName string) error {
 	backend := terminal.NewBackend()
 
-	app := config.GetDefaultTerminalApp("nvim")
+	app := config.GetDefaultTerminalApp("shell")
 	timeout := config.TerminalSessionCreationTimeoutSeconds(3)
 
 	workDir, err := workspace.GetSessionWorkingDirectory(wsPath)

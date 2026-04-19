@@ -36,6 +36,9 @@ PATH="$RESOURCES_DIR/bundled-apps:$PATH"
 
 cd "$HOME"
 
+
+[ ! -e ~/.hushlogin ] && touch ~/.hushlogin
+
 export KITTY_CONFIG_DIRECTORY="$RESOURCES_DIR/kitty-configs"
 export DEVORA_RESOURCES_DIR="$RESOURCES_DIR"
 

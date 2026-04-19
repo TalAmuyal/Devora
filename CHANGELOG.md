@@ -29,11 +29,13 @@ Types of changes:
 - GitHub Actions workflow to enforce CHANGELOG.md updates on pull requests
 - Optional pre-commit hook for local CHANGELOG.md reminders, installed via `mise run install-hooks`
 - `ccc` now supports `update`, `-u`, and `--update` to update Claude Code via `claude --update`
+- Settings page fields for configuring the workspace terminal app (`terminal.default-app`) at global and per-profile scope
 
 ### Fixed
 
 - User guide: cheatsheet now includes all keyboard shortcuts and fixes mislabeled ctrl+1/2/3 description
 - debi: PR commands (submit/close/check) now print a friendly error instead of crashing when run outside a git repository.
+- Aligned Kitty launch flags to short form (`-l -i`) consistently across source, tests, and specs; resolves a stale test assertion
 
 ### Changed
 
@@ -49,8 +51,11 @@ Types of changes:
 - Release tagging is now automated via GitHub Actions when release PRs are merged
 - `ccc` now sets Claude Code's effort level to "max"
 - `ccc` now uses `claude-opus-4-7` for Opus and Sonnet tasks
-- mac-install: automatically installs zsh completion to `~/.zsh/completions/_debi`. Prints a notice if `.zshrc` is not configured to source that directory.
-- USER_GUIDE: promoted Shell Completions from Optional Additions to a Recommended section.
+- mac-install: automatically installs zsh completion to `~/.zsh/completions/_debi`. Prints a notice if `.zshrc` is not configured to source that directory
+- USER_GUIDE: promoted Shell Completions from Optional Additions to a Recommended section
+- Default workspace app is now `shell` (bare login/interactive shell) instead of `nvim`. Existing configs with `"terminal.default-app": "nvim"` continue to work unchanged
+- The default terminal app is now configurable from the settings page
+- Kitty launch command for shell sessions no longer wraps in `-c shell` (no shell-in-shell); triggered either by the `"shell"` sentinel or by supplying a value equal to `$SHELL`
 
 ### Removed
 
