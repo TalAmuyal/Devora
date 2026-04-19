@@ -36,6 +36,22 @@ Resolves origin's default branch via `DefaultBranchName`; on failure, falls back
 
 Used by `internal/close` so that close can proceed even when `origin/HEAD` is not configured.
 
+### EnsureInRepo
+
+```go
+var ErrNotInGitRepo = errors.New("not in a git repository")
+
+const NotInRepoMessage = "this command must be run from inside a git repository"
+
+func EnsureInRepo(opts ...process.ExecOption) error
+```
+
+Precondition probe for commands that require a git repository. Runs `git rev-parse --git-dir` and returns `ErrNotInGitRepo` when the command fails; returns `nil` when the current working directory (or the directory provided via `process.WithCwd`) is inside a git repository.
+
+`NotInRepoMessage` is the user-facing string the CLI layer prints when it translates `ErrNotInGitRepo` into a `*cli.UsageError`.
+
+Used by `runSubmit`, `runClose`, and `runPRCheck` in `internal/cli` to short-circuit with a friendly error instead of letting a downstream git invocation crash with a native "not a git repository" stderr.
+
 ### Submit / close helpers (`submit_close.go`)
 
 Separate file from `commands.go` because these helpers return captured output or structured results rather than pure passthrough. Used by `internal/submit` and `internal/close`.
@@ -186,6 +202,7 @@ Runs `git rebase origin/<default-branch>`.
 | `default_branch.go` | `DefaultBranchName`, `DefaultBranchNameWithFallback` |
 | `commands.go` | All 23 command functions and the `passthrough` helper |
 | `submit_close.go` | Submit/close helpers (`CurrentBranchOrDetached`, `IsProtectedBranch`, `GenerateBranchName`, branch-config helpers, etc.) |
+| `in_repo.go` | `EnsureInRepo`, `ErrNotInGitRepo`, `NotInRepoMessage` |
 
 ## Testing
 
@@ -206,3 +223,9 @@ Integration tests using a real temp git repo:
 ### submit_close_test.go
 
 Table-driven unit tests for `GenerateBranchName` (ASCII, mixed case, trailing dashes, 70-character cap, empty input, all-non-ASCII input falls back to `"unnamed"`), plus temp-repo integration tests for `CurrentBranchOrDetached`, `IsProtectedBranch`, `SetBranchConfig`/`GetBranchConfig` (including the `--default ""` missing-key behavior), `HasLocalBranch`, and `HasRemoteBranch`.
+
+### in_repo_test.go
+
+Integration tests for `EnsureInRepo`:
+- Returns `ErrNotInGitRepo` when invoked with a `process.WithCwd` pointing at a temp directory that is not inside a git repository.
+- Returns `nil` when invoked with a `process.WithCwd` pointing at a freshly `git init`'d temp directory.

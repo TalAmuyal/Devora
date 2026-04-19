@@ -13,12 +13,15 @@ var crashDir = os.TempDir()
 var stderrWriter io.Writer = os.Stderr
 
 func HandleError(err error) {
-	crashFile := writeCrashLog(err.Error())
+	content := err.Error()
+	crashFile := writeCrashLog(content)
 	if crashFile == "" {
 		fmt.Fprintf(stderrWriter, "Devora crashed unexpectedly: %v\n", err)
 		return
 	}
-	fmt.Fprintf(stderrWriter, "Devora crashed unexpectedly. Details written to %s\n", crashFile)
+	fmt.Fprintln(stderrWriter, "Devora crashed unexpectedly. Details written to "+crashFile)
+	fmt.Fprintln(stderrWriter, "---")
+	fmt.Fprintln(stderrWriter, content)
 }
 
 func HandlePanic(recovered any) {
@@ -29,7 +32,9 @@ func HandlePanic(recovered any) {
 		fmt.Fprintf(stderrWriter, "Devora crashed unexpectedly: %v\n%s\n", recovered, stack)
 		return
 	}
-	fmt.Fprintf(stderrWriter, "Devora crashed unexpectedly. Details written to %s\n", crashFile)
+	fmt.Fprintln(stderrWriter, "Devora crashed unexpectedly. Details written to "+crashFile)
+	fmt.Fprintln(stderrWriter, "---")
+	fmt.Fprintln(stderrWriter, content)
 }
 
 func writeCrashLog(content string) string {

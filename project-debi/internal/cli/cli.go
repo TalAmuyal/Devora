@@ -5,6 +5,7 @@ import (
 	"devora/internal/completion"
 	"devora/internal/config"
 	"devora/internal/credentials"
+	"devora/internal/git"
 	"devora/internal/health"
 	"devora/internal/jsonvalidate"
 	"devora/internal/process"
@@ -214,6 +215,12 @@ func runPRCheck(args []string) error {
 			return &UsageError{Message: fmt.Sprintf("unknown flag: %s\nusage: debi pr check [--json]", arg)}
 		}
 	}
+	if err := git.EnsureInRepo(); err != nil {
+		if wrapped, ok := handleNotInGitRepo(err); ok {
+			return wrapped
+		}
+		return err
+	}
 	return prstatus.Run(os.Stdout, jsonOutput)
 }
 
@@ -376,6 +383,16 @@ func handleCredentialNotFound(err error) (error, bool) {
 	return &UsageError{Message: ""}, true
 }
 
+// handleNotInGitRepo translates git.ErrNotInGitRepo into a *UsageError so the
+// CLI exits with a friendly message instead of a crash log. Returns
+// (nil, false) when err is not the sentinel.
+func handleNotInGitRepo(err error) (error, bool) {
+	if errors.Is(err, git.ErrNotInGitRepo) {
+		return &UsageError{Message: git.NotInRepoMessage}, true
+	}
+	return nil, false
+}
+
 // runSubmit parses flags, invokes submit.Run, and translates domain sentinels
 // into user-facing CLI errors / exit codes.
 func runSubmit(args []string) error {
@@ -386,6 +403,13 @@ func runSubmit(args []string) error {
 	if helpRequested {
 		fmt.Println(submitUsage)
 		return nil
+	}
+
+	if err := git.EnsureInRepo(); err != nil {
+		if wrapped, ok := handleNotInGitRepo(err); ok {
+			return wrapped
+		}
+		return err
 	}
 
 	if _, err := resolveActiveProfile(""); err != nil {
@@ -416,6 +440,13 @@ func runClose(args []string) error {
 	if helpRequested {
 		fmt.Println(closeUsage)
 		return nil
+	}
+
+	if err := git.EnsureInRepo(); err != nil {
+		if wrapped, ok := handleNotInGitRepo(err); ok {
+			return wrapped
+		}
+		return err
 	}
 
 	if _, err := resolveActiveProfile(""); err != nil {

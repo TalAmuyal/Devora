@@ -26,8 +26,11 @@ Called when the CLI returns an error. Behavior:
 1. Generate a timestamp in `YYYYMMDD_HHMMSS` format.
 2. Construct the crash file path.
 3. Write `err.Error()` to the crash file.
-4. Print to stderr: `Devora crashed unexpectedly. Details written to <path>`
-5. If writing the crash file itself fails, print `Devora crashed unexpectedly: <error>` to stderr as a fallback.
+4. Print to stderr:
+   - `Devora crashed unexpectedly. Details written to <path>`
+   - `---`
+   - The full error content (same as the crash file).
+5. If writing the crash file itself fails, print `Devora crashed unexpectedly: <error>` to stderr as a fallback (no separator line, no duplicate content).
 
 ### HandlePanic
 
@@ -39,8 +42,11 @@ Called from a `recover()` in `main()`. Behavior:
 1. Format the panic value and stack trace (using `runtime/debug.Stack()`).
 2. Generate a timestamp and construct the crash file path (same format as `HandleError`).
 3. Write the formatted panic + stack trace to the crash file.
-4. Print to stderr: `Devora crashed unexpectedly. Details written to <path>`
-5. If writing fails, print `Devora crashed unexpectedly: <panic value>\n<stack trace>` to stderr.
+4. Print to stderr:
+   - `Devora crashed unexpectedly. Details written to <path>`
+   - `---`
+   - The full panic content (same as the crash file).
+5. If writing fails, print `Devora crashed unexpectedly: <panic value>\n<stack trace>` to stderr (no separator line).
 
 ## Integration with main()
 
@@ -56,6 +62,6 @@ Note: Ctrl+C sends SIGINT which terminates the process. Bubble Tea handles SIGIN
 
 - Test that `HandleError` writes a crash file with the error message.
 - Test that the crash file name matches the expected format.
-- Test that stderr output contains the crash file path.
-- Test `HandlePanic` includes stack trace information in the crash file.
+- Test that stderr output contains the crash file path, the `---` separator line, and the full error content.
+- Test `HandlePanic` includes stack trace information in the crash file and also echoes the panic value plus stack trace to stderr after the `---` separator.
 - Use a temp directory override or verify files appear in `os.TempDir()`.

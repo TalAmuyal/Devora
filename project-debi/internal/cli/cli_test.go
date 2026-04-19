@@ -4,6 +4,7 @@ import (
 	"bytes"
 	closecmd "devora/internal/close"
 	"devora/internal/credentials"
+	"devora/internal/git"
 	"devora/internal/process"
 	"devora/internal/submit"
 	"errors"
@@ -1635,5 +1636,81 @@ func TestRun_Close_QuietFlag_SetsOption(t *testing.T) {
 	}
 	if !gotOpts.Quiet {
 		t.Fatalf("expected Quiet=true, got %+v", gotOpts)
+	}
+}
+
+// chdirToNonGit changes the test's CWD to a fresh temp directory so
+// git-repo precondition checks fail.
+func chdirToNonGit(t *testing.T) {
+	t.Helper()
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chdir(origDir) })
+	os.Chdir(t.TempDir())
+}
+
+func TestRun_PRSubmit_OutsideGitRepo_ReturnsUsageError(t *testing.T) {
+	chdirToNonGit(t)
+	stubResolveActiveProfile(t, func(string) (string, error) {
+		t.Fatal("resolveActiveProfile should not be called when outside a git repo")
+		return "", nil
+	})
+	stubSubmitRun(t, func(io.Writer, submit.Options) error {
+		t.Fatal("submitRun should not be called when outside a git repo")
+		return nil
+	})
+
+	err := Run([]string{"pr", "submit", "-m", "msg"})
+	if err == nil {
+		t.Fatal("expected error when outside a git repo")
+	}
+	var usageErr *UsageError
+	if !errors.As(err, &usageErr) {
+		t.Fatalf("expected *UsageError, got %T: %s", err, err.Error())
+	}
+	if usageErr.Message != git.NotInRepoMessage {
+		t.Fatalf("expected message %q, got %q", git.NotInRepoMessage, usageErr.Message)
+	}
+}
+
+func TestRun_PRClose_OutsideGitRepo_ReturnsUsageError(t *testing.T) {
+	chdirToNonGit(t)
+	stubResolveActiveProfile(t, func(string) (string, error) {
+		t.Fatal("resolveActiveProfile should not be called when outside a git repo")
+		return "", nil
+	})
+	stubCloseRun(t, func(io.Writer, closecmd.Options) error {
+		t.Fatal("closeRun should not be called when outside a git repo")
+		return nil
+	})
+
+	err := Run([]string{"pr", "close"})
+	if err == nil {
+		t.Fatal("expected error when outside a git repo")
+	}
+	var usageErr *UsageError
+	if !errors.As(err, &usageErr) {
+		t.Fatalf("expected *UsageError, got %T: %s", err, err.Error())
+	}
+	if usageErr.Message != git.NotInRepoMessage {
+		t.Fatalf("expected message %q, got %q", git.NotInRepoMessage, usageErr.Message)
+	}
+}
+
+func TestRun_PRCheck_OutsideGitRepo_ReturnsUsageError(t *testing.T) {
+	chdirToNonGit(t)
+
+	err := Run([]string{"pr", "check"})
+	if err == nil {
+		t.Fatal("expected error when outside a git repo")
+	}
+	var usageErr *UsageError
+	if !errors.As(err, &usageErr) {
+		t.Fatalf("expected *UsageError, got %T: %s", err, err.Error())
+	}
+	if usageErr.Message != git.NotInRepoMessage {
+		t.Fatalf("expected message %q, got %q", git.NotInRepoMessage, usageErr.Message)
 	}
 }

@@ -33,9 +33,11 @@ Types of changes:
 ### Fixed
 
 - User guide: cheatsheet now includes all keyboard shortcuts and fixes mislabeled ctrl+1/2/3 description
+- debi: PR commands (submit/close/check) now print a friendly error instead of crashing when run outside a git repository.
 
 ### Changed
 
+- debi: Crash reports now echo the log content to stderr in addition to writing the log file.
 - Debi workspace-ui UI improvement
 	- Repo rows in workspace cards no longer wrap or push the clean/dirty status off-screen when a branch or worktree name is long
 	- Long values are tail-truncated with `…`
