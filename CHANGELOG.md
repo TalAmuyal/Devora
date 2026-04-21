@@ -30,6 +30,9 @@ Types of changes:
 - Optional pre-commit hook for local CHANGELOG.md reminders, installed via `mise run install-hooks`
 - `ccc` now supports `update`, `-u`, and `--update` to update Claude Code via `claude --update`
 - Settings page fields for configuring the workspace terminal app (`terminal.default-app`) at global and per-profile scope
+- `detached-flow` Claude Code plugin, bundled with Devora, providing `submit-pr`, `close-pr`, and `check-pr` shell aliases (wrapping the corresponding `debi pr` subcommands) and a `submit-pr` skill with guidance for submitting a PR
+- `team-work` Claude Code plugin skill for leading and coordinating a team of agents on a task (user-invocable only)
+- Bundled Devora bootstrap now prepends each cc-plugin `bin/` directory to `PATH`, enabling plugins to ship first-class CLI commands alongside skills and hooks
 
 ### Fixed
 

@@ -13,10 +13,22 @@ Devora/                           (DMG root)
       │  └─ bootstrap.sh
       └─ Resources/
          ├─ cc-plugins/
-         │  └─ judge/
-         │     ├─ hooks/
-         │     │  └─ hooks.json
-         │     └─ main.py
+         │  ├─ detached-flow/
+         │  │  ├─ bin/
+         │  │  │  ├─ check-pr
+         │  │  │  ├─ close-pr
+         │  │  │  └─ submit-pr
+         │  │  └─ skills/
+         │  │     └─ submit-pr/
+         │  │        └─ SKILL.md
+         │  ├─ judge/
+         │  │  ├─ hooks/
+         │  │  │  └─ hooks.json
+         │  │  └─ main.py
+         │  └─ team-work/
+         │     └─ skills/
+         │        └─ team-work/
+         │           └─ SKILL.md
          ├─ app.icns
          ├─ CHANGELOG.md
          ├─ USER_GUIDE.md
