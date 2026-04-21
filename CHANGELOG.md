@@ -14,55 +14,51 @@ Types of changes:
 
 ## Unreleased
 
+## 2026-04-21.0
+
 ### Added
 
-- `debi pr submit` command for committing changes, creating a tracker task, pushing a feature branch, and opening a GitHub PR from detached HEAD
-- `debi pr close` command for marking the tracker task complete, deleting the branch, and returning to detached HEAD on the default branch
-- `process.WithSilent()` exec option that routes `RunPassthrough` stdout/stderr to `io.Discard`; used by submit/close in Normal and Quiet modes.
-- `debi health` now reports task-tracker credential status when a provider is configured
-- `debi health --profile <name>` explicitly selects a profile to check (defaults to CWD-based resolution)
-- `debi pr check` command (alias: `debi check`) for checking GitHub PR status, CI checks, and code reviews for the current branch
-- `debi util json-validate` subcommand for validating JSON files with line:column error positions
-- User guide: sections for `ccc` command, Judge plugin, `debi` CLI, shell completions, and troubleshooting
-- Version display and config file status in `debi health` output
-- debi health: reports whether zsh completion is installed (optional; fails under `--strict` if missing).
-- GitHub Actions workflow to enforce CHANGELOG.md updates on pull requests
-- Optional pre-commit hook for local CHANGELOG.md reminders, installed via `mise run install-hooks`
-- `ccc` now supports `update`, `-u`, and `--update` to update Claude Code via `claude --update`
-- Settings page fields for configuring the workspace terminal app (`terminal.default-app`) at global and per-profile scope
-- `detached-flow` Claude Code plugin, bundled with Devora, providing `submit-pr`, `close-pr`, and `check-pr` shell aliases (wrapping the corresponding `debi pr` subcommands) and a `submit-pr` skill with guidance for submitting a PR
+- `debi pr` commands for a detached-HEAD PR workflow:
+	- `debi pr submit` commits changes, creates a tracker task (if configured), pushes a feature branch, and opens a GitHub PR
+	- `debi pr close` marks the tracker task complete (if configured), deletes the branch, and returns to detached HEAD on the default branch
+	- `debi pr check` reports PR status, CI checks, and code reviews for the current branch
+- `detached-flow` Claude Code plugin, bundled with Devora, providing `submit-pr`, `close-pr`, and `check-pr` shell aliases (wrapping the corresponding `debi pr` subcommands) and a `submit-pr` skill (both model and user-invocable)
 - `team-work` Claude Code plugin skill for leading and coordinating a team of agents on a task (user-invocable only)
 - Bundled Devora bootstrap now prepends each cc-plugin `bin/` directory to `PATH`, enabling plugins to ship first-class CLI commands alongside skills and hooks
-
-### Fixed
-
-- User guide: cheatsheet now includes all keyboard shortcuts and fixes mislabeled ctrl+1/2/3 description
-- debi: PR commands (submit/close/check) now print a friendly error instead of crashing when run outside a git repository.
-- Aligned Kitty launch flags to short form (`-l -i`) consistently across source, tests, and specs; resolves a stale test assertion
+- `ccc` now supports `update`, `-u`, and `--update` to update Claude Code via `claude --update`
+- Settings page fields for configuring the workspace terminal app (`terminal.default-app`) at global and per-profile scope
+- `debi health` improvements:
+	- Version display
+	- Config file status
+	- `zsh` completion installation check (optional; fails under `--strict` if missing)
+	- Task-tracker credential status (when a provider is configured)
+	- Performs a two-stage credential check, distinguishing between missing tokens and authentication failures
+	- `--profile <name>` flag for explicit profile selection (defaults to CWD-based resolution)
+- User guide: sections for `ccc` command, Judge plugin, `debi` CLI, shell completions, and troubleshooting
 
 ### Changed
 
-- debi: Crash reports now echo the log content to stderr in addition to writing the log file.
-- Debi workspace-ui UI improvement
-	- Repo rows in workspace cards no longer wrap or push the clean/dirty status off-screen when a branch or worktree name is long
-	- Long values are tail-truncated with `…`
-	- Columns are separated by a single-cell gap
-	- Dirty status is now bold
-- `debi health` now performs a two-stage credential check, distinguishing between missing tokens and authentication failures
-- `debi health` always shows a task-tracker row; when unconfigured it is a neutral informational row (`○ task-tracker  not configured (optional)`), excluded from the "Credentials met: X/Y" denominator and from `--strict` accounting
-- Automated release-cutting process: `cut-release.sh` now handles pre-flight checks, optional AI-powered changelog cleanup, interactive review pause, and PR creation in a single script
-- Release tagging is now automated via GitHub Actions when release PRs are merged
-- `ccc` now sets Claude Code's effort level to "max"
-- `ccc` now uses `claude-opus-4-7` for Opus and Sonnet tasks
-- mac-install: automatically installs zsh completion to `~/.zsh/completions/_debi`. Prints a notice if `.zshrc` is not configured to source that directory
-- USER_GUIDE: promoted Shell Completions from Optional Additions to a Recommended section
-- Default workspace app is now `shell` (bare login/interactive shell) instead of `nvim`. Existing configs with `"terminal.default-app": "nvim"` continue to work unchanged
-- The default terminal app is now configurable from the settings page
-- Kitty launch command for shell sessions no longer wraps in `-c shell` (no shell-in-shell); triggered either by the `"shell"` sentinel or by supplying a value equal to `$SHELL`
+- Default workspace app is now `shell` (bare login/interactive shell) instead of `nvim`; existing configs with `"terminal.default-app": "nvim"` continue to work unchanged
+	- Now configurable from the settings page
+- `ccc` now sets Claude Code's effort level to "max" and uses `claude-opus-4-7` for Opus and Sonnet tasks
 
 ### Removed
 
-- debi: removed hidden CLI aliases `w`, `a`, `r`. Use full command names (`workspace-ui`, `add`, `rename`) or install shell completion with `debi completion zsh > ~/.zsh/completions/_debi`.
+- `debi`: removed hidden CLI aliases `w`, `a`, `r`
+	- Use full command names (`workspace-ui`, `add`, `rename`)
+	- Not needed anymore thanks to the shell completion feature
+
+### Fixed
+
+- Kitty launch command for shell sessions no longer wraps in `-c shell` (no shell-in-shell)
+	- Triggered either by the `"shell"` sentinel or by supplying a value equal to `$SHELL`
+- Main page (`debi workspace-ui`):
+	- Repo rows no longer wrap or push the clean/dirty status off-screen when branch/worktree names are long
+	- Long values are tail-truncated with `…`
+	- Columns are separated by a double-cell gap for cleaner visual separation
+	- Dirty status visibility by setting it to bold
+- `debi` crash reports now echo the log content to stderr in addition to writing the log file
+- User guide cheatsheet: includes all keyboard shortcuts and fixes mislabeled ctrl+1/2/3 description
 
 ## 2026-04-10.1
 
