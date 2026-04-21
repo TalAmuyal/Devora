@@ -4,6 +4,8 @@ cc-simple-statusline
 .claude/settings.local.json
 
 bin/
+!/project-*/cc-plugin/bin
+
 3rd-party-apps/
 devora.app/Contents/Resources
 .venv/

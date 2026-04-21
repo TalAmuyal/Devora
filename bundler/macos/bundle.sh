@@ -54,15 +54,15 @@ REPO_ROOT=$(dirname "$BUNDLER_DIR")
 # Compute effective version
 BASE_VERSION=$(cat "$REPO_ROOT/VERSION")
 if git -C "$REPO_ROOT" describe --exact-match --tags --match 'v*' HEAD >/dev/null 2>&1; then
-    EFFECTIVE_VERSION="$BASE_VERSION"
+	EFFECTIVE_VERSION="$BASE_VERSION"
 else
-    LAST_TAG=$(git -C "$REPO_ROOT" describe --tags --match 'v*' --abbrev=0 2>/dev/null || echo "")
-    if [ -n "$LAST_TAG" ]; then
-        COMMIT_COUNT=$(git -C "$REPO_ROOT" rev-list --count "${LAST_TAG}..HEAD")
-    else
-        COMMIT_COUNT=$(git -C "$REPO_ROOT" rev-list --count HEAD)
-    fi
-    EFFECTIVE_VERSION="${BASE_VERSION}-dev.${COMMIT_COUNT}"
+	LAST_TAG=$(git -C "$REPO_ROOT" describe --tags --match 'v*' --abbrev=0 2>/dev/null || echo "")
+	if [ -n "$LAST_TAG" ]; then
+		COMMIT_COUNT=$(git -C "$REPO_ROOT" rev-list --count "${LAST_TAG}..HEAD")
+	else
+		COMMIT_COUNT=$(git -C "$REPO_ROOT" rev-list --count HEAD)
+	fi
+	EFFECTIVE_VERSION="${BASE_VERSION}-dev.${COMMIT_COUNT}"
 fi
 
 echo "Effective version: $EFFECTIVE_VERSION"
@@ -149,22 +149,24 @@ GOOS=darwin \
 	-o "$OUTPUT_CONTAINER_DIR/cc-simple-statusline"
 
 # Bundle prepared files and directories
-bundle "$REPO_ROOT/USER_GUIDE.md"           "$OUTPUT_CONTAINER_DIR/."         overwrite
-bundle "$REPO_ROOT/USER_GUIDE.md"           "$RESOURCES_DIR/."                overwrite
-bundle "$REPO_ROOT/CHANGELOG.md"            "$OUTPUT_CONTAINER_DIR/."         overwrite
-bundle "$REPO_ROOT/CHANGELOG.md"            "$RESOURCES_DIR/."                overwrite
-echo -n "$EFFECTIVE_VERSION"          >     "$RESOURCES_DIR/VERSION"
-bundle "$SCRIPT_DIR/Info.plist"             "$OUTPUT_DIR/Contents/."          overwrite
-bundle "$THIRD_PARTY_APPS_DIR/kitty.app"    "$RESOURCES_DIR/kitty.app"        check
-bundle "$BUNDLER_DIR/kitty-license.txt"     "$RESOURCES_DIR/."                overwrite
-bundle "$BUNDLER_DIR/uv-license.txt"        "$RESOURCES_DIR/."                overwrite
-bundle "$THIRD_PARTY_APPS_DIR/uv"           "$RESOURCES_DIR/uv"               check
-bundle "$THIRD_PARTY_APPS_DIR/glow"          "$BUNDLED_APPS_DIR/glow"         check
-bundle "$REPO_ROOT/kitty-configs"           "$RESOURCES_DIR/."                overwrite
-bundle "$SCRIPT_DIR/bootstrap.sh"           "$ROOT_EXEC_DIR/."                overwrite
-bundle "$REPO_ROOT/ccc.sh"                  "$BUNDLED_APPS_DIR/ccc"           overwrite
-bundle "$REPO_ROOT/project-judge/cc-plugin" "$BUNDLED_CC_PLUGINS_DIR/judge"   overwrite
-bundle "$REPO_ROOT/project-judge/main.py"   "$BUNDLED_CC_PLUGINS_DIR/judge/." overwrite
+bundle "$REPO_ROOT/USER_GUIDE.md"                   "$OUTPUT_CONTAINER_DIR/."               overwrite
+bundle "$REPO_ROOT/USER_GUIDE.md"                   "$RESOURCES_DIR/."                      overwrite
+bundle "$REPO_ROOT/CHANGELOG.md"                    "$OUTPUT_CONTAINER_DIR/."               overwrite
+bundle "$REPO_ROOT/CHANGELOG.md"                    "$RESOURCES_DIR/."                      overwrite
+echo -n "$EFFECTIVE_VERSION"          >             "$RESOURCES_DIR/VERSION"
+bundle "$SCRIPT_DIR/Info.plist"                     "$OUTPUT_DIR/Contents/."                overwrite
+bundle "$THIRD_PARTY_APPS_DIR/kitty.app"            "$RESOURCES_DIR/kitty.app"              check
+bundle "$BUNDLER_DIR/kitty-license.txt"             "$RESOURCES_DIR/."                      overwrite
+bundle "$BUNDLER_DIR/uv-license.txt"                "$RESOURCES_DIR/."                      overwrite
+bundle "$THIRD_PARTY_APPS_DIR/uv"                   "$RESOURCES_DIR/uv"                     check
+bundle "$THIRD_PARTY_APPS_DIR/glow"                 "$BUNDLED_APPS_DIR/glow"                check
+bundle "$REPO_ROOT/kitty-configs"                   "$RESOURCES_DIR/."                      overwrite
+bundle "$SCRIPT_DIR/bootstrap.sh"                   "$ROOT_EXEC_DIR/."                      overwrite
+bundle "$REPO_ROOT/ccc.sh"                          "$BUNDLED_APPS_DIR/ccc"                 overwrite
+bundle "$REPO_ROOT/project-judge/cc-plugin"         "$BUNDLED_CC_PLUGINS_DIR/judge"         overwrite
+bundle "$REPO_ROOT/project-judge/main.py"           "$BUNDLED_CC_PLUGINS_DIR/judge/."       overwrite
+bundle "$REPO_ROOT/project-team-work/cc-plugin"     "$BUNDLED_CC_PLUGINS_DIR/team-work"     overwrite
+bundle "$REPO_ROOT/project-detached-flow/cc-plugin" "$BUNDLED_CC_PLUGINS_DIR/detached-flow" overwrite
 
 # Patch Info.plist with effective version
 sed -i '' "s|<string>1\.0</string>|<string>$EFFECTIVE_VERSION</string>|g" "$OUTPUT_DIR/Contents/Info.plist"

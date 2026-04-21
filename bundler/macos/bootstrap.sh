@@ -29,13 +29,18 @@ trap 'on_error $LINENO' ERR
 
 APP_CONTENTS_PATH="$(cd "$(dirname "$0")/.." && pwd)"
 RESOURCES_DIR="$APP_CONTENTS_PATH/Resources"
+CC_PLUGINS_DIR="$RESOURCES_DIR/cc-plugins"
 
 KITTY_EXECUTABLE_PATH="$RESOURCES_DIR/kitty.app/Contents/MacOS/kitty"
 
 PATH="$RESOURCES_DIR/bundled-apps:$PATH"
+if [ -d "$CC_PLUGINS_DIR" ]; then
+	for plugin in "$CC_PLUGINS_DIR"/*; do
+		[ -d "$plugin/bin" ] && PATH="$plugin/bin:$PATH"
+	done
+fi
 
 cd "$HOME"
-
 
 [ ! -e ~/.hushlogin ] && touch ~/.hushlogin
 
