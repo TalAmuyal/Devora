@@ -4,7 +4,7 @@ Package: `internal/submit`
 
 ## Purpose
 
-Implement `debi submit`: commit local changes, create a tracker task (when a task-tracker is configured), create a feature branch, push it, open a GitHub PR via the `gh` CLI, and (unless blocked) enable auto-merge. Must be invoked from a detached HEAD.
+Implement `debi submit`: commit local changes, create a tracker task (when a task-tracker is configured), create a feature branch, push it, open a GitHub PR via the `gh` CLI, and, depending on config and flags, enable auto-merge. Must be invoked from a detached HEAD.
 
 ## Profile Resolution
 
@@ -30,15 +30,16 @@ Stable public API: `Run`, `Options`, `JSONOutput`, `ErrNotDetached`.
 
 ```go
 type Options struct {
-    Message     string // required: commit message, task title, PR title.
-    Description string // optional: appended to PR body.
-    Draft       bool   // create PR as draft.
-    Blocked     bool   // skip enabling auto-merge.
-    OpenBrowser bool   // open the PR URL in the default browser on success.
-    JSONOutput  bool   // emit a single JSON object instead of human output.
-    SkipTracker bool   // treat as no tracker configured, even if one is.
-    Verbose     bool   // show live git/gh subprocess output.
-    Quiet       bool   // print only the final PR URL on stdout.
+    Message        string // required: commit message, task title, PR title.
+    Description    string // optional: appended to PR body.
+    Draft          bool   // create PR as draft.
+    Blocked        bool   // explicit --blocked: force-skip auto-merge regardless of config.
+    ForceAutoMerge bool   // explicit --auto-merge: force auto-merge on regardless of config.
+    OpenBrowser    bool   // open the PR URL in the default browser on success.
+    JSONOutput     bool   // emit a single JSON object instead of human output.
+    SkipTracker    bool   // treat as no tracker configured, even if one is.
+    Verbose        bool   // show live git/gh subprocess output.
+    Quiet          bool   // print only the final PR URL on stdout.
 }
 ```
 
@@ -104,9 +105,11 @@ var (
 
     newTracker = tasktracker.NewForActiveProfile
 
-    getBranchPrefix = config.GetBranchPrefix
-    openBrowser     = defaultOpenBrowser  // `open` on darwin, `xdg-open` otherwise
-    getGHPRView     = defaultGetGHPRView  // wraps gh.GetPRForBranch for JSON post-fetch
+    getBranchPrefix            = config.GetBranchPrefix
+    getRepoAutoMerge           = defaultGetRepoAutoMerge            // wraps git.GetRepoConfigBool("devora.pr.auto-merge")
+    getAutoMergeDefaultForRepo = config.GetAutoMergeDefaultForRepo
+    openBrowser                = defaultOpenBrowser  // `open` on darwin, `xdg-open` otherwise
+    getGHPRView                = defaultGetGHPRView  // wraps gh.GetPRForBranch for JSON post-fetch
 )
 ```
 
@@ -138,7 +141,7 @@ Behavior:
 8. Derive the branch name from `generateBranchName(getBranchPrefix("feature"), opts.Message)`. Create and checkout the branch. When a task was created, call `setBranchConfig(branch, "task-id", task.ID)`. Push with `pushSetUpstream`.
 9. Compose the PR body: `tracker.PRBodyPrefix(task.ID)` first (when a task exists), then `"\n\n"` + `opts.Description` (when description is non-empty). Either component may be absent.
 10. Call `createGHPR(opts.Message, body, opts.Draft)`. On `*gh.PRAlreadyExistsError`, print a yellow warning (with existing URL when available) and return the wrapped error.
-11. Post-PR ops: unless `opts.Blocked`, call `enableGHAutoMerge(prURL)`. Errors print a yellow warning and do not fail the command.
+11. Post-PR ops: if `shouldEnableAutoMerge(opts)` returns true, call `enableGHAutoMerge(prURL)`. The helper applies the precedence `--blocked` (off) > `--auto-merge` (on) > per-repo `devora.pr.auto-merge` git config > profile then global `pr.auto-merge` > default on. Errors from `enableGHAutoMerge` print a yellow warning and do not fail the command.
 12. Emit output:
     - JSON mode: build `JSONOutput`, call `getGHPRView(prURL)` for `Number`/`Title`; tolerate failure (fallback fields). Write marshaled JSON to `w`.
     - Human mode: print a green "PR created" line, the branch, and (when present) the task URL.
@@ -195,6 +198,16 @@ Lines are styled via lipgloss: green for success, cyan for progress, yellow for 
 
 `task_url` is omitted when no task was created.
 
+## Auto-merge configuration
+
+`pr.auto-merge` resolves with per-repo > profile > global > built-in default (`true`) precedence. The per-repo layer lives in git's local config under the key `devora.pr.auto-merge` and is shared across all linked worktrees of a clone (including bare clones). The profile/global layers live in the standard Devora JSON config. When the key is unset or of the wrong type at a given layer, resolution falls through to the next layer.
+
+Per-invocation flags always win over every layer: `--blocked` forces off, `--auto-merge` forces on, and the two are mutually exclusive at the CLI layer.
+
+The three scopes can be managed via the `debi pr auto-merge <enable|disable|reset|show> [--scope=repo|profile|global] [--json]` command; see [cli.md](./cli.md) for its flags, verbs, output, and error conditions.
+
+At the package level this is implemented by plumbing a `getRepoAutoMerge` callback (reading `devora.pr.auto-merge` via `git.GetRepoConfigBool`) into `config.GetAutoMergeDefaultForRepo`, so the `config` package stays free of dependencies on `internal/git`.
+
 ## Test Coverage
 
 `internal/submit/submit_test.go` covers:
@@ -208,7 +221,12 @@ Lines are styled via lipgloss: green for success, cyan for progress, yellow for 
 - `SkipTracker` bypasses an otherwise-configured tracker.
 - `newTracker()` error propagates.
 - `--draft` is forwarded to `CreatePR`.
-- `--blocked` skips auto-merge; default path enables it.
+- Auto-merge matrix:
+  - `--blocked` skips auto-merge; default path (no flags, no config) enables it.
+  - Config `pr.auto-merge: false` with no flags skips auto-merge; with `--auto-merge` enables it.
+  - Config `pr.auto-merge: true` with `--blocked` skips auto-merge; with no flags enables it.
+  - Config unset with `--auto-merge` enables it; with no flags enables it.
+  - CLI rejects `--blocked` + `--auto-merge` together with a `*UsageError` naming both flags.
 - `PRAlreadyExistsError` with and without extracted URL: warning is printed, wrapped error returned.
 - Auto-merge failure is non-fatal (warning printed, command returns nil).
 - JSON mode: happy path; empty `task_url` when no tracker; tolerates `getGHPRView` failure by emitting minimal payload.

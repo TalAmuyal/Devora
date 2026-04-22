@@ -35,7 +35,8 @@ var submitFlags = []cmdinfo.Flag{
 	{Name: "-m, --message", Description: "Commit message, task title, and PR title (required)"},
 	{Name: "-d, --description", Description: "PR body description"},
 	{Name: "--draft", Description: "Create draft PR"},
-	{Name: "-b, --blocked", Description: "Skip auto-merge"},
+	{Name: "-b, --blocked", Description: "Skip auto-merge for this PR (overrides config)"},
+	{Name: "--auto-merge", Description: "Enable auto-merge for this PR (overrides config)"},
 	{Name: "-o, --open-browser", Description: "Open PR in browser after creation"},
 	{Name: "--skip-tracker", Description: "Skip tracker task creation even if configured"},
 	{Name: "--json", Description: "Output result as JSON"},
@@ -51,6 +52,12 @@ var closeFlags = []cmdinfo.Flag{
 	{Name: "-y, --force", Description: "Skip confirmation prompt for open PRs"},
 	{Name: "-v, --verbose", Description: "Show live git/gh subprocess output"},
 	{Name: "-q, --quiet", Description: `Print only "Closed" on success`},
+}
+
+// autoMergeFlags are the flags for the `pr auto-merge` subcommand.
+var autoMergeFlags = []cmdinfo.Flag{
+	{Name: "--scope", Description: "Target scope (repo|profile|global); default repo"},
+	{Name: "--json", Description: `For "show", emit result as JSON`},
 }
 
 var commands = []Command{
@@ -116,6 +123,12 @@ var commands = []Command{
 				Name:        "close",
 				Description: "Complete tracker task, delete branches",
 				Flags:       closeFlags,
+			},
+			{
+				Name:        "auto-merge",
+				Description: "Manage the per-repo/profile/global pr.auto-merge default",
+				Flags:       autoMergeFlags,
+				ValidArgs:   []string{"enable", "disable", "reset", "show"},
 			},
 		},
 	},

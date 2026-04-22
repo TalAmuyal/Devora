@@ -142,7 +142,7 @@ Highlights:
 
 - **Git shortcuts**: A collection of short aliases for common git workflows (e.g., `debi gst` for `git status`, `debi gd` for `git diff`, `debi gaa` for staging all changes). Run `debi --help` for the full list
 - **PR status**: `debi pr check` (or the shorthand `debi check`) shows the CI/review status of the current branch's pull request
-- **Submit a PR**: `debi submit` (from detached HEAD) creates a commit, optionally a tracker task, a feature branch, and a GitHub PR in one step
+- **Submit a PR**: `debi submit` (from detached HEAD) creates a commit, optionally a tracker task, a feature branch, and a GitHub PR in one step. Auto-merge defaults to on and resolves with per-repo > profile > global > built-in default precedence. The per-repo override lives in git's local config (`devora.pr.auto-merge`) and is shared across all linked worktrees of a clone; the profile/global layers live in `config.json`. Manage any scope with `debi pr auto-merge <enable|disable|reset|show> [--scope=repo|profile|global] [--json]`. Use `--blocked` or `--auto-merge` on a single invocation to override every layer
 - **Close a PR**: `debi close` completes the tracker task (if any), deletes the remote and local branches, and returns the working tree to detached HEAD on the default branch
 - **Health check**: `debi health` verifies that all required dependencies are installed
 - **Shell completions**: See [Recommended: Shell Completions](#recommended-shell-completions)

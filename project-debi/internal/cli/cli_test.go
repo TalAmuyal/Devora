@@ -1333,6 +1333,38 @@ func TestRun_Submit_AllFlagsParsed(t *testing.T) {
 	}
 }
 
+func TestRun_Submit_AutoMergeFlagParsed(t *testing.T) {
+	var captured submit.Options
+	stubSubmitRun(t, func(w io.Writer, opts submit.Options) error {
+		captured = opts
+		return nil
+	})
+	err := Run([]string{"submit", "-m", "msg", "--auto-merge"})
+	if err != nil {
+		t.Fatalf("expected no error, got: %s", err.Error())
+	}
+	if !captured.ForceAutoMerge {
+		t.Fatal("expected ForceAutoMerge=true")
+	}
+	if captured.Blocked {
+		t.Fatal("expected Blocked=false")
+	}
+}
+
+func TestRun_Submit_BlockedAndAutoMerge_ReturnsUsageError(t *testing.T) {
+	err := Run([]string{"submit", "-m", "msg", "-b", "--auto-merge"})
+	if err == nil {
+		t.Fatal("expected error for conflicting --blocked and --auto-merge")
+	}
+	var usageErr *UsageError
+	if !errors.As(err, &usageErr) {
+		t.Fatalf("expected *UsageError, got %T: %s", err, err.Error())
+	}
+	if !strings.Contains(err.Error(), "--blocked") || !strings.Contains(err.Error(), "--auto-merge") {
+		t.Fatalf("expected error to mention both flags, got: %s", err.Error())
+	}
+}
+
 func TestRun_Close_UnknownFlag_ReturnsUsageError(t *testing.T) {
 	err := Run([]string{"close", "--foo"})
 	if err == nil {

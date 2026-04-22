@@ -195,7 +195,7 @@ detached HEAD on origin/<default>
    │                  │  4. git checkout -b <prefix>-<slug>; set branch.<name>.task-id
    │                  │  5. git push --set-upstream
    │                  │  6. gh pr create --assignee @me [--draft]
-   │                  │  7. (default) gh pr merge --auto --squash
+   │                  │  7. (per pr.auto-merge per-repo/profile/global config + flags) gh pr merge --auto --squash
    └──────┬───────────┘
           ▼
   feature branch with open PR

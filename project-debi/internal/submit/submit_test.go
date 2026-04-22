@@ -59,32 +59,35 @@ type stubs struct {
 		title, body string
 		draft       bool
 	}
-	autoMergeCalls       []string
-	browserCalls         []string
-	getRepoCalls         int
-	getGHPRViewCalls     []string
-	newTrackerCalls      int
-	addCommitOptCount    int
+	autoMergeCalls    []string
+	browserCalls      []string
+	getRepoCalls      int
+	getGHPRViewCalls  []string
+	newTrackerCalls   int
+	addCommitOptCount int
 
 	// control values — tests overwrite these before calling Run.
-	currentBranch        string
-	currentBranchErr     error
-	addCommitErr         error
-	generateBranchReturn string
-	createBranchErr      error
-	setBranchConfigErr   error
-	pushErr              error
-	repoInfo             gh.RepoInfo
-	repoInfoErr          error
-	createPRURL          string
-	createPRErr          error
-	autoMergeErr         error
-	getGHPRViewReturn    gh.PRSummary
-	getGHPRViewErr       error
-	newTrackerReturn     tasktracker.Tracker
-	newTrackerErr        error
-	branchPrefix         string
-	openBrowserErr       error
+	currentBranch            string
+	currentBranchErr         error
+	addCommitErr             error
+	generateBranchReturn     string
+	createBranchErr          error
+	setBranchConfigErr       error
+	pushErr                  error
+	repoInfo                 gh.RepoInfo
+	repoInfoErr              error
+	createPRURL              string
+	createPRErr              error
+	autoMergeErr             error
+	getGHPRViewReturn        gh.PRSummary
+	getGHPRViewErr           error
+	newTrackerReturn         tasktracker.Tracker
+	newTrackerErr            error
+	branchPrefix             string
+	autoMergeDefaultOverride *bool
+	repoAutoMerge            *bool
+	repoAutoMergeErr         error
+	openBrowserErr           error
 }
 
 // stubSubmitDeps replaces every package-level dependency var with a
@@ -105,6 +108,8 @@ func stubSubmitDeps(t *testing.T) *stubs {
 		enableGHAutoMerge          func(string, ...process.ExecOption) error
 		newTracker                 func() (tasktracker.Tracker, error)
 		getBranchPrefix            func(string) string
+		getRepoAutoMerge           func() (*bool, error)
+		getAutoMergeDefaultForRepo func(bool, func() (*bool, error)) bool
 		openBrowser                func(string) error
 		getGHPRView                func(string) (gh.PRSummary, error)
 	}{
@@ -119,6 +124,8 @@ func stubSubmitDeps(t *testing.T) *stubs {
 		enableGHAutoMerge:          enableGHAutoMerge,
 		newTracker:                 newTracker,
 		getBranchPrefix:            getBranchPrefix,
+		getRepoAutoMerge:           getRepoAutoMerge,
+		getAutoMergeDefaultForRepo: getAutoMergeDefaultForRepo,
 		openBrowser:                openBrowser,
 		getGHPRView:                getGHPRView,
 	}
@@ -135,6 +142,8 @@ func stubSubmitDeps(t *testing.T) *stubs {
 		enableGHAutoMerge = orig.enableGHAutoMerge
 		newTracker = orig.newTracker
 		getBranchPrefix = orig.getBranchPrefix
+		getRepoAutoMerge = orig.getRepoAutoMerge
+		getAutoMergeDefaultForRepo = orig.getAutoMergeDefaultForRepo
 		openBrowser = orig.openBrowser
 		getGHPRView = orig.getGHPRView
 	})
@@ -198,6 +207,21 @@ func stubSubmitDeps(t *testing.T) *stubs {
 			return fallback
 		}
 		return s.branchPrefix
+	}
+	getRepoAutoMerge = func() (*bool, error) {
+		return s.repoAutoMerge, s.repoAutoMergeErr
+	}
+	getAutoMergeDefaultForRepo = func(fallback bool, getRepo func() (*bool, error)) bool {
+		if getRepo != nil {
+			val, err := getRepo()
+			if err == nil && val != nil {
+				return *val
+			}
+		}
+		if s.autoMergeDefaultOverride != nil {
+			return *s.autoMergeDefaultOverride
+		}
+		return fallback
 	}
 	openBrowser = func(url string) error {
 		s.browserCalls = append(s.browserCalls, url)
@@ -454,6 +478,183 @@ func TestRun_NotBlocked_EnablesAutoMerge(t *testing.T) {
 	}
 	if s.autoMergeCalls[0] != s.createPRURL {
 		t.Fatalf("expected auto-merge on %q, got %q", s.createPRURL, s.autoMergeCalls[0])
+	}
+}
+
+func TestRun_ConfigOff_NeitherFlag_SkipsAutoMerge(t *testing.T) {
+	s := stubSubmitDeps(t)
+	off := false
+	s.autoMergeDefaultOverride = &off
+
+	var buf bytes.Buffer
+	err := Run(&buf, Options{Message: "Fix"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(s.autoMergeCalls) != 0 {
+		t.Fatalf("expected 0 auto-merge calls when config off, got %d", len(s.autoMergeCalls))
+	}
+}
+
+func TestRun_ConfigOff_ForceAutoMerge_Enables(t *testing.T) {
+	s := stubSubmitDeps(t)
+	off := false
+	s.autoMergeDefaultOverride = &off
+
+	var buf bytes.Buffer
+	err := Run(&buf, Options{Message: "Fix", ForceAutoMerge: true})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(s.autoMergeCalls) != 1 {
+		t.Fatalf("expected 1 auto-merge call with ForceAutoMerge overriding config, got %d", len(s.autoMergeCalls))
+	}
+}
+
+func TestRun_ConfigOn_Blocked_Skips(t *testing.T) {
+	s := stubSubmitDeps(t)
+	on := true
+	s.autoMergeDefaultOverride = &on
+
+	var buf bytes.Buffer
+	err := Run(&buf, Options{Message: "Fix", Blocked: true})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(s.autoMergeCalls) != 0 {
+		t.Fatalf("expected 0 auto-merge calls when Blocked overrides config-on, got %d", len(s.autoMergeCalls))
+	}
+}
+
+func TestRun_ConfigOn_NeitherFlag_Enables(t *testing.T) {
+	s := stubSubmitDeps(t)
+	on := true
+	s.autoMergeDefaultOverride = &on
+
+	var buf bytes.Buffer
+	err := Run(&buf, Options{Message: "Fix"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(s.autoMergeCalls) != 1 {
+		t.Fatalf("expected 1 auto-merge call when config on, got %d", len(s.autoMergeCalls))
+	}
+}
+
+func TestRun_ConfigUnset_ForceAutoMerge_Enables(t *testing.T) {
+	s := stubSubmitDeps(t)
+
+	var buf bytes.Buffer
+	err := Run(&buf, Options{Message: "Fix", ForceAutoMerge: true})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(s.autoMergeCalls) != 1 {
+		t.Fatalf("expected 1 auto-merge call with ForceAutoMerge on unset config, got %d", len(s.autoMergeCalls))
+	}
+}
+
+func TestRun_ConfigUnset_Default_Enables(t *testing.T) {
+	s := stubSubmitDeps(t)
+
+	var buf bytes.Buffer
+	err := Run(&buf, Options{Message: "Fix"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(s.autoMergeCalls) != 1 {
+		t.Fatalf("expected 1 auto-merge call with default-on fallback, got %d", len(s.autoMergeCalls))
+	}
+}
+
+// --- Per-repo auto-merge precedence ---
+
+func TestRun_RepoConfigOff_WinsOverProfileOn(t *testing.T) {
+	s := stubSubmitDeps(t)
+	repoOff := false
+	s.repoAutoMerge = &repoOff
+	profileOn := true
+	s.autoMergeDefaultOverride = &profileOn
+
+	var buf bytes.Buffer
+	if err := Run(&buf, Options{Message: "Fix"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(s.autoMergeCalls) != 0 {
+		t.Fatalf("expected 0 auto-merge calls (repo off beats profile on), got %d", len(s.autoMergeCalls))
+	}
+}
+
+func TestRun_RepoConfigOn_WinsOverProfileOff(t *testing.T) {
+	s := stubSubmitDeps(t)
+	repoOn := true
+	s.repoAutoMerge = &repoOn
+	profileOff := false
+	s.autoMergeDefaultOverride = &profileOff
+
+	var buf bytes.Buffer
+	if err := Run(&buf, Options{Message: "Fix"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(s.autoMergeCalls) != 1 {
+		t.Fatalf("expected 1 auto-merge call (repo on beats profile off), got %d", len(s.autoMergeCalls))
+	}
+}
+
+func TestRun_RepoConfigOff_Blocked_Skips(t *testing.T) {
+	s := stubSubmitDeps(t)
+	repoOff := false
+	s.repoAutoMerge = &repoOff
+
+	var buf bytes.Buffer
+	if err := Run(&buf, Options{Message: "Fix", Blocked: true}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(s.autoMergeCalls) != 0 {
+		t.Fatalf("expected 0 auto-merge calls, got %d", len(s.autoMergeCalls))
+	}
+}
+
+func TestRun_RepoConfigOff_ForceAutoMerge_Enables(t *testing.T) {
+	s := stubSubmitDeps(t)
+	repoOff := false
+	s.repoAutoMerge = &repoOff
+
+	var buf bytes.Buffer
+	if err := Run(&buf, Options{Message: "Fix", ForceAutoMerge: true}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(s.autoMergeCalls) != 1 {
+		t.Fatalf("expected 1 auto-merge call (--auto-merge beats repo off), got %d", len(s.autoMergeCalls))
+	}
+}
+
+func TestRun_RepoConfigUnset_FallsBackToProfile(t *testing.T) {
+	s := stubSubmitDeps(t)
+	profileOff := false
+	s.autoMergeDefaultOverride = &profileOff
+
+	var buf bytes.Buffer
+	if err := Run(&buf, Options{Message: "Fix"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(s.autoMergeCalls) != 0 {
+		t.Fatalf("expected 0 auto-merge calls (profile off wins when repo unset), got %d", len(s.autoMergeCalls))
+	}
+}
+
+func TestRun_RepoReadError_FallsBackToProfile(t *testing.T) {
+	s := stubSubmitDeps(t)
+	s.repoAutoMergeErr = errors.New("boom")
+	profileOn := true
+	s.autoMergeDefaultOverride = &profileOn
+
+	var buf bytes.Buffer
+	if err := Run(&buf, Options{Message: "Fix"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(s.autoMergeCalls) != 1 {
+		t.Fatalf("expected 1 auto-merge call (falls through profile on when repo errors), got %d", len(s.autoMergeCalls))
 	}
 }
 

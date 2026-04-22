@@ -47,6 +47,7 @@ Flag syntax accepts both `--profile=foo` and `--profile foo`.
 | `pr check` | `[--json]` | Same as top-level `check` |
 | `pr submit` | same flags as top-level `submit` | Same as top-level `submit` |
 | `pr close` | same flags as top-level `close` | Same as top-level `close` |
+| `pr auto-merge` | `<verb> [--scope=...] [--json]` | Manage the per-repo/profile/global `pr.auto-merge` default |
 
 All three verbs (`check`, `submit`, `close`) are exposed both as top-level commands and as `pr` subcommands. For `submit` and `close`, flag slices (`submitFlags`, `closeFlags`) are declared once at package scope in `commands.go` and referenced by both registrations so the two forms never drift.
 
@@ -57,14 +58,15 @@ All three verbs (`check`, `submit`, `close`) are exposed both as top-level comma
 | `-m, --message <msg>` | Commit message, task title, and PR title (required) |
 | `-d, --description <s>` | PR body description (appended after the tracker prefix) |
 | `--draft` | Create draft PR |
-| `-b, --blocked` | Skip auto-merge |
+| `-b, --blocked` | Skip auto-merge for this PR (overrides config) |
+| `--auto-merge` | Enable auto-merge for this PR (overrides config) |
 | `-o, --open-browser` | Open PR in browser after creation |
 | `--skip-tracker` | Skip tracker task creation even if configured |
 | `--json` | Output result as a single JSON object |
 | `-v, --verbose` | Show live git/gh subprocess output |
 | `-q, --quiet` | Print only the final PR URL (no prefix, no styling) |
 
-Flag syntax accepts both `--message=foo` and `--message foo`. `-v` and `-q` are mutually exclusive; passing both returns `*UsageError`. See [submit.md](./submit.md) for the full verbosity-mode table.
+Flag syntax accepts both `--message=foo` and `--message foo`. `-v` and `-q` are mutually exclusive; passing both returns `*UsageError`. `--blocked` and `--auto-merge` are also mutually exclusive; passing both returns `*UsageError`. See [submit.md](./submit.md) for the full verbosity-mode table and auto-merge precedence.
 
 #### close flags
 
@@ -368,6 +370,7 @@ Dispatches on `args[0]`:
 - `"check"`: delegates to `runPRCheck(args[1:])`.
 - `"submit"`: delegates to `runSubmit(args[1:])`.
 - `"close"`: delegates to `runClose(args[1:])`.
+- `"auto-merge"`: delegates to `runPRAutoMerge(args[1:])`.
 - Unknown subcommand: returns a `UsageError`.
 
 If `args` is empty, returns a `UsageError`.
@@ -393,7 +396,7 @@ Delegates to `prstatus.Run(os.Stdout, jsonOutput)`. The underlying domain packag
 func runSubmit(args []string) error
 ```
 
-1. `parseSubmitFlags(args)` walks the args and populates a `submit.Options`. Accepts `-h`/`--help` (prints usage and returns nil), `--draft`, `-b`/`--blocked`, `-o`/`--open-browser`, `--skip-tracker`, `--json`, `-v`/`--verbose`, `-q`/`--quiet`, `-m`/`--message <val>`, `-d`/`--description <val>`. Both `--flag=value` and `--flag value` forms are supported. Unknown flags, missing `--message`, and combining `--verbose` with `--quiet` all return `*UsageError`.
+1. `parseSubmitFlags(args)` walks the args and populates a `submit.Options`. Accepts `-h`/`--help` (prints usage and returns nil), `--draft`, `-b`/`--blocked`, `--auto-merge`, `-o`/`--open-browser`, `--skip-tracker`, `--json`, `-v`/`--verbose`, `-q`/`--quiet`, `-m`/`--message <val>`, `-d`/`--description <val>`. Both `--flag=value` and `--flag value` forms are supported. Unknown flags, missing `--message`, combining `--verbose` with `--quiet`, and combining `--blocked` with `--auto-merge` all return `*UsageError`.
 2. Calls `git.EnsureInRepo()`. `git.ErrNotInGitRepo` is translated via `handleNotInGitRepo` to `*UsageError{Message: git.NotInRepoMessage}`; any other error bubbles up.
 3. Calls `ResolveActiveProfile("")` so profile-scoped config (notably `task-tracker.provider`) is visible to `submit.Run`. Errors from the resolver propagate.
 4. Calls `submitRun(os.Stdout, opts)` (a stubbable var pointing at `submit.Run`).
@@ -419,6 +422,93 @@ func runClose(args []string) error
    - `errors.Is(err, closecmd.ErrAborted)` -> `*process.PassthroughError{Code: 1}`. The `→ Aborted` line was already printed by `closecmd.Run`, and passthrough-error exits skip the crash log and the usage-error print.
    - `errors.As(err, &*credentials.NotFoundError)` -> prints the error and `credentials.SetupHint` to stderr, returns `*UsageError{Message: ""}`.
    - Any other error bubbles up.
+
+### pr auto-merge
+
+```go
+func runPRAutoMerge(args []string) error
+```
+
+Manages the `pr.auto-merge` default at any of three scopes (per-repo, profile, global). Precedence when `debi pr submit` runs (highest wins): per-repo > profile > global > built-in default (`true`).
+
+Usage: `debi pr auto-merge <verb> [--scope=repo|profile|global] [--json]`
+
+#### Flags
+
+| Flag | Description |
+|------|-------------|
+| `--scope <repo\|profile\|global>` | Target scope (default: `repo`) |
+| `--json` | For `show`, emit JSON on stdout |
+| `-h, --help` | Print usage and return nil |
+
+Flag syntax accepts both `--scope=profile` and `--scope profile`. Any other flag, an unknown verb, a missing verb, or a stray positional argument returns a `*UsageError`. An invalid `--scope` value returns a `*UsageError` naming the allowed choices.
+
+#### Verbs
+
+| Verb | Behavior |
+|------|----------|
+| `enable` | Set the value to `true` at the chosen scope. |
+| `disable` | Set the value to `false` at the chosen scope. |
+| `reset` | Remove the value at the chosen scope (idempotent). |
+| `show` | Print the resolved value plus each layer's contribution. Works outside a workspace/git repo; missing layers render as `<unset>` (or `null` in JSON). |
+
+For `repo` scope, `enable`/`disable`/`reset` call `git.EnsureInRepo()` and return `*UsageError{Message: git.NotInRepoMessage}` when the CWD is not inside a git repository. For `profile` scope, the handler resolves the active profile via `resolveActiveProfile("")`; when no profile is active it returns a `*UsageError` explaining how to register one. `global` scope needs no preconditions.
+
+`show` is always best-effort: when outside a git repo the repo layer is silently omitted (rendered `<unset>` / `null`); profile resolution failures are ignored; only a read error from the per-repo git config surfaces as a warning on stderr.
+
+#### Output
+
+Enable / disable confirmations (per scope):
+
+```
+✓ auto-merge enabled for this clone
+  (git config --local devora.pr.auto-merge=true)
+```
+
+```
+✓ auto-merge enabled for profile "work"
+  (config.json: pr.auto-merge=true)
+```
+
+```
+✓ auto-merge enabled globally
+  (~/.config/devora/config.json: pr.auto-merge=true)
+```
+
+Reset emits either a `cleared ...` confirmation (when a value existed) or an `already unset ...` confirmation (when the value was nil); the parenthetical mirrors the storage location with no `=value` suffix.
+
+Show (human):
+
+```
+pr.auto-merge
+  effective: true  (from: repo)
+  repo:      true
+  profile:   <unset>
+  global:    false
+  default:   true
+```
+
+Show (JSON) -- single line via `json.NewEncoder(os.Stdout).Encode(...)`:
+
+```json
+{"key":"pr.auto-merge","effective":true,"source":"repo","layers":{"repo":true,"profile":null,"global":false,"default":true}}
+```
+
+#### Stubbable dependencies
+
+`internal/cli/auto_merge.go` exposes package-level vars so `auto_merge_test.go` can exercise the handler without touching git or the user's config:
+
+```go
+var (
+    setPrAutoMergeGlobal  = config.SetPrAutoMergeGlobal
+    setPrAutoMergeProfile = config.SetPrAutoMergeProfile
+    getPrAutoMergeGlobal  = config.GetPrAutoMergeGlobalRaw
+    getPrAutoMergeProfile = config.GetPrAutoMergeProfileRaw
+    setRepoAutoMerge      = func(v bool) error { return git.SetRepoConfigBool(autoMergeKey, v) }
+    unsetRepoAutoMerge    = func() error { return git.UnsetRepoConfig(autoMergeKey) }
+    getRepoAutoMergeRaw   = func() (*bool, error) { return git.GetRepoConfigBool(autoMergeKey) }
+)
+```
 
 ## Exit Codes
 
@@ -499,4 +589,9 @@ func main() {
 - Test that `submit` and `close` map their domain sentinels to the correct `UsageError` / `PassthroughError` forms.
 - Test that `submit` and `close` translate `*credentials.NotFoundError` by printing the setup hint and returning `*UsageError{Message: ""}`.
 - Test that `pr submit`, `pr close`, and `pr check` return `*UsageError{Message: git.NotInRepoMessage}` when run from a directory that is not inside a git repository (and never invoke `resolveActiveProfile` or the domain runner).
+- Test that `pr auto-merge` flag parsing rejects an empty argv, unknown verbs, unknown flags, stray positional args, and invalid `--scope` values with `*UsageError`; accepts both `--scope=x` and `--scope x` forms; defaults scope to `repo`; and prints usage for `-h`/`--help`.
+- Test the `enable`/`disable` handler for each scope: `repo` calls `setRepoAutoMerge` and confirms `enabled for this clone`; `profile` calls `setPrAutoMergeProfile` with a non-nil pointer and prints the profile name; `global` calls `setPrAutoMergeGlobal` with a non-nil pointer.
+- Test the `enable` error paths: `repo` outside a git repo returns `*UsageError` via `handleNotInGitRepo`; `profile` with no active profile returns `*UsageError`.
+- Test `reset` for each scope: when a value exists it prints `cleared ...`; when no value exists it still invokes the underlying setter (idempotent) and prints `already unset ...`.
+- Test `show` output: the human form lists all four layers (including `default: true`); `--json` emits a single-line object parseable with the documented shape; outside a git repo the repo layer silently falls back to `<unset>` / `null`.
 - Command handler integration tests are better handled at a higher level (testing the actual TUI behavior or workspace operations).

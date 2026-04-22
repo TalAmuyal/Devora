@@ -3,6 +3,7 @@ package git_test
 import (
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -206,5 +207,170 @@ func runGitSetup(t *testing.T, dir string, commands [][]string) {
 		if err != nil {
 			t.Fatalf("setup command %v failed: %v\n%s", args, err, out)
 		}
+	}
+}
+
+// autoMergeKey is the git config key used by the repo-config helper tests.
+// It mirrors the key `internal/submit` reads in production so the tests
+// exercise the full round-trip.
+const autoMergeKey = "devora.pr.auto-merge"
+
+func TestRepoConfigBool_UnsetReturnsNil(t *testing.T) {
+	dir := setupGitRepo(t)
+
+	val, err := git.GetRepoConfigBool(autoMergeKey, process.WithCwd(dir))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if val != nil {
+		t.Fatalf("expected nil for unset key, got %v", *val)
+	}
+}
+
+func TestRepoConfigBool_RoundTripTrue(t *testing.T) {
+	dir := setupGitRepo(t)
+
+	runGitSetup(t, dir, [][]string{
+		{"git", "config", "--type=bool", "--local", autoMergeKey, "true"},
+	})
+
+	val, err := git.GetRepoConfigBool(autoMergeKey, process.WithCwd(dir))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if val == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if *val != true {
+		t.Fatalf("expected true, got %v", *val)
+	}
+}
+
+func TestRepoConfigBool_RoundTripFalse(t *testing.T) {
+	dir := setupGitRepo(t)
+
+	runGitSetup(t, dir, [][]string{
+		{"git", "config", "--type=bool", "--local", autoMergeKey, "false"},
+	})
+
+	val, err := git.GetRepoConfigBool(autoMergeKey, process.WithCwd(dir))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if val == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if *val != false {
+		t.Fatalf("expected false, got %v", *val)
+	}
+}
+
+func TestRepoConfigBool_WrongTypeFallsThrough(t *testing.T) {
+	dir := setupGitRepo(t)
+
+	runGitSetup(t, dir, [][]string{
+		{"git", "config", "--local", autoMergeKey, "maybe"},
+	})
+
+	val, err := git.GetRepoConfigBool(autoMergeKey, process.WithCwd(dir))
+	if err != nil {
+		t.Fatalf("expected nil error for wrong-type value, got: %v", err)
+	}
+	if val != nil {
+		t.Fatalf("expected nil for wrong-type value, got %v", *val)
+	}
+}
+
+func TestUnsetRepoConfig_ClearsValue(t *testing.T) {
+	dir := setupGitRepo(t)
+
+	runGitSetup(t, dir, [][]string{
+		{"git", "config", "--type=bool", "--local", autoMergeKey, "true"},
+	})
+
+	if err := git.UnsetRepoConfig(autoMergeKey, process.WithCwd(dir)); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	val, err := git.GetRepoConfigBool(autoMergeKey, process.WithCwd(dir))
+	if err != nil {
+		t.Fatalf("unexpected error after unset: %v", err)
+	}
+	if val != nil {
+		t.Fatalf("expected nil after unset, got %v", *val)
+	}
+}
+
+func TestUnsetRepoConfig_IdempotentWhenAlreadyUnset(t *testing.T) {
+	dir := setupGitRepo(t)
+
+	if err := git.UnsetRepoConfig(autoMergeKey, process.WithCwd(dir)); err != nil {
+		t.Fatalf("expected nil error when key is already unset, got: %v", err)
+	}
+}
+
+// setRepoConfigBoolFromDir invokes SetRepoConfigBool with the process cwd
+// temporarily pointing at dir. SetRepoConfigBool uses passthrough, which
+// inherits the current process CWD; Chdir for the duration of the test only.
+func setRepoConfigBoolFromDir(t *testing.T, dir, key string, value bool) {
+	t.Helper()
+	origWd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd failed: %v", err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir failed: %v", err)
+	}
+	defer func() {
+		_ = os.Chdir(origWd)
+	}()
+	if err := git.SetRepoConfigBool(key, value); err != nil {
+		t.Fatalf("SetRepoConfigBool: %v", err)
+	}
+}
+
+func TestRepoConfigBool_SharedAcrossLinkedWorktrees(t *testing.T) {
+	dir := setupGitRepo(t)
+
+	linked := filepath.Join(t.TempDir(), "linked")
+	runGitSetup(t, dir, [][]string{
+		{"git", "worktree", "add", linked, "-b", "linked-branch"},
+	})
+
+	setRepoConfigBoolFromDir(t, dir, autoMergeKey, true)
+
+	for _, path := range []string{dir, linked} {
+		val, err := git.GetRepoConfigBool(autoMergeKey, process.WithCwd(path))
+		if err != nil {
+			t.Fatalf("unexpected error reading from %s: %v", path, err)
+		}
+		if val == nil {
+			t.Fatalf("expected non-nil from %s", path)
+		}
+		if *val != true {
+			t.Fatalf("expected true from %s, got %v", path, *val)
+		}
+	}
+}
+
+func TestRepoConfigBool_BareClone(t *testing.T) {
+	src := setupGitRepo(t)
+
+	bareDir := filepath.Join(t.TempDir(), "bare.git")
+	runGitSetup(t, "", [][]string{
+		{"git", "clone", "--bare", src, bareDir},
+	})
+
+	setRepoConfigBoolFromDir(t, bareDir, autoMergeKey, false)
+
+	val, err := git.GetRepoConfigBool(autoMergeKey, process.WithCwd(bareDir))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if val == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if *val != false {
+		t.Fatalf("expected false, got %v", *val)
 	}
 }

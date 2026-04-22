@@ -2,6 +2,7 @@ package git
 
 import (
 	"errors"
+	"os/exec"
 	"regexp"
 	"strings"
 
@@ -127,6 +128,95 @@ func GetBranchConfig(branch, key string, opts ...process.ExecOption) (string, er
 // branchConfigKey formats a git config key of the form branch.<branch>.<key>.
 func branchConfigKey(branch, key string) string {
 	return "branch." + branch + "." + key
+}
+
+// badBooleanMarker identifies stderr from `git config --type=bool --get ...`
+// when the stored value cannot be parsed as a bool. Git writes
+// `fatal: bad boolean config value '<val>' for '<key>'` and exits non-zero.
+const badBooleanMarker = "bad boolean config value"
+
+// keyNotFoundExitCode is the exit status git returns from `git config --get
+// <key>` when the key is unset. Callers treat it as "no value set".
+const keyNotFoundExitCode = 1
+
+// unsetExitCode is the exit status git returns from `git config --unset <key>`
+// when the key was already absent. Git uses this code (5) to signal "nothing
+// to unset", so callers can treat it as a successful idempotent no-op.
+const unsetExitCode = 5
+
+// GetRepoConfigBool reads a local git config boolean. Returns (nil, nil) when
+// the key is unset or when the stored value cannot be parsed as a bool (so
+// callers can treat wrong-type entries as "unset" and fall through the
+// precedence chain). Propagates other errors.
+//
+// Uses `git config --type=bool --get <key>`. --type=bool normalizes
+// "true"/"yes"/"on"/"1" to "true" and "false"/"no"/"off"/"0" to "false";
+// anything else causes git to exit 128 with a "bad boolean config value"
+// message, which this function treats as "unset". When the key is absent
+// git exits 1 with no output, which is also treated as "unset".
+//
+// Because git stores local config in $GIT_COMMON_DIR/config, values written
+// via SetRepoConfigBool are shared across all linked worktrees automatically.
+func GetRepoConfigBool(key string, opts ...process.ExecOption) (*bool, error) {
+	output, err := process.GetOutput(
+		[]string{"git", "config", "--type=bool", "--get", key},
+		opts...,
+	)
+	if err != nil {
+		var verr *process.VerboseExecError
+		if errors.As(err, &verr) {
+			if strings.Contains(verr.Stderr, badBooleanMarker) {
+				return nil, nil
+			}
+			var exitErr *exec.ExitError
+			if errors.As(verr.Err, &exitErr) && exitErr.ExitCode() == keyNotFoundExitCode {
+				return nil, nil
+			}
+		}
+		return nil, err
+	}
+	switch output {
+	case "true":
+		v := true
+		return &v, nil
+	case "false":
+		v := false
+		return &v, nil
+	default:
+		return nil, nil
+	}
+}
+
+// SetRepoConfigBool writes a local git config boolean via
+// `git config --type=bool --local <key> <value>` ("true" or "false").
+func SetRepoConfigBool(key string, value bool, opts ...process.ExecOption) error {
+	literal := "false"
+	if value {
+		literal = "true"
+	}
+	return process.RunPassthrough(
+		[]string{"git", "config", "--type=bool", "--local", key, literal},
+		opts...,
+	)
+}
+
+// UnsetRepoConfig clears a local git config key via
+// `git config --local --unset <key>`. Git exits 5 when the key was already
+// unset; this function normalizes that case to a nil error so callers can
+// call it idempotently.
+func UnsetRepoConfig(key string, opts ...process.ExecOption) error {
+	err := process.RunPassthrough(
+		[]string{"git", "config", "--local", "--unset", key},
+		opts...,
+	)
+	if err == nil {
+		return nil
+	}
+	var passErr *process.PassthroughError
+	if errors.As(err, &passErr) && passErr.Code == unsetExitCode {
+		return nil
+	}
+	return err
 }
 
 // FetchOrigin fetches from origin in passthrough mode.

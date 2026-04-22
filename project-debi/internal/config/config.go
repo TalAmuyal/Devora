@@ -143,6 +143,37 @@ func setNestedString(cfg map[string]any, segments []string, value *string) map[s
 	return cfg
 }
 
+// setNestedBool sets (value non-nil) or deletes (value nil) a nested bool
+// at the given dot-path segments. Prunes empty intermediate maps on delete.
+func setNestedBool(cfg map[string]any, segments []string, value *bool) map[string]any {
+	if len(segments) == 0 {
+		return cfg
+	}
+	if len(segments) == 1 {
+		if value == nil {
+			delete(cfg, segments[0])
+		} else {
+			cfg[segments[0]] = *value
+		}
+		return cfg
+	}
+	head := segments[0]
+	child, _ := cfg[head].(map[string]any)
+	if child == nil {
+		if value == nil {
+			return cfg
+		}
+		child = map[string]any{}
+	}
+	child = setNestedBool(child, segments[1:], value)
+	if len(child) == 0 {
+		delete(cfg, head)
+	} else {
+		cfg[head] = child
+	}
+	return cfg
+}
+
 // --- Config resolution ---
 
 func get(path string) (any, bool) {
@@ -601,6 +632,28 @@ func SetDefaultTerminalAppProfile(value *string) error {
 	})
 }
 
+// SetPrAutoMergeGlobal writes "pr.auto-merge" to the global config. A non-nil
+// value sets the key; a nil value clears it and prunes the "pr" map when it
+// becomes empty.
+func SetPrAutoMergeGlobal(value *bool) error {
+	cfg := loadFreshGlobalConfig()
+	cfg = setNestedBool(cfg, []string{"pr", "auto-merge"}, value)
+	return writeFreshGlobalConfig(cfg)
+}
+
+// SetPrAutoMergeProfile writes "pr.auto-merge" to the active profile's
+// config. A non-nil value sets the key; a nil value clears it and prunes
+// the "pr" map when it becomes empty. Returns an error if no profile is
+// active.
+func SetPrAutoMergeProfile(value *bool) error {
+	if activeProfile == nil {
+		return errors.New("no active profile set")
+	}
+	return updateProfileConfig(activeProfile, func(cfg map[string]any) map[string]any {
+		return setNestedBool(cfg, []string{"pr", "auto-merge"}, value)
+	})
+}
+
 // --- Workspace root ---
 
 func WorkspacesRootForProfile(p *Profile) string {
@@ -726,4 +779,73 @@ func GetBranchPrefix(fallback string) string {
 		return fallback
 	}
 	return s
+}
+
+// GetAutoMergeDefault resolves "pr.auto-merge" (profile-overridable) with the
+// given fallback when the key is unset or not a bool.
+func GetAutoMergeDefault(fallback bool) bool {
+	val, ok := get("pr.auto-merge")
+	if !ok {
+		return fallback
+	}
+	b, ok := val.(bool)
+	if !ok {
+		return fallback
+	}
+	return b
+}
+
+// GetPrAutoMergeGlobalRaw returns a pointer to the value of "pr.auto-merge"
+// stored in the global config, or nil if the key is unset or not a bool.
+// Reads only from the global config -- does not fall back to any other
+// scope. Intended for UI and diagnostic code that needs to distinguish
+// "unset at this scope" from "set to false".
+func GetPrAutoMergeGlobalRaw() *bool {
+	val, ok := getGlobal("pr.auto-merge")
+	if !ok {
+		return nil
+	}
+	b, ok := val.(bool)
+	if !ok {
+		return nil
+	}
+	return &b
+}
+
+// GetPrAutoMergeProfileRaw returns a pointer to the value of "pr.auto-merge"
+// stored in the active profile's config, or nil if there is no active
+// profile, the key is unset at the profile scope, or the value is not a
+// bool. Reads only from the active profile -- does not fall back to global.
+func GetPrAutoMergeProfileRaw() *bool {
+	if activeProfile == nil {
+		return nil
+	}
+	val, ok := resolvePath(activeProfile.Config, "pr.auto-merge")
+	if !ok {
+		return nil
+	}
+	b, ok := val.(bool)
+	if !ok {
+		return nil
+	}
+	return &b
+}
+
+// GetAutoMergeDefaultForRepo resolves "pr.auto-merge" with per-repo > profile
+// > global > fallback precedence. The getRepo callback is expected to return
+// (*bool, error): a non-nil pointer wins outright. The callback pattern keeps
+// this package free of dependencies on internal/git.
+//
+// If getRepo returns an error, a warning is written to stderr via the
+// package-level log; resolution then falls through to GetAutoMergeDefault.
+func GetAutoMergeDefaultForRepo(fallback bool, getRepo func() (*bool, error)) bool {
+	if getRepo != nil {
+		val, err := getRepo()
+		if err != nil {
+			log.Printf("warning: failed to read per-repo pr.auto-merge: %v", err)
+		} else if val != nil {
+			return *val
+		}
+	}
+	return GetAutoMergeDefault(fallback)
 }
