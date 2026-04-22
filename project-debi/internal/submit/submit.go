@@ -32,15 +32,16 @@ var ErrNotDetached = errors.New("submit requires detached HEAD")
 
 // Options controls submit behavior.
 type Options struct {
-	Message     string // required: commit message, task title, PR title.
-	Description string // optional: appended to PR body.
-	Draft       bool   // create PR as draft.
-	Blocked     bool   // skip enabling auto-merge.
-	OpenBrowser bool   // open the PR URL in the default browser on success.
-	JSONOutput  bool   // emit a single JSON object instead of human output.
-	SkipTracker bool   // treat as no tracker configured, even if one is.
-	Verbose     bool   // show live git/gh subprocess output.
-	Quiet       bool   // print only the final PR URL on stdout.
+	Message        string // required: commit message, task title, PR title.
+	Description    string // optional: appended to PR body.
+	Draft          bool   // create PR as draft.
+	Blocked        bool   // explicit --blocked: force-skip auto-merge regardless of config.
+	ForceAutoMerge bool   // explicit --auto-merge: force auto-merge on regardless of config.
+	OpenBrowser    bool   // open the PR URL in the default browser on success.
+	JSONOutput     bool   // emit a single JSON object instead of human output.
+	SkipTracker    bool   // treat as no tracker configured, even if one is.
+	Verbose        bool   // show live git/gh subprocess output.
+	Quiet          bool   // print only the final PR URL on stdout.
 }
 
 // JSONOutput is the shape emitted when Options.JSONOutput is true.
@@ -70,9 +71,11 @@ var (
 
 	newTracker = tasktracker.NewForActiveProfile
 
-	getBranchPrefix = config.GetBranchPrefix
-	openBrowser     = defaultOpenBrowser
-	getGHPRView     = defaultGetGHPRView
+	getBranchPrefix            = config.GetBranchPrefix
+	getRepoAutoMerge           = defaultGetRepoAutoMerge
+	getAutoMergeDefaultForRepo = config.GetAutoMergeDefaultForRepo
+	openBrowser                = defaultOpenBrowser
+	getGHPRView                = defaultGetGHPRView
 )
 
 // stderr is the sink for warnings that must not corrupt w. In JSON mode w is
@@ -85,6 +88,13 @@ var stderr io.Writer = os.Stderr
 // zero-arg stub, so this adapter keeps the stubbable-var signature uniform.
 func defaultCurrentBranchOrDetached() (string, error) {
 	return git.CurrentBranchOrDetached()
+}
+
+// defaultGetRepoAutoMerge reads the per-repo "devora.pr.auto-merge" local git
+// config. Used by shouldEnableAutoMerge via getRepoAutoMerge so the config
+// package can stay free of internal/git imports.
+func defaultGetRepoAutoMerge() (*bool, error) {
+	return git.GetRepoConfigBool("devora.pr.auto-merge")
 }
 
 // defaultOpenBrowser opens url in the OS default browser via `open` on macOS
@@ -125,7 +135,7 @@ var (
 
 // Run executes the submit flow: validate preconditions, commit changes,
 // (optionally) create a tracker task, create+push a feature branch, open a
-// PR, and (unless Blocked) enable auto-merge.
+// PR, and (depending on config and flags) enable auto-merge.
 //
 // Output modes:
 //   - JSON (opts.JSONOutput): a single JSON object on w; progress to io.Discard.
@@ -281,7 +291,7 @@ func Run(w io.Writer, opts Options) error {
 	// Post-PR ops. Auto-merge is best-effort; a failure warns but does not
 	// fail the command. Warnings land on stderr in JSON/Quiet modes to keep
 	// stdout clean; in Normal/Verbose they go to progress (which == w).
-	if !opts.Blocked {
+	if shouldEnableAutoMerge(opts) {
 		if err := enableGHAutoMerge(prURL, execOpts...); err != nil {
 			sink := progress
 			if opts.JSONOutput || opts.Quiet {
@@ -359,4 +369,23 @@ func emitJSON(w io.Writer, opts Options, prURL, branchName, baseBranch string, t
 	}
 	fmt.Fprintln(w, string(data))
 	return nil
+}
+
+// shouldEnableAutoMerge applies the precedence rules:
+//  1. --blocked => false
+//  2. --auto-merge => true
+//  3. per-repo git config (devora.pr.auto-merge)
+//  4. profile then global pr.auto-merge
+//  5. default true
+//
+// The CLI layer rejects --blocked + --auto-merge before Run is invoked, so
+// at most one of opts.Blocked / opts.ForceAutoMerge is set here.
+func shouldEnableAutoMerge(opts Options) bool {
+	if opts.Blocked {
+		return false
+	}
+	if opts.ForceAutoMerge {
+		return true
+	}
+	return getAutoMergeDefaultForRepo(true, getRepoAutoMerge)
 }

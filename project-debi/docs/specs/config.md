@@ -59,11 +59,14 @@ type ExplicitRepoEntry struct {
   },
   "feature": {
     "branch-prefix": "feature"
+  },
+  "pr": {
+    "auto-merge": true
   }
 }
 ```
 
-`task-tracker.*` and `feature.branch-prefix` are profile-overridable. `task-tracker.<provider>.<key>` merges per leaf, so global and profile can each contribute different leaves under the same provider (e.g., global sets `workspace-id`, profile sets `project-id`).
+`task-tracker.*`, `feature.branch-prefix`, and `pr.auto-merge` are profile-overridable. `task-tracker.<provider>.<key>` merges per leaf, so global and profile can each contribute different leaves under the same provider (e.g., global sets `workspace-id`, profile sets `project-id`).
 
 ### Loading and Caching
 
@@ -108,6 +111,7 @@ Resolves the path against the global config only. Skips profile lookup entirely.
 | `task-tracker.provider` | profile-overridable |
 | `task-tracker.<provider>.<key>` | profile-overridable (per-leaf merge: profile and global can each contribute different leaves) |
 | `feature.branch-prefix` | profile-overridable |
+| `pr.auto-merge` | per-repo + profile-overridable (per-repo > profile > global) |
 | `name` | profile-only (read directly from `Profile.Config`) |
 | `repos` | profile-only (read directly from `Profile.Config`) |
 
@@ -340,6 +344,32 @@ Writes the `"terminal.default-app"` key to the active profile's `config.json`.
 
 Uses the read-modify-write pattern (see [Profile Config Mutation](#profile-config-mutation)). Returns an error if no active profile is set.
 
+### SetPrAutoMergeGlobal
+
+```go
+func SetPrAutoMergeGlobal(value *bool) error
+```
+
+Writes the `"pr.auto-merge"` key to the global config.
+
+- If `value` is non-nil, sets `"pr.auto-merge"` to `*value`, creating the `"pr"` object if it does not already exist.
+- If `value` is nil, removes the `"auto-merge"` key. If the `"pr"` object becomes empty as a result, it is pruned too.
+
+Operates on the global config only (does not touch profile config). Uses `loadFreshGlobalConfig` / `writeFreshGlobalConfig` to bypass the cache.
+
+### SetPrAutoMergeProfile
+
+```go
+func SetPrAutoMergeProfile(value *bool) error
+```
+
+Writes the `"pr.auto-merge"` key to the active profile's `config.json`.
+
+- If `value` is non-nil, sets `"pr.auto-merge"` to `*value`, creating the `"pr"` object if it does not already exist.
+- If `value` is nil, removes the `"auto-merge"` key. If the `"pr"` object becomes empty as a result, it is pruned too.
+
+Uses the read-modify-write pattern (see [Profile Config Mutation](#profile-config-mutation)). Returns an error if no active profile is set.
+
 ### Profile Config Mutation
 
 Profile config changes use a read-modify-write pattern:
@@ -431,6 +461,44 @@ func GetBranchPrefix(fallback string) string
 ```
 
 Returns the resolved value of `"feature.branch-prefix"` (profile-overridable). Returns `fallback` when the key is unset or the value is not a string.
+
+### GetAutoMergeDefault
+
+```go
+func GetAutoMergeDefault(fallback bool) bool
+```
+
+Returns the resolved value of `"pr.auto-merge"` (profile-overridable). Returns `fallback` when the key is unset or the value is not a bool.
+
+### GetPrAutoMergeGlobalRaw
+
+```go
+func GetPrAutoMergeGlobalRaw() *bool
+```
+
+Returns a pointer to the value of `"pr.auto-merge"` stored in the global config, or `nil` if the key is unset or not a bool. Reads only from the global config -- does not fall back to any other scope. Intended for UI and diagnostic code that needs to distinguish "unset at this scope" from "set to `false`".
+
+### GetPrAutoMergeProfileRaw
+
+```go
+func GetPrAutoMergeProfileRaw() *bool
+```
+
+Returns a pointer to the value of `"pr.auto-merge"` stored in the active profile's config, or `nil` if there is no active profile, the key is unset at the profile scope, or the value is not a bool. Reads only from the active profile -- does not fall back to global.
+
+### GetAutoMergeDefaultForRepo
+
+```go
+func GetAutoMergeDefaultForRepo(fallback bool, getRepo func() (*bool, error)) bool
+```
+
+Resolves `"pr.auto-merge"` with per-repo > profile > global > `fallback` precedence. The `getRepo` callback is expected to return `(*bool, error)`; a non-nil pointer wins outright. The callback indirection keeps this package free of dependencies on `internal/git`. When `getRepo` returns an error, a warning is written to stderr via the standard `log` package and resolution falls through to `GetAutoMergeDefault(fallback)`. A `nil` callback (or a callback that returns `(nil, nil)`) is treated as "no per-repo value".
+
+## Per-repo overrides
+
+Per-repo state for `pr.auto-merge` lives in git's local config (`devora.pr.auto-merge`), which git stores in `$GIT_COMMON_DIR/config` and shares natively across all linked worktrees of a clone (including bare clones). This package does not read the git config directly; callers (notably `internal/submit`) plumb the per-repo value into `GetAutoMergeDefaultForRepo` via the `getRepo` callback. The read and write primitives live in `internal/git` (`GetRepoConfigBool`, `SetRepoConfigBool`, `UnsetRepoConfig`).
+
+A wrong-type value stored under `devora.pr.auto-merge` (e.g., `maybe`) is treated as "unset" by `GetRepoConfigBool` -- resolution falls through to the profile/global layers rather than propagating the parse failure.
 
 ## Path Utilities
 
@@ -549,4 +617,6 @@ Clears the active profile and resets the global config cache. Must be called bet
 - `GetTaskTrackerString` returns `""` when the stored value is not a string.
 - `GetBranchPrefix` returns the fallback when unset or the stored value is not a string.
 - `GetBranchPrefix` returns the profile value when both profile and global are set.
+- `GetAutoMergeDefault` returns the fallback when unset or the stored value is not a bool.
+- `GetAutoMergeDefault` returns the profile value when both profile and global are set.
 

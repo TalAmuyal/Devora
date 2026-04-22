@@ -70,6 +70,9 @@ Separate file from `commands.go` because these helpers return captured output or
 | `HasRemoteBranch(branch string, opts ...process.ExecOption) bool` | True when `git ls-remote --exit-code --heads origin <branch>` succeeds. |
 | `SetBranchConfig(branch, key, value string, opts ...process.ExecOption) error` | Writes `branch.<branch>.<key>=<value>` via `git config --local`. |
 | `GetBranchConfig(branch, key string, opts ...process.ExecOption) (string, error)` | Reads `branch.<branch>.<key>` via `git config --get --default "" ...`. Returns `""` (not an error) when the key is missing. Requires git 2.18+. |
+| `GetRepoConfigBool(key string, opts ...process.ExecOption) (*bool, error)` | Reads a local git config boolean via `git config --type=bool --get <key>`. Returns `(nil, nil)` when the key is absent or when the stored value cannot be parsed as a bool (so callers can treat wrong-type entries as "unset"). Because git stores local config in `$GIT_COMMON_DIR/config`, values are shared across all linked worktrees automatically. |
+| `SetRepoConfigBool(key string, value bool, opts ...process.ExecOption) error` | Writes a local git config boolean via `git config --type=bool --local <key> <value>` (`"true"` or `"false"`). |
+| `UnsetRepoConfig(key string, opts ...process.ExecOption) error` | Clears a local git config key via `git config --local --unset <key>`. Git exits 5 when the key was already unset; this function treats that exit as `nil` so callers can invoke it idempotently. |
 | `FetchOrigin(opts ...process.ExecOption) error` | Passthrough `git fetch origin`. |
 | `CheckoutDetach(ref string, opts ...process.ExecOption) error` | Passthrough `git checkout <ref>`. Callers typically pass `origin/<default>` to land in detached HEAD. |
 | `GenerateBranchName(prefix, taskName string) string` | Produces `<prefix>-<slug>` where `<slug>` is a dash-separated, lowercase, ASCII-alphanumeric distillation of `taskName`. Non-alphanumerics collapse to a single `-`; leading/trailing dashes trimmed; capped at 70 characters with trailing `-` trimmed after truncation. When the distilled slug is empty (e.g., all non-ASCII input), falls back to the constant `"unnamed"`. |
@@ -223,6 +226,15 @@ Integration tests using a real temp git repo:
 ### submit_close_test.go
 
 Table-driven unit tests for `GenerateBranchName` (ASCII, mixed case, trailing dashes, 70-character cap, empty input, all-non-ASCII input falls back to `"unnamed"`), plus temp-repo integration tests for `CurrentBranchOrDetached`, `IsProtectedBranch`, `SetBranchConfig`/`GetBranchConfig` (including the `--default ""` missing-key behavior), `HasLocalBranch`, and `HasRemoteBranch`.
+
+Repo-config helper tests:
+- `GetRepoConfigBool` returns `(nil, nil)` when the key is unset.
+- Round-trip: `SetRepoConfigBool(key, true/false)` → `GetRepoConfigBool` returns the matching `*bool`.
+- A wrong-type stored value (e.g., `maybe`) falls through to `(nil, nil)` without error.
+- `UnsetRepoConfig` clears a previously set value; subsequent `GetRepoConfigBool` returns `(nil, nil)`.
+- `UnsetRepoConfig` is idempotent: calling it when no value is set returns `nil`.
+- Values written from the main worktree are visible from a linked worktree added via `git worktree add`.
+- Round-trip works against a bare clone (`git clone --bare`).
 
 ### in_repo_test.go
 

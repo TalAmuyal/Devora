@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"sort"
@@ -1350,6 +1351,68 @@ func TestGetBranchPrefix_WrongType_ReturnsFallback(t *testing.T) {
 	}
 }
 
+func TestGetAutoMergeDefault_Global(t *testing.T) {
+	tmpDir := setupTest(t)
+	writeJSON(t, filepath.Join(tmpDir, "config.json"), map[string]any{
+		"pr": map[string]any{
+			"auto-merge": false,
+		},
+	})
+	resetGlobalConfigCache()
+
+	if got := GetAutoMergeDefault(true); got != false {
+		t.Fatalf("expected false, got %v", got)
+	}
+}
+
+func TestGetAutoMergeDefault_ProfileOverridesGlobal(t *testing.T) {
+	tmpDir := setupTest(t)
+	writeJSON(t, filepath.Join(tmpDir, "config.json"), map[string]any{
+		"pr": map[string]any{
+			"auto-merge": true,
+		},
+	})
+	resetGlobalConfigCache()
+
+	profileDir := filepath.Join(tmpDir, "profile")
+	profileCfg := map[string]any{
+		"name": "p",
+		"pr": map[string]any{
+			"auto-merge": false,
+		},
+	}
+	createProfile(t, profileDir, profileCfg)
+	SetActiveProfile(&Profile{Name: "p", RootPath: profileDir, Config: profileCfg})
+
+	if got := GetAutoMergeDefault(true); got != false {
+		t.Fatalf("expected false (profile wins), got %v", got)
+	}
+}
+
+func TestGetAutoMergeDefault_Unset_ReturnsFallback(t *testing.T) {
+	setupTest(t)
+	if got := GetAutoMergeDefault(true); got != true {
+		t.Fatalf("expected true (fallback), got %v", got)
+	}
+	if got := GetAutoMergeDefault(false); got != false {
+		t.Fatalf("expected false (fallback), got %v", got)
+	}
+}
+
+func TestGetAutoMergeDefault_WrongType_ReturnsFallback(t *testing.T) {
+	tmpDir := setupTest(t)
+	writeJSON(t, filepath.Join(tmpDir, "config.json"), map[string]any{
+		"pr": map[string]any{
+			"auto-merge": "yes",
+		},
+	})
+	resetGlobalConfigCache()
+
+	if got := GetAutoMergeDefault(true); got != true {
+		t.Fatalf("expected true (fallback for wrong type), got %v", got)
+	}
+}
+
 // --- Profile unregistration tests ---
 
 func TestUnregisterProfile_RemovesFromGlobalConfig(t *testing.T) {
@@ -2228,5 +2291,351 @@ func TestGetDefaultTerminalAppProfileRaw_NoActiveProfileReturnsNil(t *testing.T)
 	result := GetDefaultTerminalAppProfileRaw()
 	if result != nil {
 		t.Fatalf("expected nil, got %v", *result)
+	}
+}
+
+// --- pr.auto-merge setter/raw-getter tests ---
+
+func TestSetPrAutoMergeGlobal_Set(t *testing.T) {
+	tmpDir := setupTest(t)
+
+	val := true
+	err := SetPrAutoMergeGlobal(&val)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	cfg := readJSON(t, filepath.Join(tmpDir, "config.json"))
+	pr, ok := cfg["pr"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected 'pr' map, got %v", cfg["pr"])
+	}
+	if pr["auto-merge"] != true {
+		t.Fatalf("expected true, got %v", pr["auto-merge"])
+	}
+}
+
+func TestSetPrAutoMergeGlobal_ClearWithNil(t *testing.T) {
+	tmpDir := setupTest(t)
+	writeJSON(t, filepath.Join(tmpDir, "config.json"), map[string]any{
+		"pr": map[string]any{
+			"auto-merge": false,
+		},
+	})
+	resetGlobalConfigCache()
+
+	err := SetPrAutoMergeGlobal(nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	cfg := readJSON(t, filepath.Join(tmpDir, "config.json"))
+	if _, exists := cfg["pr"]; exists {
+		t.Fatalf("expected 'pr' map to be removed, got %v", cfg["pr"])
+	}
+}
+
+func TestSetPrAutoMergeGlobal_PreservesSiblings(t *testing.T) {
+	tmpDir := setupTest(t)
+	writeJSON(t, filepath.Join(tmpDir, "config.json"), map[string]any{
+		"pr": map[string]any{
+			"auto-merge":  true,
+			"other-field": "keep-me",
+		},
+	})
+	resetGlobalConfigCache()
+
+	err := SetPrAutoMergeGlobal(nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	cfg := readJSON(t, filepath.Join(tmpDir, "config.json"))
+	pr, ok := cfg["pr"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected 'pr' map to still exist, got %v", cfg["pr"])
+	}
+	if _, exists := pr["auto-merge"]; exists {
+		t.Fatalf("expected 'auto-merge' to be removed, got %v", pr["auto-merge"])
+	}
+	if pr["other-field"] != "keep-me" {
+		t.Fatalf("expected 'other-field' to be preserved, got %v", pr["other-field"])
+	}
+}
+
+func TestSetPrAutoMergeProfile_Set(t *testing.T) {
+	tmpDir := setupTest(t)
+	profileDir := filepath.Join(tmpDir, "profile")
+	createProfile(t, profileDir, map[string]any{"name": "test"})
+
+	p := Profile{Name: "test", RootPath: profileDir, Config: map[string]any{"name": "test"}}
+	SetActiveProfile(&p)
+
+	val := false
+	err := SetPrAutoMergeProfile(&val)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	cfg := readJSON(t, filepath.Join(profileDir, "config.json"))
+	pr, ok := cfg["pr"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected 'pr' map, got %v", cfg["pr"])
+	}
+	if pr["auto-merge"] != false {
+		t.Fatalf("expected false on disk, got %v", pr["auto-merge"])
+	}
+
+	active := GetActiveProfile()
+	activePr, ok := active.Config["pr"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected in-memory 'pr' map, got %v", active.Config["pr"])
+	}
+	if activePr["auto-merge"] != false {
+		t.Fatalf("expected in-memory false, got %v", activePr["auto-merge"])
+	}
+}
+
+func TestSetPrAutoMergeProfile_ClearWithNil(t *testing.T) {
+	tmpDir := setupTest(t)
+	profileDir := filepath.Join(tmpDir, "profile")
+	profileCfg := map[string]any{
+		"name": "test",
+		"pr": map[string]any{
+			"auto-merge": true,
+		},
+	}
+	createProfile(t, profileDir, profileCfg)
+
+	p := Profile{Name: "test", RootPath: profileDir, Config: profileCfg}
+	SetActiveProfile(&p)
+
+	err := SetPrAutoMergeProfile(nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	cfg := readJSON(t, filepath.Join(profileDir, "config.json"))
+	if _, exists := cfg["pr"]; exists {
+		t.Fatalf("expected 'pr' map to be removed, got %v", cfg["pr"])
+	}
+
+	active := GetActiveProfile()
+	if _, exists := active.Config["pr"]; exists {
+		t.Fatalf("expected in-memory 'pr' to be removed, got %v", active.Config["pr"])
+	}
+}
+
+func TestSetPrAutoMergeProfile_NoActiveProfile(t *testing.T) {
+	setupTest(t)
+	val := true
+	err := SetPrAutoMergeProfile(&val)
+	if err == nil {
+		t.Fatal("expected error when no active profile")
+	}
+}
+
+func TestGetPrAutoMergeGlobalRaw_UnsetReturnsNil(t *testing.T) {
+	setupTest(t)
+	result := GetPrAutoMergeGlobalRaw()
+	if result != nil {
+		t.Fatalf("expected nil, got %v", *result)
+	}
+}
+
+func TestGetPrAutoMergeGlobalRaw_SetReturnsPointer(t *testing.T) {
+	tmpDir := setupTest(t)
+	writeJSON(t, filepath.Join(tmpDir, "config.json"), map[string]any{
+		"pr": map[string]any{
+			"auto-merge": true,
+		},
+	})
+	resetGlobalConfigCache()
+
+	result := GetPrAutoMergeGlobalRaw()
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if *result != true {
+		t.Fatalf("expected true, got %v", *result)
+	}
+}
+
+func TestGetPrAutoMergeGlobalRaw_IgnoresProfile(t *testing.T) {
+	tmpDir := setupTest(t)
+	profileDir := filepath.Join(tmpDir, "profile")
+	profileCfg := map[string]any{
+		"name": "test",
+		"pr": map[string]any{
+			"auto-merge": true,
+		},
+	}
+	createProfile(t, profileDir, profileCfg)
+	SetActiveProfile(&Profile{Name: "test", RootPath: profileDir, Config: profileCfg})
+
+	result := GetPrAutoMergeGlobalRaw()
+	if result != nil {
+		t.Fatalf("expected nil (should ignore profile), got %v", *result)
+	}
+}
+
+func TestGetPrAutoMergeGlobalRaw_WrongTypeReturnsNil(t *testing.T) {
+	tmpDir := setupTest(t)
+	writeJSON(t, filepath.Join(tmpDir, "config.json"), map[string]any{
+		"pr": map[string]any{
+			"auto-merge": "yes",
+		},
+	})
+	resetGlobalConfigCache()
+
+	result := GetPrAutoMergeGlobalRaw()
+	if result != nil {
+		t.Fatalf("expected nil for wrong-type value, got %v", *result)
+	}
+}
+
+func TestGetPrAutoMergeProfileRaw_UnsetReturnsNil(t *testing.T) {
+	tmpDir := setupTest(t)
+	profileDir := filepath.Join(tmpDir, "profile")
+	profileCfg := map[string]any{"name": "test"}
+	createProfile(t, profileDir, profileCfg)
+	SetActiveProfile(&Profile{Name: "test", RootPath: profileDir, Config: profileCfg})
+
+	result := GetPrAutoMergeProfileRaw()
+	if result != nil {
+		t.Fatalf("expected nil, got %v", *result)
+	}
+}
+
+func TestGetPrAutoMergeProfileRaw_SetReturnsPointer(t *testing.T) {
+	tmpDir := setupTest(t)
+	profileDir := filepath.Join(tmpDir, "profile")
+	profileCfg := map[string]any{
+		"name": "test",
+		"pr": map[string]any{
+			"auto-merge": false,
+		},
+	}
+	createProfile(t, profileDir, profileCfg)
+	SetActiveProfile(&Profile{Name: "test", RootPath: profileDir, Config: profileCfg})
+
+	result := GetPrAutoMergeProfileRaw()
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if *result != false {
+		t.Fatalf("expected false, got %v", *result)
+	}
+}
+
+func TestGetPrAutoMergeProfileRaw_NoActiveProfileReturnsNil(t *testing.T) {
+	setupTest(t)
+	result := GetPrAutoMergeProfileRaw()
+	if result != nil {
+		t.Fatalf("expected nil, got %v", *result)
+	}
+}
+
+func TestGetPrAutoMergeProfileRaw_WrongTypeReturnsNil(t *testing.T) {
+	tmpDir := setupTest(t)
+	profileDir := filepath.Join(tmpDir, "profile")
+	profileCfg := map[string]any{
+		"name": "test",
+		"pr": map[string]any{
+			"auto-merge": "nope",
+		},
+	}
+	createProfile(t, profileDir, profileCfg)
+	SetActiveProfile(&Profile{Name: "test", RootPath: profileDir, Config: profileCfg})
+
+	result := GetPrAutoMergeProfileRaw()
+	if result != nil {
+		t.Fatalf("expected nil for wrong-type value, got %v", *result)
+	}
+}
+
+// --- GetAutoMergeDefaultForRepo tests ---
+
+func TestGetAutoMergeDefaultForRepo_PerRepoWinsOverProfileAndGlobal(t *testing.T) {
+	tmpDir := setupTest(t)
+	writeJSON(t, filepath.Join(tmpDir, "config.json"), map[string]any{
+		"pr": map[string]any{"auto-merge": true},
+	})
+	resetGlobalConfigCache()
+
+	profileDir := filepath.Join(tmpDir, "profile")
+	profileCfg := map[string]any{
+		"name": "test",
+		"pr":   map[string]any{"auto-merge": true},
+	}
+	createProfile(t, profileDir, profileCfg)
+	SetActiveProfile(&Profile{Name: "test", RootPath: profileDir, Config: profileCfg})
+
+	repoVal := false
+	getRepo := func() (*bool, error) { return &repoVal, nil }
+
+	if got := GetAutoMergeDefaultForRepo(true, getRepo); got != false {
+		t.Fatalf("expected false (per-repo wins), got %v", got)
+	}
+}
+
+func TestGetAutoMergeDefaultForRepo_PerRepoUnsetFallsThroughToProfile(t *testing.T) {
+	tmpDir := setupTest(t)
+	writeJSON(t, filepath.Join(tmpDir, "config.json"), map[string]any{
+		"pr": map[string]any{"auto-merge": true},
+	})
+	resetGlobalConfigCache()
+
+	profileDir := filepath.Join(tmpDir, "profile")
+	profileCfg := map[string]any{
+		"name": "test",
+		"pr":   map[string]any{"auto-merge": false},
+	}
+	createProfile(t, profileDir, profileCfg)
+	SetActiveProfile(&Profile{Name: "test", RootPath: profileDir, Config: profileCfg})
+
+	getRepo := func() (*bool, error) { return nil, nil }
+
+	if got := GetAutoMergeDefaultForRepo(true, getRepo); got != false {
+		t.Fatalf("expected false (profile wins over global when repo unset), got %v", got)
+	}
+}
+
+func TestGetAutoMergeDefaultForRepo_AllUnsetReturnsFallback(t *testing.T) {
+	setupTest(t)
+
+	getRepo := func() (*bool, error) { return nil, nil }
+
+	if got := GetAutoMergeDefaultForRepo(true, getRepo); got != true {
+		t.Fatalf("expected fallback true, got %v", got)
+	}
+	if got := GetAutoMergeDefaultForRepo(false, getRepo); got != false {
+		t.Fatalf("expected fallback false, got %v", got)
+	}
+}
+
+func TestGetAutoMergeDefaultForRepo_RepoErrorWarnsAndFallsThrough(t *testing.T) {
+	tmpDir := setupTest(t)
+	writeJSON(t, filepath.Join(tmpDir, "config.json"), map[string]any{
+		"pr": map[string]any{"auto-merge": false},
+	})
+	resetGlobalConfigCache()
+
+	getRepo := func() (*bool, error) { return nil, errors.New("boom") }
+
+	if got := GetAutoMergeDefaultForRepo(true, getRepo); got != false {
+		t.Fatalf("expected global value false, got %v", got)
+	}
+}
+
+func TestGetAutoMergeDefaultForRepo_NilGetRepo(t *testing.T) {
+	tmpDir := setupTest(t)
+	writeJSON(t, filepath.Join(tmpDir, "config.json"), map[string]any{
+		"pr": map[string]any{"auto-merge": false},
+	})
+	resetGlobalConfigCache()
+
+	if got := GetAutoMergeDefaultForRepo(true, nil); got != false {
+		t.Fatalf("expected global value false, got %v", got)
 	}
 }

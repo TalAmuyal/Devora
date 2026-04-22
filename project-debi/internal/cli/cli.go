@@ -189,7 +189,7 @@ func runPR(args []string) error {
 
 	switch subcommand {
 	case "-h", "--help":
-		fmt.Println("usage: debi pr <subcommand>\n\nSubcommands:\n  check     Check the status of the PR for the current branch\n  submit    Commit, create tracker task and GitHub PR\n  close     Complete tracker task, delete branches")
+		fmt.Println("usage: debi pr <subcommand>\n\nSubcommands:\n  check       Check the status of the PR for the current branch\n  submit      Commit, create tracker task and GitHub PR\n  close       Complete tracker task, delete branches\n  auto-merge  Manage the per-repo/profile/global pr.auto-merge default")
 		return nil
 	case "check":
 		return runPRCheck(subArgs)
@@ -197,6 +197,8 @@ func runPR(args []string) error {
 		return runSubmit(subArgs)
 	case "close":
 		return runClose(subArgs)
+	case "auto-merge":
+		return runPRAutoMerge(subArgs)
 	default:
 		return &UsageError{Message: fmt.Sprintf("unknown pr subcommand: %s\nusage: debi pr <subcommand>", subcommand)}
 	}
@@ -243,11 +245,16 @@ Commit local changes, create a tracker task (if configured), create a feature
 branch, push it, open a GitHub PR, and optionally enable auto-merge. Must be
 run from a detached HEAD.
 
+Auto-merge default comes from config (pr.auto-merge, profile-overridable,
+defaults to on when unset). Use --blocked to disable or --auto-merge to
+force-enable for this PR only.
+
 Flags:
   -m, --message <msg>    Commit message, task title, and PR title (required)
   -d, --description <s>  PR body description
       --draft            Create draft PR
-  -b, --blocked          Skip auto-merge
+  -b, --blocked          Skip auto-merge for this PR (overrides config)
+      --auto-merge       Enable auto-merge for this PR (overrides config)
   -o, --open-browser     Open PR in browser after creation
       --skip-tracker     Skip tracker task creation even if configured
       --json             Output result as JSON
@@ -284,8 +291,8 @@ func parseValue(args []string, i int, flagToken, flagName string) (string, int, 
 }
 
 // parseSubmitFlags walks args and returns a populated submit.Options.
-// Returns *UsageError for invalid usage (unknown flag, missing -m, or both
-// --verbose and --quiet).
+// Returns *UsageError for invalid usage (unknown flag, missing -m, both
+// --verbose and --quiet, or both --blocked and --auto-merge).
 func parseSubmitFlags(args []string) (submit.Options, bool, error) {
 	var opts submit.Options
 	for i := 0; i < len(args); i++ {
@@ -297,6 +304,8 @@ func parseSubmitFlags(args []string) (submit.Options, bool, error) {
 			opts.Draft = true
 		case arg == "-b" || arg == "--blocked":
 			opts.Blocked = true
+		case arg == "--auto-merge":
+			opts.ForceAutoMerge = true
 		case arg == "-o" || arg == "--open-browser":
 			opts.OpenBrowser = true
 		case arg == "--skip-tracker":
@@ -330,6 +339,9 @@ func parseSubmitFlags(args []string) (submit.Options, bool, error) {
 	}
 	if opts.Verbose && opts.Quiet {
 		return opts, false, &UsageError{Message: "cannot use both --verbose and --quiet"}
+	}
+	if opts.Blocked && opts.ForceAutoMerge {
+		return opts, false, &UsageError{Message: "cannot use both --blocked and --auto-merge"}
 	}
 	return opts, false, nil
 }
