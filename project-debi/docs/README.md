@@ -32,8 +32,8 @@ Specifications for the domain packages. These define the intended behavior of ea
 | [specs/jsonvalidate.md](specs/jsonvalidate.md) | `internal/jsonvalidate` | JSON validation with line:column error positions |
 | [specs/git.md](specs/git.md) | `internal/git` | Git shortcut commands and submit/close helpers |
 | [specs/prstatus.md](specs/prstatus.md) | `internal/prstatus` | PR status checking via gh CLI |
-| [specs/submit.md](specs/submit.md) | `internal/submit` | `debi submit`: commit, tracker task, PR creation |
-| [specs/close.md](specs/close.md) | `internal/close` (pkg `closecmd`) | `debi close`: task completion, branch cleanup |
+| [specs/submit.md](specs/submit.md) | `internal/submit` | `debi pr submit`: commit, tracker task, PR creation |
+| [specs/close.md](specs/close.md) | `internal/close` (pkg `closecmd`) | `debi pr close`: task completion, branch cleanup |
 | [specs/tasktracker.md](specs/tasktracker.md) | `internal/tasktracker` | Pluggable issue tracker interface and registry |
 | [specs/credentials.md](specs/credentials.md) | `internal/credentials` | OS keychain token lookup |
 | [specs/gh.md](specs/gh.md) | `internal/gh` | GitHub CLI (`gh`) wrapper for submit/close |

@@ -4,7 +4,7 @@ Package: `internal/submit`
 
 ## Purpose
 
-Implement `debi submit`: commit local changes, create a tracker task (when a task-tracker is configured), create a feature branch, push it, open a GitHub PR via the `gh` CLI, and, depending on config and flags, enable auto-merge. Must be invoked from a detached HEAD.
+Implement `debi pr submit`: commit local changes, create a tracker task (when a task-tracker is configured), create a feature branch, push it, open a GitHub PR via the `gh` CLI, and, depending on config and flags, enable auto-merge. Must be invoked from a detached HEAD.
 
 ## Profile Resolution
 

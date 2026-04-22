@@ -10,7 +10,7 @@ closecmd "devora/internal/close"
 
 ## Purpose
 
-Implement `debi close`: mark the tracker task (when one exists) as complete, delete the remote branch, return the working tree to detached HEAD on `origin/<default>`, and delete the local branch. Must be invoked from a non-protected feature branch.
+Implement `debi pr close`: mark the tracker task (when one exists) as complete, delete the remote branch, return the working tree to detached HEAD on `origin/<default>`, and delete the local branch. Must be invoked from a non-protected feature branch.
 
 ## Profile Resolution
 

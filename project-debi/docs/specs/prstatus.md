@@ -2,7 +2,7 @@
 
 Package: `internal/prstatus`
 
-Exposed as the `debi check` CLI command (also available as `debi pr check`). The package name kept its historical `prstatus` form because it's an internal implementation detail; the public-facing CLI verb is `check`.
+Exposed as the `debi pr check` CLI command. The package name kept its historical `prstatus` form because it's an internal implementation detail; the public-facing CLI verb is `check`.
 
 ## Purpose
 

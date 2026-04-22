@@ -45,15 +45,6 @@ func testCommands() []cmdinfo.Command {
 			},
 		},
 		{
-			Name:        "check",
-			Description: "Check the status of the PR for the current branch",
-			ArgsHint:    "[flags]",
-			Group:       "PR",
-			Flags: []cmdinfo.Flag{
-				{Name: "--json", Description: "Output status as JSON"},
-			},
-		},
-		{
 			Name:        "gaa",
 			Description: "Stage all changes",
 			Group:       "Git Shortcuts",
@@ -338,28 +329,46 @@ func TestGenerateZsh_ValidArgsInArgsState(t *testing.T) {
 }
 
 func TestGenerate_PRCheckSubcommandCompletion(t *testing.T) {
+	// Shell-specific markers that tie the `check` sub-command name to the
+	// `pr` sub-command rendering context, so this test cannot be satisfied
+	// by an unrelated top-level `check` entry.
+	expectations := map[string]string{
+		"bash": `compgen -W "check -h --help"`,
+		"zsh":  `'check:Check the status of the PR for the current branch'`,
+		"fish": `-n "__debi_needs_subcmd_of pr" -a "check"`,
+	}
 	for _, tc := range shellGenerators() {
 		t.Run(tc.name, func(t *testing.T) {
 			var buf bytes.Buffer
 			tc.generate(&buf, "debi", testCommands())
 			output := buf.String()
 
-			if !strings.Contains(output, "check") {
-				t.Fatalf("%s output should contain 'check' as a completion option for pr", tc.name)
+			marker := expectations[tc.name]
+			if !strings.Contains(output, marker) {
+				t.Fatalf("%s output should contain %q to render 'check' as a sub-command of pr", tc.name, marker)
 			}
 		})
 	}
 }
 
 func TestGenerate_PRCheckJsonFlagCompletion(t *testing.T) {
+	// Shell-specific markers that tie `--json` to the `pr check` sub-command
+	// rendering context, so this test cannot be satisfied by an unrelated
+	// top-level `check` entry that happens to carry the same flag.
+	expectations := map[string]string{
+		"bash": `compgen -W "--json -h --help"`,
+		"zsh":  `'--json:Output status as JSON'`,
+		"fish": `-n "__debi_seen_subcmd pr check" -a "--json"`,
+	}
 	for _, tc := range shellGenerators() {
 		t.Run(tc.name, func(t *testing.T) {
 			var buf bytes.Buffer
 			tc.generate(&buf, "debi", testCommands())
 			output := buf.String()
 
-			if !strings.Contains(output, "--json") {
-				t.Fatalf("%s output should contain '--json' as a completion option for check", tc.name)
+			marker := expectations[tc.name]
+			if !strings.Contains(output, marker) {
+				t.Fatalf("%s output should contain %q as a flag completion for pr check", tc.name, marker)
 			}
 		})
 	}
