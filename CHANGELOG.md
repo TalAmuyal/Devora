@@ -25,6 +25,7 @@ Types of changes:
 
 - `-b, --blocked` on `debi pr submit` is now also a per-invocation override of the new `pr.auto-merge` config (behavior unchanged when the config is unset)
 - Scheduled nightly builds are skipped when `master` has not advanced since the previous nightly
+- `mise mac-install` now automatically runs `download-deps` first, so third-party bundler dependencies are fetched on demand
 
 ### Removed
 
