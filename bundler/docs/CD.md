@@ -51,6 +51,13 @@ Both are marked as **pre-release** and have `latest=false` so they never appear 
 
 Release notes include the short commit SHA and date, with a note that the build may be unstable.
 
+#### Skip logic
+
+Scheduled nightly runs are skipped when `master` has not advanced since the previous successful nightly.
+A dedicated `check-changes` job compares `${{ github.sha }}` against the `nightly-last-built` git tag (force-pushed at the end of every successful nightly publish) using `git ls-remote`, and gates the `test` and `build-and-release` jobs on the result.
+`workflow_dispatch` runs, tag pushes, and re-runs of scheduled runs always build.
+If the marker tag is absent (cold start) or the lookup fails, the pipeline fails open and builds.
+
 ### Stable
 
 Stable releases are triggered by pushing a tag matching `v*` (e.g. `v2026-03-28.0`).
