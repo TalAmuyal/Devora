@@ -25,6 +25,7 @@ raw = true
 description = "Cut a new release (interactive)"
 
 [tasks.mac-install]
+depends = ["download-deps"]
 run = """
 set -e
 ./bundler/macos/bundle.sh
