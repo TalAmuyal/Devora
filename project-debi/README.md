@@ -46,9 +46,9 @@ This produces the `debi` binary.
 mise test
 ```
 
-## PR workflow: `debi submit` and `debi close`
+## PR workflow: `debi pr submit` and `debi pr close`
 
-`debi submit` commits local changes, creates a tracker task (when a task tracker is configured), pushes a feature branch, and opens a GitHub PR in one step. `debi close` is the other end: after the PR is merged it marks the tracker task complete, deletes the remote branch, and returns the working tree to detached HEAD on the default branch. Both commands are also available as `debi pr submit` and `debi pr close`.
+`debi pr submit` commits local changes, creates a tracker task (when a task tracker is configured), pushes a feature branch, and opens a GitHub PR in one step. `debi pr close` is the other end: after the PR is merged it marks the tracker task complete, deletes the remote branch, and returns the working tree to detached HEAD on the default branch.
 
 ## Documentation
 

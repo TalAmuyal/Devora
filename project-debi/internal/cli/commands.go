@@ -29,8 +29,6 @@ var groupOrder = []string{
 	"Utility",
 }
 
-// submitFlags are the flags shared by the top-level `submit` command and the
-// `pr submit` subcommand entry.
 var submitFlags = []cmdinfo.Flag{
 	{Name: "-m, --message", Description: "Commit message, task title, and PR title (required)"},
 	{Name: "-d, --description", Description: "PR body description"},
@@ -44,8 +42,6 @@ var submitFlags = []cmdinfo.Flag{
 	{Name: "-q, --quiet", Description: "Print only the final PR URL"},
 }
 
-// closeFlags are the flags shared by the top-level `close` command and the
-// `pr close` subcommand entry.
 var closeFlags = []cmdinfo.Flag{
 	{Name: "-t, --task-url", Description: "Tracker task URL (overrides branch's stored ID)"},
 	{Name: "--skip-tracker", Description: "Skip marking tracker task as complete"},
@@ -54,7 +50,6 @@ var closeFlags = []cmdinfo.Flag{
 	{Name: "-q, --quiet", Description: `Print only "Closed" on success`},
 }
 
-// autoMergeFlags are the flags for the `pr auto-merge` subcommand.
 var autoMergeFlags = []cmdinfo.Flag{
 	{Name: "--scope", Description: "Target scope (repo|profile|global); default repo"},
 	{Name: "--json", Description: `For "show", emit result as JSON`},
@@ -131,32 +126,6 @@ var commands = []Command{
 				ValidArgs:   []string{"enable", "disable", "reset", "show"},
 			},
 		},
-	},
-	{
-		Name:        "check",
-		Description: "Check the status of the PR for the current branch",
-		ArgsHint:    "[flags]",
-		Group:       "PR",
-		Run:         func(args []string) error { return runPRCheck(args) },
-		Flags: []cmdinfo.Flag{
-			{Name: "--json", Description: "Output status as JSON"},
-		},
-	},
-	{
-		Name:        "submit",
-		Description: "Commit, create tracker task and GitHub PR (from detached HEAD)",
-		ArgsHint:    "[flags]",
-		Group:       "PR",
-		Run:         func(args []string) error { return runSubmit(args) },
-		Flags:       submitFlags,
-	},
-	{
-		Name:        "close",
-		Description: "Complete tracker task, delete branches, return to detached HEAD",
-		ArgsHint:    "[flags]",
-		Group:       "PR",
-		Run:         func(args []string) error { return runClose(args) },
-		Flags:       closeFlags,
 	},
 
 	// Git Shortcuts — no args

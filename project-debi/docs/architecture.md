@@ -20,7 +20,7 @@ main.go
 
 cli
   ├── cmdinfo    (shared command metadata types)
-  ├── close      (pkg closecmd: debi close command)
+  ├── close      (pkg closecmd: debi pr close command)
   ├── completion (shell completion script generation)
   ├── config     (profiles, repos, settings)
   ├── credentials (OS keychain lookup; for submit/close error translation)
@@ -28,7 +28,7 @@ cli
   ├── jsonvalidate
   ├── process    (shell command execution)
   ├── prstatus   (PR status checking)
-  ├── submit     (debi submit command)
+  ├── submit     (debi pr submit command)
   ├── tasktracker/asana (blank import; registers "asana" provider via init)
   ├── task       (task file read/write)
   ├── tui        (UI entry points)
@@ -182,14 +182,14 @@ For the state decision tree and conditions, see [workspace.md](specs/workspace.m
 
 ## PR Submit/Close Flow
 
-`debi submit` and `debi close` form a two-ended feature workflow around a detached-HEAD model. The CLI registers them both as top-level commands and as `pr submit` / `pr close` subcommands; flag slices are declared once and shared.
+`debi pr submit` and `debi pr close` form a two-ended feature workflow around a detached-HEAD model.
 
 ```
 detached HEAD on origin/<default>
          │
          ▼
    ┌──────────────────┐
-   │   debi submit    │  1. Guard: HEAD must be detached
+   │  debi pr submit  │  1. Guard: HEAD must be detached
    │   -m "..."       │  2. git add . && git commit -m "<message>"
    │                  │  3. (optional) tracker.CreateTask via tasktracker
    │                  │  4. git checkout -b <prefix>-<slug>; set branch.<name>.task-id
@@ -205,7 +205,7 @@ detached HEAD on origin/<default>
           │
           ▼
    ┌──────────────────┐
-   │    debi close    │  1. Guard: on a non-protected branch
+   │   debi pr close  │  1. Guard: on a non-protected branch
    │                  │  2. Resolve tracker + task-id (from --task-url or branch config)
    │                  │  3. Unless --force, prompt when PR is still OPEN
    │                  │  4. Parallel (best-effort): CompleteTask + delete remote branch

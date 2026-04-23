@@ -288,7 +288,7 @@ func TestRun_Submit_ResolverInvokedBeforeRun(t *testing.T) {
 		return nil
 	})
 
-	err := Run([]string{"submit", "-m", "msg"})
+	err := Run([]string{"pr", "submit", "-m", "msg"})
 	if err != nil {
 		t.Fatalf("expected no error, got: %s", err.Error())
 	}
@@ -308,7 +308,7 @@ func TestRun_Close_ResolverInvokedBeforeRun(t *testing.T) {
 		return nil
 	})
 
-	err := Run([]string{"close"})
+	err := Run([]string{"pr", "close"})
 	if err != nil {
 		t.Fatalf("expected no error, got: %s", err.Error())
 	}
@@ -328,7 +328,7 @@ func TestRun_Submit_ResolverError_SkipsSubmit(t *testing.T) {
 		return nil
 	})
 
-	err := Run([]string{"submit", "-m", "msg"})
+	err := Run([]string{"pr", "submit", "-m", "msg"})
 	if err == nil {
 		t.Fatal("expected error when resolver fails")
 	}
@@ -346,7 +346,7 @@ func TestRun_Close_ResolverError_SkipsClose(t *testing.T) {
 		return nil
 	})
 
-	err := Run([]string{"close"})
+	err := Run([]string{"pr", "close"})
 	if err == nil {
 		t.Fatal("expected error when resolver fails")
 	}
@@ -441,45 +441,6 @@ func TestRun_PRCheck_UnknownFlag_ReturnsUsageError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "--foo") {
 		t.Fatalf("expected error to mention the flag, got: %s", err.Error())
-	}
-}
-
-func TestRun_Check_UnknownFlag_ReturnsUsageError(t *testing.T) {
-	err := Run([]string{"check", "--foo"})
-	if err == nil {
-		t.Fatal("expected error for unknown flag")
-	}
-	var usageErr *UsageError
-	if !errors.As(err, &usageErr) {
-		t.Fatalf("expected UsageError, got %T: %s", err, err.Error())
-	}
-	if !strings.Contains(err.Error(), "--foo") {
-		t.Fatalf("expected error to mention the flag, got: %s", err.Error())
-	}
-}
-
-func TestRun_Check_Help_PrintsUsage(t *testing.T) {
-	old := os.Stdout
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	os.Stdout = w
-
-	runErr := Run([]string{"check", "-h"})
-
-	w.Close()
-	os.Stdout = old
-
-	if runErr != nil {
-		t.Fatalf("expected no error for check -h, got: %s", runErr.Error())
-	}
-
-	var buf bytes.Buffer
-	io.Copy(&buf, r)
-	output := buf.String()
-	if !strings.Contains(output, "usage: debi pr check") {
-		t.Fatalf("expected pr check usage message on stdout, got: %q", output)
 	}
 }
 
@@ -1102,30 +1063,6 @@ func stubResolveActiveProfile(t *testing.T, fn func(explicit string) (string, er
 	t.Cleanup(func() { resolveActiveProfile = orig })
 }
 
-func TestRun_Submit_Recognized(t *testing.T) {
-	stubResolveActiveProfile(t, func(string) (string, error) { return "", nil })
-	stubSubmitRun(t, func(io.Writer, submit.Options) error { return nil })
-	err := Run([]string{"submit", "-m", "msg"})
-	if err != nil && strings.Contains(err.Error(), "unknown command") {
-		t.Fatalf("submit should be recognized, got: %s", err.Error())
-	}
-	if err != nil {
-		t.Fatalf("expected no error, got: %s", err.Error())
-	}
-}
-
-func TestRun_Close_Recognized(t *testing.T) {
-	stubResolveActiveProfile(t, func(string) (string, error) { return "", nil })
-	stubCloseRun(t, func(io.Writer, closecmd.Options) error { return nil })
-	err := Run([]string{"close"})
-	if err != nil && strings.Contains(err.Error(), "unknown command") {
-		t.Fatalf("close should be recognized, got: %s", err.Error())
-	}
-	if err != nil {
-		t.Fatalf("expected no error, got: %s", err.Error())
-	}
-}
-
 func TestRun_PRSubmit_Recognized(t *testing.T) {
 	stubResolveActiveProfile(t, func(string) (string, error) { return "", nil })
 	stubSubmitRun(t, func(io.Writer, submit.Options) error { return nil })
@@ -1160,7 +1097,7 @@ func TestRun_Submit_Help_PrintsUsage(t *testing.T) {
 			}
 			os.Stdout = w
 
-			runErr := Run([]string{"submit", flag})
+			runErr := Run([]string{"pr", "submit", flag})
 
 			w.Close()
 			os.Stdout = old
@@ -1171,7 +1108,7 @@ func TestRun_Submit_Help_PrintsUsage(t *testing.T) {
 			var buf bytes.Buffer
 			io.Copy(&buf, r)
 			output := buf.String()
-			if !strings.Contains(output, "usage: debi submit") {
+			if !strings.Contains(output, "usage: debi pr submit") {
 				t.Fatalf("expected submit usage on stdout, got: %q", output)
 			}
 		})
@@ -1188,7 +1125,7 @@ func TestRun_Close_Help_PrintsUsage(t *testing.T) {
 			}
 			os.Stdout = w
 
-			runErr := Run([]string{"close", flag})
+			runErr := Run([]string{"pr", "close", flag})
 
 			w.Close()
 			os.Stdout = old
@@ -1199,7 +1136,7 @@ func TestRun_Close_Help_PrintsUsage(t *testing.T) {
 			var buf bytes.Buffer
 			io.Copy(&buf, r)
 			output := buf.String()
-			if !strings.Contains(output, "usage: debi close") {
+			if !strings.Contains(output, "usage: debi pr close") {
 				t.Fatalf("expected close usage on stdout, got: %q", output)
 			}
 		})
@@ -1234,7 +1171,7 @@ func TestRun_PR_Help_MentionsSubmitAndClose(t *testing.T) {
 }
 
 func TestRun_Submit_UnknownFlag_ReturnsUsageError(t *testing.T) {
-	err := Run([]string{"submit", "--foo"})
+	err := Run([]string{"pr", "submit", "--foo"})
 	if err == nil {
 		t.Fatal("expected error for unknown flag")
 	}
@@ -1248,7 +1185,7 @@ func TestRun_Submit_UnknownFlag_ReturnsUsageError(t *testing.T) {
 }
 
 func TestRun_Submit_MissingMessage_ReturnsUsageError(t *testing.T) {
-	err := Run([]string{"submit"})
+	err := Run([]string{"pr", "submit"})
 	if err == nil {
 		t.Fatal("expected error for submit without --message")
 	}
@@ -1267,7 +1204,7 @@ func TestRun_Submit_MessageEqualsSyntax(t *testing.T) {
 		captured = opts.Message
 		return nil
 	})
-	err := Run([]string{"submit", "--message=hello world"})
+	err := Run([]string{"pr", "submit", "--message=hello world"})
 	if err != nil {
 		t.Fatalf("expected no error, got: %s", err.Error())
 	}
@@ -1282,7 +1219,7 @@ func TestRun_Submit_MessageSpaceSyntax(t *testing.T) {
 		captured = opts.Message
 		return nil
 	})
-	err := Run([]string{"submit", "--message", "hello world"})
+	err := Run([]string{"pr", "submit", "--message", "hello world"})
 	if err != nil {
 		t.Fatalf("expected no error, got: %s", err.Error())
 	}
@@ -1298,7 +1235,7 @@ func TestRun_Submit_AllFlagsParsed(t *testing.T) {
 		return nil
 	})
 	err := Run([]string{
-		"submit",
+		"pr", "submit",
 		"-m", "title",
 		"-d", "body",
 		"--draft",
@@ -1339,7 +1276,7 @@ func TestRun_Submit_AutoMergeFlagParsed(t *testing.T) {
 		captured = opts
 		return nil
 	})
-	err := Run([]string{"submit", "-m", "msg", "--auto-merge"})
+	err := Run([]string{"pr", "submit", "-m", "msg", "--auto-merge"})
 	if err != nil {
 		t.Fatalf("expected no error, got: %s", err.Error())
 	}
@@ -1352,7 +1289,7 @@ func TestRun_Submit_AutoMergeFlagParsed(t *testing.T) {
 }
 
 func TestRun_Submit_BlockedAndAutoMerge_ReturnsUsageError(t *testing.T) {
-	err := Run([]string{"submit", "-m", "msg", "-b", "--auto-merge"})
+	err := Run([]string{"pr", "submit", "-m", "msg", "-b", "--auto-merge"})
 	if err == nil {
 		t.Fatal("expected error for conflicting --blocked and --auto-merge")
 	}
@@ -1366,7 +1303,7 @@ func TestRun_Submit_BlockedAndAutoMerge_ReturnsUsageError(t *testing.T) {
 }
 
 func TestRun_Close_UnknownFlag_ReturnsUsageError(t *testing.T) {
-	err := Run([]string{"close", "--foo"})
+	err := Run([]string{"pr", "close", "--foo"})
 	if err == nil {
 		t.Fatal("expected error for unknown flag")
 	}
@@ -1386,7 +1323,7 @@ func TestRun_Close_AllFlagsParsed(t *testing.T) {
 		return nil
 	})
 	err := Run([]string{
-		"close",
+		"pr", "close",
 		"-t", "https://tracker/task/1",
 		"--skip-tracker",
 		"-y",
@@ -1409,7 +1346,7 @@ func TestRun_Submit_ErrNotDetached_ReturnsUsageError(t *testing.T) {
 	stubSubmitRun(t, func(io.Writer, submit.Options) error {
 		return fmt.Errorf("%w (currently on branch \"foo\")", submit.ErrNotDetached)
 	})
-	err := Run([]string{"submit", "-m", "msg"})
+	err := Run([]string{"pr", "submit", "-m", "msg"})
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -1435,7 +1372,7 @@ func TestRun_Submit_NotFoundError_PrintsHintAndReturnsEmptyUsageError(t *testing
 	os.Stderr = w
 	defer func() { os.Stderr = oldStderr }()
 
-	runErr := Run([]string{"submit", "-m", "msg"})
+	runErr := Run([]string{"pr", "submit", "-m", "msg"})
 
 	w.Close()
 	os.Stderr = oldStderr
@@ -1464,7 +1401,7 @@ func TestRun_Submit_NotFoundError_PrintsHintAndReturnsEmptyUsageError(t *testing
 
 func TestRun_Close_ErrDetached_ReturnsUsageError(t *testing.T) {
 	stubCloseRun(t, func(io.Writer, closecmd.Options) error { return closecmd.ErrDetached })
-	err := Run([]string{"close"})
+	err := Run([]string{"pr", "close"})
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -1484,7 +1421,7 @@ func TestRun_Close_ErrProtectedBranch_ReturnsUsageError(t *testing.T) {
 	stubCloseRun(t, func(io.Writer, closecmd.Options) error {
 		return fmt.Errorf("%w: %q", closecmd.ErrProtectedBranch, "main")
 	})
-	err := Run([]string{"close"})
+	err := Run([]string{"pr", "close"})
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -1499,7 +1436,7 @@ func TestRun_Close_ErrProtectedBranch_ReturnsUsageError(t *testing.T) {
 
 func TestRun_Close_ErrNoTrackerForURL_ReturnsUsageError(t *testing.T) {
 	stubCloseRun(t, func(io.Writer, closecmd.Options) error { return closecmd.ErrNoTrackerForURL })
-	err := Run([]string{"close", "-t", "https://x"})
+	err := Run([]string{"pr", "close", "-t", "https://x"})
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -1514,7 +1451,7 @@ func TestRun_Close_ErrNoTrackerForURL_ReturnsUsageError(t *testing.T) {
 
 func TestRun_Close_ErrAborted_ReturnsPassthroughError1(t *testing.T) {
 	stubCloseRun(t, func(io.Writer, closecmd.Options) error { return closecmd.ErrAborted })
-	err := Run([]string{"close"})
+	err := Run([]string{"pr", "close"})
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -1540,7 +1477,7 @@ func TestRun_Close_NotFoundError_PrintsHintAndReturnsEmptyUsageError(t *testing.
 	os.Stderr = w
 	defer func() { os.Stderr = oldStderr }()
 
-	runErr := Run([]string{"close"})
+	runErr := Run([]string{"pr", "close"})
 
 	w.Close()
 	os.Stderr = oldStderr
@@ -1566,7 +1503,7 @@ func TestRun_Close_NotFoundError_PrintsHintAndReturnsEmptyUsageError(t *testing.
 
 func TestRun_Submit_OtherError_BubblesUp(t *testing.T) {
 	stubSubmitRun(t, func(io.Writer, submit.Options) error { return errors.New("something weird") })
-	err := Run([]string{"submit", "-m", "msg"})
+	err := Run([]string{"pr", "submit", "-m", "msg"})
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -1581,7 +1518,7 @@ func TestRun_Submit_OtherError_BubblesUp(t *testing.T) {
 
 func TestRun_Close_OtherError_BubblesUp(t *testing.T) {
 	stubCloseRun(t, func(io.Writer, closecmd.Options) error { return errors.New("network down") })
-	err := Run([]string{"close"})
+	err := Run([]string{"pr", "close"})
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -1597,7 +1534,7 @@ func TestRun_Close_OtherError_BubblesUp(t *testing.T) {
 func TestRun_Submit_VerboseQuietCombined_ReturnsUsageError(t *testing.T) {
 	stubResolveActiveProfile(t, func(string) (string, error) { return "", nil })
 	stubSubmitRun(t, func(io.Writer, submit.Options) error { return nil })
-	err := Run([]string{"submit", "-m", "msg", "-v", "-q"})
+	err := Run([]string{"pr", "submit", "-m", "msg", "-v", "-q"})
 	if err == nil {
 		t.Fatal("expected error when -v and -q are combined")
 	}
@@ -1613,7 +1550,7 @@ func TestRun_Submit_VerboseQuietCombined_ReturnsUsageError(t *testing.T) {
 func TestRun_Close_VerboseQuietCombined_ReturnsUsageError(t *testing.T) {
 	stubResolveActiveProfile(t, func(string) (string, error) { return "", nil })
 	stubCloseRun(t, func(io.Writer, closecmd.Options) error { return nil })
-	err := Run([]string{"close", "--verbose", "--quiet"})
+	err := Run([]string{"pr", "close", "--verbose", "--quiet"})
 	if err == nil {
 		t.Fatal("expected error when -v and -q are combined")
 	}
@@ -1633,7 +1570,7 @@ func TestRun_Submit_VerboseFlag_SetsOption(t *testing.T) {
 		gotOpts = opts
 		return nil
 	})
-	if err := Run([]string{"submit", "-m", "msg", "-v"}); err != nil {
+	if err := Run([]string{"pr", "submit", "-m", "msg", "-v"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if !gotOpts.Verbose || gotOpts.Quiet {
@@ -1648,7 +1585,7 @@ func TestRun_Submit_QuietFlag_SetsOption(t *testing.T) {
 		gotOpts = opts
 		return nil
 	})
-	if err := Run([]string{"submit", "-m", "msg", "--quiet"}); err != nil {
+	if err := Run([]string{"pr", "submit", "-m", "msg", "--quiet"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if gotOpts.Verbose || !gotOpts.Quiet {
@@ -1663,7 +1600,7 @@ func TestRun_Close_QuietFlag_SetsOption(t *testing.T) {
 		gotOpts = opts
 		return nil
 	})
-	if err := Run([]string{"close", "-q"}); err != nil {
+	if err := Run([]string{"pr", "close", "-q"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if !gotOpts.Quiet {

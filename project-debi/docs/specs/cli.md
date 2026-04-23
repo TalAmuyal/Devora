@@ -8,7 +8,7 @@ Define and dispatch the CLI commands. This is the entry point that wires togethe
 
 ## Commands
 
-The CLI has 3 workspace commands, a health command, PR commands (including `submit` and `close`, also registered as `pr submit` and `pr close`), a util command, 23 git shortcuts, and utility commands:
+The CLI has 3 workspace commands, a health command, PR commands (`pr check`, `pr submit`, `pr close`, `pr auto-merge`), a util command, 23 git shortcuts, and utility commands:
 
 ### Workspace Commands
 
@@ -44,12 +44,10 @@ Flag syntax accepts both `--profile=foo` and `--profile foo`.
 
 | Subcommand | Args | Description |
 |------------|------|-------------|
-| `pr check` | `[--json]` | Same as top-level `check` |
-| `pr submit` | same flags as top-level `submit` | Same as top-level `submit` |
-| `pr close` | same flags as top-level `close` | Same as top-level `close` |
+| `pr check` | `[--json]` | Check PR status for the current branch |
+| `pr submit` | see `submit flags` below | Commit, create tracker task and GitHub PR |
+| `pr close` | see `close flags` below | Complete tracker task, delete branches |
 | `pr auto-merge` | `<verb> [--scope=...] [--json]` | Manage the per-repo/profile/global `pr.auto-merge` default |
-
-All three verbs (`check`, `submit`, `close`) are exposed both as top-level commands and as `pr` subcommands. For `submit` and `close`, flag slices (`submitFlags`, `closeFlags`) are declared once at package scope in `commands.go` and referenced by both registrations so the two forms never drift.
 
 #### submit flags
 
@@ -181,9 +179,6 @@ Health:
 
 PR:
   pr <subcommand>       Pull request commands
-  pr check [flags]      Check the status of the PR for the current branch
-  pr submit [flags]     Commit, create tracker task and GitHub PR (from detached HEAD)
-  pr close [flags]      Complete tracker task, delete branches, return to detached HEAD
 
 Git Shortcuts:
   gaa               Stage all changes
@@ -375,7 +370,7 @@ Dispatches on `args[0]`:
 
 If `args` is empty, returns a `UsageError`.
 
-### check (also `pr check`)
+### pr check
 
 ```go
 func runPRCheck(args []string) error
@@ -390,7 +385,7 @@ After flag parsing (so `-h` still works outside a git repo), calls `git.EnsureIn
 
 Delegates to `prstatus.Run(os.Stdout, jsonOutput)`. The underlying domain package is still named `prstatus` because the CLI rename from `pr status` to `pr check` is a presentation-layer change; the package that implements the check continues to be `internal/prstatus`.
 
-### submit (also `pr submit`)
+### pr submit
 
 ```go
 func runSubmit(args []string) error
@@ -405,7 +400,7 @@ func runSubmit(args []string) error
    - `errors.As(err, &*credentials.NotFoundError)` -> prints the error message and `credentials.SetupHint(provider)` to stderr, returns `*UsageError{Message: ""}` (suppresses the crash log; main.go prints nothing and exits 1).
    - Any other error bubbles up to `main.go`, which runs `crash.HandleError` unless the error is a `*process.PassthroughError`.
 
-### close (also `pr close`)
+### pr close
 
 ```go
 func runClose(args []string) error
@@ -516,13 +511,13 @@ var (
 |-----------|-----:|
 | Success | 0 |
 | Any `*cli.UsageError` (including the `{Message: ""}` "already printed" form) | 1 |
-| PR command (`submit`/`close`/`check`) run outside a git repository (`git.ErrNotInGitRepo`) | 1 (friendly `NotInRepoMessage`, no crash log) |
-| `submit`/`close` domain sentinel (not-detached, protected branch, aborted, `--task-url` without tracker, missing required flag) | 1 |
+| PR command (`pr submit`/`pr close`/`pr check`) run outside a git repository (`git.ErrNotInGitRepo`) | 1 (friendly `NotInRepoMessage`, no crash log) |
+| `pr submit`/`pr close` domain sentinel (not-detached, protected branch, aborted, `--task-url` without tracker, missing required flag) | 1 |
 | `*credentials.NotFoundError` | 1 |
 | `gh.PRAlreadyExistsError`, other domain errors | 1 (crash log printed) |
 | `*process.PassthroughError{Code: N}` (raised by a git/gh subprocess via `internal/process`) | `N` (subprocess exit code propagates transparently) |
 
-`PassthroughError.Code` still propagates unchanged when git/gh subprocesses raise it; submit and close do not intercept it.
+`PassthroughError.Code` still propagates unchanged when git/gh subprocesses raise it; pr submit and pr close do not intercept it.
 
 ## Binary Name
 
@@ -578,16 +573,16 @@ func main() {
 - Test that `pr` without a subcommand returns a `UsageError`.
 - Test that `pr` with an unknown subcommand returns a `UsageError`.
 - Test that `pr check` is recognized and dispatches correctly.
-- Test that `check --json` enables JSON output mode.
-- Test that `check` with an unknown flag returns a `UsageError`.
+- Test that `pr check --json` enables JSON output mode.
+- Test that `pr check` with an unknown flag returns a `UsageError`.
 - Test that `util` without a subcommand returns a `UsageError`.
 - Test that `util` with an unknown subcommand returns a `UsageError`.
 - Test that `util json-validate` is recognized and dispatches correctly.
 - Test that `util json-validate` without an argument returns `PassthroughError{Code: 2}`.
-- Test that `submit` without `--message` returns a `UsageError`.
-- Test that `submit` accepts both `-m value` and `--message=value` forms.
-- Test that `submit` and `close` map their domain sentinels to the correct `UsageError` / `PassthroughError` forms.
-- Test that `submit` and `close` translate `*credentials.NotFoundError` by printing the setup hint and returning `*UsageError{Message: ""}`.
+- Test that `pr submit` without `--message` returns a `UsageError`.
+- Test that `pr submit` accepts both `-m value` and `--message=value` forms.
+- Test that `pr submit` and `pr close` map their domain sentinels to the correct `UsageError` / `PassthroughError` forms.
+- Test that `pr submit` and `pr close` translate `*credentials.NotFoundError` by printing the setup hint and returning `*UsageError{Message: ""}`.
 - Test that `pr submit`, `pr close`, and `pr check` return `*UsageError{Message: git.NotInRepoMessage}` when run from a directory that is not inside a git repository (and never invoke `resolveActiveProfile` or the domain runner).
 - Test that `pr auto-merge` flag parsing rejects an empty argv, unknown verbs, unknown flags, stray positional args, and invalid `--scope` values with `*UsageError`; accepts both `--scope=x` and `--scope x` forms; defaults scope to `repo`; and prints usage for `-h`/`--help`.
 - Test the `enable`/`disable` handler for each scope: `repo` calls `setRepoAutoMerge` and confirms `enabled for this clone`; `profile` calls `setPrAutoMergeProfile` with a non-nil pointer and prints the profile name; `global` calls `setPrAutoMergeGlobal` with a non-nil pointer.

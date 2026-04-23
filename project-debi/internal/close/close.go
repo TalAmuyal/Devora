@@ -1,4 +1,4 @@
-// Package closecmd implements the `debi close` command: marks the tracker
+// Package closecmd implements the `debi pr close` command: marks the tracker
 // task as complete, deletes the remote branch, and returns the working tree
 // to detached HEAD on origin/<default>, deleting the local branch.
 //

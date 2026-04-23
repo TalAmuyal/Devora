@@ -17,13 +17,17 @@ Types of changes:
 ### Added
 
 - `debi pr submit` auto-merge is now configurable via `pr.auto-merge` (bool, profile-overridable) in `config.json`; defaults to on when unset
-- New `--auto-merge` flag on `debi pr submit` / `debi submit` to force-enable auto-merge for a single invocation, overriding the config
+- New `--auto-merge` flag on `debi pr submit` to force-enable auto-merge for a single invocation, overriding the config
 - Per-repo override for `pr.auto-merge`, stored in git's local config (`devora.pr.auto-merge`) and shared across all linked worktrees of a clone. Precedence: per-repo > profile > global > built-in default (on)
 - New `debi pr auto-merge <enable|disable|reset|show> [--scope=repo|profile|global] [--json]` command to manage the default at any of the three scopes. `reset` is idempotent; `show` prints the resolved value plus each layer's contribution
 
 ### Changed
 
 - `-b, --blocked` on `debi pr submit` is now also a per-invocation override of the new `pr.auto-merge` config (behavior unchanged when the config is unset)
+
+### Removed
+
+- Top-level `debi submit`, `debi close`, and `debi check` aliases; use `debi pr submit`, `debi pr close`, and `debi pr check` instead
 
 ## 2026-04-21.0
 

@@ -239,7 +239,7 @@ var healthRun = health.Run
 // tests so the three handlers (health/submit/close) can verify they invoke it.
 var resolveActiveProfile = ResolveActiveProfile
 
-const submitUsage = `usage: debi submit -m <message> [flags]
+const submitUsage = `usage: debi pr submit -m <message> [flags]
 
 Commit local changes, create a tracker task (if configured), create a feature
 branch, push it, open a GitHub PR, and optionally enable auto-merge. Must be
@@ -262,7 +262,7 @@ Flags:
   -q, --quiet            Print only the final PR URL
   -h, --help             Show this help`
 
-const closeUsage = `usage: debi close [flags]
+const closeUsage = `usage: debi pr close [flags]
 
 Mark the tracker task (if any) as complete, delete the remote branch, return
 the working tree to detached HEAD on the default branch, and delete the local

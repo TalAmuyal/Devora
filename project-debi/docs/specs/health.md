@@ -24,7 +24,7 @@ Resolution order, stopping at the first hit:
 2. CWD-based — `workspace.ResolveWorkspaceFromCWD(cwd)`. When the CWD falls inside a profile's workspaces root, that profile becomes active. A failure from `os.Getwd` is treated as "no CWD match" and falls through to global.
 3. No active profile — all reads fall back to global config.
 
-This mirrors the `debi add` pattern. The flag is exposed only on `health`; `submit` and `close` auto-resolve from CWD without a matching flag.
+This mirrors the `debi add` pattern. The flag is exposed only on `health`; `pr submit` and `pr close` auto-resolve from CWD without a matching flag.
 
 ## Types
 
