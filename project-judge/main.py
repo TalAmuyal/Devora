@@ -241,6 +241,8 @@ IRRELEVANT_PREFIXES = {
     # Redirects to another command
     "xargs",
     "do",
+    "time",
+    "watch",
     #
     # A harmless env-vars
     "MISE_VERBOSE=1",
@@ -250,6 +252,7 @@ IRRELEVANT_PREFIXES = {
     "MISE_PREPARE_SKIP=1",
     "MISE_PREPARE_SKIP=0",
     "PYTHONPATH=.",
+    "NODE_PATH=.",
 }
 
 
