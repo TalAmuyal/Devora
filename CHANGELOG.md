@@ -27,6 +27,9 @@ Types of changes:
 - `-b, --blocked` on `debi pr submit` is now also a per-invocation override of the new `pr.auto-merge` config (behavior unchanged when the config is unset)
 - Scheduled nightly builds are skipped when `master` has not advanced since the previous nightly
 - `mise mac-install` now automatically runs `download-deps` first, so third-party bundler dependencies are fetched on demand
+- Bootstrap and Kitty tab launchers now honor `$SHELL` (falling back to `/bin/zsh`) instead of hardcoding `zsh`
+- User Guide tab (F1) launches `glow` directly instead of wrapping it in a login/interactive shell (faster startup)
+- Main page tab and shell tab titles are now bracketed (`[Devora]`, `[Shell]`)
 
 ### Removed
 

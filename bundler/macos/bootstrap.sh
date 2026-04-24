@@ -27,6 +27,8 @@ on_error() {
 
 trap 'on_error $LINENO' ERR
 
+export SHELL="${SHELL:-/bin/zsh}"
+
 APP_CONTENTS_PATH="$(cd "$(dirname "$0")/.." && pwd)"
 RESOURCES_DIR="$APP_CONTENTS_PATH/Resources"
 CC_PLUGINS_DIR="$RESOURCES_DIR/cc-plugins"
@@ -49,4 +51,4 @@ export DEVORA_RESOURCES_DIR="$RESOURCES_DIR"
 
 $KITTY_EXECUTABLE_PATH \
 	--title "Devora" \
-	zsh --login --interactive -c "\"$RESOURCES_DIR/bundled-apps/debi\" workspace-ui"
+	"$SHELL" -l -i -c "\"$RESOURCES_DIR/bundled-apps/debi\" workspace-ui"
