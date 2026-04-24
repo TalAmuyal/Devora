@@ -32,6 +32,7 @@ Types of changes:
 - User Guide tab (F1) launches `glow` directly instead of wrapping it in a login/interactive shell (faster startup)
 - Main page tab and shell tab titles are now bracketed (`[Devora]`, `[Shell]`)
 - Titlebar color is now `#181926` (Catppuccin Macchiato crust) instead of the system default, for a consistent look across macOS themes
+- Judge now treats `time` and `watch` as irrelevant prefixes (stripped before matching), and recognizes `NODE_PATH=.` as a harmless env-var prefix
 
 ### Removed
 
