@@ -214,6 +214,8 @@ To view the full changelog, go to Settings and select "View Changelog".
 
 ### Devora-wide
 
+Note: the split-pane shortcuts below operate on Kitty panes (each pane is its own shell). Neovim's own `:sp` / `:vsp` still work independently inside any pane.
+
 - `ctrl + s`: Open workspace manager in a new tab
 - `ctrl + shift + s`: Open shell in a new tab
 - `ctrl + left / right`: Navigate between tabs (workspeces)
@@ -222,6 +224,10 @@ To view the full changelog, go to Settings and select "View Changelog".
 - `ctrl + equal / minus`: Increase / decrease font size
 - `ctrl + shift + v` or `cmd + v`: Paste from clipboard
 - `ctrl + shift + r`: Reload configuration
+- `cmd + shift + \`: Split the current Kitty pane vertically (new shell to the right) — vim `:vsp` analog
+- `cmd + shift + -`: Split the current Kitty pane horizontally (new shell below) — vim `:sp` analog
+- `cmd + shift + h / j / k / l`: Move focus between split panes (left / down / up / right)
+- `cmd + shift + w`: Close the current split pane
 - `F1`: Open this User Guide
 
 ### Workspace List

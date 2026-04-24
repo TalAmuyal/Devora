@@ -22,6 +22,7 @@ Types of changes:
 - New `debi pr auto-merge <enable|disable|reset|show> [--scope=repo|profile|global] [--json]` command to manage the default at any of the three scopes. `reset` is idempotent; `show` prints the resolved value plus each layer's contribution
 - A mise command to build and open dev Devora in one go
 - Dev builds set `macos_titlebar_color` to `#F5A97F` (Catppuccin Macchiato peach) so the dev `.app` titlebar is visually distinct from the release build
+- Vim-style Kitty split panes: `cmd+shift+\` (vertical split, new shell to the right) and `cmd+shift+-` (horizontal split, new shell below); `cmd+shift+h/j/k/l` moves focus between panes, `cmd+shift+w` closes the focused pane; new panes inherit the active pane's working directory
 
 ### Changed
 
