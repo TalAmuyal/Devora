@@ -2,7 +2,7 @@
 
 set -e
 
-HELPER_TEXT="Usage: $0 [--help|-h] [--dmg] [--dev]
+HELPER_TEXT="Usage: $0 [--help|-h] [--dmg] [--dev] [--open]
 
   --dev       Build \"Dev-Devora\" variant (can coexist with production app)
   --dmg       Create a DMG file in addition to the app bundle
@@ -11,6 +11,7 @@ HELPER_TEXT="Usage: $0 [--help|-h] [--dmg] [--dev]
 
 # Parse arguments
 SHOULD_MAKE_DMG=false
+SHOULD_OPEN=false
 IS_DEV_MODE=false
 while [[ $# -gt 0 ]]; do
 	case "$1" in
@@ -24,6 +25,10 @@ while [[ $# -gt 0 ]]; do
 			;;
 		--dev)
 			IS_DEV_MODE=true
+			shift
+			;;
+		--open)
+			SHOULD_OPEN=true
 			shift
 			;;
 		*)
@@ -208,5 +213,7 @@ $SHOULD_MAKE_DMG \
 	-imagekey zlib-level=9 \
 	-srcfolder "$OUTPUT_CONTAINER_DIR" \
 	-o "$BIN_MACOS_DIR/${APP_NAME}_${EFFECTIVE_VERSION}.dmg"
+
+$SHOULD_OPEN && open "$OUTPUT_DIR"
 
 echo "Done"
