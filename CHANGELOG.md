@@ -20,6 +20,7 @@ Types of changes:
 - New `--auto-merge` flag on `debi pr submit` to force-enable auto-merge for a single invocation, overriding the config
 - Per-repo override for `pr.auto-merge`, stored in git's local config (`devora.pr.auto-merge`) and shared across all linked worktrees of a clone. Precedence: per-repo > profile > global > built-in default (on)
 - New `debi pr auto-merge <enable|disable|reset|show> [--scope=repo|profile|global] [--json]` command to manage the default at any of the three scopes. `reset` is idempotent; `show` prints the resolved value plus each layer's contribution
+- A mise command to build and open dev Devora in one go
 
 ### Changed
 

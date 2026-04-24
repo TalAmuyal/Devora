@@ -6,6 +6,10 @@ mise run -C project-status-line build
 """
 description = "Build all sub-projects (debi, cc-simple-statusline)"
 
+[tasks.build-dev-and-open]
+run = "./bundler/macos/bundle.sh --dev --open"
+description = "Build Devora.app in development mode and open it"
+
 [tasks.test]
 run = """
 set -e
