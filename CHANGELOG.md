@@ -21,6 +21,7 @@ Types of changes:
 - Per-repo override for `pr.auto-merge`, stored in git's local config (`devora.pr.auto-merge`) and shared across all linked worktrees of a clone. Precedence: per-repo > profile > global > built-in default (on)
 - New `debi pr auto-merge <enable|disable|reset|show> [--scope=repo|profile|global] [--json]` command to manage the default at any of the three scopes. `reset` is idempotent; `show` prints the resolved value plus each layer's contribution
 - A mise command to build and open dev Devora in one go
+- Dev builds set `macos_titlebar_color` to `#F5A97F` (Catppuccin Macchiato peach) so the dev `.app` titlebar is visually distinct from the release build
 
 ### Changed
 
@@ -30,6 +31,7 @@ Types of changes:
 - Bootstrap and Kitty tab launchers now honor `$SHELL` (falling back to `/bin/zsh`) instead of hardcoding `zsh`
 - User Guide tab (F1) launches `glow` directly instead of wrapping it in a login/interactive shell (faster startup)
 - Main page tab and shell tab titles are now bracketed (`[Devora]`, `[Shell]`)
+- Titlebar color is now `#181926` (Catppuccin Macchiato crust) instead of the system default, for a consistent look across macOS themes
 
 ### Removed
 

@@ -197,6 +197,14 @@ if $IS_DEV_MODE; then
 		-e 's|--tab-title "Devora"|--tab-title "Dev-Devora"|' \
 		-e 's|devora-kitty\.sock|devora-kitty-dev.sock|' \
 		"$RESOURCES_DIR/kitty-configs/kitty.conf"
+
+	# Override titlebar color (applied after `include current-theme.conf`) to
+	# visually distinguish the dev build from the release build
+	cat >> "$RESOURCES_DIR/kitty-configs/kitty.conf" <<'EOF'
+
+# Dev build titlebar color (overrides theme) to visually distinguish from release
+macos_titlebar_color #F5A97F
+EOF
 fi
 
 # Set permissions
