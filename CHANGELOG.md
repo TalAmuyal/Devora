@@ -16,6 +16,8 @@ Types of changes:
 
 ### Added
 
+- `debi util yaml-validate <file|->` validates YAML files (multi-document streams supported, empty input rejected)
+- `debi util toml-validate <file|->` validates TOML files (empty input rejected; comment-only files are valid)
 - `debi pr submit` auto-merge is now configurable via `pr.auto-merge` (bool, profile-overridable) in `config.json`; defaults to on when unset
 - New `--auto-merge` flag on `debi pr submit` to force-enable auto-merge for a single invocation, overriding the config
 - Per-repo override for `pr.auto-merge`, stored in git's local config (`devora.pr.auto-merge`) and shared across all linked worktrees of a clone. Precedence: per-repo > profile > global > built-in default (on)

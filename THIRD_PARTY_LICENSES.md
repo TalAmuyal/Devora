@@ -36,6 +36,16 @@ Devora bundles and depends on the following third-party software and assets.
 - **License:** MIT
 - **Source:** https://github.com/charmbracelet/lipgloss
 
+### github.com/BurntSushi/toml
+
+- **License:** MIT
+- **Source:** https://github.com/BurntSushi/toml
+
+### github.com/goccy/go-yaml
+
+- **License:** MIT
+- **Source:** https://github.com/goccy/go-yaml
+
 ### golang.org/x/sync
 
 - **License:** BSD-3-Clause

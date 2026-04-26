@@ -679,6 +679,11 @@ func TestRun_Util_Help_PrintsUsage(t *testing.T) {
 	if !strings.Contains(output, "usage: debi util") {
 		t.Fatalf("expected util usage message on stdout, got: %q", output)
 	}
+	for _, name := range []string{"json-validate", "yaml-validate", "toml-validate"} {
+		if !strings.Contains(output, name) {
+			t.Fatalf("expected util help to mention %q, got: %q", name, output)
+		}
+	}
 }
 
 func TestRun_JSONValidate_NoArgs_ReturnsPassthroughError2(t *testing.T) {
@@ -821,6 +826,310 @@ func TestRun_JSONValidate_NonexistentFile_ReturnsPassthroughError2(t *testing.T)
 	}()
 
 	runErr := Run([]string{"util", "json-validate", "/tmp/nonexistent-json-validate-test-file.json"})
+	if runErr == nil {
+		t.Fatal("expected error for nonexistent file")
+	}
+	var ptErr *process.PassthroughError
+	if !errors.As(runErr, &ptErr) {
+		t.Fatalf("expected PassthroughError, got %T: %s", runErr, runErr.Error())
+	}
+	if ptErr.Code != 2 {
+		t.Fatalf("expected exit code 2, got: %d", ptErr.Code)
+	}
+}
+
+func TestRun_YAMLValidate_NoArgs_ReturnsPassthroughError2(t *testing.T) {
+	// Capture stderr since runYAMLValidate prints usage there
+	oldStderr := os.Stderr
+	_, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stderr = w
+	defer func() {
+		w.Close()
+		os.Stderr = oldStderr
+	}()
+
+	runErr := Run([]string{"util", "yaml-validate"})
+	if runErr == nil {
+		t.Fatal("expected error for yaml-validate without args")
+	}
+	var ptErr *process.PassthroughError
+	if !errors.As(runErr, &ptErr) {
+		t.Fatalf("expected PassthroughError, got %T: %s", runErr, runErr.Error())
+	}
+	if ptErr.Code != 2 {
+		t.Fatalf("expected exit code 2, got: %d", ptErr.Code)
+	}
+}
+
+func TestRun_YAMLValidate_ValidFile_PrintsValidYAML(t *testing.T) {
+	tmpFile := filepath.Join(t.TempDir(), "valid.yaml")
+	if err := os.WriteFile(tmpFile, []byte("key: value\nother: 7\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	old := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdout = w
+
+	runErr := Run([]string{"util", "yaml-validate", tmpFile})
+
+	w.Close()
+	os.Stdout = old
+
+	if runErr != nil {
+		t.Fatalf("expected no error for valid YAML file, got: %s", runErr.Error())
+	}
+
+	var buf bytes.Buffer
+	io.Copy(&buf, r)
+	output := buf.String()
+	if !strings.Contains(output, "Valid YAML") {
+		t.Fatalf("expected 'Valid YAML' on stdout, got: %q", output)
+	}
+}
+
+func TestRun_YAMLValidate_InvalidFile_ReturnsPassthroughError1(t *testing.T) {
+	tmpFile := filepath.Join(t.TempDir(), "invalid.yaml")
+	if err := os.WriteFile(tmpFile, []byte("{key: value"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	old := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdout = w
+
+	runErr := Run([]string{"util", "yaml-validate", tmpFile})
+
+	w.Close()
+	os.Stdout = old
+
+	var ptErr *process.PassthroughError
+	if !errors.As(runErr, &ptErr) {
+		t.Fatalf("expected PassthroughError, got %T: %v", runErr, runErr)
+	}
+	if ptErr.Code != 1 {
+		t.Fatalf("expected exit code 1, got: %d", ptErr.Code)
+	}
+
+	var buf bytes.Buffer
+	io.Copy(&buf, r)
+	output := buf.String()
+	if !strings.Contains(output, "Invalid YAML") {
+		t.Fatalf("expected 'Invalid YAML' on stdout, got: %q", output)
+	}
+}
+
+func TestRun_YAMLValidate_Stdin_ValidYAML(t *testing.T) {
+	stdinR, stdinW, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stdinW.Write([]byte("key: value\n"))
+	stdinW.Close()
+
+	oldStdin := os.Stdin
+	os.Stdin = stdinR
+	defer func() { os.Stdin = oldStdin }()
+
+	old := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdout = w
+
+	runErr := Run([]string{"util", "yaml-validate", "-"})
+
+	w.Close()
+	os.Stdout = old
+
+	if runErr != nil {
+		t.Fatalf("expected no error for valid YAML on stdin, got: %s", runErr.Error())
+	}
+
+	var buf bytes.Buffer
+	io.Copy(&buf, r)
+	output := buf.String()
+	if !strings.Contains(output, "Valid YAML") {
+		t.Fatalf("expected 'Valid YAML' on stdout, got: %q", output)
+	}
+}
+
+func TestRun_YAMLValidate_NonexistentFile_ReturnsPassthroughError2(t *testing.T) {
+	// Capture stderr since runYAMLValidate prints the error there
+	oldStderr := os.Stderr
+	_, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stderr = w
+	defer func() {
+		w.Close()
+		os.Stderr = oldStderr
+	}()
+
+	runErr := Run([]string{"util", "yaml-validate", "/tmp/nonexistent-yaml-validate-test-file.yaml"})
+	if runErr == nil {
+		t.Fatal("expected error for nonexistent file")
+	}
+	var ptErr *process.PassthroughError
+	if !errors.As(runErr, &ptErr) {
+		t.Fatalf("expected PassthroughError, got %T: %s", runErr, runErr.Error())
+	}
+	if ptErr.Code != 2 {
+		t.Fatalf("expected exit code 2, got: %d", ptErr.Code)
+	}
+}
+
+func TestRun_TOMLValidate_NoArgs_ReturnsPassthroughError2(t *testing.T) {
+	// Capture stderr since runTOMLValidate prints usage there
+	oldStderr := os.Stderr
+	_, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stderr = w
+	defer func() {
+		w.Close()
+		os.Stderr = oldStderr
+	}()
+
+	runErr := Run([]string{"util", "toml-validate"})
+	if runErr == nil {
+		t.Fatal("expected error for toml-validate without args")
+	}
+	var ptErr *process.PassthroughError
+	if !errors.As(runErr, &ptErr) {
+		t.Fatalf("expected PassthroughError, got %T: %s", runErr, runErr.Error())
+	}
+	if ptErr.Code != 2 {
+		t.Fatalf("expected exit code 2, got: %d", ptErr.Code)
+	}
+}
+
+func TestRun_TOMLValidate_ValidFile_PrintsValidTOML(t *testing.T) {
+	tmpFile := filepath.Join(t.TempDir(), "valid.toml")
+	if err := os.WriteFile(tmpFile, []byte(`title = "test"`+"\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	old := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdout = w
+
+	runErr := Run([]string{"util", "toml-validate", tmpFile})
+
+	w.Close()
+	os.Stdout = old
+
+	if runErr != nil {
+		t.Fatalf("expected no error for valid TOML file, got: %s", runErr.Error())
+	}
+
+	var buf bytes.Buffer
+	io.Copy(&buf, r)
+	output := buf.String()
+	if !strings.Contains(output, "Valid TOML") {
+		t.Fatalf("expected 'Valid TOML' on stdout, got: %q", output)
+	}
+}
+
+func TestRun_TOMLValidate_InvalidFile_ReturnsPassthroughError1(t *testing.T) {
+	tmpFile := filepath.Join(t.TempDir(), "invalid.toml")
+	if err := os.WriteFile(tmpFile, []byte("a = 1\na = 2\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	old := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdout = w
+
+	runErr := Run([]string{"util", "toml-validate", tmpFile})
+
+	w.Close()
+	os.Stdout = old
+
+	var ptErr *process.PassthroughError
+	if !errors.As(runErr, &ptErr) {
+		t.Fatalf("expected PassthroughError, got %T: %v", runErr, runErr)
+	}
+	if ptErr.Code != 1 {
+		t.Fatalf("expected exit code 1, got: %d", ptErr.Code)
+	}
+
+	var buf bytes.Buffer
+	io.Copy(&buf, r)
+	output := buf.String()
+	if !strings.Contains(output, "Invalid TOML") {
+		t.Fatalf("expected 'Invalid TOML' on stdout, got: %q", output)
+	}
+}
+
+func TestRun_TOMLValidate_Stdin_ValidTOML(t *testing.T) {
+	stdinR, stdinW, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stdinW.Write([]byte(`title = "test"` + "\n"))
+	stdinW.Close()
+
+	oldStdin := os.Stdin
+	os.Stdin = stdinR
+	defer func() { os.Stdin = oldStdin }()
+
+	old := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdout = w
+
+	runErr := Run([]string{"util", "toml-validate", "-"})
+
+	w.Close()
+	os.Stdout = old
+
+	if runErr != nil {
+		t.Fatalf("expected no error for valid TOML on stdin, got: %s", runErr.Error())
+	}
+
+	var buf bytes.Buffer
+	io.Copy(&buf, r)
+	output := buf.String()
+	if !strings.Contains(output, "Valid TOML") {
+		t.Fatalf("expected 'Valid TOML' on stdout, got: %q", output)
+	}
+}
+
+func TestRun_TOMLValidate_NonexistentFile_ReturnsPassthroughError2(t *testing.T) {
+	// Capture stderr since runTOMLValidate prints the error there
+	oldStderr := os.Stderr
+	_, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stderr = w
+	defer func() {
+		w.Close()
+		os.Stderr = oldStderr
+	}()
+
+	runErr := Run([]string{"util", "toml-validate", "/tmp/nonexistent-toml-validate-test-file.toml"})
 	if runErr == nil {
 		t.Fatal("expected error for nonexistent file")
 	}

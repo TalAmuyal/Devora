@@ -300,6 +300,16 @@ var commands = []Command{
 				Description:    "Validate a JSON file",
 				CompletesFiles: true,
 			},
+			{
+				Name:           "yaml-validate",
+				Description:    "Validate a YAML file",
+				CompletesFiles: true,
+			},
+			{
+				Name:           "toml-validate",
+				Description:    "Validate a TOML file",
+				CompletesFiles: true,
+			},
 		},
 	},
 }

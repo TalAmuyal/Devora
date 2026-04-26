@@ -31,8 +31,10 @@ cli
   ├── submit     (debi pr submit command)
   ├── tasktracker/asana (blank import; registers "asana" provider via init)
   ├── task       (task file read/write)
+  ├── tomlvalidate
   ├── tui        (UI entry points)
-  └── workspace  (workspace detection from CWD)
+  ├── workspace  (workspace detection from CWD)
+  └── yamlvalidate
 
 tui
   ├── config     (active profile, settings, repos)
@@ -96,6 +98,12 @@ gh
 
 credentials
   └── zalando/go-keyring (sole OS keychain backend)
+
+tomlvalidate
+  └── BurntSushi/toml (TOML parser with typed ParseError positions)
+
+yamlvalidate
+  └── goccy/go-yaml (YAML parser with typed errors carrying token positions)
 
 config, process, task, crash, cmdinfo, version
   └── (stdlib only)
