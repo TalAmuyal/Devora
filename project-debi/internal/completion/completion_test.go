@@ -68,6 +68,16 @@ func testCommands() []cmdinfo.Command {
 					Description:    "Validate a JSON file",
 					CompletesFiles: true,
 				},
+				{
+					Name:           "yaml-validate",
+					Description:    "Validate a YAML file",
+					CompletesFiles: true,
+				},
+				{
+					Name:           "toml-validate",
+					Description:    "Validate a TOML file",
+					CompletesFiles: true,
+				},
 			},
 		},
 	}
@@ -382,8 +392,10 @@ func TestGenerate_SubCommandNamesAtSecondLevel(t *testing.T) {
 			output := buf.String()
 
 			// Sub-command names should appear in second-level completions
-			if !strings.Contains(output, "json-validate") {
-				t.Fatalf("%s output should contain 'json-validate' as a sub-command of util", tc.name)
+			for _, name := range []string{"json-validate", "yaml-validate", "toml-validate"} {
+				if !strings.Contains(output, name) {
+					t.Fatalf("%s output should contain %q as a sub-command of util", tc.name, name)
+				}
 			}
 			if !strings.Contains(output, "check") {
 				t.Fatalf("%s output should contain 'check' as a sub-command of pr", tc.name)
@@ -436,11 +448,14 @@ func TestGenerateBash_SubCommandFileCompletion(t *testing.T) {
 	GenerateBash(&buf, "debi", testCommands())
 	output := buf.String()
 
-	if !strings.Contains(output, "util:json-validate)") {
-		t.Fatal("bash output should contain 'util:json-validate)' case for third-level file completion")
+	for _, name := range []string{"json-validate", "yaml-validate", "toml-validate"} {
+		marker := "util:" + name + ")"
+		if !strings.Contains(output, marker) {
+			t.Fatalf("bash output should contain %q case for third-level file completion", marker)
+		}
 	}
 	if !strings.Contains(output, "compgen -f") {
-		t.Fatal("bash output should contain 'compgen -f' for file completion in util:json-validate")
+		t.Fatal("bash output should contain 'compgen -f' for file completion in util:<validator>")
 	}
 }
 
@@ -449,11 +464,13 @@ func TestGenerateZsh_SubCommandFileCompletion(t *testing.T) {
 	GenerateZsh(&buf, "debi", testCommands())
 	output := buf.String()
 
-	if !strings.Contains(output, "json-validate") {
-		t.Fatal("zsh output should contain 'json-validate' in util sub-command handling")
+	for _, name := range []string{"json-validate", "yaml-validate", "toml-validate"} {
+		if !strings.Contains(output, name) {
+			t.Fatalf("zsh output should contain %q in util sub-command handling", name)
+		}
 	}
 	if !strings.Contains(output, "_files") {
-		t.Fatal("zsh output should contain '_files' for file completion in util json-validate")
+		t.Fatal("zsh output should contain '_files' for file completion in util validators")
 	}
 }
 
@@ -462,12 +479,15 @@ func TestGenerateFish_SubCommandFileCompletion(t *testing.T) {
 	GenerateFish(&buf, "debi", testCommands())
 	output := buf.String()
 
-	if !strings.Contains(output, "__debi_seen_subcmd util json-validate") {
-		t.Fatal("fish output should contain '__debi_seen_subcmd util json-validate' for file completion")
+	for _, name := range []string{"json-validate", "yaml-validate", "toml-validate"} {
+		marker := "__debi_seen_subcmd util " + name
+		if !strings.Contains(output, marker) {
+			t.Fatalf("fish output should contain %q for file completion", marker)
+		}
 	}
 	// File completion uses -F flag in fish
 	if !strings.Contains(output, "-F") {
-		t.Fatal("fish output should contain '-F' flag for file completion in util json-validate")
+		t.Fatal("fish output should contain '-F' flag for file completion in util validators")
 	}
 }
 
