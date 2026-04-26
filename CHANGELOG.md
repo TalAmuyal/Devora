@@ -28,6 +28,10 @@ Types of changes:
 
 ### Changed
 
+- New workspace-level functionality:
+	- When run at the root of a workspace (instead of in a repo), `debi gst` and `debi gcl` now operate on all repos in the workspace in parallel instead of failing
+	- `debi gst` now prints a per-repo summary (branch, file counts, commits behind origin/<default>, PR status)
+	- `debi gcl` now applies `debi gcl` on every repo in the workspace (after verifying they are clean and detached)
 - `-b, --blocked` on `debi pr submit` is now also a per-invocation override of the new `pr.auto-merge` config (behavior unchanged when the config is unset)
 - Scheduled nightly builds are skipped when `master` has not advanced since the previous nightly
 - `mise mac-install` now automatically runs `download-deps` first, so third-party bundler dependencies are fetched on demand

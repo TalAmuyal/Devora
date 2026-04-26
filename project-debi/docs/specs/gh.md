@@ -77,7 +77,7 @@ var (
 )
 ```
 
-`defaultRunGHGetOutput` captures stdout; `defaultRunGHPassthrough` streams stdin/stdout/stderr to the terminal and accepts variadic `process.ExecOption` (forwarded to `process.RunPassthrough`) so callers can pass `process.WithSilent()` to suppress output. Tests replace both to simulate any gh response or error condition without invoking the real CLI.
+Both `defaultRunGHGetOutput` and `defaultRunGHPassthrough` accept variadic `process.ExecOption` and forward them to the underlying `process.GetOutput`/`process.RunPassthrough`. `defaultRunGHGetOutput` captures stdout; `defaultRunGHPassthrough` streams stdin/stdout/stderr to the terminal. Callers pass `process.WithCwd` to scope per-repo lookups (used by workspace-mode `gst`) and `process.WithSilent` to suppress passthrough output (used by submit/close in Normal/Quiet modes). Tests replace both to simulate any gh response or error condition without invoking the real CLI.
 
 ## Functions
 
@@ -95,10 +95,12 @@ Runs `gh repo view --json defaultBranchRef,name,owner`. Returns the flattened `R
 ### GetPRForBranch
 
 ```go
-func GetPRForBranch(branch string) (*PRSummary, error)
+func GetPRForBranch(branch string, opts ...process.ExecOption) (*PRSummary, error)
 ```
 
 Runs `gh pr view <branch> --json number,url,state,isDraft,title`. `PRSummary.Merged` is derived from `state == "MERGED"`.
+
+Variadic `process.ExecOption` is forwarded to the underlying gh subprocess so callers can scope the lookup. Workspace-mode `gst` passes `process.WithCwd(repoPath)` so each per-repo lookup runs inside that repo (the workspace root itself is not a git repo, and `gh pr view` requires being inside one).
 
 - Returns `(nil, nil)` when gh's stderr contains `"no pull requests found"` -- the idiomatic "no PR" signal, matching the pattern used in `internal/prstatus`.
 - Invocation error (other than "no PR"): wrapped as `fmt.Errorf("gh pr view %s: %w", branch, classifyGHError(err))`.

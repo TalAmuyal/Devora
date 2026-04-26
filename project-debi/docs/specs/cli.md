@@ -107,7 +107,7 @@ They return `PassthroughError` on non-zero exit.
 | `gb` | `[args]` | `git branch [args]` |
 | `gbd` | `<branch>...` (required) | `git branch -D <branch>...` |
 | `gbdc` | none | Delete current branch (detach first) |
-| `gcl` | none | `gfo` then `gcom` |
+| `gcl` | none | `gfo` then `gcom` (workspace-aware: see [specs/wsgit.md](./wsgit.md)) |
 | `gcom` | `[args]` | `git checkout origin/<default-branch> [args]` |
 | `gd` | `[args]` | `git diff [args]` |
 | `gfo` | `[args]` | `git fetch origin [args]` |
@@ -120,8 +120,18 @@ They return `PassthroughError` on non-zero exit.
 | `grl` | none | `gfo` then `grom` |
 | `grlp` | none | `grl` then `gpof` |
 | `grom` | none | `git rebase origin/<default-branch>` |
-| `gst` | `[args]` | `git status [args]` |
+| `gst` | `[args]` | `git status [args]` (workspace-aware: see [specs/wsgit.md](./wsgit.md)) |
 | `gstash` | `[args]` | `git stash [args]` |
+
+### Workspace-mode git commands
+
+`gst` and `gcl` dispatch on the caller's CWD before reaching `internal/git`:
+
+- When the resolved CWD is the exact root of a Devora workspace (`ws-N/`), the CLI invokes `wsgit.RunStatus` / `wsgit.RunClean` for an aggregated, parallel multi-repo flow.
+- Anywhere else (including inside any single repo, even one that lives inside a workspace), the CLI falls back to the per-repo passthrough wrappers `git.Gst` / `git.Gcl`, preserving their historical behavior.
+- At the workspace root, `gst` rejects extra positional args with `*UsageError` (since the workspace summary takes none); `gcl` accepts no args in either mode.
+
+Detection uses `wsgit.EnsureAtWorkspaceRoot(cwd)`; an `ErrNotAtWorkspaceRoot` result triggers the passthrough fallback. See [specs/wsgit.md](./wsgit.md) for the full output format and edge-case behavior.
 
 ### Utility
 

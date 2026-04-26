@@ -99,7 +99,7 @@ func stubCloseDeps(t *testing.T) {
 	deleteLocalBranch = func(string, ...process.ExecOption) error { return nil }
 	fetchOrigin = func(...process.ExecOption) error { return nil }
 	checkoutDetach = func(string, ...process.ExecOption) error { return nil }
-	getGHPRForBranch = func(string) (*gh.PRSummary, error) { return nil, nil }
+	getGHPRForBranch = func(string, ...process.ExecOption) (*gh.PRSummary, error) { return nil, nil }
 	newTracker = func() (tasktracker.Tracker, error) { return nil, nil }
 	readLine = func(io.Reader) (string, error) { return "\n", nil }
 }
@@ -229,7 +229,7 @@ func TestRun_SkipTracker_BypassesTracker(t *testing.T) {
 
 func TestRun_OpenPRWithForce_NoPromptProceeds(t *testing.T) {
 	stubCloseDeps(t)
-	getGHPRForBranch = func(string) (*gh.PRSummary, error) {
+	getGHPRForBranch = func(string, ...process.ExecOption) (*gh.PRSummary, error) {
 		return &gh.PRSummary{Number: 7, URL: "https://gh/pr/7", State: "OPEN"}, nil
 	}
 	readLineCalled := false
@@ -254,7 +254,7 @@ func TestRun_OpenPRNoForce_Yes_Proceeds(t *testing.T) {
 	tracker := &fakeTracker{}
 	newTracker = func() (tasktracker.Tracker, error) { return tracker, nil }
 	getBranchConfig = func(string, string) (string, error) { return "xyz", nil }
-	getGHPRForBranch = func(string) (*gh.PRSummary, error) {
+	getGHPRForBranch = func(string, ...process.ExecOption) (*gh.PRSummary, error) {
 		return &gh.PRSummary{Number: 7, URL: "https://gh/pr/7", State: "OPEN"}, nil
 	}
 	readLine = func(io.Reader) (string, error) { return "y\n", nil }
@@ -272,7 +272,7 @@ func TestRun_OpenPRNoForce_Yes_Proceeds(t *testing.T) {
 
 func TestRun_OpenPRNoForce_No_AbortsWithErrAborted(t *testing.T) {
 	stubCloseDeps(t)
-	getGHPRForBranch = func(string) (*gh.PRSummary, error) {
+	getGHPRForBranch = func(string, ...process.ExecOption) (*gh.PRSummary, error) {
 		return &gh.PRSummary{Number: 7, URL: "https://gh/pr/7", State: "OPEN"}, nil
 	}
 	readLine = func(io.Reader) (string, error) { return "\n", nil }
@@ -291,7 +291,7 @@ func TestRun_OpenPRNoForce_No_AbortsWithErrAborted(t *testing.T) {
 
 func TestRun_PRCheckError_PrintsWarning_Proceeds(t *testing.T) {
 	stubCloseDeps(t)
-	getGHPRForBranch = func(string) (*gh.PRSummary, error) {
+	getGHPRForBranch = func(string, ...process.ExecOption) (*gh.PRSummary, error) {
 		return nil, errors.New("gh exploded")
 	}
 
@@ -488,7 +488,7 @@ func TestConfirm_StdinReadError_Propagated(t *testing.T) {
 
 func TestRun_OpenPR_PromptContainsPRInfo(t *testing.T) {
 	stubCloseDeps(t)
-	getGHPRForBranch = func(string) (*gh.PRSummary, error) {
+	getGHPRForBranch = func(string, ...process.ExecOption) (*gh.PRSummary, error) {
 		return &gh.PRSummary{Number: 42, URL: "https://gh/pr/42", State: "OPEN"}, nil
 	}
 	readLine = func(io.Reader) (string, error) { return "\n", nil }
@@ -576,7 +576,7 @@ func TestRun_VerbosePassesNoExecOpts_NormalPassesWithSilent(t *testing.T) {
 
 func TestRun_PromptPrintsEvenInQuietMode(t *testing.T) {
 	stubCloseDeps(t)
-	getGHPRForBranch = func(string) (*gh.PRSummary, error) {
+	getGHPRForBranch = func(string, ...process.ExecOption) (*gh.PRSummary, error) {
 		return &gh.PRSummary{State: "OPEN", Number: 7, URL: "https://example/pr/7"}, nil
 	}
 	readLine = func(io.Reader) (string, error) { return "y\n", nil }

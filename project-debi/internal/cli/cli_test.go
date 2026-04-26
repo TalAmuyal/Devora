@@ -7,6 +7,7 @@ import (
 	"devora/internal/git"
 	"devora/internal/process"
 	"devora/internal/submit"
+	"devora/internal/workspace/wsgit"
 	"errors"
 	"fmt"
 	"io"
@@ -1990,5 +1991,167 @@ func TestRun_PRCheck_OutsideGitRepo_ReturnsUsageError(t *testing.T) {
 	}
 	if usageErr.Message != git.NotInRepoMessage {
 		t.Fatalf("expected message %q, got %q", git.NotInRepoMessage, usageErr.Message)
+	}
+}
+
+// --- wsgit dispatch tests ---
+
+// stubWsgitEnsureAtWorkspaceRoot overrides wsgitEnsureAtWorkspaceRoot for the
+// duration of the test.
+func stubWsgitEnsureAtWorkspaceRoot(t *testing.T, fn func(cwd string) (string, error)) {
+	t.Helper()
+	orig := wsgitEnsureAtWorkspaceRoot
+	wsgitEnsureAtWorkspaceRoot = fn
+	t.Cleanup(func() { wsgitEnsureAtWorkspaceRoot = orig })
+}
+
+func stubWsgitRunStatus(t *testing.T, fn func(io.Writer, string) error) {
+	t.Helper()
+	orig := wsgitRunStatus
+	wsgitRunStatus = fn
+	t.Cleanup(func() { wsgitRunStatus = orig })
+}
+
+func stubWsgitRunClean(t *testing.T, fn func(io.Writer, string) error) {
+	t.Helper()
+	orig := wsgitRunClean
+	wsgitRunClean = fn
+	t.Cleanup(func() { wsgitRunClean = orig })
+}
+
+func stubGitGst(t *testing.T, fn func(args []string) error) {
+	t.Helper()
+	orig := gitGst
+	gitGst = fn
+	t.Cleanup(func() { gitGst = orig })
+}
+
+func stubGitGcl(t *testing.T, fn func() error) {
+	t.Helper()
+	orig := gitGcl
+	gitGcl = fn
+	t.Cleanup(func() { gitGcl = orig })
+}
+
+func TestRun_Gst_NotAtWorkspaceRoot_FallsThroughToPerRepo(t *testing.T) {
+	stubWsgitEnsureAtWorkspaceRoot(t, func(string) (string, error) {
+		return "", wsgit.ErrNotAtWorkspaceRoot
+	})
+	wsgitCalled := false
+	stubWsgitRunStatus(t, func(io.Writer, string) error {
+		wsgitCalled = true
+		return nil
+	})
+	gstCalled := false
+	gotArgs := []string(nil)
+	stubGitGst(t, func(args []string) error {
+		gstCalled = true
+		gotArgs = args
+		return nil
+	})
+
+	if err := Run([]string{"gst", "--short"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if wsgitCalled {
+		t.Fatal("wsgitRunStatus should not be called when not at workspace root")
+	}
+	if !gstCalled {
+		t.Fatal("git.Gst should be called when not at workspace root")
+	}
+	if len(gotArgs) != 1 || gotArgs[0] != "--short" {
+		t.Fatalf("expected args [--short], got %v", gotArgs)
+	}
+}
+
+func TestRun_Gst_AtWorkspaceRoot_RoutesToWsgit(t *testing.T) {
+	stubWsgitEnsureAtWorkspaceRoot(t, func(cwd string) (string, error) {
+		return "/fake/ws-1", nil
+	})
+	gotPath := ""
+	stubWsgitRunStatus(t, func(_ io.Writer, wsPath string) error {
+		gotPath = wsPath
+		return nil
+	})
+	stubGitGst(t, func([]string) error {
+		t.Fatal("git.Gst should not be called at workspace root")
+		return nil
+	})
+
+	if err := Run([]string{"gst"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gotPath != "/fake/ws-1" {
+		t.Fatalf("expected wsPath '/fake/ws-1', got %q", gotPath)
+	}
+}
+
+func TestRun_Gst_AtWorkspaceRoot_ExtraArgs_ReturnsUsageError(t *testing.T) {
+	stubWsgitEnsureAtWorkspaceRoot(t, func(cwd string) (string, error) {
+		return "/fake/ws-1", nil
+	})
+	stubWsgitRunStatus(t, func(io.Writer, string) error {
+		t.Fatal("wsgitRunStatus should not be called when args are present")
+		return nil
+	})
+	stubGitGst(t, func([]string) error {
+		t.Fatal("git.Gst should not be called at workspace root")
+		return nil
+	})
+
+	err := Run([]string{"gst", "--short"})
+	if err == nil {
+		t.Fatal("expected error when extra args at workspace root")
+	}
+	var usageErr *UsageError
+	if !errors.As(err, &usageErr) {
+		t.Fatalf("expected *UsageError, got %T: %s", err, err.Error())
+	}
+	if !strings.Contains(usageErr.Message, "no arguments") {
+		t.Fatalf("expected message to mention 'no arguments', got %q", usageErr.Message)
+	}
+}
+
+func TestRun_Gcl_NotAtWorkspaceRoot_FallsThroughToPerRepo(t *testing.T) {
+	stubWsgitEnsureAtWorkspaceRoot(t, func(string) (string, error) {
+		return "", wsgit.ErrNotAtWorkspaceRoot
+	})
+	stubWsgitRunClean(t, func(io.Writer, string) error {
+		t.Fatal("wsgitRunClean should not be called when not at workspace root")
+		return nil
+	})
+	gclCalled := false
+	stubGitGcl(t, func() error {
+		gclCalled = true
+		return nil
+	})
+
+	if err := Run([]string{"gcl"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !gclCalled {
+		t.Fatal("git.Gcl should be called when not at workspace root")
+	}
+}
+
+func TestRun_Gcl_AtWorkspaceRoot_RoutesToWsgit(t *testing.T) {
+	stubWsgitEnsureAtWorkspaceRoot(t, func(string) (string, error) {
+		return "/fake/ws-1", nil
+	})
+	gotPath := ""
+	stubWsgitRunClean(t, func(_ io.Writer, wsPath string) error {
+		gotPath = wsPath
+		return nil
+	})
+	stubGitGcl(t, func() error {
+		t.Fatal("git.Gcl should not be called at workspace root")
+		return nil
+	})
+
+	if err := Run([]string{"gcl"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gotPath != "/fake/ws-1" {
+		t.Fatalf("expected wsPath '/fake/ws-1', got %q", gotPath)
 	}
 }

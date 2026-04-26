@@ -26,7 +26,7 @@ func stubGHDeps(t *testing.T) {
 func TestGetRepo_ParsesPayload(t *testing.T) {
 	stubGHDeps(t)
 
-	runGHGetOutput = func(args []string) (string, error) {
+	runGHGetOutput = func(args []string, opts ...process.ExecOption) (string, error) {
 		return `{
 			"name": "devora",
 			"owner": {"login": "TalAmuyal"},
@@ -52,7 +52,7 @@ func TestGetRepo_ParsesPayload(t *testing.T) {
 func TestGetRepo_MalformedJSON(t *testing.T) {
 	stubGHDeps(t)
 
-	runGHGetOutput = func(args []string) (string, error) {
+	runGHGetOutput = func(args []string, opts ...process.ExecOption) (string, error) {
 		return `{"name": "devora"`, nil // truncated
 	}
 
@@ -68,7 +68,7 @@ func TestGetRepo_MalformedJSON(t *testing.T) {
 func TestGetRepo_GhNotInstalled(t *testing.T) {
 	stubGHDeps(t)
 
-	runGHGetOutput = func(args []string) (string, error) {
+	runGHGetOutput = func(args []string, opts ...process.ExecOption) (string, error) {
 		return "", &process.VerboseExecError{
 			Command: []string{"gh", "repo", "view"},
 			Err:     exec.ErrNotFound,
@@ -89,7 +89,7 @@ func TestGetRepo_GhNotInstalled(t *testing.T) {
 func TestGetPRForBranch_NoPR(t *testing.T) {
 	stubGHDeps(t)
 
-	runGHGetOutput = func(args []string) (string, error) {
+	runGHGetOutput = func(args []string, opts ...process.ExecOption) (string, error) {
 		return "", &process.VerboseExecError{
 			Command: []string{"gh", "pr", "view", "foo"},
 			Err:     &exec.ExitError{},
@@ -109,7 +109,7 @@ func TestGetPRForBranch_NoPR(t *testing.T) {
 func TestGetPRForBranch_ParsesPayload(t *testing.T) {
 	stubGHDeps(t)
 
-	runGHGetOutput = func(args []string) (string, error) {
+	runGHGetOutput = func(args []string, opts ...process.ExecOption) (string, error) {
 		return `{
 			"number": 42,
 			"url": "https://github.com/org/repo/pull/42",
@@ -149,7 +149,7 @@ func TestGetPRForBranch_ParsesPayload(t *testing.T) {
 func TestGetPRForBranch_StateMerged_DerivesMergedTrue(t *testing.T) {
 	stubGHDeps(t)
 
-	runGHGetOutput = func(args []string) (string, error) {
+	runGHGetOutput = func(args []string, opts ...process.ExecOption) (string, error) {
 		return `{
 			"number": 7,
 			"url": "https://github.com/org/repo/pull/7",
@@ -178,7 +178,7 @@ func TestGetPRForBranch_FieldListOmitsMerged(t *testing.T) {
 	stubGHDeps(t)
 
 	var gotArgs []string
-	runGHGetOutput = func(args []string) (string, error) {
+	runGHGetOutput = func(args []string, opts ...process.ExecOption) (string, error) {
 		gotArgs = args
 		return `{"number":1,"url":"u","state":"OPEN","isDraft":false,"title":"t"}`, nil
 	}
@@ -195,10 +195,31 @@ func TestGetPRForBranch_FieldListOmitsMerged(t *testing.T) {
 	}
 }
 
+// TestGetPRForBranch_ForwardsOpts asserts that variadic process.ExecOption
+// values supplied by callers reach the underlying gh subprocess. This guards
+// against the regression where workspace-mode `gst` had no way to scope
+// `gh pr view` to a specific repo and inherited the workspace-root cwd.
+func TestGetPRForBranch_ForwardsOpts(t *testing.T) {
+	stubGHDeps(t)
+
+	var gotOptCount int
+	runGHGetOutput = func(args []string, opts ...process.ExecOption) (string, error) {
+		gotOptCount = len(opts)
+		return `{"number":1,"url":"u","state":"OPEN","isDraft":false,"title":"t"}`, nil
+	}
+
+	if _, err := GetPRForBranch("feature/x", process.WithCwd("/tmp")); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gotOptCount != 1 {
+		t.Fatalf("expected 1 opt forwarded to runGHGetOutput, got %d", gotOptCount)
+	}
+}
+
 func TestGetPRForBranch_OtherError(t *testing.T) {
 	stubGHDeps(t)
 
-	runGHGetOutput = func(args []string) (string, error) {
+	runGHGetOutput = func(args []string, opts ...process.ExecOption) (string, error) {
 		return "", &process.VerboseExecError{
 			Command: []string{"gh", "pr", "view", "foo"},
 			Err:     errors.New("auth required"),
@@ -220,7 +241,7 @@ func TestGetPRForBranch_OtherError(t *testing.T) {
 func TestCreatePR_Success(t *testing.T) {
 	stubGHDeps(t)
 
-	runGHGetOutput = func(args []string) (string, error) {
+	runGHGetOutput = func(args []string, opts ...process.ExecOption) (string, error) {
 		return "https://github.com/owner/repo/pull/42\n", nil
 	}
 
@@ -236,7 +257,7 @@ func TestCreatePR_Success(t *testing.T) {
 func TestCreatePR_AlreadyExists_WithURL(t *testing.T) {
 	stubGHDeps(t)
 
-	runGHGetOutput = func(args []string) (string, error) {
+	runGHGetOutput = func(args []string, opts ...process.ExecOption) (string, error) {
 		return "", &process.VerboseExecError{
 			Command: []string{"gh", "pr", "create"},
 			Err:     &exec.ExitError{},
@@ -263,7 +284,7 @@ func TestCreatePR_AlreadyExists_WithURL(t *testing.T) {
 func TestCreatePR_AlreadyExists_WithoutURL(t *testing.T) {
 	stubGHDeps(t)
 
-	runGHGetOutput = func(args []string) (string, error) {
+	runGHGetOutput = func(args []string, opts ...process.ExecOption) (string, error) {
 		return "", &process.VerboseExecError{
 			Command: []string{"gh", "pr", "create"},
 			Err:     &exec.ExitError{},
@@ -290,7 +311,7 @@ func TestCreatePR_AlreadyExists_WithoutURL(t *testing.T) {
 func TestCreatePR_GhNotInstalled(t *testing.T) {
 	stubGHDeps(t)
 
-	runGHGetOutput = func(args []string) (string, error) {
+	runGHGetOutput = func(args []string, opts ...process.ExecOption) (string, error) {
 		return "", &process.VerboseExecError{
 			Command: []string{"gh", "pr", "create"},
 			Err:     exec.ErrNotFound,
