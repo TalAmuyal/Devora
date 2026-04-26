@@ -55,6 +55,22 @@ func WithSilent() ExecOption
 
 Routes `RunPassthrough`'s stdout and stderr to `io.Discard`. Has no effect on `GetOutput`/`GetShellOutput` (which always capture). `stdin` is left unchanged. Used by submit/close in Normal and Quiet modes to keep git/gh subprocess output off the user's terminal while still enforcing exit-code semantics (`*PassthroughError` is still returned on failure).
 
+#### WithExtraEnv
+
+```go
+func WithExtraEnv(entries ...string) ExecOption
+```
+
+Appends `KEY=VALUE` entries to the parent process's environment for the child. Repeated keys take the last value (matches `exec.Command` semantics). Used by workspace-mode `gst` to set `GIT_TERMINAL_PROMPT=0` and `GIT_SSH_COMMAND=ssh -o BatchMode=yes` so per-repo `git fetch origin` calls fail fast instead of blocking on credential prompts.
+
+#### WithContext
+
+```go
+func WithContext(ctx context.Context) ExecOption
+```
+
+Binds the subprocess to `ctx` so cancellation/deadline kills the child. When the context expires, the returned error wraps `ctx.Err()`. Used by workspace-mode `gst` to cap each per-repo `git fetch origin` so a hung remote doesn't stall the workspace-wide summary.
+
 ### PassthroughError
 
 ```go
@@ -101,6 +117,14 @@ Behavior:
 4. Run the command.
 5. If the command fails (non-zero exit), return a `*VerboseExecError` with trimmed stdout and stderr.
 6. On success, return `strings.TrimSpace(stdout)`.
+
+### GetOutputRaw
+
+```go
+func GetOutputRaw(command []string, opts ...ExecOption) (string, error)
+```
+
+Identical to `GetOutput` but does not trim whitespace from stdout. Used for byte-sensitive output like `git status --porcelain=v1 -z`, where leading spaces in each entry encode meaningful status information and trimming would corrupt the parse.
 
 ### GetShellOutput
 

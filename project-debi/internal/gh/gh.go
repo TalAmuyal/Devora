@@ -57,8 +57,8 @@ var (
 	runGHPassthrough = defaultRunGHPassthrough
 )
 
-func defaultRunGHGetOutput(args []string) (string, error) {
-	return process.GetOutput(append([]string{"gh"}, args...))
+func defaultRunGHGetOutput(args []string, opts ...process.ExecOption) (string, error) {
+	return process.GetOutput(append([]string{"gh"}, args...), opts...)
 }
 
 func defaultRunGHPassthrough(args []string, opts ...process.ExecOption) error {
@@ -133,11 +133,15 @@ type prViewPayload struct {
 // Returns (nil, nil) when gh reports no PR for the branch — detected via the
 // stderr substring "no pull requests found", matching the handling in
 // internal/prstatus.
-func GetPRForBranch(branch string) (*PRSummary, error) {
+//
+// Variadic process.ExecOption is forwarded to the underlying gh subprocess so
+// callers can scope the lookup (e.g. process.WithCwd to a specific repo when
+// invoked from a multi-repo context).
+func GetPRForBranch(branch string, opts ...process.ExecOption) (*PRSummary, error) {
 	out, err := runGHGetOutput([]string{
 		"pr", "view", branch,
 		"--json", "number,url,state,isDraft,title",
-	})
+	}, opts...)
 	if err != nil {
 		var execErr *process.VerboseExecError
 		if errors.As(err, &execErr) {

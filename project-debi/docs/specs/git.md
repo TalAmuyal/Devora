@@ -6,6 +6,8 @@ Package: `internal/git`
 
 Provides git shortcut command implementations and shared git utilities. All commands run in passthrough mode (stdin/stdout/stderr connected to the terminal).
 
+`Gst` and `Gcl` here remain pure per-repo passthrough wrappers; the workspace-aware variants (parallel multi-repo summary for `debi gst`, two-phase verify-then-update for `debi gcl`) live in `internal/workspace/wsgit` and are dispatched by the CLI based on the caller's CWD. See [wsgit.md](./wsgit.md).
+
 ## Dependencies
 
 - `devora/internal/process` -- command execution (`RunPassthrough`, `GetOutput`)

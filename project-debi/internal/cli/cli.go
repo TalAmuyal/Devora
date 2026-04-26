@@ -19,6 +19,7 @@ import (
 	_ "devora/internal/tasktracker/asana"
 	"devora/internal/tui"
 	"devora/internal/workspace"
+	"devora/internal/workspace/wsgit"
 	"errors"
 	"fmt"
 	"os"
@@ -240,6 +241,15 @@ var healthRun = health.Run
 // resolveActiveProfile is the profile resolver entry point; stubbable for
 // tests so the three handlers (health/submit/close) can verify they invoke it.
 var resolveActiveProfile = ResolveActiveProfile
+
+// Stubbable seams for the workspace-aware gst/gcl dispatchers.
+var (
+	wsgitEnsureAtWorkspaceRoot = wsgit.EnsureAtWorkspaceRoot
+	wsgitRunStatus             = wsgit.RunStatus
+	wsgitRunClean              = wsgit.RunClean
+	gitGst                     = git.Gst
+	gitGcl                     = git.Gcl
+)
 
 const submitUsage = `usage: debi pr submit -m <message> [flags]
 
@@ -486,6 +496,46 @@ func runClose(args []string) error {
 		return wrapped
 	}
 	return err
+}
+
+// runGst dispatches `debi gst`: at a workspace root, runs the structured
+// per-repo summary; anywhere else, falls through to the existing
+// per-repo passthrough. Workspace-mode rejects extra args because the
+// summary is incompatible with passthrough flags like --short.
+func runGst(args []string) error {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return gitGst(args)
+	}
+	wsPath, err := wsgitEnsureAtWorkspaceRoot(cwd)
+	if err != nil {
+		if errors.Is(err, wsgit.ErrNotAtWorkspaceRoot) {
+			return gitGst(args)
+		}
+		return err
+	}
+	if len(args) > 0 {
+		return &UsageError{Message: "workspace-mode gst takes no arguments; cd into a repo to use git-status flags"}
+	}
+	return wsgitRunStatus(os.Stdout, wsPath)
+}
+
+// runGcl dispatches `debi gcl`: at a workspace root, runs the verify-then-
+// update flow across all repos; anywhere else, falls through to the existing
+// per-repo passthrough.
+func runGcl(args []string) error {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return gitGcl()
+	}
+	wsPath, err := wsgitEnsureAtWorkspaceRoot(cwd)
+	if err != nil {
+		if errors.Is(err, wsgit.ErrNotAtWorkspaceRoot) {
+			return gitGcl()
+		}
+		return err
+	}
+	return wsgitRunClean(os.Stdout, wsPath)
 }
 
 func runRename(newName string) error {

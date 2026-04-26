@@ -18,6 +18,7 @@ Specifications for the domain packages. These define the intended behavior of ea
 |----------|---------|-------------|
 | [specs/config.md](specs/config.md) | `internal/config` | Configuration loading, profiles, paths |
 | [specs/workspace.md](specs/workspace.md) | `internal/workspace` | Workspace creation, worktrees, locking |
+| [specs/wsgit.md](specs/wsgit.md) | `internal/workspace/wsgit` | Workspace-aware `debi gst` / `debi gcl` (parallel multi-repo) |
 | [specs/terminal.md](specs/terminal.md) | `internal/terminal` | Kitty terminal session management |
 | [specs/cli.md](specs/cli.md) | `internal/cli` | CLI entry point and subcommands |
 | [specs/process.md](specs/process.md) | `internal/process` | Shell command execution |

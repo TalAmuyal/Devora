@@ -2,6 +2,7 @@ package process
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -35,6 +36,8 @@ func (e *VerboseExecError) Unwrap() error {
 type execConfig struct {
 	cwd    string
 	silent bool
+	env    []string
+	ctx    context.Context
 }
 
 type ExecOption func(*execConfig)
@@ -54,6 +57,23 @@ func WithSilent() ExecOption {
 	}
 }
 
+// WithExtraEnv appends key=value entries to the parent process's environment
+// for the child. Repeated keys take the last value (matches exec.Command
+// semantics).
+func WithExtraEnv(entries ...string) ExecOption {
+	return func(cfg *execConfig) {
+		cfg.env = append(cfg.env, entries...)
+	}
+}
+
+// WithContext binds the subprocess to ctx so cancellation/deadline kills the
+// child. When the context expires, the returned error wraps ctx.Err().
+func WithContext(ctx context.Context) ExecOption {
+	return func(cfg *execConfig) {
+		cfg.ctx = ctx
+	}
+}
+
 type PassthroughError struct {
 	Code int
 }
@@ -68,9 +88,12 @@ func RunPassthrough(command []string, opts ...ExecOption) error {
 		opt(cfg)
 	}
 
-	cmd := exec.Command(command[0], command[1:]...)
+	cmd := newCmd(cfg, command)
 	if cfg.cwd != "" {
 		cmd.Dir = cfg.cwd
+	}
+	if cfg.env != nil {
+		cmd.Env = append(os.Environ(), cfg.env...)
 	}
 
 	cmd.Stdin = os.Stdin
@@ -93,15 +116,40 @@ func RunPassthrough(command []string, opts ...ExecOption) error {
 	return nil
 }
 
+func newCmd(cfg *execConfig, command []string) *exec.Cmd {
+	if cfg.ctx != nil {
+		return exec.CommandContext(cfg.ctx, command[0], command[1:]...)
+	}
+	return exec.Command(command[0], command[1:]...)
+}
+
 func GetOutput(command []string, opts ...ExecOption) (string, error) {
+	out, err := getOutputRaw(command, opts...)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(out), nil
+}
+
+// GetOutputRaw is identical to GetOutput but does not trim whitespace from
+// stdout. Use it for byte-sensitive output like `git status --porcelain -z`,
+// where leading spaces in each entry encode meaningful status information.
+func GetOutputRaw(command []string, opts ...ExecOption) (string, error) {
+	return getOutputRaw(command, opts...)
+}
+
+func getOutputRaw(command []string, opts ...ExecOption) (string, error) {
 	cfg := &execConfig{}
 	for _, opt := range opts {
 		opt(cfg)
 	}
 
-	cmd := exec.Command(command[0], command[1:]...)
+	cmd := newCmd(cfg, command)
 	if cfg.cwd != "" {
 		cmd.Dir = cfg.cwd
+	}
+	if cfg.env != nil {
+		cmd.Env = append(os.Environ(), cfg.env...)
 	}
 
 	var stdout, stderr bytes.Buffer
@@ -117,7 +165,7 @@ func GetOutput(command []string, opts ...ExecOption) (string, error) {
 			Stderr:  strings.TrimSpace(stderr.String()),
 		}
 	}
-	return strings.TrimSpace(stdout.String()), nil
+	return stdout.String(), nil
 }
 
 func GetShellOutput(command string, opts ...ExecOption) (string, error) {

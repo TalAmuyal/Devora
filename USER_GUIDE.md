@@ -96,6 +96,15 @@ Once a workspace exists, you can manage it from the workspace list:
 
 Both actions are blocked if the workspace has an active terminal session, uncommitted changes, or worktrees that are still on a branch (not yet detached).
 
+#### Multi-repo git shortcuts at the workspace root
+
+Two of the `debi` git shortcuts are workspace-aware when run from the exact root of a workspace directory (`ws-N/`):
+
+- `debi gst` prints an aligned per-repo summary across every repo in the workspace: branch (or `HEAD` if detached), staged/unstaged/untracked file counts, commits behind `origin/<default>`, and PR state. All repos are queried in parallel and a SUMMARY block reports the totals
+- `debi gcl` first verifies that every repo is clean and on detached HEAD; if any repo fails, the command aborts and no git operations run. Otherwise it fetches and checks out `origin/<default>` in every repo in parallel and reports per-repo success or failure
+
+Inside any specific repo (including a repo that lives inside a workspace), both commands work exactly as before: `gst` is `git status` passthrough, `gcl` is `gfo` then `gcom`.
+
 ### Settings
 
 Press `s` from the workspace list to open the settings page.

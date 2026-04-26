@@ -188,7 +188,7 @@ var commands = []Command{
 		Name:        "gcl",
 		Description: "Fetch origin and checkout default branch",
 		Group:       "Git Shortcuts",
-		Run:         func(args []string) error { return git.Gcl() },
+		Run:         func(args []string) error { return runGcl(args) },
 	},
 	{
 		Name:        "gcom",
@@ -276,7 +276,7 @@ var commands = []Command{
 		Description: "git status",
 		ArgsHint:    "[args]",
 		Group:       "Git Shortcuts",
-		Run:         func(args []string) error { return git.Gst(args) },
+		Run:         func(args []string) error { return runGst(args) },
 	},
 	{
 		Name:        "gstash",
