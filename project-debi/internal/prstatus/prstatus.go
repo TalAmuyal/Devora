@@ -11,6 +11,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"devora/internal/process"
+	"devora/internal/style"
 )
 
 // --- Types ---
@@ -110,15 +111,6 @@ func defaultGetGHPRView() (string, error) {
 func defaultGetCurrentBranch() (string, error) {
 	return process.GetOutput([]string{"git", "symbolic-ref", "--short", "HEAD"})
 }
-
-// --- Colors (Catppuccin Mocha) ---
-
-var (
-	greenStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#A6E3A1"))
-	redStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("#F38BA8"))
-	yellowStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#F9E2AF"))
-	cyanStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#89DCEB"))
-)
 
 // --- Core logic ---
 
@@ -251,7 +243,7 @@ func handleNoPR(w io.Writer, branch string, jsonOutput bool) error {
 	fmt.Fprintln(w, "PR Status")
 	fmt.Fprintln(w)
 	fmt.Fprintf(w, "Branch: %s\n", branch)
-	fmt.Fprintf(w, "%s No PR found for branch %s\n", yellowStyle.Render("\u26a0"), branch)
+	fmt.Fprintf(w, "%s No PR found for branch %s\n", style.Warning.Render("\u26a0"), branch)
 	return nil
 }
 
@@ -322,31 +314,31 @@ func writeHuman(w io.Writer, branch string, prData PRData, checks ChecksSummary,
 func renderState(state string, isDraft bool) string {
 	switch {
 	case state == "merged":
-		return greenStyle.Render("merged")
+		return style.Green.Render("merged")
 	case state == "closed":
-		return redStyle.Render("closed")
+		return style.Red.Render("closed")
 	case isDraft:
-		return yellowStyle.Render("draft")
+		return style.Yellow.Render("draft")
 	default:
-		return cyanStyle.Render("open")
+		return style.Cyan.Render("open")
 	}
 }
 
 func renderChecksSection(w io.Writer, checks ChecksSummary) {
 	summaryText := fmt.Sprintf("%d/%d passing", checks.Passed, checks.Total)
 
-	var style lipgloss.Style
+	var summaryStyle lipgloss.Style
 	if checks.Failed > 0 {
 		summaryText += fmt.Sprintf(" (%d failed)", checks.Failed)
-		style = redStyle
+		summaryStyle = style.Error
 	} else if checks.Pending > 0 {
 		summaryText += fmt.Sprintf(" (%d pending)", checks.Pending)
-		style = yellowStyle
+		summaryStyle = style.Warning
 	} else {
-		style = greenStyle
+		summaryStyle = style.Success
 	}
 
-	fmt.Fprintf(w, "  Checks: %s\n", style.Render(summaryText))
+	fmt.Fprintf(w, "  Checks: %s\n", summaryStyle.Render(summaryText))
 
 	const maxShown = 5
 
@@ -356,7 +348,7 @@ func renderChecksSection(w io.Writer, checks ChecksSummary) {
 			fmt.Fprintf(w, "    ...and %d more\n", len(checks.FailedChecks)-maxShown)
 			break
 		}
-		fmt.Fprintf(w, "    %s %s\n", redStyle.Render("\u2717"), name)
+		fmt.Fprintf(w, "    %s %s\n", style.Error.Render("\u2717"), name)
 	}
 
 	// List pending checks
@@ -365,20 +357,20 @@ func renderChecksSection(w io.Writer, checks ChecksSummary) {
 			fmt.Fprintf(w, "    ...and %d more\n", len(checks.PendingChecks)-maxShown)
 			break
 		}
-		fmt.Fprintf(w, "    %s %s\n", yellowStyle.Render("\u25cb"), name)
+		fmt.Fprintf(w, "    %s %s\n", style.Warning.Render("\u25cb"), name)
 	}
 }
 
 func renderReviewsSection(w io.Writer, reviews ReviewsSummary) {
 	var parts []string
 	if reviews.Approved > 0 {
-		parts = append(parts, greenStyle.Render(fmt.Sprintf("%d approved", reviews.Approved)))
+		parts = append(parts, style.Success.Render(fmt.Sprintf("%d approved", reviews.Approved)))
 	}
 	if reviews.ChangesRequested > 0 {
-		parts = append(parts, redStyle.Render(fmt.Sprintf("%d changes requested", reviews.ChangesRequested)))
+		parts = append(parts, style.Error.Render(fmt.Sprintf("%d changes requested", reviews.ChangesRequested)))
 	}
 	if reviews.Pending > 0 {
-		parts = append(parts, yellowStyle.Render(fmt.Sprintf("%d pending", reviews.Pending)))
+		parts = append(parts, style.Warning.Render(fmt.Sprintf("%d pending", reviews.Pending)))
 	}
 	if len(parts) > 0 {
 		fmt.Fprintf(w, "  Reviews: %s\n", strings.Join(parts, ", "))

@@ -5,10 +5,12 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+
+	"devora/internal/style"
 )
 
 func TestStartupError_QuitKeys(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewStartupErrorModel(&styles, "some error")
 
 	quitKeys := []struct {
@@ -37,7 +39,7 @@ func TestStartupError_QuitKeys(t *testing.T) {
 }
 
 func TestStartupError_OtherKeysIgnored(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewStartupErrorModel(&styles, "some error")
 
 	ignoredKeys := []struct {
@@ -62,7 +64,7 @@ func TestStartupError_OtherKeysIgnored(t *testing.T) {
 }
 
 func TestStartupError_ViewContainsMessage(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	errorMessage := "Expected PATH to contain /Applications/Devora.app/Contents/Resources/bundled-apps"
 	m := NewStartupErrorModel(&styles, errorMessage)
 	m.SetSize(80, 24)
@@ -75,7 +77,7 @@ func TestStartupError_ViewContainsMessage(t *testing.T) {
 }
 
 func TestStartupError_ViewContainsInstructions(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewStartupErrorModel(&styles, "some error")
 	m.SetSize(80, 24)
 
@@ -93,7 +95,7 @@ func TestStartupError_ViewContainsInstructions(t *testing.T) {
 }
 
 func TestStartupError_ActionBindings(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewStartupErrorModel(&styles, "some error")
 
 	bindings := m.ActionBindings()
@@ -107,7 +109,7 @@ func TestStartupError_ActionBindings(t *testing.T) {
 }
 
 func TestStartupError_BorderTitle(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewStartupErrorModel(&styles, "some error")
 
 	title := m.borderTitle()

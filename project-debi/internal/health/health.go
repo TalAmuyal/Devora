@@ -17,6 +17,7 @@ import (
 	"devora/internal/config"
 	"devora/internal/credentials"
 	"devora/internal/process"
+	"devora/internal/style"
 	"devora/internal/version"
 )
 
@@ -234,19 +235,19 @@ func Check(dep Dependency) CheckResult {
 	return result
 }
 
-func renderSection(w io.Writer, results []CheckResult, nameWidth, versionWidth int, verbose bool, greenStyle, redStyle lipgloss.Style) int {
+func renderSection(w io.Writer, results []CheckResult, nameWidth, versionWidth int, verbose bool) int {
 	found := 0
 	for _, r := range results {
 		if r.Found {
 			found++
-			prefix := greenStyle.Render(fmt.Sprintf("  \u2713 %-*s", nameWidth, r.Name))
+			prefix := style.Success.Render(fmt.Sprintf("  \u2713 %-*s", nameWidth, r.Name))
 			if verbose {
 				fmt.Fprintf(w, "%s  %-*s  %s\n", prefix, versionWidth, r.Version, shortenPath(r.Path))
 			} else {
 				fmt.Fprintf(w, "%s  %s\n", prefix, r.Version)
 			}
 		} else {
-			prefix := redStyle.Render(fmt.Sprintf("  \u2717 %-*s", nameWidth, r.Name))
+			prefix := style.Error.Render(fmt.Sprintf("  \u2717 %-*s", nameWidth, r.Name))
 			if verbose {
 				fmt.Fprintf(w, "%s  %-*s  not found\n", prefix, versionWidth, "")
 			} else {
@@ -257,22 +258,22 @@ func renderSection(w io.Writer, results []CheckResult, nameWidth, versionWidth i
 	return found
 }
 
-func renderCredentials(w io.Writer, results []CredentialResult, nameWidth int, greenStyle, redStyle, yellowStyle, mutedStyle lipgloss.Style) int {
+func renderCredentials(w io.Writer, results []CredentialResult, nameWidth int) int {
 	ok := 0
 	for _, r := range results {
 		switch r.Status {
 		case CredentialOK:
 			ok++
-			prefix := greenStyle.Render(fmt.Sprintf("  ✓ %-*s", nameWidth, r.Name))
+			prefix := style.Success.Render(fmt.Sprintf("  ✓ %-*s", nameWidth, r.Name))
 			fmt.Fprintf(w, "%s  %s\n", prefix, r.Message)
 		case CredentialFailed:
-			prefix := redStyle.Render(fmt.Sprintf("  ✗ %-*s", nameWidth, r.Name))
+			prefix := style.Error.Render(fmt.Sprintf("  ✗ %-*s", nameWidth, r.Name))
 			fmt.Fprintf(w, "%s  %s\n", prefix, r.Message)
 		case CredentialUnchecked:
-			prefix := yellowStyle.Render(fmt.Sprintf("  ? %-*s", nameWidth, r.Name))
+			prefix := style.Warning.Render(fmt.Sprintf("  ? %-*s", nameWidth, r.Name))
 			fmt.Fprintf(w, "%s  %s\n", prefix, r.Message)
 		case CredentialInfo:
-			prefix := mutedStyle.Render(fmt.Sprintf("  ○ %-*s", nameWidth, r.Name))
+			prefix := style.Muted.Render(fmt.Sprintf("  ○ %-*s", nameWidth, r.Name))
 			fmt.Fprintf(w, "%s  %s\n", prefix, r.Message)
 		}
 	}
@@ -292,14 +293,14 @@ func countedCredentials(results []CredentialResult) int {
 	return n
 }
 
-func renderSummaryLine(w io.Writer, labelWidth int, label string, found, total int, style lipgloss.Style) {
+func renderSummaryLine(w io.Writer, labelWidth int, label string, found, total int, pctStyle lipgloss.Style) {
 	pct := 0
 	if total > 0 {
 		pct = found * 100 / total
 	}
 	fmt.Fprintf(w, "%-*s %s (%d/%d)\n",
 		labelWidth, label,
-		style.Render(fmt.Sprintf("%3d%%", pct)),
+		pctStyle.Render(fmt.Sprintf("%3d%%", pct)),
 		found, total)
 }
 
@@ -335,32 +336,25 @@ func Run(w io.Writer, strict bool, verbose bool) error {
 		}
 	}
 
-	greenStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#A6E3A1"))
-	redStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#F38BA8"))
-	yellowStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#F9E2AF"))
-	// Muted color for informational rows (e.g., unconfigured optional tracker).
-	// Matches tui.theme.go's TextMuted (Catppuccin overlay0).
-	mutedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6C7086"))
-
 	fmt.Fprintf(w, "Devora Health Check (version: %s)\n", getAppVersion())
 	fmt.Fprintln(w)
 
 	configPath := getConfigPath()
 	_, configErr := statFile(configPath)
 	if configErr == nil {
-		fmt.Fprintf(w, "Config: %s %s\n", shortenPath(configPath), greenStyle.Render("✓"))
+		fmt.Fprintf(w, "Config: %s %s\n", shortenPath(configPath), style.Success.Render("✓"))
 	} else {
-		fmt.Fprintf(w, "Config: %s %s\n", shortenPath(configPath), yellowStyle.Render("(not found)"))
+		fmt.Fprintf(w, "Config: %s %s\n", shortenPath(configPath), style.Warning.Render("(not found)"))
 	}
 	fmt.Fprintln(w)
 
 	fmt.Fprintln(w, "Required:")
-	requiredFound := renderSection(w, required, nameWidth, versionWidth, verbose, greenStyle, redStyle)
+	requiredFound := renderSection(w, required, nameWidth, versionWidth, verbose)
 
 	fmt.Fprintln(w)
 
 	fmt.Fprintln(w, "Optional:")
-	optionalFound := renderSection(w, optional, nameWidth, versionWidth, verbose, greenStyle, redStyle)
+	optionalFound := renderSection(w, optional, nameWidth, versionWidth, verbose)
 
 	// Credential checks
 	ghFound := false
@@ -382,7 +376,7 @@ func Run(w io.Writer, strict bool, verbose bool) error {
 
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Credentials:")
-	credFound := renderCredentials(w, credResults, credNameWidth, greenStyle, redStyle, yellowStyle, mutedStyle)
+	credFound := renderCredentials(w, credResults, credNameWidth)
 	credTotal := countedCredentials(credResults)
 
 	completionPath := zshCompletionPath()
@@ -391,14 +385,14 @@ func Run(w io.Writer, strict bool, verbose bool) error {
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Completion:")
 	if completionFound {
-		prefix := greenStyle.Render("  ✓ zsh completion")
+		prefix := style.Success.Render("  ✓ zsh completion")
 		if verbose {
 			fmt.Fprintf(w, "%s  %s\n", prefix, shortenPath(completionPath))
 		} else {
 			fmt.Fprintln(w, prefix)
 		}
 	} else {
-		prefix := redStyle.Render("  ✗ zsh completion")
+		prefix := style.Error.Render("  ✗ zsh completion")
 		fmt.Fprintf(w, "%s  run: debi completion zsh > ~/.zsh/completions/_debi\n", prefix)
 	}
 
@@ -413,19 +407,19 @@ func Run(w io.Writer, strict bool, verbose bool) error {
 
 	fmt.Fprintln(w)
 
-	requiredPctStyle := greenStyle
+	requiredPctStyle := style.Success
 	if requiredFound < len(required) {
-		requiredPctStyle = redStyle
+		requiredPctStyle = style.Error
 	}
-	optionalPctStyle := greenStyle
+	optionalPctStyle := style.Success
 	if optionalFound < len(optional) {
-		optionalPctStyle = yellowStyle
+		optionalPctStyle = style.Warning
 	}
 
 	renderSummaryLine(w, summaryLabelWidth, requiredLabel, requiredFound, len(required), requiredPctStyle)
 	renderSummaryLine(w, summaryLabelWidth, optionalLabel, optionalFound, len(optional), optionalPctStyle)
 
-	credPctStyle := greenStyle
+	credPctStyle := style.Success
 	if credFound < credTotal {
 		hasFailed := false
 		for _, r := range credResults {
@@ -435,9 +429,9 @@ func Run(w io.Writer, strict bool, verbose bool) error {
 			}
 		}
 		if hasFailed {
-			credPctStyle = redStyle
+			credPctStyle = style.Error
 		} else {
-			credPctStyle = yellowStyle
+			credPctStyle = style.Warning
 		}
 	}
 

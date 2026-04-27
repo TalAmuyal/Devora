@@ -21,7 +21,7 @@ Stable public API: `Run`, `Options`, `JSONOutput`, `ErrNotDetached`.
 - `devora/internal/tasktracker` -- pluggable task-tracker interface
 - `devora/internal/config` -- branch-prefix resolution
 - `devora/internal/process` -- passthrough execution of the default browser opener
-- `charm.land/lipgloss/v2` -- colored progress output
+- `devora/internal/style` -- shared Catppuccin Mocha palette + pre-built lipgloss styles for colored progress output
 - `golang.org/x/sync/errgroup` -- concurrent pre-fetch when both WhoAmI and GetRepo are needed
 
 ## Types
@@ -180,7 +180,7 @@ The git-config key used to store the task id is `task-id` (provider-agnostic). T
   Task:   https://app.asana.com/1/<workspace>/task/<id>
 ```
 
-Lines are styled via lipgloss: green for success, cyan for progress, yellow for warnings, red for errors. Styles use the Catppuccin Mocha palette, matching `internal/prstatus`.
+Lines are styled via lipgloss using the shared pre-built styles from `internal/style`: green for success, cyan for progress, yellow for warnings, red for errors.
 
 ### JSON mode
 

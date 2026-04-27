@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"charm.land/lipgloss/v2"
+
+	"devora/internal/style"
 )
 
 func findRepoRow(t *testing.T, rendered string) string {
@@ -19,7 +21,7 @@ func findRepoRow(t *testing.T, rendered string) string {
 }
 
 func TestRenderCard_RepoRow(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewWorkspaceListModel(&styles)
 
 	tests := []struct {

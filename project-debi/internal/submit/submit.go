@@ -16,13 +16,13 @@ import (
 	"os"
 	"runtime"
 
-	"charm.land/lipgloss/v2"
 	"golang.org/x/sync/errgroup"
 
 	"devora/internal/config"
 	"devora/internal/gh"
 	"devora/internal/git"
 	"devora/internal/process"
+	"devora/internal/style"
 	"devora/internal/tasktracker"
 )
 
@@ -123,14 +123,6 @@ func defaultGetGHPRView(url string) (gh.PRSummary, error) {
 	return *pr, nil
 }
 
-// --- Styles (Catppuccin Mocha — match internal/prstatus) ---
-
-var (
-	greenStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#A6E3A1"))
-	yellowStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#F9E2AF"))
-	cyanStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#89DCEB"))
-)
-
 // --- Run ---
 
 // Run executes the submit flow: validate preconditions, commit changes,
@@ -173,12 +165,12 @@ func Run(w io.Writer, opts Options) error {
 
 	// Stage and commit.
 	if opts.Verbose {
-		fmt.Fprintln(progress, cyanStyle.Render("\u2192 Staging and committing..."))
+		fmt.Fprintln(progress, style.Info.Render("\u2192 Staging and committing..."))
 	}
 	if err := addAllAndCommit(opts.Message, execOpts...); err != nil {
 		return fmt.Errorf("commit changes: %w", err)
 	}
-	fmt.Fprintln(progress, greenStyle.Render("\u2713 Committed"))
+	fmt.Fprintln(progress, style.Success.Render("\u2713 Committed"))
 
 	// Resolve tracker. SkipTracker forces nil.
 	var tracker tasktracker.Tracker
@@ -234,7 +226,7 @@ func Run(w io.Writer, opts Options) error {
 		if err != nil {
 			return fmt.Errorf("create tracker task: %w", err)
 		}
-		fmt.Fprintln(progress, greenStyle.Render("\u2713 Task created: "+task.URL))
+		fmt.Fprintln(progress, style.Success.Render("\u2713 Task created: "+task.URL))
 	}
 
 	// Generate branch name, create it, store the task ID (if any), push.
@@ -254,7 +246,7 @@ func Run(w io.Writer, opts Options) error {
 	if err := pushSetUpstream(branchName, execOpts...); err != nil {
 		return fmt.Errorf("push branch: %w", err)
 	}
-	fmt.Fprintln(progress, greenStyle.Render("\u2713 Pushed "+branchName))
+	fmt.Fprintln(progress, style.Success.Render("\u2713 Pushed "+branchName))
 
 	// Build PR body: tracker prefix first, description after (with a blank
 	// line separator when both are present).
@@ -279,9 +271,9 @@ func Run(w io.Writer, opts Options) error {
 			// Route the warning to stderr so stdout (especially in JSON or
 			// Quiet mode) stays clean for piping to scripts.
 			if exists.ExistingURL != "" {
-				fmt.Fprintln(stderr, yellowStyle.Render("\u26a0 PR already exists: "+exists.ExistingURL))
+				fmt.Fprintln(stderr, style.Warning.Render("\u26a0 PR already exists: "+exists.ExistingURL))
 			} else {
-				fmt.Fprintln(stderr, yellowStyle.Render("\u26a0 A pull request for this branch already exists"))
+				fmt.Fprintln(stderr, style.Warning.Render("\u26a0 A pull request for this branch already exists"))
 			}
 			return fmt.Errorf("create PR: %w", err)
 		}
@@ -297,9 +289,9 @@ func Run(w io.Writer, opts Options) error {
 			if opts.JSONOutput || opts.Quiet {
 				sink = stderr
 			}
-			fmt.Fprintln(sink, yellowStyle.Render(fmt.Sprintf("\u26a0 Could not enable auto-merge: %v", err)))
+			fmt.Fprintln(sink, style.Warning.Render(fmt.Sprintf("\u26a0 Could not enable auto-merge: %v", err)))
 		} else {
-			fmt.Fprintln(progress, greenStyle.Render("\u2713 Auto-merge enabled"))
+			fmt.Fprintln(progress, style.Success.Render("\u2713 Auto-merge enabled"))
 		}
 	}
 
@@ -312,7 +304,7 @@ func Run(w io.Writer, opts Options) error {
 		fmt.Fprintln(w, prURL)
 	case opts.Verbose:
 		// Existing verbose summary: checkmark prefix, branch + task lines.
-		fmt.Fprintln(w, greenStyle.Render("\u2713 PR created: "+prURL))
+		fmt.Fprintln(w, style.Success.Render("\u2713 PR created: "+prURL))
 		fmt.Fprintln(w, "  Branch: "+branchName)
 		if task.URL != "" {
 			fmt.Fprintln(w, "  Task:   "+task.URL)
@@ -320,7 +312,7 @@ func Run(w io.Writer, opts Options) error {
 	default:
 		// Normal mode: concise checkmark followed by the URL on its own
 		// line so it's easy to copy or script against.
-		fmt.Fprintln(w, greenStyle.Render("\u2713 PR created"))
+		fmt.Fprintln(w, style.Success.Render("\u2713 PR created"))
 		fmt.Fprintln(w, prURL)
 	}
 
@@ -331,7 +323,7 @@ func Run(w io.Writer, opts Options) error {
 			if opts.JSONOutput || opts.Quiet {
 				sink = stderr
 			}
-			fmt.Fprintln(sink, yellowStyle.Render(fmt.Sprintf("\u26a0 Could not open browser: %v", err)))
+			fmt.Fprintln(sink, style.Warning.Render(fmt.Sprintf("\u26a0 Could not open browser: %v", err)))
 		}
 	}
 

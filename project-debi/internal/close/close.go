@@ -17,12 +17,12 @@ import (
 	"strings"
 	"sync"
 
-	"charm.land/lipgloss/v2"
 	"golang.org/x/sync/errgroup"
 
 	"devora/internal/gh"
 	"devora/internal/git"
 	"devora/internal/process"
+	"devora/internal/style"
 	"devora/internal/tasktracker"
 )
 
@@ -95,15 +95,6 @@ func defaultReadLine(r io.Reader) (string, error) {
 	}
 	return line, nil
 }
-
-// --- Colors (Catppuccin Mocha), matched to internal/prstatus ---
-
-var (
-	greenStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#A6E3A1"))
-	redStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("#F38BA8"))
-	yellowStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#F9E2AF"))
-	cyanStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#89DCEB"))
-)
 
 // --- confirm helper ---
 
@@ -189,7 +180,7 @@ func Run(w io.Writer, opts Options) error {
 
 	// Final marker is always printed, regardless of mode — this is the
 	// script-parseable success signal.
-	fmt.Fprintf(w, "%s Closed\n", greenStyle.Render("\u2713"))
+	fmt.Fprintf(w, "%s Closed\n", style.Success.Render("\u2713"))
 	return nil
 }
 
@@ -217,7 +208,7 @@ func resolveTaskID(w io.Writer, opts Options, tracker tasktracker.Tracker, branc
 	id, _ := getBranchConfig(branch, "task-id")
 	if tracker != nil && id == "" {
 		fmt.Fprintf(w, "%s No task ID associated with branch %s; skipping task completion.\n",
-			yellowStyle.Render("\u26a0"), branch)
+			style.Warning.Render("\u26a0"), branch)
 	}
 	return id, nil
 }
@@ -230,7 +221,7 @@ func checkOpenPR(w io.Writer, branch string) (bool, error) {
 	pr, err := getGHPRForBranch(branch)
 	if err != nil {
 		fmt.Fprintf(w, "%s Could not check PR status: %v\n",
-			yellowStyle.Render("\u26a0"), err)
+			style.Warning.Render("\u26a0"), err)
 		return false, nil
 	}
 	if pr == nil || pr.State != "OPEN" {
@@ -238,14 +229,14 @@ func checkOpenPR(w io.Writer, branch string) (bool, error) {
 	}
 
 	fmt.Fprintf(w, "%s PR #%d is still open: %s\n",
-		redStyle.Render("!"), pr.Number, pr.URL)
+		style.Error.Render("!"), pr.Number, pr.URL)
 
 	ok, err := confirm(w, "Are you sure you want to close this work item? [y/N]: ")
 	if err != nil {
 		return false, err
 	}
 	if !ok {
-		fmt.Fprintf(w, "%s Aborted\n", cyanStyle.Render("\u2192"))
+		fmt.Fprintf(w, "%s Aborted\n", style.Info.Render("\u2192"))
 		return true, nil
 	}
 	return false, nil
@@ -279,11 +270,11 @@ func runParallelPhase(w io.Writer, tracker tasktracker.Tracker, taskID, branch s
 		g.Go(func() error {
 			if err := tracker.CompleteTask(taskID); err != nil {
 				fmt.Fprintf(sw, "%s Could not mark task as complete: %v\n",
-					yellowStyle.Render("\u26a0"), err)
+					style.Warning.Render("\u26a0"), err)
 				return nil
 			}
 			fmt.Fprintf(sw, "%s Marked task as complete\n",
-				greenStyle.Render("\u2713"))
+				style.Success.Render("\u2713"))
 			return nil
 		})
 	}
@@ -292,16 +283,16 @@ func runParallelPhase(w io.Writer, tracker tasktracker.Tracker, taskID, branch s
 		g.Go(func() error {
 			if err := deleteRemoteBranch(branch, execOpts...); err != nil {
 				fmt.Fprintf(sw, "%s Could not delete remote branch: %v\n",
-					yellowStyle.Render("\u26a0"), err)
+					style.Warning.Render("\u26a0"), err)
 				return nil
 			}
 			fmt.Fprintf(sw, "%s Deleted remote branch\n",
-				greenStyle.Render("\u2713"))
+				style.Success.Render("\u2713"))
 			return nil
 		})
 	} else {
 		fmt.Fprintf(sw, "%s Remote branch already deleted\n",
-			cyanStyle.Render("\u2192"))
+			style.Info.Render("\u2192"))
 	}
 
 	// Goroutines never surface errors; ignoring g.Wait() is deliberate.
@@ -315,26 +306,26 @@ func runParallelPhase(w io.Writer, tracker tasktracker.Tracker, taskID, branch s
 func returnToDetachedHead(w io.Writer, branch, defBranch string, execOpts []process.ExecOption) error {
 	if branch == defBranch {
 		fmt.Fprintf(w, "%s Already on %s, skipping branch deletion.\n",
-			yellowStyle.Render("\u26a0"), defBranch)
+			style.Warning.Render("\u26a0"), defBranch)
 		return nil
 	}
 
 	if err := fetchOrigin(execOpts...); err != nil {
 		return fmt.Errorf("fetch origin: %w", err)
 	}
-	fmt.Fprintf(w, "%s Fetched origin\n", greenStyle.Render("\u2713"))
+	fmt.Fprintf(w, "%s Fetched origin\n", style.Success.Render("\u2713"))
 
 	if err := checkoutDetach("origin/"+defBranch, execOpts...); err != nil {
 		return fmt.Errorf("checkout origin/%s: %w", defBranch, err)
 	}
-	fmt.Fprintf(w, "%s Returned to detached HEAD\n", greenStyle.Render("\u2713"))
+	fmt.Fprintf(w, "%s Returned to detached HEAD\n", style.Success.Render("\u2713"))
 
 	if hasLocalBranch(branch) {
 		if err := deleteLocalBranch(branch, execOpts...); err != nil {
 			fmt.Fprintf(w, "%s Could not delete local branch: %v\n",
-				yellowStyle.Render("\u26a0"), err)
+				style.Warning.Render("\u26a0"), err)
 		} else {
-			fmt.Fprintf(w, "%s Deleted local branch\n", greenStyle.Render("\u2713"))
+			fmt.Fprintf(w, "%s Deleted local branch\n", style.Success.Render("\u2713"))
 		}
 	}
 	return nil

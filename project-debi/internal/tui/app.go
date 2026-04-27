@@ -3,6 +3,7 @@ package tui
 import (
 	"devora/internal/config"
 	"devora/internal/process"
+	"devora/internal/style"
 	"devora/internal/task"
 	"devora/internal/terminal"
 	"devora/internal/tui/components"
@@ -53,7 +54,7 @@ type AppModel struct {
 	startupError  StartupErrorModel
 
 	styles      Styles
-	palette     ThemePalette
+	palette     style.ThemePalette
 	repoNames   []string
 	profileName string
 	version     string
@@ -69,7 +70,7 @@ type AppModel struct {
 }
 
 func NewAppModel(
-	palette ThemePalette,
+	palette style.ThemePalette,
 	repoNames []string,
 	showProfileRegistration bool,
 	startupError string,
@@ -744,7 +745,7 @@ func RunWorkspaceUI(
 	showProfileRegistration bool,
 	startupError string,
 ) (*AppResult, error) {
-	palette := LoadTheme(themePath)
+	palette := style.LoadKittyTheme(themePath)
 	model := NewAppModel(palette, repoNames, showProfileRegistration, startupError)
 	p := tea.NewProgram(model)
 	finalModel, err := p.Run()

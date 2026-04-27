@@ -4,11 +4,12 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"devora/internal/style"
 	"devora/internal/tui/components"
 )
 
 func TestRegisterRepo_TypingClearsError(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewRegisterRepoModel(&styles)
 	m.errMsg = "Please enter a path"
 
@@ -20,7 +21,7 @@ func TestRegisterRepo_TypingClearsError(t *testing.T) {
 }
 
 func TestRegisterRepo_SubmitDoesNotClearError(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewRegisterRepoModel(&styles)
 
 	// Submit with empty path — should set an error
@@ -34,7 +35,7 @@ func TestRegisterRepo_SubmitDoesNotClearError(t *testing.T) {
 // Two-stage esc navigation tests
 
 func TestRegisterRepo_EscInInsertModeUnfocuses(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewRegisterRepoModel(&styles)
 
 	// Default is insert mode (navMode = false, pathInput focused)
@@ -49,7 +50,7 @@ func TestRegisterRepo_EscInInsertModeUnfocuses(t *testing.T) {
 }
 
 func TestRegisterRepo_QInInsertModeTypesLetter(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewRegisterRepoModel(&styles)
 
 	m.Update(tea.KeyPressMsg(tea.Key{Code: 'q'}))
@@ -63,7 +64,7 @@ func TestRegisterRepo_QInInsertModeTypesLetter(t *testing.T) {
 }
 
 func TestRegisterRepo_EscInNavModeGoesBack(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewRegisterRepoModel(&styles)
 	m.navMode = true
 
@@ -79,7 +80,7 @@ func TestRegisterRepo_EscInNavModeGoesBack(t *testing.T) {
 }
 
 func TestRegisterRepo_QInNavModeGoesBack(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewRegisterRepoModel(&styles)
 	m.navMode = true
 
@@ -95,7 +96,7 @@ func TestRegisterRepo_QInNavModeGoesBack(t *testing.T) {
 }
 
 func TestRegisterRepo_TypingInNavModeExitsNavMode(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewRegisterRepoModel(&styles)
 	m.navMode = true
 	m.pathInput.Blur()
@@ -112,7 +113,7 @@ func TestRegisterRepo_TypingInNavModeExitsNavMode(t *testing.T) {
 }
 
 func TestRegisterRepo_EnterInNavModeSubmits(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewRegisterRepoModel(&styles)
 	m.navMode = true
 
@@ -129,7 +130,7 @@ func TestRegisterRepo_EnterInNavModeSubmits(t *testing.T) {
 }
 
 func TestRegisterRepo_ResetClearsNavMode(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewRegisterRepoModel(&styles)
 	m.navMode = true
 
@@ -141,7 +142,7 @@ func TestRegisterRepo_ResetClearsNavMode(t *testing.T) {
 }
 
 func TestRegisterRepo_CtrlCNotHandledAtPageLevel(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewRegisterRepoModel(&styles)
 
 	cmd := m.Update(tea.KeyPressMsg(tea.Key{Code: 'c', Mod: tea.ModCtrl}))
@@ -152,7 +153,7 @@ func TestRegisterRepo_CtrlCNotHandledAtPageLevel(t *testing.T) {
 }
 
 func TestRegisterRepo_ActionBindings_InsertMode(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewRegisterRepoModel(&styles)
 	m.navMode = false
 
@@ -164,7 +165,7 @@ func TestRegisterRepo_ActionBindings_InsertMode(t *testing.T) {
 }
 
 func TestRegisterRepo_ActionBindings_NavMode(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewRegisterRepoModel(&styles)
 	m.navMode = true
 
@@ -176,7 +177,7 @@ func TestRegisterRepo_ActionBindings_NavMode(t *testing.T) {
 }
 
 func TestRegisterRepo_EscInNavModeGoesBackToSettings(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewRegisterRepoModel(&styles)
 	m.navMode = true
 	m.returnToSettings = true
@@ -193,7 +194,7 @@ func TestRegisterRepo_EscInNavModeGoesBackToSettings(t *testing.T) {
 }
 
 func TestRegisterRepo_QInNavModeGoesBackToSettings(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewRegisterRepoModel(&styles)
 	m.navMode = true
 	m.returnToSettings = true
@@ -210,7 +211,7 @@ func TestRegisterRepo_QInNavModeGoesBackToSettings(t *testing.T) {
 }
 
 func TestRegisterRepo_ActionBindings_NoCtrlC(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewRegisterRepoModel(&styles)
 
 	bindings := m.ActionBindings()
@@ -229,7 +230,7 @@ func enterBrowseMode(m *RegisterRepoModel) {
 }
 
 func TestRegisterRepo_CtrlLEntersBrowseMode(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewRegisterRepoModel(&styles)
 
 	m.Update(tea.KeyPressMsg(tea.Key{Code: 'l', Mod: tea.ModCtrl}))
@@ -240,7 +241,7 @@ func TestRegisterRepo_CtrlLEntersBrowseMode(t *testing.T) {
 }
 
 func TestRegisterRepo_EscInBrowseModeGoesBack(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewRegisterRepoModel(&styles)
 	enterBrowseMode(&m)
 
@@ -256,7 +257,7 @@ func TestRegisterRepo_EscInBrowseModeGoesBack(t *testing.T) {
 }
 
 func TestRegisterRepo_QInBrowseModeGoesBack(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewRegisterRepoModel(&styles)
 	enterBrowseMode(&m)
 
@@ -272,7 +273,7 @@ func TestRegisterRepo_QInBrowseModeGoesBack(t *testing.T) {
 }
 
 func TestRegisterRepo_EnterInBrowseModeDoesNotSubmit(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewRegisterRepoModel(&styles)
 	enterBrowseMode(&m)
 
@@ -287,7 +288,7 @@ func TestRegisterRepo_EnterInBrowseModeDoesNotSubmit(t *testing.T) {
 }
 
 func TestRegisterRepo_ActionBindings_BrowseMode(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewRegisterRepoModel(&styles)
 	enterBrowseMode(&m)
 
@@ -299,7 +300,7 @@ func TestRegisterRepo_ActionBindings_BrowseMode(t *testing.T) {
 }
 
 func TestRegisterRepo_ActionBindings_HasBrowseHint(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewRegisterRepoModel(&styles)
 
 	bindings := m.ActionBindings()
@@ -310,7 +311,7 @@ func TestRegisterRepo_ActionBindings_HasBrowseHint(t *testing.T) {
 }
 
 func TestRegisterRepo_EscInBrowseModeGoesBackToSettings(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewRegisterRepoModel(&styles)
 	m.returnToSettings = true
 	enterBrowseMode(&m)

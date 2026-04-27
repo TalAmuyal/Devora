@@ -11,7 +11,8 @@ Check and report on the GitHub PR status for the current branch. The current bra
 ## Dependencies
 
 - `devora/internal/process` -- `VerboseExecError` for detecting "no PR" vs other errors
-- `github.com/charmbracelet/lipgloss/v2` -- colored output
+- `devora/internal/style` -- shared Catppuccin Mocha palette + pre-built lipgloss styles for colored output
+- `charm.land/lipgloss/v2` -- `lipgloss.Style` type for the local summary-style variable
 - `encoding/json` -- parsing `gh` JSON output and producing JSON output
 - `errors` -- error wrapping and unwrapping
 - `fmt` -- formatted output

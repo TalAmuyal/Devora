@@ -18,19 +18,8 @@ import (
 	"devora/internal/gh"
 	"devora/internal/git"
 	"devora/internal/process"
+	"devora/internal/style"
 	"devora/internal/workspace"
-)
-
-// Catppuccin Mocha palette. Values mirror internal/close/close.go:101-106;
-// duplicated here so wsgit doesn't import the close command package.
-var (
-	greenStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#A6E3A1"))
-	redStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("#F38BA8"))
-	yellowStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#F9E2AF"))
-	cyanStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#89DCEB"))
-	mutedStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#6C7086"))
-
-	mergedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#A6E3A1")).Bold(true)
 )
 
 // fetchTimeout caps each per-repo `git fetch origin` so a hung remote doesn't
@@ -199,7 +188,7 @@ func renderStatus(w io.Writer, wsPath string, results []RepoStatus, ghMissing bo
 		}
 	}
 
-	headerStyle := mutedStyle
+	headerStyle := style.Muted
 	header := fmt.Sprintf(
 		"  %-*s  %-*s  %5s  %5s  %5s  %6s  %s",
 		nameWidth, "REPO",
@@ -218,7 +207,7 @@ func renderStatus(w io.Writer, wsPath string, results []RepoStatus, ghMissing bo
 			hasFetchFailures = true
 			fmt.Fprintln(w)
 			fmt.Fprintf(w, "%s  %s: fetch failed (using cached data; counts may be stale)\n",
-				yellowStyle.Render("WARN"), r.Name)
+				style.Warning.Render("WARN"), r.Name)
 		}
 	}
 	if !hasFetchFailures {
@@ -227,7 +216,7 @@ func renderStatus(w io.Writer, wsPath string, results []RepoStatus, ghMissing bo
 	}
 
 	if ghMissing {
-		fmt.Fprintln(w, mutedStyle.Render("gh not installed; PR status unavailable"))
+		fmt.Fprintln(w, style.Muted.Render("gh not installed; PR status unavailable"))
 	}
 
 	renderSummary(w, results)
@@ -236,15 +225,15 @@ func renderStatus(w io.Writer, wsPath string, results []RepoStatus, ghMissing bo
 func formatStatusRow(r RepoStatus, nameWidth, branchWidth int, ghMissing bool) string {
 	branchText := branchDisplay(r.Branch)
 
-	stageText, stageStyle := classifyCount(r.Counts.Staged, greenStyle)
-	unstgText, unstgStyle := classifyCount(r.Counts.Unstaged, yellowStyle)
-	untrkText, untrkStyle := classifyCount(r.Counts.Untracked, redStyle)
+	stageText, stageStyle := classifyCount(r.Counts.Staged, style.Green)
+	unstgText, unstgStyle := classifyCount(r.Counts.Unstaged, style.Yellow)
+	untrkText, untrkStyle := classifyCount(r.Counts.Untracked, style.Red)
 	behindText, behindStyle := classifyBehind(r.BehindOrigin, r.FetchFailed)
 	prText, prStyle := classifyPRDisplay(r, ghMissing)
 
-	branchStyle := cyanStyle
+	branchStyle := style.Cyan
 	if r.Branch == "" {
-		branchStyle = mutedStyle
+		branchStyle = style.Muted
 	}
 
 	return fmt.Sprintf(
@@ -259,12 +248,13 @@ func formatStatusRow(r RepoStatus, nameWidth, branchWidth int, ghMissing bool) s
 	)
 }
 
-// padCell renders text with style, then right-pads with plain spaces so the
-// visible width equals width. Computing padding from the unstyled text avoids
-// the column-drift you get from formatting an already-ANSI-escaped string
-// with `%-*s`.
-func padCell(text string, width int, style lipgloss.Style) string {
-	rendered := style.Render(text)
+// padCell renders text with cellStyle, then right-pads with plain spaces so
+// the visible width equals width. Computing padding from the unstyled text
+// avoids the column-drift you get from formatting an already-ANSI-escaped
+// string with `%-*s`. Parameter is named cellStyle (not style) to avoid
+// shadowing the internal/style package import.
+func padCell(text string, width int, cellStyle lipgloss.Style) string {
+	rendered := cellStyle.Render(text)
 	pad := width - len(text)
 	if pad <= 0 {
 		return rendered
@@ -281,41 +271,41 @@ func branchDisplay(branch string) string {
 
 func classifyCount(n int, color lipgloss.Style) (string, lipgloss.Style) {
 	if n == 0 {
-		return ".", mutedStyle
+		return ".", style.Muted
 	}
 	return strconv.Itoa(n), color
 }
 
 func classifyBehind(n int, fetchFailed bool) (string, lipgloss.Style) {
 	if n < 0 {
-		return "?", mutedStyle
+		return "?", style.Muted
 	}
 	text := strconv.Itoa(n)
 	if fetchFailed {
 		text += "*"
 	}
 	if n == 0 {
-		return text, greenStyle
+		return text, style.Green
 	}
-	return text, yellowStyle
+	return text, style.Yellow
 }
 
 func classifyPRDisplay(r RepoStatus, ghMissing bool) (string, lipgloss.Style) {
 	if ghMissing {
-		return "—", mutedStyle
+		return "—", style.Muted
 	}
 	if r.PRError != nil {
-		return "?", mutedStyle
+		return "?", style.Muted
 	}
 	switch r.PRState {
 	case PRStateOpen:
-		return "open", cyanStyle
+		return "open", style.Cyan
 	case PRStateClosed:
-		return "closed", redStyle
+		return "closed", style.Red
 	case PRStateMerged:
-		return "merged", mergedStyle
+		return "merged", style.Green.Bold(true)
 	default:
-		return "No", mutedStyle
+		return "No", style.Muted
 	}
 }
 

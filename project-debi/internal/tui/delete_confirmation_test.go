@@ -4,10 +4,12 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+
+	"devora/internal/style"
 )
 
 func TestDeleteConfirm_Q_CancelsAndGoesBack(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewDeleteConfirmModel(&styles)
 	m.SetWorkspace(&WorkspaceInfo{
 		Path: "/tmp/ws-1",
@@ -28,7 +30,7 @@ func TestDeleteConfirm_Q_CancelsAndGoesBack(t *testing.T) {
 }
 
 func TestDeleteConfirm_N_CancelsAndGoesBack(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewDeleteConfirmModel(&styles)
 	m.SetWorkspace(&WorkspaceInfo{
 		Path: "/tmp/ws-1",
@@ -49,7 +51,7 @@ func TestDeleteConfirm_N_CancelsAndGoesBack(t *testing.T) {
 }
 
 func TestDeleteConfirm_Escape_CancelsAndGoesBack(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewDeleteConfirmModel(&styles)
 	m.SetWorkspace(&WorkspaceInfo{
 		Path: "/tmp/ws-1",

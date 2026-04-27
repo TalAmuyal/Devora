@@ -10,6 +10,7 @@ import (
 	"devora/internal/jsonvalidate"
 	"devora/internal/process"
 	"devora/internal/prstatus"
+	"devora/internal/style"
 	"devora/internal/submit"
 	"devora/internal/task"
 	"devora/internal/tomlvalidate"
@@ -83,7 +84,7 @@ func runWorkspaceUI() error {
 	)
 
 	result, err := tui.RunWorkspaceUI(
-		tui.DefaultThemePath(),
+		style.DefaultKittyThemePath(),
 		repoNames,
 		showProfileRegistration,
 		startupError,
@@ -139,7 +140,7 @@ func runAddRepo() error {
 	}
 
 	return tui.RunAddRepo(
-		tui.DefaultThemePath(),
+		style.DefaultKittyThemePath(),
 		wsPath,
 		repoNames,
 	)
