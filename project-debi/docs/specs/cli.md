@@ -268,7 +268,7 @@ func runWorkspaceUI() error
 2. Load profiles from config.
 3. If no profiles exist, set `showProfileRegistration = true`. Skip to step 5 (`repoNames` remains `nil`).
 4. If profiles exist, set the first profile as active and load repo names.
-5. Launch the workspace TUI via `tui.RunWorkspaceUI(themePath, repoNames, showProfileRegistration, startupError)`. The `themePath` is obtained from `tui.DefaultThemePath()`.
+5. Launch the workspace TUI via `tui.RunWorkspaceUI(themePath, repoNames, showProfileRegistration, startupError)`. The `themePath` is obtained from `style.DefaultKittyThemePath()`.
 5. After the TUI exits, handle the result:
    - If `result.SelectedWorkspace` is set, derive `sessionName` from `ws.TaskTitle` (falling back to `ws.Name` if empty), then delegate to `tui.CreateAndAttachSession(ws.Path, sessionName)` to create and attach a terminal session.
    - If `result.NewWorkspace` is set, delegate to `tui.CreateAndAttachSession(ws.WorkspacePath, ws.SessionName)`.

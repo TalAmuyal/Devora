@@ -4,6 +4,7 @@ import (
 	"image/color"
 
 	"charm.land/lipgloss/v2"
+	"devora/internal/style"
 	"devora/internal/tui/components"
 )
 
@@ -66,7 +67,7 @@ type Styles struct {
 	PanelColor   color.Color
 }
 
-func NewStyles(palette ThemePalette) Styles {
+func NewStyles(palette style.ThemePalette) Styles {
 	return Styles{
 		// Header
 		Brand: lipgloss.NewStyle().

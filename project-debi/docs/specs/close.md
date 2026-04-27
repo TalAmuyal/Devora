@@ -25,7 +25,7 @@ Stable public API: `Run`, `Options`, `ErrDetached`, `ErrProtectedBranch`, `ErrAb
 - `devora/internal/git` -- branch detection, protected-branch check, config helpers, push/fetch/checkout/delete helpers, default-branch resolution
 - `devora/internal/gh` -- `gh pr view <branch>` wrapper
 - `devora/internal/tasktracker` -- pluggable task-tracker interface
-- `charm.land/lipgloss/v2` -- colored progress output
+- `devora/internal/style` -- shared Catppuccin Mocha palette + pre-built lipgloss styles for colored progress output
 - `golang.org/x/sync/errgroup` -- concurrent task completion and remote-branch deletion
 
 ## Types
@@ -157,7 +157,7 @@ Are you sure you want to close this work item? [y/N]: y
 ✓ Closed
 ```
 
-Cyan for progress, green for success, yellow for warnings, red for the `!` attention marker. Styles use the Catppuccin Mocha palette, matching `internal/prstatus`.
+Cyan for progress, green for success, yellow for warnings, red for the `!` attention marker. Styles come from the shared `internal/style` package (Catppuccin Mocha palette).
 
 ## Test Coverage
 

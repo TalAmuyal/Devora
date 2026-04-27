@@ -4,10 +4,12 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+
+	"devora/internal/style"
 )
 
 func TestAddRepo_TypingClearsError(t *testing.T) {
-	m := NewAddRepoModel(ThemePalette{}, "/tmp/ws", []string{"repo1"})
+	m := NewAddRepoModel(style.ThemePalette{}, "/tmp/ws", []string{"repo1"})
 	m.errMsg = "No repo selected"
 	m.focused = fieldAddRepoPostfix
 	m.postfixInput.Focus()
@@ -21,7 +23,7 @@ func TestAddRepo_TypingClearsError(t *testing.T) {
 }
 
 func TestAddRepo_TabDoesNotClearError(t *testing.T) {
-	m := NewAddRepoModel(ThemePalette{}, "/tmp/ws", []string{"repo1"})
+	m := NewAddRepoModel(style.ThemePalette{}, "/tmp/ws", []string{"repo1"})
 	m.errMsg = "some error"
 
 	updated, _ := m.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyTab}))
@@ -73,20 +75,20 @@ func assertNoQuit(t *testing.T, cmd tea.Cmd) {
 }
 
 func TestAddRepo_CtrlC_QuitsFromForm(t *testing.T) {
-	m := NewAddRepoModel(ThemePalette{}, "/tmp/ws", []string{"repo1"})
+	m := NewAddRepoModel(style.ThemePalette{}, "/tmp/ws", []string{"repo1"})
 	_, cmd := m.Update(addRepoCtrlC())
 	assertQuitCmd(t, cmd)
 }
 
 func TestAddRepo_CtrlC_QuitsFromProgress(t *testing.T) {
-	m := NewAddRepoModel(ThemePalette{}, "/tmp/ws", []string{"repo1"})
+	m := NewAddRepoModel(style.ThemePalette{}, "/tmp/ws", []string{"repo1"})
 	m.showProgress = true
 	_, cmd := m.Update(addRepoCtrlC())
 	assertQuitCmd(t, cmd)
 }
 
 func TestAddRepo_CtrlC_QuitsFromError(t *testing.T) {
-	m := NewAddRepoModel(ThemePalette{}, "/tmp/ws", []string{"repo1"})
+	m := NewAddRepoModel(style.ThemePalette{}, "/tmp/ws", []string{"repo1"})
 	m.showProgress = true
 	m.errMsg = "something went wrong"
 	_, cmd := m.Update(addRepoCtrlC())
@@ -96,7 +98,7 @@ func TestAddRepo_CtrlC_QuitsFromError(t *testing.T) {
 // --- ctrl+d is no-op ---
 
 func TestAddRepo_CtrlD_IsNoOp(t *testing.T) {
-	m := NewAddRepoModel(ThemePalette{}, "/tmp/ws", []string{"repo1"})
+	m := NewAddRepoModel(style.ThemePalette{}, "/tmp/ws", []string{"repo1"})
 	updated, cmd := m.Update(addRepoCtrlD())
 	model := updated.(AddRepoModel)
 
@@ -111,7 +113,7 @@ func TestAddRepo_CtrlD_IsNoOp(t *testing.T) {
 // --- Two-stage esc: text input focused ---
 
 func TestAddRepo_Esc_UnfocusesTextInput(t *testing.T) {
-	m := NewAddRepoModel(ThemePalette{}, "/tmp/ws", []string{"repo1"})
+	m := NewAddRepoModel(style.ThemePalette{}, "/tmp/ws", []string{"repo1"})
 	m.focused = fieldAddRepoPostfix
 	m.postfixInput.Focus()
 	// navMode starts false (insert mode)
@@ -129,7 +131,7 @@ func TestAddRepo_Esc_UnfocusesTextInput(t *testing.T) {
 }
 
 func TestAddRepo_Esc_SecondEscQuits(t *testing.T) {
-	m := NewAddRepoModel(ThemePalette{}, "/tmp/ws", []string{"repo1"})
+	m := NewAddRepoModel(style.ThemePalette{}, "/tmp/ws", []string{"repo1"})
 	m.focused = fieldAddRepoPostfix
 	m.navMode = true
 	m.postfixInput.Blur()
@@ -141,7 +143,7 @@ func TestAddRepo_Esc_SecondEscQuits(t *testing.T) {
 // --- q in insert mode types literal character ---
 
 func TestAddRepo_Q_InInsertMode_TypesLiteral(t *testing.T) {
-	m := NewAddRepoModel(ThemePalette{}, "/tmp/ws", []string{"repo1"})
+	m := NewAddRepoModel(style.ThemePalette{}, "/tmp/ws", []string{"repo1"})
 	m.focused = fieldAddRepoPostfix
 	m.postfixInput.Focus()
 	// navMode is false (insert mode)
@@ -158,7 +160,7 @@ func TestAddRepo_Q_InInsertMode_TypesLiteral(t *testing.T) {
 // --- q in nav mode quits ---
 
 func TestAddRepo_Q_InNavMode_Quits(t *testing.T) {
-	m := NewAddRepoModel(ThemePalette{}, "/tmp/ws", []string{"repo1"})
+	m := NewAddRepoModel(style.ThemePalette{}, "/tmp/ws", []string{"repo1"})
 	m.focused = fieldAddRepoPostfix
 	m.navMode = true
 	m.postfixInput.Blur()
@@ -170,7 +172,7 @@ func TestAddRepo_Q_InNavMode_Quits(t *testing.T) {
 // --- q/esc on non-text fields quit directly ---
 
 func TestAddRepo_Esc_OnRepoList_Quits(t *testing.T) {
-	m := NewAddRepoModel(ThemePalette{}, "/tmp/ws", []string{"repo1"})
+	m := NewAddRepoModel(style.ThemePalette{}, "/tmp/ws", []string{"repo1"})
 	m.focused = fieldAddRepoList
 	// navMode is false, but list is non-text field
 
@@ -179,7 +181,7 @@ func TestAddRepo_Esc_OnRepoList_Quits(t *testing.T) {
 }
 
 func TestAddRepo_Q_OnRepoList_Quits(t *testing.T) {
-	m := NewAddRepoModel(ThemePalette{}, "/tmp/ws", []string{"repo1"})
+	m := NewAddRepoModel(style.ThemePalette{}, "/tmp/ws", []string{"repo1"})
 	m.focused = fieldAddRepoList
 
 	_, cmd := m.Update(addRepoQ())
@@ -187,7 +189,7 @@ func TestAddRepo_Q_OnRepoList_Quits(t *testing.T) {
 }
 
 func TestAddRepo_Esc_OnSubmitButton_Quits(t *testing.T) {
-	m := NewAddRepoModel(ThemePalette{}, "/tmp/ws", []string{"repo1"})
+	m := NewAddRepoModel(style.ThemePalette{}, "/tmp/ws", []string{"repo1"})
 	m.focused = fieldAddRepoSubmit
 
 	_, cmd := m.Update(addRepoEsc())
@@ -195,7 +197,7 @@ func TestAddRepo_Esc_OnSubmitButton_Quits(t *testing.T) {
 }
 
 func TestAddRepo_Q_OnSubmitButton_Quits(t *testing.T) {
-	m := NewAddRepoModel(ThemePalette{}, "/tmp/ws", []string{"repo1"})
+	m := NewAddRepoModel(style.ThemePalette{}, "/tmp/ws", []string{"repo1"})
 	m.focused = fieldAddRepoSubmit
 
 	_, cmd := m.Update(addRepoQ())
@@ -205,7 +207,7 @@ func TestAddRepo_Q_OnSubmitButton_Quits(t *testing.T) {
 // --- During progress: only ctrl+c works ---
 
 func TestAddRepo_Progress_EscIsNoOp(t *testing.T) {
-	m := NewAddRepoModel(ThemePalette{}, "/tmp/ws", []string{"repo1"})
+	m := NewAddRepoModel(style.ThemePalette{}, "/tmp/ws", []string{"repo1"})
 	m.showProgress = true
 	m.errMsg = ""
 
@@ -214,7 +216,7 @@ func TestAddRepo_Progress_EscIsNoOp(t *testing.T) {
 }
 
 func TestAddRepo_Progress_QIsNoOp(t *testing.T) {
-	m := NewAddRepoModel(ThemePalette{}, "/tmp/ws", []string{"repo1"})
+	m := NewAddRepoModel(style.ThemePalette{}, "/tmp/ws", []string{"repo1"})
 	m.showProgress = true
 	m.errMsg = ""
 
@@ -225,7 +227,7 @@ func TestAddRepo_Progress_QIsNoOp(t *testing.T) {
 // --- Error state: esc/q quit ---
 
 func TestAddRepo_Error_EscQuits(t *testing.T) {
-	m := NewAddRepoModel(ThemePalette{}, "/tmp/ws", []string{"repo1"})
+	m := NewAddRepoModel(style.ThemePalette{}, "/tmp/ws", []string{"repo1"})
 	m.showProgress = true
 	m.errMsg = "something went wrong"
 
@@ -234,7 +236,7 @@ func TestAddRepo_Error_EscQuits(t *testing.T) {
 }
 
 func TestAddRepo_Error_QQuits(t *testing.T) {
-	m := NewAddRepoModel(ThemePalette{}, "/tmp/ws", []string{"repo1"})
+	m := NewAddRepoModel(style.ThemePalette{}, "/tmp/ws", []string{"repo1"})
 	m.showProgress = true
 	m.errMsg = "something went wrong"
 
@@ -245,7 +247,7 @@ func TestAddRepo_Error_QQuits(t *testing.T) {
 // --- Tab re-focuses text input and resets navMode ---
 
 func TestAddRepo_Tab_ResetsNavMode(t *testing.T) {
-	m := NewAddRepoModel(ThemePalette{}, "/tmp/ws", []string{"repo1"})
+	m := NewAddRepoModel(style.ThemePalette{}, "/tmp/ws", []string{"repo1"})
 	m.focused = fieldAddRepoList
 	m.navMode = true
 
@@ -262,7 +264,7 @@ func TestAddRepo_Tab_ResetsNavMode(t *testing.T) {
 }
 
 func TestAddRepo_ShiftTab_ResetsNavMode(t *testing.T) {
-	m := NewAddRepoModel(ThemePalette{}, "/tmp/ws", []string{"repo1"})
+	m := NewAddRepoModel(style.ThemePalette{}, "/tmp/ws", []string{"repo1"})
 	m.focused = fieldAddRepoSubmit
 	m.navMode = true
 

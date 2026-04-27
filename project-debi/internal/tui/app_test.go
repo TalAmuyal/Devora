@@ -8,6 +8,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+
+	"devora/internal/style"
 )
 
 func ctrlC() tea.Msg {
@@ -19,7 +21,7 @@ func ctrlD() tea.Msg {
 }
 
 func newTestAppModel() AppModel {
-	palette := ThemePalette{}
+	palette := style.ThemePalette{}
 	styles := NewStyles(palette)
 	return AppModel{
 		activePage:    PageWorkspaceList,
@@ -789,7 +791,7 @@ func TestSpinnerTick_StopsOnWrongPage(t *testing.T) {
 }
 
 func TestCreationView_ShowsSpinnerForPreparingRepos(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewCreationModel(&styles)
 	m.repoOrder = []string{"my-repo"}
 	m.repoStates = map[string]string{"my-repo": "preparing..."}
@@ -804,7 +806,7 @@ func TestCreationView_ShowsSpinnerForPreparingRepos(t *testing.T) {
 }
 
 func TestCreationView_NoSpinnerForReadyRepos(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewCreationModel(&styles)
 	m.repoOrder = []string{"my-repo"}
 	m.repoStates = map[string]string{"my-repo": "ready"}
@@ -901,7 +903,7 @@ func TestStartupError_CtrlDQuits(t *testing.T) {
 }
 
 func TestNewAppModel_StartupError_TakesPriority(t *testing.T) {
-	palette := ThemePalette{}
+	palette := style.ThemePalette{}
 	m := NewAppModel(palette, nil, true, "test error")
 	if m.activePage != PageStartupError {
 		t.Fatalf("expected PageStartupError, got %d", m.activePage)
@@ -909,7 +911,7 @@ func TestNewAppModel_StartupError_TakesPriority(t *testing.T) {
 }
 
 func TestNewAppModel_NoStartupError_ShowsProfileRegistration(t *testing.T) {
-	palette := ThemePalette{}
+	palette := style.ThemePalette{}
 	m := NewAppModel(palette, nil, true, "")
 	if m.activePage != PageProfileRegistration {
 		t.Fatalf("expected PageProfileRegistration, got %d", m.activePage)

@@ -12,7 +12,8 @@ Check and report on Devora IDE dependency availability and credential status. Ea
 - `devora/internal/version` -- application version string
 - `devora/internal/config` -- config file path, task-tracker provider lookup
 - `devora/internal/credentials` -- task-tracker token lookup and `SetupHint`
-- `charm.land/lipgloss/v2` -- colored output
+- `devora/internal/style` -- shared Catppuccin Mocha palette + pre-built lipgloss styles for colored output
+- `charm.land/lipgloss/v2` -- `lipgloss.Style` type for the `renderSummaryLine` percentage-style parameter
 
 ## Profile Resolution
 
@@ -164,7 +165,7 @@ Credentials met: 100% (1/1)
 
 Only the status indicator and dependency name are colored (green for found, red for missing). Version and path columns use the default terminal color. Paths under `$HOME` are shortened with `~`. Version strings are cleaned to extract just the version number (e.g., `"git version 2.50.1 (Apple Git-155)"` becomes `"2.50.1"`). Column widths are dynamically calculated to align all entries.
 
-Credential rows use four markers: green `✓` for OK, red `✗` for failed, yellow `?` for unchecked, muted `○` for info. The muted color is Catppuccin overlay0 (`#6C7086`), matching `tui.theme.go`'s `TextMuted`.
+Credential rows use four markers: green `✓` for OK, red `✗` for failed, yellow `?` for unchecked, muted `○` for info. All four come from the shared `internal/style` package, which centralizes the Catppuccin Mocha palette.
 
 The summary percentages are colored: required is green (100%) or red; optional is green (100%) or yellow; credentials is green (100%), red (if any failed), or yellow (if only unchecked). Summary labels are right-padded to align to the longest label ("Credentials met:").
 

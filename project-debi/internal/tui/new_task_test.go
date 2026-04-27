@@ -4,11 +4,12 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"devora/internal/style"
 	"devora/internal/tui/components"
 )
 
 func TestNewTask_TypingClearsError(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewNewTaskModel([]string{"repo1"}, &styles)
 	m.errMsg = "Please select at least one repo"
 
@@ -21,7 +22,7 @@ func TestNewTask_TypingClearsError(t *testing.T) {
 }
 
 func TestNewTask_SubmitDoesNotClearError(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewNewTaskModel(nil, &styles)
 	m.focused = fieldTaskName
 
@@ -34,7 +35,7 @@ func TestNewTask_SubmitDoesNotClearError(t *testing.T) {
 }
 
 func TestNewTask_TabDoesNotClearError(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewNewTaskModel([]string{"repo1"}, &styles)
 	m.errMsg = "some error"
 
@@ -48,7 +49,7 @@ func TestNewTask_TabDoesNotClearError(t *testing.T) {
 // Two-stage esc navigation tests
 
 func TestNewTask_EscOnTextFieldUnfocuses(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewNewTaskModel([]string{"repo1"}, &styles)
 	m.focused = fieldTaskName
 	m.updateFocus()
@@ -65,7 +66,7 @@ func TestNewTask_EscOnTextFieldUnfocuses(t *testing.T) {
 }
 
 func TestNewTask_QOnTextFieldTypesLetter(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewNewTaskModel([]string{"repo1"}, &styles)
 	m.focused = fieldTaskName
 	m.updateFocus()
@@ -82,7 +83,7 @@ func TestNewTask_QOnTextFieldTypesLetter(t *testing.T) {
 }
 
 func TestNewTask_EscInNavModeGoesBack(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewNewTaskModel([]string{"repo1"}, &styles)
 	m.navMode = true
 
@@ -98,7 +99,7 @@ func TestNewTask_EscInNavModeGoesBack(t *testing.T) {
 }
 
 func TestNewTask_QInNavModeGoesBack(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewNewTaskModel([]string{"repo1"}, &styles)
 	m.navMode = true
 
@@ -114,7 +115,7 @@ func TestNewTask_QInNavModeGoesBack(t *testing.T) {
 }
 
 func TestNewTask_EscOnNonTextFieldGoesBack(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewNewTaskModel([]string{"repo1"}, &styles)
 	m.focused = fieldRepos
 	m.navMode = false
@@ -133,7 +134,7 @@ func TestNewTask_EscOnNonTextFieldGoesBack(t *testing.T) {
 }
 
 func TestNewTask_QOnNonTextFieldGoesBack(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewNewTaskModel([]string{"repo1"}, &styles)
 	m.focused = fieldRepos
 	m.navMode = false
@@ -151,7 +152,7 @@ func TestNewTask_QOnNonTextFieldGoesBack(t *testing.T) {
 }
 
 func TestNewTask_EscOnSubmitGoesBack(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewNewTaskModel([]string{"repo1"}, &styles)
 	m.focused = fieldSubmit
 	m.navMode = false
@@ -169,7 +170,7 @@ func TestNewTask_EscOnSubmitGoesBack(t *testing.T) {
 }
 
 func TestNewTask_TabToTextFieldExitsNavMode(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewNewTaskModel([]string{"repo1"}, &styles)
 	m.focused = fieldRepos
 	m.navMode = true
@@ -186,7 +187,7 @@ func TestNewTask_TabToTextFieldExitsNavMode(t *testing.T) {
 }
 
 func TestNewTask_TabAwayFromTextFieldKeepsNavMode(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewNewTaskModel([]string{"repo1"}, &styles)
 	m.focused = fieldTaskName
 	m.navMode = true
@@ -203,7 +204,7 @@ func TestNewTask_TabAwayFromTextFieldKeepsNavMode(t *testing.T) {
 }
 
 func TestNewTask_ResetClearsNavMode(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewNewTaskModel([]string{"repo1"}, &styles)
 	m.navMode = true
 
@@ -215,7 +216,7 @@ func TestNewTask_ResetClearsNavMode(t *testing.T) {
 }
 
 func TestNewTask_CtrlCNotHandledAtPageLevel(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewNewTaskModel([]string{"repo1"}, &styles)
 
 	cmd := m.Update(tea.KeyPressMsg(tea.Key{Code: 'c', Mod: tea.ModCtrl}))
@@ -226,7 +227,7 @@ func TestNewTask_CtrlCNotHandledAtPageLevel(t *testing.T) {
 }
 
 func TestNewTask_ActionBindings_InsertModeOnTextField(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewNewTaskModel([]string{"repo1"}, &styles)
 	m.focused = fieldTaskName
 	m.navMode = false
@@ -245,7 +246,7 @@ func TestNewTask_ActionBindings_InsertModeOnTextField(t *testing.T) {
 }
 
 func TestNewTask_ActionBindings_NavMode(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewNewTaskModel([]string{"repo1"}, &styles)
 	m.navMode = true
 
@@ -263,7 +264,7 @@ func TestNewTask_ActionBindings_NavMode(t *testing.T) {
 }
 
 func TestNewTask_ActionBindings_NonTextFieldInsertMode(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewNewTaskModel([]string{"repo1"}, &styles)
 	m.focused = fieldRepos
 	m.navMode = false
@@ -282,7 +283,7 @@ func TestNewTask_ActionBindings_NonTextFieldInsertMode(t *testing.T) {
 }
 
 func TestNewTask_ActionBindings_NoCtrlC(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewNewTaskModel([]string{"repo1"}, &styles)
 
 	bindings := m.ActionBindings()

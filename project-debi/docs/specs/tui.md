@@ -8,19 +8,11 @@ The TUI is the primary user interface. It provides workspace management (listing
 
 The visual design uses a panel-based dashboard with cards, diamond selection indicators, and category badges.
 
-For theme loading, palette structure, and style definitions, see [tui-theme.md](tui-theme.md).
+For theme loading, palette structure, and the shared CLI styles, see [style.md](style.md).
 
 For workspace data gathering, creation flow, deletion rules, and add-repo logic, see [tui-operations.md](tui-operations.md).
 
 ## Entry Points
-
-### DefaultThemePath
-
-```go
-func DefaultThemePath() string
-```
-
-Returns the path to the Kitty current-theme config file (`~/.config/kitty/current-theme.conf`). Used by the CLI to obtain the `themePath` parameter for `RunWorkspaceUI` and `RunAddRepo`.
 
 ### RunWorkspaceUI
 
@@ -40,7 +32,7 @@ Returns `*AppResult` with either `SelectedWorkspace` (user picked an existing wo
 ### NewAppModel
 
 ```go
-func NewAppModel(palette ThemePalette, repoNames []string, showProfileRegistration bool, startupError string) AppModel
+func NewAppModel(palette style.ThemePalette, repoNames []string, showProfileRegistration bool, startupError string) AppModel
 ```
 
 Constructs the main app model. Initializes all page models, loads the active profile name, and sets the starting page. Starting page priority: `PageStartupError` if `startupError` is non-empty, then `PageProfileRegistration` if `showProfileRegistration` is true, then `PageWorkspaceList` otherwise. Called by `RunWorkspaceUI`.
@@ -64,7 +56,7 @@ Standalone `tea.Program` for adding a repo to an existing workspace. Separate fr
 ### NewAddRepoModel
 
 ```go
-func NewAddRepoModel(palette ThemePalette, workspacePath string, repoNames []string) AddRepoModel
+func NewAddRepoModel(palette style.ThemePalette, workspacePath string, repoNames []string) AddRepoModel
 ```
 
 Constructs the standalone add-repo model. Called by `RunAddRepo`.
@@ -141,7 +133,7 @@ type AppModel struct {
 
     // Shared state
     styles      Styles
-    palette     ThemePalette
+    palette     style.ThemePalette
     repoNames   []string
     profileName string
     version     string

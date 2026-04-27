@@ -8,6 +8,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"devora/internal/config"
+	"devora/internal/style"
 )
 
 func readJSONFile(t *testing.T, path string) map[string]any {
@@ -42,7 +43,7 @@ func setupSettingsConfig(t *testing.T) (config.Profile, string) {
 
 func newSettingsModel(t *testing.T) SettingsModel {
 	t.Helper()
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	return NewSettingsModel(&styles)
 }
 

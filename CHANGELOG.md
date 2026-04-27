@@ -16,6 +16,7 @@ Types of changes:
 
 ### Added
 
+- Catppuccin attribution in THIRD_PARTY_LICENSES.md
 - `debi util yaml-validate <file|->` validates YAML files (multi-document streams supported, empty input rejected)
 - `debi util toml-validate <file|->` validates TOML files (empty input rejected; comment-only files are valid)
 - `debi pr submit` auto-merge is now configurable via `pr.auto-merge` (bool, profile-overridable) in `config.json`; defaults to on when unset
@@ -28,6 +29,7 @@ Types of changes:
 
 ### Changed
 
+- Consolidated Catppuccin Mocha palette into a single internal/style package; eliminates duplicated hex literals across the TUI fallback theme, pr check, pr submit, pr close, gst, gcl, and health
 - New workspace-level functionality:
 	- When run at the root of a workspace (instead of in a repo), `debi gst` and `debi gcl` now operate on all repos in the workspace in parallel instead of failing
 	- `debi gst` now prints a per-repo summary (branch, file counts, commits behind origin/<default>, PR status)

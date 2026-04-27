@@ -9,6 +9,7 @@ import (
 
 	"devora/internal/git"
 	"devora/internal/process"
+	"devora/internal/style"
 	"devora/internal/workspace"
 )
 
@@ -107,16 +108,16 @@ func renderVerifyFailure(w io.Writer, results []RepoVerifyResult) {
 	for _, r := range results {
 		ok, reason := verifyRowSummary(r)
 		if ok {
-			fmt.Fprintf(w, "  %s  %s\n", greenStyle.Render("✓"), r.Name)
+			fmt.Fprintf(w, "  %s  %s\n", style.Success.Render("✓"), r.Name)
 			continue
 		}
 		failed++
-		fmt.Fprintf(w, "  %s  %-*s  %s\n", redStyle.Render("✗"), nameWidth, r.Name, reason)
+		fmt.Fprintf(w, "  %s  %-*s  %s\n", style.Error.Render("✗"), nameWidth, r.Name, reason)
 	}
 
 	fmt.Fprintln(w)
 	fmt.Fprintf(w, "%s  Aborted — %d of %d repos failed verification. No changes made.\n",
-		redStyle.Render("✗"), failed, len(results))
+		style.Error.Render("✗"), failed, len(results))
 	fmt.Fprintln(w, "   Fix the listed repos and re-run `debi gcl`.")
 }
 
@@ -210,19 +211,19 @@ func renderCleanResults(w io.Writer, results []cleanRepoResult) {
 		if r.Err == nil {
 			succeeded++
 			fmt.Fprintf(w, "  %s  %-*s  checked out %s\n",
-				greenStyle.Render("✓"), nameWidth, r.Name, r.Branch)
+				style.Success.Render("✓"), nameWidth, r.Name, r.Branch)
 			continue
 		}
 		fmt.Fprintf(w, "  %s  %-*s  %s\n",
-			redStyle.Render("✗"), nameWidth, r.Name, r.Err.Error())
+			style.Error.Render("✗"), nameWidth, r.Name, r.Err.Error())
 	}
 
 	fmt.Fprintln(w)
 	if succeeded == len(results) {
 		fmt.Fprintf(w, "%s  Done — %d of %d repos updated.\n",
-			greenStyle.Render("✓"), succeeded, len(results))
+			style.Success.Render("✓"), succeeded, len(results))
 		return
 	}
 	fmt.Fprintf(w, "%s  Done — %d of %d repos updated; %d failed.\n",
-		redStyle.Render("✗"), succeeded, len(results), len(results)-succeeded)
+		style.Error.Render("✗"), succeeded, len(results), len(results)-succeeded)
 }

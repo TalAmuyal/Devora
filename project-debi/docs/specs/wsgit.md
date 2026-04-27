@@ -12,7 +12,8 @@ Implement workspace-aware variants of `debi gst` and `debi gcl`. When the user r
 - `devora/internal/git` -- `CurrentBranchOrDetached`, `DefaultBranchNameWithFallback`
 - `devora/internal/gh` -- `GetPRForBranch`, `ErrGHNotInstalled`, `PRSummary`
 - `devora/internal/process` -- `GetOutput`, `GetOutputRaw`, `WithCwd`, `WithContext`, `WithExtraEnv`, `PassthroughError`
-- `charm.land/lipgloss/v2` -- colored output
+- `devora/internal/style` -- shared Catppuccin Mocha palette + pre-built lipgloss styles for colored output
+- `charm.land/lipgloss/v2` -- `lipgloss.Style` type for the per-cell padding helper and the inline `style.Green.Bold(true)` composition for merged-PR display
 
 ## Types
 

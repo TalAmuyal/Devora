@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"devora/internal/style"
 	"devora/internal/tui/components"
 	"devora/internal/workspace"
 	"fmt"
@@ -51,7 +52,7 @@ type AddRepoModel struct {
 }
 
 func NewAddRepoModel(
-	palette ThemePalette,
+	palette style.ThemePalette,
 	workspacePath string,
 	repoNames []string,
 ) AddRepoModel {
@@ -310,7 +311,7 @@ func RunAddRepo(
 	workspacePath string,
 	repoNames []string,
 ) error {
-	palette := LoadTheme(themePath)
+	palette := style.LoadKittyTheme(themePath)
 	model := NewAddRepoModel(palette, workspacePath, repoNames)
 	p := tea.NewProgram(model)
 	_, err := p.Run()

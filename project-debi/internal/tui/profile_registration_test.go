@@ -8,6 +8,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"devora/internal/config"
+	"devora/internal/style"
 	"devora/internal/tui/components"
 )
 
@@ -159,7 +160,7 @@ func TestRegister_CreatesDirectoryWhenParentExists(t *testing.T) {
 }
 
 func TestProfileReg_TypingClearsError(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewProfileRegModel(&styles, true)
 	m.errMsg = "Please enter a path"
 
@@ -172,7 +173,7 @@ func TestProfileReg_TypingClearsError(t *testing.T) {
 }
 
 func TestProfileReg_ViewShowsExplanatoryLabel(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewProfileRegModel(&styles, true)
 
 	view := m.View()
@@ -190,7 +191,7 @@ func TestProfileReg_ViewShowsExplanatoryLabel(t *testing.T) {
 }
 
 func TestProfileReg_TabDoesNotClearError(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewProfileRegModel(&styles, true)
 	m.errMsg = "some error"
 
@@ -204,7 +205,7 @@ func TestProfileReg_TabDoesNotClearError(t *testing.T) {
 // Two-stage esc navigation tests
 
 func TestProfileReg_EscOnNameFieldUnfocuses(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewProfileRegModel(&styles, true)
 	m.focused = fieldProfileName
 	m.updateFocus()
@@ -220,7 +221,7 @@ func TestProfileReg_EscOnNameFieldUnfocuses(t *testing.T) {
 }
 
 func TestProfileReg_EscOnPathFieldInTypeModeUnfocuses(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewProfileRegModel(&styles, true)
 	m.focused = fieldProfilePath
 	m.updateFocus()
@@ -237,7 +238,7 @@ func TestProfileReg_EscOnPathFieldInTypeModeUnfocuses(t *testing.T) {
 }
 
 func TestProfileReg_EscOnPathFieldInBrowseModeGoesBack(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewProfileRegModel(&styles, true)
 	m.focused = fieldProfilePath
 	m.updateFocus()
@@ -261,7 +262,7 @@ func TestProfileReg_EscOnPathFieldInBrowseModeGoesBack(t *testing.T) {
 }
 
 func TestProfileReg_QOnNameFieldTypesLetter(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewProfileRegModel(&styles, true)
 	m.focused = fieldProfileName
 	m.updateFocus()
@@ -277,7 +278,7 @@ func TestProfileReg_QOnNameFieldTypesLetter(t *testing.T) {
 }
 
 func TestProfileReg_EscOnSubmitGoesBack(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewProfileRegModel(&styles, true)
 	m.focused = fieldProfileSubmit
 	m.navMode = false
@@ -295,7 +296,7 @@ func TestProfileReg_EscOnSubmitGoesBack(t *testing.T) {
 }
 
 func TestProfileReg_QOnSubmitGoesBack(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewProfileRegModel(&styles, true)
 	m.focused = fieldProfileSubmit
 	m.navMode = false
@@ -313,7 +314,7 @@ func TestProfileReg_QOnSubmitGoesBack(t *testing.T) {
 }
 
 func TestProfileReg_EscInNavModeGoesBack(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewProfileRegModel(&styles, true)
 	m.navMode = true
 
@@ -329,7 +330,7 @@ func TestProfileReg_EscInNavModeGoesBack(t *testing.T) {
 }
 
 func TestProfileReg_EscInNavModeReturnsToSettings(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewProfileRegModel(&styles, true)
 	m.returnToSettings = true
 	m.navMode = true
@@ -346,7 +347,7 @@ func TestProfileReg_EscInNavModeReturnsToSettings(t *testing.T) {
 }
 
 func TestProfileReg_QInNavModeGoesBack(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewProfileRegModel(&styles, true)
 	m.navMode = true
 
@@ -362,7 +363,7 @@ func TestProfileReg_QInNavModeGoesBack(t *testing.T) {
 }
 
 func TestProfileReg_EscInNavModeQuitsWhenNoBack(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewProfileRegModel(&styles, false) // hasBack = false (first-run)
 	m.navMode = true
 
@@ -378,7 +379,7 @@ func TestProfileReg_EscInNavModeQuitsWhenNoBack(t *testing.T) {
 }
 
 func TestProfileReg_QInNavModeQuitsWhenNoBack(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewProfileRegModel(&styles, false) // hasBack = false (first-run)
 	m.navMode = true
 
@@ -394,7 +395,7 @@ func TestProfileReg_QInNavModeQuitsWhenNoBack(t *testing.T) {
 }
 
 func TestProfileReg_TabToNameFieldExitsNavMode(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewProfileRegModel(&styles, true)
 	m.focused = fieldProfilePath
 	m.navMode = true
@@ -411,7 +412,7 @@ func TestProfileReg_TabToNameFieldExitsNavMode(t *testing.T) {
 }
 
 func TestProfileReg_TabToPathFieldExitsNavMode(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewProfileRegModel(&styles, true)
 	m.focused = fieldProfileSubmit
 	m.navMode = true
@@ -428,7 +429,7 @@ func TestProfileReg_TabToPathFieldExitsNavMode(t *testing.T) {
 }
 
 func TestProfileReg_TabToSubmitKeepsNavMode(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewProfileRegModel(&styles, true)
 	m.focused = fieldProfileName
 	m.navMode = true
@@ -445,7 +446,7 @@ func TestProfileReg_TabToSubmitKeepsNavMode(t *testing.T) {
 }
 
 func TestProfileReg_ResetClearsNavMode(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewProfileRegModel(&styles, true)
 	m.navMode = true
 
@@ -457,7 +458,7 @@ func TestProfileReg_ResetClearsNavMode(t *testing.T) {
 }
 
 func TestProfileReg_CtrlCNotHandledAtPageLevel(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewProfileRegModel(&styles, true)
 
 	cmd := m.Update(tea.KeyPressMsg(tea.Key{Code: 'c', Mod: tea.ModCtrl}))
@@ -468,7 +469,7 @@ func TestProfileReg_CtrlCNotHandledAtPageLevel(t *testing.T) {
 }
 
 func TestProfileReg_ActionBindings_InsertModeOnNameField(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewProfileRegModel(&styles, true)
 	m.focused = fieldProfileName
 	m.navMode = false
@@ -481,7 +482,7 @@ func TestProfileReg_ActionBindings_InsertModeOnNameField(t *testing.T) {
 }
 
 func TestProfileReg_ActionBindings_NavModeWithBack(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewProfileRegModel(&styles, true)
 	m.navMode = true
 
@@ -493,7 +494,7 @@ func TestProfileReg_ActionBindings_NavModeWithBack(t *testing.T) {
 }
 
 func TestProfileReg_ActionBindings_NavModeWithQuit(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewProfileRegModel(&styles, false) // hasBack = false (first-run)
 	m.navMode = true
 
@@ -505,7 +506,7 @@ func TestProfileReg_ActionBindings_NavModeWithQuit(t *testing.T) {
 }
 
 func TestProfileReg_ActionBindings_NonTextFieldInsertMode(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewProfileRegModel(&styles, true)
 	m.focused = fieldProfileSubmit
 	m.navMode = false
@@ -518,7 +519,7 @@ func TestProfileReg_ActionBindings_NonTextFieldInsertMode(t *testing.T) {
 }
 
 func TestProfileReg_DefaultPathWhenNoProfiles(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewProfileRegModel(&styles, false) // hasBack=false means first-run, no profiles
 
 	if m.pathInput.Value() != "~/devora" {
@@ -527,7 +528,7 @@ func TestProfileReg_DefaultPathWhenNoProfiles(t *testing.T) {
 }
 
 func TestProfileReg_NoDefaultPathWhenProfilesExist(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewProfileRegModel(&styles, true) // hasBack=true means profiles exist
 
 	if m.pathInput.Value() != "" {
@@ -536,7 +537,7 @@ func TestProfileReg_NoDefaultPathWhenProfilesExist(t *testing.T) {
 }
 
 func TestProfileReg_ActionBindings_NoCtrlC(t *testing.T) {
-	styles := NewStyles(ThemePalette{})
+	styles := NewStyles(style.ThemePalette{})
 	m := NewProfileRegModel(&styles, true)
 
 	bindings := m.ActionBindings()
