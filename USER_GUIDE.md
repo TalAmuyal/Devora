@@ -10,7 +10,9 @@
 
 ### MacOS
 
-For the first usage, you might need to work around macOS Gatekeeper (see also [Troubleshooting](#troubleshooting)):
+If you installed via the curl-based installer (see README), the quarantine attribute is cleared automatically and you can skip these steps.
+
+Otherwise, for the first usage, you might need to work around macOS Gatekeeper (see also [Troubleshooting](#troubleshooting)):
 1. "Right-click > Open" the app
 2. Press "Done" on the warning dialog
 3. Open the "security & privacy" settings
@@ -269,4 +271,5 @@ Use `--strict` to also check optional dependencies.
 ### macOS Gatekeeper
 
 On first launch, macOS may block Devora because it is not signed by an identified developer.
-To work around this: right-click the app and select "Open", press "Done" on the warning dialog, then open "Security & Privacy" in System Settings and allow the app to run.
+If you used the curl-based installer (see README), the quarantine attribute is cleared automatically and this step is not needed.
+To work around this manually: right-click the app and select "Open", press "Done" on the warning dialog, then open "Security & Privacy" in System Settings and allow the app to run.

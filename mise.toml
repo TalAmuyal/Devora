@@ -1,3 +1,6 @@
+[tools]
+shellcheck = "latest"
+
 [tasks.build]
 run = """
 set -e
@@ -18,6 +21,10 @@ mise run -C project-judge test
 mise run -C project-status-line test
 """
 description = "Run tests for all sub-projects"
+
+[tasks.lint-shell]
+run = "shellcheck install.sh"
+description = "Lint shell scripts with shellcheck (currently install.sh only)"
 
 [tasks.download-deps]
 run = "./bundler/download-deps.sh"
