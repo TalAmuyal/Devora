@@ -26,9 +26,11 @@ Types of changes:
 - A mise command to build and open dev Devora in one go
 - Dev builds set `macos_titlebar_color` to `#F5A97F` (Catppuccin Macchiato peach) so the dev `.app` titlebar is visually distinct from the release build
 - Vim-style Kitty split panes: `cmd+shift+\` (vertical split, new shell to the right) and `cmd+shift+-` (horizontal split, new shell below); `cmd+shift+h/j/k/l` moves focus between panes, `cmd+shift+w` closes the focused pane; new panes inherit the active pane's working directory
+- One-line `install.sh` installer: `curl -fsSL .../install.sh | bash` downloads the latest release DMG, replaces any existing `/Applications/Devora.app`, clears macOS quarantine, and installs the `debi` zsh completion. Pass `--nightly` to install the latest nightly build instead of the latest stable release
 
 ### Changed
 
+- DMG filename simplified from `Devora_<version>.dmg` to `Devora.dmg` (the version is still embedded inside the app bundle's `Contents/Resources/VERSION` file)
 - Consolidated Catppuccin Mocha palette into a single internal/style package; eliminates duplicated hex literals across the TUI fallback theme, pr check, pr submit, pr close, gst, gcl, and health
 - New workspace-level functionality:
 	- When run at the root of a workspace (instead of in a repo), `debi gst` and `debi gcl` now operate on all repos in the workspace in parallel instead of failing

@@ -39,7 +39,31 @@ Use `--strict` to also check optional ones.
 
 ### Install from a release
 
+#### One-line install (recommended)
+
+Stable:
+
+```
+curl -fsSL https://raw.githubusercontent.com/TalAmuyal/Devora/master/install.sh | bash
+```
+
+Nightly:
+
+```
+curl -fsSL https://raw.githubusercontent.com/TalAmuyal/Devora/master/install.sh | bash -s -- --nightly
+```
+
+Both commands download the latest DMG, replace any existing `/Applications/Devora.app`, clear the macOS quarantine attribute (so Gatekeeper won't block first launch), and install the `debi` zsh completion.
+
+#### Manual install
+
 Download the latest `.dmg` from the [GitHub Releases](https://github.com/TalAmuyal/Devora/releases) page and drag Devora.app to `/Applications`.
+
+If Gatekeeper blocks the app on first launch, clear the quarantine attribute manually:
+
+```
+xattr -dr com.apple.quarantine /Applications/Devora.app
+```
 
 ### Build from source
 
