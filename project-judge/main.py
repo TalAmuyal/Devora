@@ -27,6 +27,7 @@ import typing
 
 
 UNSUPPORTED_CASES_FILE = pathlib.Path.home() / ".claude" / "cc-judge-unsupported-cases.json"
+UNHANDLED_REQUESTS_FILE = pathlib.Path.home() / ".claude" / "cc-judge-unhandled-requests.json"
 
 
 Command = list[str]
@@ -269,6 +270,8 @@ def remove_irrelevant_parts(command: Command) -> None:
 
 def main(args: dict, expected: str | None) -> None:
     if args.get("tool_name", "Bash") != "Bash":
+        if expected is None:
+            save_unhandled_request(args)
         _debug_mismatch(expected, "deferred", "not a Bash tool")
         direct_to_user_and_exit()
 
@@ -414,6 +417,19 @@ def save_unsupported_case(args: dict):
         cases.append(args)
         with open(UNSUPPORTED_CASES_FILE, "w") as f:
             json.dump(cases, f, indent=4)
+
+
+def save_unhandled_request(args: dict):
+    if UNHANDLED_REQUESTS_FILE.exists():
+        with open(UNHANDLED_REQUESTS_FILE, "r") as f:
+            requests = json.load(f)
+    else:
+        requests = []
+
+    if args not in requests:
+        requests.append(args)
+        with open(UNHANDLED_REQUESTS_FILE, "w") as f:
+            json.dump(requests, f, indent=4)
 
 
 def allow_and_exit(

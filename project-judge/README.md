@@ -32,6 +32,10 @@ git -C <some long path> <command I already allowed> ...
 The script decides whether to allow or deny a permission request based on the command and its arguments.
 When it encounters a situation that it doesn't know how to handle, it saves it as an example case and defer the decision to the user, allowing them to review and decide on it later.
 
+## Unhandled tool types
+
+Judge currently only reasons about `Bash` permission requests. When it sees a request for any other tool type, it defers to the user and appends the raw request to `~/.claude/cc-judge-unhandled-requests.json`. This file is the source for adding support for new tool types.
+
 ## Testing
 
 An end-to-end test is done by running the script with known inputs and matching that to an expected result.

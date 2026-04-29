@@ -27,6 +27,7 @@ Types of changes:
 - Dev builds set `macos_titlebar_color` to `#F5A97F` (Catppuccin Macchiato peach) so the dev `.app` titlebar is visually distinct from the release build
 - Vim-style Kitty split panes: `cmd+shift+\` (vertical split, new shell to the right) and `cmd+shift+-` (horizontal split, new shell below); `cmd+shift+h/j/k/l` moves focus between panes, `cmd+shift+w` closes the focused pane; new panes inherit the active pane's working directory
 - One-line `install.sh` installer: `curl -fsSL .../install.sh | bash` downloads the latest release DMG, replaces any existing `/Applications/Devora.app`, clears macOS quarantine, and installs the `debi` zsh completion. Pass `--nightly` to install the latest nightly build instead of the latest stable release
+- Judge records permission requests for non-Bash tool types to `~/.claude/cc-judge-unhandled-requests.json` (separate from the existing Bash unsupported-cases file), so we can inspect real payloads and add support
 
 ### Changed
 
@@ -44,6 +45,7 @@ Types of changes:
 - Main page tab and shell tab titles are now bracketed (`[Devora]`, `[Shell]`)
 - Titlebar color is now `#181926` (Catppuccin Macchiato crust) instead of the system default, for a consistent look across macOS themes
 - Judge now treats `time` and `watch` as irrelevant prefixes (stripped before matching), and recognizes `NODE_PATH=.` as a harmless env-var prefix
+- Judge's Claude Code hook now matches all permission requests instead of only `Bash`, so non-Bash requests can be inspected and supported incrementally
 
 ### Removed
 
