@@ -47,6 +47,14 @@ DECLINED_COMMANDS = (
         MSG_USE_MISE_TASK,
     ),
     (
+        ["node"],
+        MSG_USE_MISE_TASK,
+    ),
+    (
+        ["bun"],
+        MSG_USE_MISE_TASK,
+    ),
+    (
         ["npm"],
         MSG_USE_MISE_TASK,
     ),
@@ -56,6 +64,10 @@ DECLINED_COMMANDS = (
     ),
     (
         ["poetry"],
+        MSG_USE_MISE_TASK,
+    ),
+    (
+        ["shellcheck"],
         MSG_USE_MISE_TASK,
     ),
     (
@@ -184,12 +196,12 @@ class Detectors:
     KNOWN_TO_NOT_HANDLE: list[BooleanDetector] = [
         lambda cmd, _: cmd[0].startswith("./"),
         lambda cmd, _: cmd[0] == "find" and RISKY_FIND_FLAGS & set(cmd),
+        lambda cmd, _: cmd[0] == "bash" and cmd[1] != "-n",  # Allow "bash -n" for syntax checking, but no other bash invocations
         lambda cmd, _: any(
             cmd[0:len(cmd_start)] == cmd_start
             for cmd_start in [
                 ["chmod"],
                 ["rm"],
-                ["bash"],
                 ["git", "add"],
                 ["git", "checkout"],
                 ["git", "reset"],
@@ -198,14 +210,23 @@ class Detectors:
     ]
     APPROVED: list[BooleanDetector] = [
         lambda cmd, _: cmd[0] in ALLOWED_COMMANDS,
+        lambda cmd, cwd: (
+            len(cmd) == 2
+            and cmd[0] == "source"
+            and cmd[1].startswith(cwd + "/")
+            and cmd[1].endswith("/.venv/bin/activate")
+        ),
         lambda cmd, _: any(
             cmd[0:len(allowed)] == allowed
             for allowed in [
+                ["command", "-v"],
+                ["bash", "-n"],
+                ["source", ".venv/bin/activate"],
                 ["git", "diff"],
                 ["git", "grep"],
                 ["git", "show"],
                 ["git", "log"],
-                ["git", "tag" "-l"],
+                ["git", "tag", "-l"],
                 ["git", "tag", "--list"],
                 ["git", "config", "--list"],
                 ["git", "notes", "list"],
@@ -264,12 +285,37 @@ def _debug_mismatch(expected: str | None, actual: str, reason: str) -> None:
 
 
 def remove_irrelevant_parts(command: Command) -> None:
-    while command and command[0] in IRRELEVANT_PREFIXES:
+    if len(command) > 2 and command[0] == "timeout":
+        arg = command[1]
+        if arg.endswith("s"):
+            arg = arg[:-1]
+
+        is_number = False
+        try:
+            is_number = float(arg) >= 0
+        except ValueError:
+            pass
+
+        if is_number:
+            command.pop(0)  # Remove "timeout"
+            command.pop(0)  # Remove the duration
+            remove_irrelevant_parts(command)
+    elif command and command[0] in IRRELEVANT_PREFIXES:
         command.pop(0)
+        remove_irrelevant_parts(command)
 
 
 def main(args: dict, expected: str | None) -> None:
-    if args.get("tool_name", "Bash") != "Bash":
+    if args.get("tool_name") == "WebFetch":
+        url = args.get("tool_input", {}).get("url", "")
+        if url.startswith("file://"):
+            deny_and_exit("`WebFetch` access to local files is not allowed, use the `Read` tool instead.")
+        elif url.startswith("http://") or url.startswith("https://"):
+            direct_to_user_and_exit()  # Let the user decide on web requests
+        else:
+            save_unhandled_request(args)
+            direct_to_user_and_exit()  # Let the user decide on web requests
+    elif args.get("tool_name", "Bash") != "Bash":
         if expected is None:
             save_unhandled_request(args)
         _debug_mismatch(expected, "deferred", "not a Bash tool")
