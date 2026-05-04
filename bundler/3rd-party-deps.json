@@ -35,6 +35,41 @@
       "sha256": "234a20a7d0cebc775cdc77ecd62d28da9479364a122b52d8bac9adf1312b860d",
       "archive_type": "tar.gz",
       "extract_path": "glow"
+    },
+    {
+      "name": "glimpse-tty",
+      "version": "2.0.9",
+      "license": "BSD-3-Clause",
+      "source_repo": "https://github.com/TalAmuyal/glimpse-tty",
+      "tag": "v2.0.9",
+      "download_url": "https://github.com/TalAmuyal/glimpse-tty/releases/download/v2.0.9/glimpse-tty-2.0.9-darwin-arm64.tar.gz",
+      "sha256": "907588c01cb80fc1f31f3500f48e2172fa32e9b40b91564bf1c112efc82539ef",
+      "archive_type": "tar.gz",
+      "extract_path": "glimpse-tty",
+      "extract_type": "directory"
+    },
+    {
+      "name": "crit",
+      "version": "0.10.1",
+      "license": "MIT",
+      "source_repo": "https://github.com/tomasz-tomczyk/crit",
+      "tag": "v0.10.1",
+      "download_url": "https://github.com/tomasz-tomczyk/crit/releases/download/v0.10.1/crit-darwin-arm64",
+      "sha256": "2cf8701dce5e79b20618e2ad766d5f5bcd261dd60289bc5a186fa8ad0ef5b849",
+      "archive_type": "raw",
+      "extract_path": "original-crit"
+    },
+    {
+      "name": "crit-cc-plugin",
+      "version": "0.10.1",
+      "license": "MIT",
+      "source_repo": "https://github.com/tomasz-tomczyk/crit",
+      "tag": "v0.10.1",
+      "download_url": "https://github.com/tomasz-tomczyk/crit/archive/refs/tags/v0.10.1.tar.gz",
+      "sha256": "9cf692d82c4458da6d0443a7b9cd9fbcb0aae12193feae90a55789a1fa71b124",
+      "archive_type": "tar.gz",
+      "extract_path": "claude-code",
+      "extract_type": "directory"
     }
   ]
 }

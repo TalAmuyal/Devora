@@ -288,6 +288,16 @@ var commands = []Command{
 
 	// Utility
 	{
+		Name:        "get-conf",
+		Description: "Print a resolved config value",
+		ArgsHint:    "<key>",
+		Group:       "Utility",
+		Run:         func(args []string) error { return runGetConf(args) },
+		Flags: []cmdinfo.Flag{
+			{Name: "-p, --profile", Description: "Resolve against a specific profile"},
+		},
+	},
+	{
 		Name:        "util",
 		Description: "Developer utility commands",
 		ArgsHint:    "<subcommand>",

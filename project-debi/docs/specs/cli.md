@@ -8,7 +8,7 @@ Define and dispatch the CLI commands. This is the entry point that wires togethe
 
 ## Commands
 
-The CLI has 3 workspace commands, a health command, PR commands (`pr check`, `pr submit`, `pr close`, `pr auto-merge`), a util command, 23 git shortcuts, and utility commands:
+The CLI has 3 workspace commands, a health command, PR commands (`pr check`, `pr submit`, `pr close`, `pr auto-merge`), `get-conf`, a util command, 23 git shortcuts, and utility commands:
 
 ### Workspace Commands
 
@@ -82,6 +82,7 @@ Flag syntax accepts both `--message=foo` and `--message foo`. `-v` and `-q` are 
 
 | Command | Args | Description |
 |---------|------|-------------|
+| `get-conf` | `[--profile <name>] <key>` | Print the resolved value of a config key (dot-path notation) |
 | `util <subcommand>` | subcommand (required) | Developer tool utilities. Dispatches to subcommands |
 
 #### Util Subcommands
@@ -218,6 +219,7 @@ Git Shortcuts:
   gstash [args]     git stash
 
 Utility:
+  get-conf <key>              Print a resolved config value
   util <subcommand>           Developer utility commands
   completion <bash|zsh|fish>  Generate shell completion script
 ```
@@ -254,7 +256,7 @@ var (
 
 The handlers reach the resolver through `resolveActiveProfile`, a stubbable var pointing at `ResolveActiveProfile`, so tests can assert each handler invokes it.
 
-Only `runHealth` accepts an explicit `--profile <name>`; `runSubmit` and `runClose` always call `ResolveActiveProfile("")`.
+Only `runHealth` and `runGetConf` accept an explicit `--profile <name>`; `runSubmit` and `runClose` always call `ResolveActiveProfile("")`.
 
 ## Command Handlers
 
@@ -553,6 +555,44 @@ var (
 )
 ```
 
+### get-conf
+
+```go
+func runGetConf(args []string) error
+```
+
+Prints the resolved value of a config key using dot-path notation.
+
+Usage: `debi get-conf [--profile <name>] <key>`
+
+#### Flags
+
+| Flag | Description |
+|------|-------------|
+| `-p, --profile <name>` | Resolve against a specific profile (defaults to CWD-based resolution) |
+| `-h, --help` | Print usage and return nil |
+
+Flag syntax accepts both `--profile=foo` and `--profile foo`. Any other flag returns a `*UsageError`. Missing `<key>` returns a `*UsageError`.
+
+#### Behavior
+
+1. Parse flags. Accept `-p`/`--profile` and `-h`/`--help`. Reject unknown flags with `*UsageError`.
+2. If no key argument is provided, return `*UsageError` with usage text.
+3. Call `resolveActiveProfile(profile)` to set the active profile for resolution.
+4. Call `config.Get(key)` to resolve the value.
+5. If not found, return `*process.PassthroughError{Code: 1}`.
+6. Print the value to stdout based on type:
+   - `string`: printed as-is with a trailing newline.
+   - `bool`: printed as `true` or `false` with a trailing newline.
+   - `float64`: if the value is an integer (no fractional part), printed as an integer (e.g., `42`); otherwise printed with `%g` formatting (e.g., `3.14`).
+   - All other types (maps, slices): serialized as compact JSON via `json.NewEncoder(os.Stdout).Encode(val)`.
+
+#### Stubbable dependency
+
+```go
+var configGet = config.Get
+```
+
 ## Exit Codes
 
 | Situation | Exit |
@@ -640,4 +680,15 @@ func main() {
 - Test the `enable` error paths: `repo` outside a git repo returns `*UsageError` via `handleNotInGitRepo`; `profile` with no active profile returns `*UsageError`.
 - Test `reset` for each scope: when a value exists it prints `cleared ...`; when no value exists it still invokes the underlying setter (idempotent) and prints `already unset ...`.
 - Test `show` output: the human form lists all four layers (including `default: true`); `--json` emits a single-line object parseable with the documented shape; outside a git repo the repo layer silently falls back to `<unset>` / `null`.
+- Test that `get-conf` without arguments returns a `UsageError`.
+- Test that `get-conf` with an unknown flag returns a `UsageError`.
+- Test that `get-conf` prints string values as raw text with a trailing newline.
+- Test that `get-conf` prints bool values as `true`/`false` with a trailing newline.
+- Test that `get-conf` prints integer-valued floats without a decimal point (e.g., `42`).
+- Test that `get-conf` prints fractional floats with `%g` formatting (e.g., `3.14`).
+- Test that `get-conf` prints map values as compact JSON with a trailing newline.
+- Test that `get-conf` returns `PassthroughError{Code: 1}` when the key is not found.
+- Test that `get-conf --profile <name>` passes the profile name to `resolveActiveProfile`.
+- Test that `get-conf -p <name>` passes the profile name to `resolveActiveProfile`.
+- Test that `get-conf --help` prints usage information.
 - Command handler integration tests are better handled at a higher level (testing the actual TUI behavior or workspace operations).

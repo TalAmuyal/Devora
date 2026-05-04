@@ -176,6 +176,12 @@ func setNestedBool(cfg map[string]any, segments []string, value *bool) map[strin
 
 // --- Config resolution ---
 
+// Get resolves a config key using the standard resolution chain:
+// active profile first, then global config.
+func Get(path string) (any, bool) {
+	return get(path)
+}
+
 func get(path string) (any, bool) {
 	if activeProfile != nil {
 		if val, ok := resolvePath(activeProfile.Config, path); ok {

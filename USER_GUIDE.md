@@ -124,6 +124,30 @@ Info section:
 
 - **View Changelog**: Opens the full changelog in a new kitty tab using glow
 
+#### Config File Settings
+
+Some settings are configured directly in `config.json` (global or per-profile) rather than through the settings page.
+
+| Key | Values | Default | Scope |
+|-----|--------|---------|-------|
+| `review.open-mode` | `"tab"`, `"overlay"`, `"browser"` | `"tab"` | profile-overridable |
+
+**`review.open-mode`** controls how the crit review UI opens:
+
+- `"tab"` -- opens in a new Kitty tab titled "[Crit]"
+- `"overlay"` -- opens in a Kitty overlay covering the current window
+- `"browser"` -- opens in the system browser (original crit behavior)
+
+Example:
+
+```json
+{
+  "review": {
+    "open-mode": "overlay"
+  }
+}
+```
+
 ## The `ccc` Command
 
 `ccc` (Customized Claude Code) is a launcher that wraps Claude Code with Devora-specific configuration.
@@ -133,6 +157,7 @@ What it does:
 
 - **Model upgrades**: Default models are upgraded -- Sonnet is replaced with Opus, and Haiku with Sonnet. This provides stronger reasoning out of the box but does affect billing accordingly
 - **Effort level**: Sets the effort level to "max" by default, so that Claude Code always tries to give the best answer it can (instead of trying to be fast or cost-efficient)
+- **Plan mode**: Claude Code starts in plan permission mode by default, which requires explicit approval before making changes
 - **Privacy**: Disables telemetry and nonessential network traffic
 - **Agent teams**: Enables experimental agent teams support
 - **Plugins**: Auto-loads Devora plugins (including Judge -- see below)
@@ -156,6 +181,7 @@ Highlights:
 - **Submit a PR**: `debi pr submit` (or `submit-pr`) from detached HEAD creates a commit, optionally a tracker task, a feature branch, and a GitHub PR in one step
 - **Close a PR**: `debi pr close` (or `close-pr`) completes the tracker task (if any), deletes the remote and local branches, and returns the working tree to detached HEAD on the default branch
 - **Health check**: `debi health` verifies that all required dependencies are installed
+- **Read config**: `debi get-conf [--profile <name>] <key>` reads a resolved config value and prints it to stdout, intended for use in shell scripts
 - **Shell completions**: See [Recommended: Shell Completions](#recommended-shell-completions)
 
 ## Recommended: Shell Completions

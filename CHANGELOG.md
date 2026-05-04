@@ -16,6 +16,9 @@ Types of changes:
 
 ### Added
 
+- `debi get-conf` command for reading config values from scripts
+- `review.open-mode` config key to control how crit review UI opens (tab, overlay, or browser)
+- Crit is now bundled as a vendored dependency (binary + Claude Code plugin)
 - Catppuccin attribution in THIRD_PARTY_LICENSES.md
 - `debi util yaml-validate <file|->` validates YAML files (multi-document streams supported, empty input rejected)
 - `debi util toml-validate <file|->` validates TOML files (empty input rejected; comment-only files are valid)
@@ -31,6 +34,9 @@ Types of changes:
 - Judge now handles `WebFetch` permission requests: blocks `file://` URLs (directing to use the `Read` tool instead), defers `http(s)://` URLs to the user
 - Judge now strips `timeout <duration>` prefix from commands before matching
 - Judge now auto-approves `command -v`, `bash -n` (syntax checking), and `source .venv/bin/activate` commands
+- glimpse-tty is now bundled as a vendored dependency (terminal web viewer binary)
+- Judge now auto-allows reading crit plan and review files (`~/.crit/plans/`, `~/.crit/reviews/`)
+- Bundler test suite and `test-bundler` mise task
 
 ### Changed
 
@@ -51,6 +57,8 @@ Types of changes:
 - Judge's Claude Code hook now matches all permission requests instead of only `Bash`, so non-Bash requests can be inspected and supported incrementally
 - Judge now declines `node`, `bun`, and `shellcheck` commands (directing to use mise tasks)
 - Judge now escalates non-syntax-checking `bash` invocations to the user instead of silently blocking them
+- Claude Code now starts in plan mode by default (via `--permission-mode plan` in `ccc.sh`)
+- Judge no longer intercepts `ExitPlanMode` permission requests (required for crit plan-exit integration)
 
 ### Fixed
 

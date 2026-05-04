@@ -13,6 +13,12 @@ Devora/                           (DMG root)
       │  └─ bootstrap.sh
       └─ Resources/
          ├─ cc-plugins/
+         │  ├─ crit/
+         │  │  ├─ .claude-plugin/
+         │  │  │  └─ plugin.json
+         │  │  ├─ hooks/
+         │  │  │  └─ hooks.json
+         │  │  └─ skills/
          │  ├─ detached-flow/
          │  │  ├─ bin/
          │  │  │  ├─ check-pr
@@ -35,15 +41,22 @@ Devora/                           (DMG root)
          ├─ VERSION
          ├─ bundled-apps/
          │  ├─ ccc
+         │  ├─ crit                   (wrapper, forwards to original-crit with overlay behavior)
          │  ├─ debi
-         │  └─ glow
+         │  ├─ glimpse-tty           (launcher shim, forwards to ../glimpse-tty/glimpse-tty)
+         │  ├─ glow
+         │  └─ original-crit
          ├─ kitty-configs/
          │  ├─ current-theme.conf
          │  ├─ glow-theme.json
          │  └─ kitty.conf
+         ├─ crit-license.txt
          ├─ kitty-license.txt
          ├─ uv-license.txt
+         ├─ glimpse-tty-license.txt
          ├─ kitty.app/
+         │  └─ ...
+         ├─ glimpse-tty/             (distribution: launcher + Electron + node_modules)
          │  └─ ...
          └─ uv
 ```

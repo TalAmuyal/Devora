@@ -154,24 +154,39 @@ GOOS=darwin \
 	-o "$OUTPUT_CONTAINER_DIR/cc-simple-statusline"
 
 # Bundle prepared files and directories
-bundle "$REPO_ROOT/USER_GUIDE.md"                   "$OUTPUT_CONTAINER_DIR/."               overwrite
-bundle "$REPO_ROOT/USER_GUIDE.md"                   "$RESOURCES_DIR/."                      overwrite
-bundle "$REPO_ROOT/CHANGELOG.md"                    "$OUTPUT_CONTAINER_DIR/."               overwrite
-bundle "$REPO_ROOT/CHANGELOG.md"                    "$RESOURCES_DIR/."                      overwrite
-echo -n "$EFFECTIVE_VERSION"          >             "$RESOURCES_DIR/VERSION"
-bundle "$SCRIPT_DIR/Info.plist"                     "$OUTPUT_DIR/Contents/."                overwrite
-bundle "$THIRD_PARTY_APPS_DIR/kitty.app"            "$RESOURCES_DIR/kitty.app"              check
-bundle "$BUNDLER_DIR/kitty-license.txt"             "$RESOURCES_DIR/."                      overwrite
-bundle "$BUNDLER_DIR/uv-license.txt"                "$RESOURCES_DIR/."                      overwrite
-bundle "$THIRD_PARTY_APPS_DIR/uv"                   "$RESOURCES_DIR/uv"                     check
-bundle "$THIRD_PARTY_APPS_DIR/glow"                 "$BUNDLED_APPS_DIR/glow"                check
-bundle "$REPO_ROOT/kitty-configs"                   "$RESOURCES_DIR/."                      overwrite
-bundle "$SCRIPT_DIR/bootstrap.sh"                   "$ROOT_EXEC_DIR/."                      overwrite
-bundle "$REPO_ROOT/ccc.sh"                          "$BUNDLED_APPS_DIR/ccc"                 overwrite
-bundle "$REPO_ROOT/project-judge/cc-plugin"         "$BUNDLED_CC_PLUGINS_DIR/judge"         overwrite
-bundle "$REPO_ROOT/project-judge/main.py"           "$BUNDLED_CC_PLUGINS_DIR/judge/."       overwrite
-bundle "$REPO_ROOT/project-team-work/cc-plugin"     "$BUNDLED_CC_PLUGINS_DIR/team-work"     overwrite
-bundle "$REPO_ROOT/project-detached-flow/cc-plugin" "$BUNDLED_CC_PLUGINS_DIR/detached-flow" overwrite
+bundle "$REPO_ROOT/USER_GUIDE.md"                     "$OUTPUT_CONTAINER_DIR/."               overwrite
+bundle "$REPO_ROOT/USER_GUIDE.md"                     "$RESOURCES_DIR/."                      overwrite
+bundle "$REPO_ROOT/CHANGELOG.md"                      "$OUTPUT_CONTAINER_DIR/."               overwrite
+bundle "$REPO_ROOT/CHANGELOG.md"                      "$RESOURCES_DIR/."                      overwrite
+echo -n "$EFFECTIVE_VERSION"          >               "$RESOURCES_DIR/VERSION"
+bundle "$SCRIPT_DIR/Info.plist"                       "$OUTPUT_DIR/Contents/."                overwrite
+bundle "$THIRD_PARTY_APPS_DIR/kitty.app"              "$RESOURCES_DIR/kitty.app"              check
+bundle "$BUNDLER_DIR/kitty-license.txt"               "$RESOURCES_DIR/."                      overwrite
+bundle "$BUNDLER_DIR/uv-license.txt"                  "$RESOURCES_DIR/."                      overwrite
+bundle "$BUNDLER_DIR/glimpse-tty-license.txt"         "$RESOURCES_DIR/."                      overwrite
+bundle "$THIRD_PARTY_APPS_DIR/uv"                     "$RESOURCES_DIR/uv"                     check
+bundle "$THIRD_PARTY_APPS_DIR/glow"                   "$BUNDLED_APPS_DIR/glow"                check
+bundle "$THIRD_PARTY_APPS_DIR/glimpse-tty"            "$RESOURCES_DIR/glimpse-tty"            check
+bundle "$REPO_ROOT/kitty-configs"                     "$RESOURCES_DIR/."                      overwrite
+bundle "$SCRIPT_DIR/bootstrap.sh"                     "$ROOT_EXEC_DIR/."                      overwrite
+bundle "$REPO_ROOT/ccc.sh"                            "$BUNDLED_APPS_DIR/ccc"                 overwrite
+bundle "$REPO_ROOT/project-judge/cc-plugin"           "$BUNDLED_CC_PLUGINS_DIR/judge"         overwrite
+bundle "$REPO_ROOT/project-judge/main.py"             "$BUNDLED_CC_PLUGINS_DIR/judge/."       overwrite
+bundle "$REPO_ROOT/project-team-work/cc-plugin"       "$BUNDLED_CC_PLUGINS_DIR/team-work"     overwrite
+bundle "$REPO_ROOT/project-detached-flow/cc-plugin"   "$BUNDLED_CC_PLUGINS_DIR/detached-flow" overwrite
+bundle "$THIRD_PARTY_APPS_DIR/original-crit"          "$BUNDLED_APPS_DIR/original-crit"       check
+bundle "$REPO_ROOT/project-crit-integration/bin/crit" "$BUNDLED_APPS_DIR/crit"                overwrite
+bundle "$THIRD_PARTY_APPS_DIR/claude-code"            "$BUNDLED_CC_PLUGINS_DIR/crit"          overwrite
+bundle "$BUNDLER_DIR/crit-license.txt"                "$RESOURCES_DIR/."                      overwrite
+
+# glimpse-tty's heavy distribution (Electron + node_modules) lives under Resources/glimpse-tty/.
+# bundled-apps/ gets a thin shim so `glimpse-tty` is on PATH as a bare command.
+cat > "$BUNDLED_APPS_DIR/glimpse-tty" <<'LAUNCHER'
+#!/usr/bin/env bash
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE:-$0}")" &>/dev/null && pwd)
+exec "$SCRIPT_DIR/../glimpse-tty/glimpse-tty" "$@"
+LAUNCHER
+chmod 755 "$BUNDLED_APPS_DIR/glimpse-tty"
 
 # Patch Info.plist with effective version
 sed -i '' "s|<string>1\.0</string>|<string>$EFFECTIVE_VERSION</string>|g" "$OUTPUT_DIR/Contents/Info.plist"

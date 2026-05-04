@@ -62,11 +62,14 @@ type ExplicitRepoEntry struct {
   },
   "pr": {
     "auto-merge": true
+  },
+  "review": {
+    "open-mode": "tab"
   }
 }
 ```
 
-`task-tracker.*`, `feature.branch-prefix`, and `pr.auto-merge` are profile-overridable. `task-tracker.<provider>.<key>` merges per leaf, so global and profile can each contribute different leaves under the same provider (e.g., global sets `workspace-id`, profile sets `project-id`).
+`task-tracker.*`, `feature.branch-prefix`, `pr.auto-merge`, and `review.open-mode` are profile-overridable. `task-tracker.<provider>.<key>` merges per leaf, so global and profile can each contribute different leaves under the same provider (e.g., global sets `workspace-id`, profile sets `project-id`).
 
 ### Loading and Caching
 
@@ -112,6 +115,7 @@ Resolves the path against the global config only. Skips profile lookup entirely.
 | `task-tracker.<provider>.<key>` | profile-overridable (per-leaf merge: profile and global can each contribute different leaves) |
 | `feature.branch-prefix` | profile-overridable |
 | `pr.auto-merge` | per-repo + profile-overridable (per-repo > profile > global) |
+| `review.open-mode` | profile-overridable |
 | `name` | profile-only (read directly from `Profile.Config`) |
 | `repos` | profile-only (read directly from `Profile.Config`) |
 
@@ -381,6 +385,16 @@ Profile config changes use a read-modify-write pattern:
 5. If the profile being updated is the active profile (same `RootPath`), update the in-memory active profile with the new config data.
 
 Returns an error if any filesystem or JSON operation fails.
+
+## Generic Getter
+
+### Get
+
+```go
+func Get(path string) (any, bool)
+```
+
+Resolves a config key using the standard profile-overridable resolution chain: active profile first, then global config. Returns `(value, true)` if the key is found at either level, or `(nil, false)` if not found. This is the exported counterpart of the internal `get(path)` function, intended for callers that need to read arbitrary config keys without a typed convenience wrapper.
 
 ## Convenience Getters
 
