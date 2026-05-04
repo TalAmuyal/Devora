@@ -2639,3 +2639,90 @@ func TestGetAutoMergeDefaultForRepo_NilGetRepo(t *testing.T) {
 		t.Fatalf("expected global value false, got %v", got)
 	}
 }
+
+// --- Exported Get tests ---
+
+func TestGet_ProfileValueOnly_ReturnsProfileValue(t *testing.T) {
+	setupTest(t)
+	p := &Profile{Name: "test", RootPath: "/tmp/test", Config: map[string]any{
+		"name":            "test",
+		"prepare-command": "make build",
+	}}
+	SetActiveProfile(p)
+
+	val, ok := Get("prepare-command")
+	if !ok {
+		t.Fatal("expected to find 'prepare-command' via Get")
+	}
+	if val != "make build" {
+		t.Fatalf("expected 'make build', got %v", val)
+	}
+}
+
+func TestGet_GlobalValueOnly_ReturnsGlobalValue(t *testing.T) {
+	tmpDir := setupTest(t)
+	writeJSON(t, filepath.Join(tmpDir, "config.json"), map[string]any{
+		"prepare-command": "global-prep",
+	})
+	resetGlobalConfigCache()
+
+	val, ok := Get("prepare-command")
+	if !ok {
+		t.Fatal("expected to find 'prepare-command' in global config via Get")
+	}
+	if val != "global-prep" {
+		t.Fatalf("expected 'global-prep', got %v", val)
+	}
+}
+
+func TestGet_BothLevels_ProfileWins(t *testing.T) {
+	tmpDir := setupTest(t)
+	writeJSON(t, filepath.Join(tmpDir, "config.json"), map[string]any{
+		"prepare-command": "global-prep",
+	})
+	resetGlobalConfigCache()
+
+	p := &Profile{Name: "test", RootPath: filepath.Join(tmpDir, "profile"), Config: map[string]any{
+		"name":            "test",
+		"prepare-command": "profile-prep",
+	}}
+	SetActiveProfile(p)
+
+	val, ok := Get("prepare-command")
+	if !ok {
+		t.Fatal("expected to find 'prepare-command' via Get")
+	}
+	if val != "profile-prep" {
+		t.Fatalf("expected 'profile-prep' (profile wins), got %v", val)
+	}
+}
+
+func TestGet_NoValue_ReturnsNotFound(t *testing.T) {
+	setupTest(t)
+	val, ok := Get("nonexistent-key")
+	if ok {
+		t.Fatalf("expected not-found, got val=%v", val)
+	}
+	if val != nil {
+		t.Fatalf("expected nil value for not-found key, got %v", val)
+	}
+}
+
+func TestGet_NestedPath_Resolves(t *testing.T) {
+	setupTest(t)
+	p := &Profile{Name: "test", RootPath: "/tmp/test", Config: map[string]any{
+		"name": "test",
+		"a": map[string]any{
+			"b": "deep-value",
+		},
+	}}
+	SetActiveProfile(p)
+
+	val, ok := Get("a.b")
+	if !ok {
+		t.Fatal("expected to find 'a.b' via Get")
+	}
+	if val != "deep-value" {
+		t.Fatalf("expected 'deep-value', got %v", val)
+	}
+}

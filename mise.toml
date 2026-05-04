@@ -19,8 +19,13 @@ set -e
 mise run -C project-debi test
 mise run -C project-judge test
 mise run -C project-status-line test
+mise run test-bundler
 """
 description = "Run tests for all sub-projects"
+
+[tasks.test-bundler]
+run = "./bundler/test-download-deps.sh"
+description = "Run tests for the bundler scripts"
 
 [tasks.lint-shell]
 run = "shellcheck install.sh"

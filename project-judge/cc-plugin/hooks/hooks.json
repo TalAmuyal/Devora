@@ -2,7 +2,7 @@
   "hooks": {
     "PermissionRequest": [
       {
-        "matcher": "*",
+        "matcher": "^(?!ExitPlanMode$).*",
         "hooks": [
           {
             "type": "command",

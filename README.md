@@ -22,9 +22,11 @@ macOS (Apple Silicon) only.
 
 ### Bundled
 
+- [Crit](https://github.com/tomasz-tomczyk/crit) -- AI code review tool with inline comments
+- [glimpse-tty](https://github.com/TalAmuyal/glimpse-tty) -- terminal web viewer based on awrit
+- [glow](https://github.com/charmbracelet/glow) -- terminal-based Markdown renderer
 - [Kitty](https://sw.kovidgoyal.net/kitty/) -- terminal emulator used as the main UI container
 - [uv](https://docs.astral.sh/uv/) -- Python package manager
-- [glow](https://github.com/charmbracelet/glow) -- terminal-based Markdown renderer
 
 ### Optional
 
@@ -90,6 +92,7 @@ Devora builds upon the following tools:
 	- Configurable via `terminal.default-app`: by default each workspace session opens a bare login/interactive shell; set `terminal.default-app` to `nvim` (or any other command) to launch a wrapped app instead
 - Debi (`./project-debi/`), a UI tool for workspace and session management
 - Judge (`./project-judge/`), a Claude Code plugin for auto-approving/rejecting permission requests aiming to reduce permission fatigue and speed up the development process
+- Crit for reviewing plans and code changes
 - CCC (`./ccc.sh`), a launcher script for Claude Code that customizes its behavior and integrates it with the rest of the IDE
 - CC Status Line (`./project-status-line/`), a simple status line script for Claude Code that shows the current context-window usage and session cost
 - Bundler (`./bundler/`), a tool for bundling the IDE into a self-contained app bundle for distribution

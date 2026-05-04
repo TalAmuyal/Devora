@@ -5,6 +5,7 @@ cc-simple-statusline
 
 bin/
 !/project-*/cc-plugin/bin
+!/project-crit-integration/bin
 
 3rd-party-apps/
 devora.app/Contents/Resources

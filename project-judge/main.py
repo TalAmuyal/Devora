@@ -306,22 +306,36 @@ def remove_irrelevant_parts(command: Command) -> None:
 
 
 def main(args: dict, expected: str | None) -> None:
-    if args.get("tool_name") == "WebFetch":
-        url = args.get("tool_input", {}).get("url", "")
+    tool_name: str = args.get("tool_name")
+    tool_input: dict = args.get("tool_input", {})
+
+    if tool_name == "WebFetch":
+        url = tool_input.get("url", "")
         if url.startswith("file://"):
             deny_and_exit("`WebFetch` access to local files is not allowed, use the `Read` tool instead.")
         elif url.startswith("http://") or url.startswith("https://"):
             direct_to_user_and_exit()  # Let the user decide on web requests
         else:
             save_unhandled_request(args)
-            direct_to_user_and_exit()  # Let the user decide on web requests
-    elif args.get("tool_name", "Bash") != "Bash":
+            direct_to_user_and_exit()
+    elif tool_name == "Read":
+        file_path = tool_input.get("file_path", "")
+        crit_dir_path = pathlib.Path.home() / ".crit"
+        read_allowed_paths = {
+            str(crit_dir_path / "plans") + "/",
+            str(crit_dir_path / "reviews") + "/",
+        }
+        if any(file_path.startswith(allowed) for allowed in read_allowed_paths):
+            allow_and_exit(tool_input)
+        else:
+            save_unhandled_request(args)
+            direct_to_user_and_exit()
+    elif tool_name != "Bash":
         if expected is None:
             save_unhandled_request(args)
         _debug_mismatch(expected, "deferred", "not a Bash tool")
         direct_to_user_and_exit()
 
-    tool_input: dict = args["tool_input"]
     input_command: str = tool_input.get("command")
     if not input_command:
         _debug_mismatch(expected, "deferred", "no command in tool_input")
@@ -479,16 +493,14 @@ def save_unhandled_request(args: dict):
 
 
 def allow_and_exit(
-    updated_command: str,
+    updated_tool_input: dict,
 ) -> None:
     result = {
         "hookSpecificOutput": {
             "hookEventName": "PermissionRequest",
             "decision": {
                 "behavior": "allow",
-                "updatedInput": {
-                    "command": updated_command,
-                }
+                "updatedInput": updated_tool_input,
             }
         }
     }

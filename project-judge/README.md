@@ -16,7 +16,7 @@ git -C <some long path> <command I already allowed> ...
 ```json
     "PermissionRequest": [
       {
-        "matcher": "Bash",
+        "matcher": "^(?!ExitPlanMode$).*",
         "hooks": [
           {
             "type": "command",
@@ -27,14 +27,20 @@ git -C <some long path> <command I already allowed> ...
     ],
 ```
 
+The `^(?!ExitPlanMode$).*` matcher intercepts all permission requests except `ExitPlanMode`, which is passed through to support crit's plan-exit integration.
+
 ## Flow
 
 The script decides whether to allow or deny a permission request based on the command and its arguments.
 When it encounters a situation that it doesn't know how to handle, it saves it as an example case and defer the decision to the user, allowing them to review and decide on it later.
 
-## Unhandled tool types
+## Handled tool types
 
-Judge currently only reasons about `Bash` permission requests. When it sees a request for any other tool type, it defers to the user and appends the raw request to `~/.claude/cc-judge-unhandled-requests.json`. This file is the source for adding support for new tool types.
+Judge reasons about `Bash`, `Read`, and `WebFetch` permission requests. `Bash` commands are matched against a set of known-safe and known-disallowed patterns. `Read` requests auto-allow access to crit plan and review files (`~/.crit/plans/`, `~/.crit/reviews/`). `WebFetch` requests block `file://` URLs (directing to use the `Read` tool instead) and defer `http(s)://` URLs to the user.
+
+`ExitPlanMode` permission requests are passed through without intervention to support crit's plan-exit integration.
+
+When Judge sees a request for any other tool type, it defers to the user and appends the raw request to `~/.claude/cc-judge-unhandled-requests.json`. This file is the source for adding support for new tool types.
 
 ## Testing
 

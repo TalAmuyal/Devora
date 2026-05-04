@@ -24,6 +24,20 @@ Devora bundles and depends on the following third-party software and assets.
 - **Author:** Charmbracelet
 - **Source:** https://github.com/charmbracelet/glow
 
+### glimpse-tty v2.0.9
+
+- **License:** BSD-3-Clause
+- **Authors:** Tal Amuyal, Chase Colman
+- **Source:** https://github.com/TalAmuyal/glimpse-tty
+- **Full license text:** See `bundler/glimpse-tty-license.txt`
+
+### crit v0.10.1
+
+- **License:** MIT
+- **Author:** Tomasz Tomczyk
+- **Source:** https://github.com/tomasz-tomczyk/crit
+- **Full license text:** See `bundler/crit-license.txt`
+
 ## Go Dependencies
 
 ### charm.land/bubbletea/v2

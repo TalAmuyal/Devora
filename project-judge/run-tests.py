@@ -33,6 +33,7 @@ def map_exit_code(exit_code: int) -> str:
 
 
 def run_test(input_data: dict, expected: str) -> tuple[str, str, str]:
+    input_data["tool_name"] = "Bash"
     result = subprocess.run(
         [sys.executable, str(MAIN_SCRIPT), "--expected", expected],
         input=json.dumps(input_data),
