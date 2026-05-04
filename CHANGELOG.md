@@ -16,6 +16,7 @@ Types of changes:
 
 ### Added
 
+- `update-deps` script and mise task for automated third-party dependency updates (checks latest GitHub releases, updates JSON/checksums, refreshes artifacts)
 - `debi get-conf` command for reading config values from scripts
 - `review.open-mode` config key to control how crit review UI opens (tab, overlay, or browser)
 - Crit is now bundled as a vendored dependency (binary + Claude Code plugin)
@@ -40,6 +41,7 @@ Types of changes:
 
 ### Changed
 
+- Updated crit to v0.10.4
 - DMG filename simplified from `Devora_<version>.dmg` to `Devora.dmg` (the version is still embedded inside the app bundle's `Contents/Resources/VERSION` file)
 - Consolidated Catppuccin Mocha palette into a single internal/style package; eliminates duplicated hex literals across the TUI fallback theme, pr check, pr submit, pr close, gst, gcl, and health
 - New workspace-level functionality:

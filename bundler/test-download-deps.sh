@@ -20,35 +20,8 @@ trap cleanup EXIT
 # shellcheck source=./download-deps.sh
 source "$SCRIPT_DIR/download-deps.sh"
 
-PASS=0
-FAIL=0
-
-assert_eq() {
-	local label="$1"
-	local expected="$2"
-	local actual="$3"
-	if [ "$expected" = "$actual" ]; then
-		PASS=$((PASS + 1))
-		echo "  ok: $label"
-	else
-		FAIL=$((FAIL + 1))
-		echo "  FAIL: $label"
-		echo "    expected: $expected"
-		echo "    actual:   $actual"
-	fi
-}
-
-assert_exists() {
-	local label="$1"
-	local path="$2"
-	if [ -e "$path" ]; then
-		PASS=$((PASS + 1))
-		echo "  ok: $label ($path)"
-	else
-		FAIL=$((FAIL + 1))
-		echo "  FAIL: $label — missing: $path"
-	fi
-}
+# shellcheck source=./test-helpers.sh
+source "$SCRIPT_DIR/test-helpers.sh"
 
 # ---- Test: extract a single file (existing behavior) ----
 echo "test: extract_tar_gz with extract_type=file"
@@ -125,6 +98,4 @@ assert_eq "deeply-nested file contents" \
 	"$(cat "$TARGET_DIR/target-dir/file.txt")"
 
 # ---- Summary ----
-echo ""
-echo "Results: $PASS passed, $FAIL failed"
-[ "$FAIL" -eq 0 ]
+print_test_results

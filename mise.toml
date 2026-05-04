@@ -24,12 +24,20 @@ mise run test-bundler
 description = "Run tests for all sub-projects"
 
 [tasks.test-bundler]
-run = "./bundler/test-download-deps.sh"
+run = """
+set -e
+./bundler/test-download-deps.sh
+./bundler/test-update-deps.sh
+"""
 description = "Run tests for the bundler scripts"
 
 [tasks.lint-shell]
 run = "shellcheck install.sh"
 description = "Lint shell scripts with shellcheck (currently install.sh only)"
+
+[tasks.update-deps]
+run = "./bundler/update-deps.sh"
+description = "Update all 3rd-party dependencies to their latest versions"
 
 [tasks.download-deps]
 run = "./bundler/download-deps.sh"
