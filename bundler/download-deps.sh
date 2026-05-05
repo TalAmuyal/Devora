@@ -95,6 +95,20 @@ verify_checksum() {
 	fi
 }
 
+# Check whether a dependency is already present at the expected version.
+# Returns 0 (skip download) when the target exists and its version marker matches.
+# Returns 1 (re-download needed) otherwise.
+check_version() {
+	local target="$1"
+	local version="$2"
+	local version_file="${target}.dep-version"
+
+	if [ -e "$target" ] && [ -f "$version_file" ] && [ "$(cat "$version_file")" = "$version" ]; then
+		return 0
+	fi
+	return 1
+}
+
 main() {
 	SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 	DEPS_JSON="$SCRIPT_DIR/3rd-party-deps.json"
@@ -114,7 +128,7 @@ main() {
 	trap cleanup EXIT
 
 	# Parse the JSON into a bash-friendly format using macOS system Python
-	# Each line: name<TAB>download_url<TAB>sha256<TAB>archive_type<TAB>extract_path<TAB>extract_type
+	# Each line: name<TAB>version<TAB>download_url<TAB>sha256<TAB>archive_type<TAB>extract_path<TAB>extract_type
 	local dep_lines
 	dep_lines=$(/usr/bin/python3 -c "
 import json, sys
@@ -123,6 +137,7 @@ with open(sys.argv[1]) as f:
 for dep in data['dependencies']:
     print('\t'.join([
         dep['name'],
+        dep['version'],
         dep['download_url'],
         dep['sha256'],
         dep['archive_type'],
@@ -131,16 +146,18 @@ for dep in data['dependencies']:
     ]))
 " "$DEPS_JSON")
 
-	local name download_url sha256 archive_type extract_path extract_type target local_archive
-	while IFS=$'\t' read -r name download_url sha256 archive_type extract_path extract_type; do
+	local name version download_url sha256 archive_type extract_path extract_type target local_archive
+	while IFS=$'\t' read -r name version download_url sha256 archive_type extract_path extract_type; do
 		target="$TARGET_DIR/$extract_path"
 
-		# Check if already present
-		# Note: the sha256 in the JSON is for the archive, not the extracted file,
-		# so we can only do an existence check here.
-		if [ -e "$target" ]; then
-			echo "[$name] Already exists, skipping"
+		if check_version "$target" "$version"; then
+			echo "[$name] Already at version $version, skipping"
 			continue
+		fi
+		if [ -e "$target" ]; then
+			echo "[$name] Stale (expected $version), removing"
+			rm -rf "$target"
+			rm -f "${target}.dep-version"
 		fi
 
 		# Download
@@ -168,6 +185,7 @@ for dep in data['dependencies']:
 				;;
 		esac
 
+		echo "$version" > "${target}.dep-version"
 		echo "[$name] Done"
 	done <<< "$dep_lines"
 
