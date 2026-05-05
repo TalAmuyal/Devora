@@ -67,6 +67,9 @@ Types of changes:
 
 ### Fixed
 
+- Crit plan-hook integration broken with crit v0.10.4: port detection failed because v0.10.4 changed its stderr format from `on port N` to `http://localhost:N`
+- Crit hook errors and window dismissals no longer silently auto-approve plan exits — the user is now prompted to confirm
+- `download-deps.sh` now tracks dependency versions via `.dep-version` marker files, preventing stale artifacts when versions are bumped in `3rd-party-deps.json`
 - Race condition in Judge's `save_unsupported_case` and `save_unhandled_request` — concurrent writes could corrupt the JSON files. Now uses `fcntl.flock` for exclusive locking
 - Fixed a missing comma in Judge's `git tag -l` approval rule
 

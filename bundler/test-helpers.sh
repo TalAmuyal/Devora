@@ -32,6 +32,18 @@ assert_exists() {
 	fi
 }
 
+assert_not_exists() {
+	local label="$1"
+	local path="$2"
+	if [ ! -e "$path" ]; then
+		PASS=$((PASS + 1))
+		echo "  ok: $label ($path)"
+	else
+		FAIL=$((FAIL + 1))
+		echo "  FAIL: $label — should not exist: $path"
+	fi
+}
+
 print_test_results() {
 	echo ""
 	echo "Results: $PASS passed, $FAIL failed"

@@ -97,5 +97,43 @@ assert_eq "deeply-nested file contents" \
 	"deep-content" \
 	"$(cat "$TARGET_DIR/target-dir/file.txt")"
 
+# ---- Test: extraction functions do not write version markers ----
+echo "test: extract_raw does not write a .dep-version marker"
+assert_not_exists "no .dep-version after extract_raw" "$TARGET_DIR/myraw.dep-version"
+
+echo "test: extract_tar_gz does not write a .dep-version marker"
+assert_not_exists "no .dep-version after extract_tar_gz (file)" "$TARGET_DIR/myapp.dep-version"
+assert_not_exists "no .dep-version after extract_tar_gz (directory)" "$TARGET_DIR/mydir.dep-version"
+
+# ---- Test: check_version helper ----
+echo "test: check_version returns 0 (skip) when target exists and marker matches"
+cv_dir=$(mktemp -d)
+echo "content" > "$cv_dir/artifact"
+echo "1.2.3" > "$cv_dir/artifact.dep-version"
+cv_rc=0
+check_version "$cv_dir/artifact" "1.2.3" || cv_rc=$?
+assert_eq "skip when version matches" "0" "$cv_rc"
+
+echo "test: check_version returns 1 when target exists but marker is missing"
+cv_dir2=$(mktemp -d)
+echo "content" > "$cv_dir2/artifact"
+cv_rc=0
+check_version "$cv_dir2/artifact" "1.2.3" || cv_rc=$?
+assert_eq "re-download when marker missing" "1" "$cv_rc"
+
+echo "test: check_version returns 1 when target exists but marker has wrong version"
+cv_dir3=$(mktemp -d)
+echo "content" > "$cv_dir3/artifact"
+echo "0.9.0" > "$cv_dir3/artifact.dep-version"
+cv_rc=0
+check_version "$cv_dir3/artifact" "1.2.3" || cv_rc=$?
+assert_eq "re-download when version stale" "1" "$cv_rc"
+
+echo "test: check_version returns 1 when target does not exist"
+cv_dir4=$(mktemp -d)
+cv_rc=0
+check_version "$cv_dir4/nonexistent" "1.2.3" || cv_rc=$?
+assert_eq "re-download when target missing" "1" "$cv_rc"
+
 # ---- Summary ----
 print_test_results
