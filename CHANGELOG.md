@@ -28,6 +28,7 @@ Types of changes:
 - `debi pr submit` auto-merge is now configurable via `pr.auto-merge` (bool, profile-overridable) in `config.json`; defaults to on when unset
 - New `--auto-merge` flag on `debi pr submit` to force-enable auto-merge for a single invocation, overriding the config
 - Per-repo override for `pr.auto-merge`, stored in git's local config (`devora.pr.auto-merge`) and shared across all linked worktrees of a clone. Precedence: per-repo > profile > global > built-in default (on)
+- `mise clean` task to remove build artifacts (`bin/` and `bundler/macos/3rd-party-apps/`)
 - New `debi pr auto-merge <enable|disable|reset|show> [--scope=repo|profile|global] [--json]` command to manage the default at any of the three scopes. `reset` is idempotent; `show` prints the resolved value plus each layer's contribution
 - A mise command to build and open dev Devora in one go
 - Dev builds set `macos_titlebar_color` to `#F5A97F` (Catppuccin Macchiato peach) so the dev `.app` titlebar is visually distinct from the release build
