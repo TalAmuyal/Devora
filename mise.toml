@@ -9,6 +9,13 @@ mise run -C project-status-line build
 """
 description = "Build all sub-projects (debi, cc-simple-statusline)"
 
+[tasks.clean]
+run = """
+set -e
+rm -rf bin/ bundler/macos/3rd-party-apps/
+"""
+description = "Clean build artifacts and downloaded dependencies"
+
 [tasks.build-dev-and-open]
 run = "./bundler/macos/bundle.sh --dev --open"
 description = "Build Devora.app in development mode and open it"

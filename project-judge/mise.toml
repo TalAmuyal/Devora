@@ -1,5 +1,5 @@
 [tools]
-uv = "latest"
+uv = "0.11.8"
 
 [tasks.classify]
 run = "./classify-cases.py"
