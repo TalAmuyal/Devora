@@ -16,6 +16,8 @@ Types of changes:
 
 ### Added
 
+- Judge audit log: every invocation (allow, deny, defer, error) is logged to `~/.claude/cc-judge-audit.jsonl` with full decision trail, structured reason keys, and timing data. Concurrency-safe via `O_APPEND`. Uncaught exceptions are captured with full tracebacks
+- `audit-stats.py` script (`mise stats` in project-judge) for querying audit log statistics with time, decision, and tool filters
 - `update-deps` script and mise task for automated third-party dependency updates (checks latest GitHub releases, updates JSON/checksums, refreshes artifacts)
 - `debi get-conf` command for reading config values from scripts
 - `review.open-mode` config key to control how crit review UI opens (tab, overlay, or browser)
@@ -64,6 +66,7 @@ Types of changes:
 
 ### Fixed
 
+- Race condition in Judge's `save_unsupported_case` and `save_unhandled_request` — concurrent writes could corrupt the JSON files. Now uses `fcntl.flock` for exclusive locking
 - Fixed a missing comma in Judge's `git tag -l` approval rule
 
 ### Removed

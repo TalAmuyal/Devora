@@ -13,6 +13,10 @@ description = "Redact sensitive information from test-cases"
 run = "./run-tests.py && uv run ./test_redact.py"
 description = "Run all tests"
 
+[tasks.stats]
+run = "./audit-stats.py"
+description = "Print audit log statistics"
+
 [tasks.submit]
 depends = ["test"]
 run = """
