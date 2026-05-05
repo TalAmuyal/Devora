@@ -42,6 +42,50 @@ Judge reasons about `Bash`, `Read`, and `WebFetch` permission requests. `Bash` c
 
 When Judge sees a request for any other tool type, it defers to the user and appends the raw request to `~/.claude/cc-judge-unhandled-requests.json`. This file is the source for adding support for new tool types.
 
+## Audit log
+
+Judge writes a JSONL audit log of every invocation to `~/.claude/cc-judge-audit.jsonl`. Every allow, deny, defer, and error is recorded.
+
+Each line is a JSON object with these fields:
+
+| Field | Description |
+|---|---|
+| `ts` | ISO 8601 timestamp (UTC) |
+| `pid` | Process ID |
+| `session_id` | Claude Code session identifier |
+| `agent_id` | Agent identifier (for sub-agents) |
+| `tool_name` | The tool being requested (`Bash`, `Read`, `WebFetch`, etc.) |
+| `tool_input` | Full tool input (command text, file path, URL, etc.) |
+| `cwd` | Session working directory |
+| `decision` | `allow`, `deny`, `defer`, or `error` |
+| `reason` | Structured reason key (e.g., `bash.all_commands_approved`, `bash.declined_command`) |
+| `trail` | List of decision breadcrumbs showing which checks ran and what matched |
+| `duration_us` | Processing time in microseconds |
+| `details` | (optional) Additional context like the specific command or detector that matched |
+
+Uses `O_APPEND` for atomic writes, so concurrent Judge invocations are safe.
+
+Audit writes are wrapped in try/except — logging failures never alter the permission decision. If Judge itself crashes (malformed input, uncaught exception), the error is logged with `decision=error` and a full traceback in the `details` field.
+
+Audit writes are suppressed when running with `--expected` (test mode).
+
+### Querying
+
+```sh
+# Recent entries
+tail -20 ~/.claude/cc-judge-audit.jsonl
+
+# All denials
+grep '"deny"' ~/.claude/cc-judge-audit.jsonl
+
+# Specific reason
+jq 'select(.reason=="bash.no_approved_detector")' < ~/.claude/cc-judge-audit.jsonl
+```
+
+### Stats
+
+`audit-stats.py` (or `mise stats`) prints summary statistics from the log. Accepts `--since`, `--decision`, `--tool`, `--verbose`, and `--log-file` flags.
+
 ## Testing
 
 An end-to-end test is done by running the script with known inputs and matching that to an expected result.
