@@ -11,11 +11,11 @@ Devora bundles and depends on the following third-party software and assets.
 - **Source:** https://github.com/kovidgoyal/kitty/tree/4483a6c110275d5603e48337ba533a322781efe2
 - **Full license text:** See `bundler/kitty-license.txt`
 
-### uv v0.11.8
+### uv v0.11.10
 
 - **License:** MIT AND Apache-2.0
 - **Author:** Astral
-- **Source:** https://github.com/astral-sh/uv/tree/0e961dd9a
+- **Source:** https://github.com/astral-sh/uv/tree/add376fd9
 - **Full license text:** See `bundler/uv-license.txt`
 
 ### glow v2.1.2
@@ -24,14 +24,14 @@ Devora bundles and depends on the following third-party software and assets.
 - **Author:** Charmbracelet
 - **Source:** https://github.com/charmbracelet/glow
 
-### glimpse-tty v2.0.9
+### glimpse-tty v2.1.0
 
 - **License:** BSD-3-Clause
 - **Authors:** Tal Amuyal, Chase Colman
 - **Source:** https://github.com/TalAmuyal/glimpse-tty
 - **Full license text:** See `bundler/glimpse-tty-license.txt`
 
-### crit v0.10.4
+### crit v0.10.5
 
 - **License:** MIT
 - **Author:** Tomasz Tomczyk
