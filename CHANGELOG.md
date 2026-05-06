@@ -14,6 +14,10 @@ Types of changes:
 
 ## Unreleased
 
+### Changed
+
+- Always show the Kitty tab bar, even with a single tab
+
 ## 2026-05-06.0
 
 ### Highlights
