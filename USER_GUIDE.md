@@ -122,7 +122,7 @@ Profile-specific settings (for the current profile) include:
 
 Info section:
 
-- **View Changelog**: Opens the full changelog in a new kitty tab using glow
+- **View Changelog**: Opens the full changelog in a new kitty tab
 
 #### Config File Settings
 

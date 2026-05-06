@@ -165,7 +165,6 @@ bundle "$BUNDLER_DIR/kitty-license.txt"               "$RESOURCES_DIR/."        
 bundle "$BUNDLER_DIR/uv-license.txt"                  "$RESOURCES_DIR/."                      overwrite
 bundle "$BUNDLER_DIR/glimpse-tty-license.txt"         "$RESOURCES_DIR/."                      overwrite
 bundle "$THIRD_PARTY_APPS_DIR/uv"                     "$RESOURCES_DIR/uv"                     check
-bundle "$THIRD_PARTY_APPS_DIR/glow"                   "$BUNDLED_APPS_DIR/glow"                check
 bundle "$THIRD_PARTY_APPS_DIR/glimpse-tty"            "$RESOURCES_DIR/glimpse-tty"            check
 bundle "$REPO_ROOT/kitty-configs"                     "$RESOURCES_DIR/."                      overwrite
 bundle "$SCRIPT_DIR/bootstrap.sh"                     "$ROOT_EXEC_DIR/."                      overwrite

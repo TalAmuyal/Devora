@@ -18,12 +18,6 @@ Devora bundles and depends on the following third-party software and assets.
 - **Source:** https://github.com/astral-sh/uv/tree/add376fd9
 - **Full license text:** See `bundler/uv-license.txt`
 
-### glow v2.1.2
-
-- **License:** MIT
-- **Author:** Charmbracelet
-- **Source:** https://github.com/charmbracelet/glow
-
 ### glimpse-tty v2.1.0
 
 - **License:** BSD-3-Clause

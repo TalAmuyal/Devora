@@ -190,7 +190,6 @@ var dependencies = []Dependency{
 	{Name: "claude", Required: true, VersionCommand: []string{"claude", "--version"}},
 	{Name: "git", Required: true, VersionCommand: []string{"git", "--version"}},
 	{Name: "uv", Required: true, VersionCommand: []string{"uv", "--version"}},
-	{Name: "glow", Required: true, VersionCommand: []string{"glow", "--version"}},
 	{Name: "zsh", Required: true, VersionCommand: []string{"zsh", "--version"}},
 	{Name: "nvim", Required: false, VersionCommand: []string{"nvim", "--version"}},
 	{Name: "mise", Required: false, VersionCommand: []string{"mise", "--version"}},

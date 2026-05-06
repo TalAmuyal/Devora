@@ -107,7 +107,6 @@ jobs:
           # Verify binaries are arm64
           file bin/macOS/Devora/Devora.app/Contents/Resources/bundled-apps/debi | grep -q "arm64"
           file bin/macOS/Devora/Devora.app/Contents/Resources/uv | grep -q "arm64"
-          file bin/macOS/Devora/Devora.app/Contents/Resources/bundled-apps/glow | grep -q "arm64"
 
           # Validate Info.plist
           plutil -lint bin/macOS/Devora/Devora.app/Contents/Info.plist

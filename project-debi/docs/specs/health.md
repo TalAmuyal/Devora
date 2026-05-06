@@ -83,7 +83,7 @@ The result of checking a single credential. `Name` is the service name (e.g., "G
 
 ## Dependency List
 
-Six required and three optional dependencies:
+Required and optional dependencies:
 
 | Name | Required | Version Command |
 |------|----------|-----------------|
@@ -91,7 +91,6 @@ Six required and three optional dependencies:
 | `claude` | yes | `claude --version` |
 | `git` | yes | `git --version` |
 | `uv` | yes | `uv --version` |
-| `glow` | yes | `glow --version` |
 | `zsh` | yes | `zsh --version` |
 | `nvim` | no | `nvim --version` |
 | `mise` | no | `mise --version` |
@@ -158,7 +157,7 @@ Credentials:
   ✓ GitHub        Logged in as Jane Doe
   ○ task-tracker  not configured (optional)
 
-Required met:    100% (6/6)
+Required met:    100% (5/5)
 Optional met:    100% (3/3)
 Credentials met: 100% (1/1)
 ```
@@ -215,7 +214,7 @@ Tests can replace `lookPath` and `getVersion` to simulate dependency presence/ab
 
 ## Testing
 
-- Test `cleanVersion` with various real-world version strings (kitty, claude, git, uv, glow, zsh, nvim, mise) and edge cases (empty, no match).
+- Test `cleanVersion` with various real-world version strings (kitty, claude, git, uv, zsh, nvim, mise) and edge cases (empty, no match).
 - Test `shortenPath` with paths under `$HOME`, paths outside `$HOME`, and empty string.
 - Test `Check` with a dependency that is found (mock `lookPath` to return a path and `getVersion` to return version output); verify version is cleaned.
 - Test `Check` with a dependency that is not found (mock `lookPath` to return an error).
