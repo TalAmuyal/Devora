@@ -16,7 +16,12 @@ Types of changes:
 
 ### Changed
 
+- User Guide tab (F1) and View Changelog now use `glimpse-tty` instead of `glow` for rendering
 - Always show the Kitty tab bar, even with a single tab
+
+### Removed
+
+- Removed `glow` as a bundled dependency (replaced by `glimpse-tty`)
 
 ## 2026-05-06.0
 

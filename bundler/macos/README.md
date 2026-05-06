@@ -44,11 +44,9 @@ Devora/                           (DMG root)
          │  ├─ crit                   (wrapper, forwards to original-crit with overlay behavior)
          │  ├─ debi
          │  ├─ glimpse-tty           (launcher shim, forwards to ../glimpse-tty/glimpse-tty)
-         │  ├─ glow
          │  └─ original-crit
          ├─ kitty-configs/
          │  ├─ current-theme.conf
-         │  ├─ glow-theme.json
          │  └─ kitty.conf
          ├─ crit-license.txt
          ├─ kitty-license.txt

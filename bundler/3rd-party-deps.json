@@ -26,17 +26,6 @@
       "extract_path": "uv"
     },
     {
-      "name": "glow",
-      "version": "2.1.2",
-      "license": "MIT",
-      "source_repo": "https://github.com/charmbracelet/glow",
-      "tag": "v2.1.2",
-      "download_url": "https://github.com/charmbracelet/glow/releases/download/v2.1.2/glow_2.1.2_Darwin_arm64.tar.gz",
-      "sha256": "6f7abfb47de69fbf7b0e67d2fa019cc554916e8b6694f9877212be89fc7ebb8c",
-      "archive_type": "tar.gz",
-      "extract_path": "glow"
-    },
-    {
       "name": "glimpse-tty",
       "version": "2.1.0",
       "license": "BSD-3-Clause",

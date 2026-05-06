@@ -24,7 +24,6 @@ macOS (Apple Silicon) only.
 
 - [Crit](https://github.com/tomasz-tomczyk/crit) -- AI code review tool with inline comments
 - [glimpse-tty](https://github.com/TalAmuyal/glimpse-tty) -- terminal web viewer based on awrit
-- [glow](https://github.com/charmbracelet/glow) -- terminal-based Markdown renderer
 - [Kitty](https://sw.kovidgoyal.net/kitty/) -- terminal emulator used as the main UI container
 - [uv](https://docs.astral.sh/uv/) -- Python package manager
 

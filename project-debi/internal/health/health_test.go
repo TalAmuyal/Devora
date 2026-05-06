@@ -55,7 +55,6 @@ func TestCleanVersion(t *testing.T) {
 		{"2.1.89 (Claude Code)", "2.1.89"},
 		{"git version 2.50.1 (Apple Git-155)", "2.50.1"},
 		{"uv 0.11.2 (Homebrew 2026-03-26 aarch64-apple-darwin)", "0.11.2"},
-		{"glow version 2.1.1 (d37e988)", "2.1.1"},
 		{"zsh 5.9 (arm64-apple-darwin25.0)", "5.9"},
 		{"NVIM v0.12.0", "0.12.0"},
 		{"2026.3.17 macos-arm64 (2026-03-27)", "2026.3.17"},
@@ -367,7 +366,7 @@ func TestRun_AllFound(t *testing.T) {
 	if !strings.Contains(output, "Optional:") {
 		t.Fatal("expected output to contain 'Optional:' header")
 	}
-	if !strings.Contains(output, "Required met:") || !strings.Contains(output, "(6/6)") {
+	if !strings.Contains(output, "Required met:") || !strings.Contains(output, "(5/5)") {
 		t.Fatalf("expected required summary line with count, got:\n%s", output)
 	}
 	if !strings.Contains(output, "Optional met:") || !strings.Contains(output, "(3/3)") {

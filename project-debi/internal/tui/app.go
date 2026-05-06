@@ -480,22 +480,12 @@ func (m AppModel) openChangelogCmd() tea.Cmd {
 		if resourcesDir == "" {
 			return notifyMsg{text: "Changelog not available outside the app bundle", isError: true}
 		}
-		configDir := os.Getenv("KITTY_CONFIG_DIRECTORY")
-		if configDir == "" {
-			return notifyMsg{text: "Kitty config directory not set", isError: true}
-		}
 		changelogPath := filepath.Join(resourcesDir, "CHANGELOG.md")
-		glowStylePath := filepath.Join(configDir, "glow-theme.json")
-		shell := os.Getenv("SHELL")
-		if shell == "" {
-			shell = "/bin/sh"
-		}
 		_, err := process.GetOutput([]string{
 			"kitty", "@", "launch",
 			"--type=tab",
 			"--tab-title", "Changelog",
-			shell, "-l", "-i",
-			"-c", fmt.Sprintf("glow --style %s --pager %s", glowStylePath, changelogPath),
+			"glimpse-tty", changelogPath,
 		})
 		if err != nil {
 			return notifyMsg{text: fmt.Sprintf("Failed to open changelog: %v", err), isError: true}

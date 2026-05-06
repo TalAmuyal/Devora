@@ -32,7 +32,7 @@ The pipeline has two jobs:
 5. **Build DMG** via `./bundler/macos/bundle.sh --dmg`. This compiles Debi, Status-line, bundles all resources, and creates a compressed DMG.
 6. **Smoke test** -- verifies that:
    - The DMG file was created
-   - Bundled binaries (`debi`, `uv`, `glow`) are arm64
+   - Bundled binaries (`debi`, `uv`) are arm64
    - `Info.plist` is valid XML
    - The version in `Info.plist` was patched (not the placeholder `1.0`)
 7. **Publish release** (see [Release types](#release-types)).
