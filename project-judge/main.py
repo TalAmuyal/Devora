@@ -33,6 +33,7 @@ from datetime import datetime, timezone
 UNSUPPORTED_CASES_FILE = pathlib.Path.home() / ".claude" / "cc-judge-unsupported-cases.json"
 UNHANDLED_REQUESTS_FILE = pathlib.Path.home() / ".claude" / "cc-judge-unhandled-requests.json"
 AUDIT_LOG_FILE = pathlib.Path.home() / ".claude" / "cc-judge-audit.jsonl"
+ABSTAIN_TOOL_NAMES: set[str] = {"AskUserQuestion", "Edit"}
 
 
 Command = list[str]
@@ -326,6 +327,9 @@ def main(args: dict, expected: str | None) -> None:
     tool_name: str = args.get("tool_name")
     tool_input: dict = args.get("tool_input", {})
 
+    if tool_name in ABSTAIN_TOOL_NAMES:
+        abstain_and_exit()
+
     if tool_name == "WebFetch":
         _trail.append("tool_type=WebFetch")
         url = tool_input.get("url", "")
@@ -602,6 +606,10 @@ def deny_and_exit(error_message: str, reason: str, details: dict | None = None):
 def direct_to_user_and_exit(reason: str, details: dict | None = None):
     _write_audit_entry("defer", reason, details)
     sys.exit(1)
+
+
+def abstain_and_exit():
+    sys.exit(0)
 
 
 if __name__ == "__main__":

@@ -38,7 +38,7 @@ When it encounters a situation that it doesn't know how to handle, it saves it a
 
 Judge reasons about `Bash`, `Read`, and `WebFetch` permission requests. `Bash` commands are matched against a set of known-safe and known-disallowed patterns. `Read` requests auto-allow access to crit plan and review files (`~/.crit/plans/`, `~/.crit/reviews/`). `WebFetch` requests block `file://` URLs (directing to use the `Read` tool instead) and defer `http(s)://` URLs to the user.
 
-`ExitPlanMode` permission requests are passed through without intervention to support crit's plan-exit integration.
+`ExitPlanMode` permission requests are excluded at the matcher level to support crit's plan-exit integration. `AskUserQuestion` and `Edit` permission requests are silently abstained (Judge exits without a decision, deferring to Claude Code's normal permission flow).
 
 When Judge sees a request for any other tool type, it defers to the user and appends the raw request to `~/.claude/cc-judge-unhandled-requests.json`. This file is the source for adding support for new tool types.
 
