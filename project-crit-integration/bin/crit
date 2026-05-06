@@ -113,10 +113,10 @@ done
 
 case "$OPEN_MODE" in
   overlay)
-    WINDOW_ID=$(kitty @ launch --type=overlay-main glimpse-tty "http://localhost:$PORT")
+    WINDOW_ID=$(kitty @ launch --type=overlay-main glimpse-tty --ctrl-c-copy "http://localhost:$PORT")
     ;;
   *)
-    WINDOW_ID=$(kitty @ launch --type=tab --tab-title "[Crit]" glimpse-tty "http://localhost:$PORT")
+    WINDOW_ID=$(kitty @ launch --type=tab --tab-title "[Crit]" glimpse-tty --ctrl-c-copy "http://localhost:$PORT")
     ;;
 esac
 

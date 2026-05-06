@@ -14,6 +14,10 @@ Types of changes:
 
 ## Unreleased
 
+### Changed
+
+- Crit viewer now passes `--ctrl-c-copy` to `glimpse-tty`, enabling Ctrl+C text copying in both overlay and tab modes
+
 ### Added
 
 - Judge audit log: every invocation (allow, deny, defer, error) is logged to `~/.claude/cc-judge-audit.jsonl` with full decision trail, structured reason keys, and timing data. Concurrency-safe via `O_APPEND`. Uncaught exceptions are captured with full tracebacks
