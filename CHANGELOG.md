@@ -44,6 +44,7 @@ Types of changes:
 
 ### Changed
 
+- Judge now abstains on `AskUserQuestion` and `Edit` permission requests (exits without a decision, deferring to Claude Code's normal permission flow)
 - Updated crit to v0.10.4
 - DMG filename simplified from `Devora_<version>.dmg` to `Devora.dmg` (the version is still embedded inside the app bundle's `Contents/Resources/VERSION` file)
 - Consolidated Catppuccin Mocha palette into a single internal/style package; eliminates duplicated hex literals across the TUI fallback theme, pr check, pr submit, pr close, gst, gcl, and health
