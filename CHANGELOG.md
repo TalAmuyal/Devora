@@ -14,73 +14,55 @@ Types of changes:
 
 ## Unreleased
 
-### Changed
+## 2026-05-06.0
 
-- Crit viewer now passes `--ctrl-c-copy` to `glimpse-tty`, enabling Ctrl+C text copying in both overlay and tab modes
+### Highlights
+
+#### Crit integration
+
+[Crit](https://crit.md/) is an app that provides a GitHub-like code review experience for Claude's plan, as well as local changes.
+Most of the changes in this release are related to the Crit integration.
+
+- Crit and glimpse-tty are now bundled as vendored dependencies
+- Added `review.open-mode` config key to control how Crit review UI opens (tab, overlay, or browser)
+	- Defaults to `tab`
+
+#### `cmd+shift`-based Vim-style key-bindings
+
+- Kitty split panes: `cmd+shift+\` (pipe - vertical split) and `cmd+shift+-` (dash horizontal)
+	- New panes inherit the active pane's working directory
+- `cmd+shift+h/j/k/l` moves focus
+- `cmd+shift+w` closes a pane
 
 ### Added
 
-- Judge audit log: every invocation (allow, deny, defer, error) is logged to `~/.claude/cc-judge-audit.jsonl` with full decision trail, structured reason keys, and timing data. Concurrency-safe via `O_APPEND`. Uncaught exceptions are captured with full tracebacks
-- `audit-stats.py` script (`mise stats` in project-judge) for querying audit log statistics with time, decision, and tool filters
-- `update-deps` script and mise task for automated third-party dependency updates (checks latest GitHub releases, updates JSON/checksums, refreshes artifacts)
+- One-line `install.sh` installer: downloads the latest release, replaces any existing app, clears macOS quarantine, and installs shell completion
+	- Pass `--nightly` for nightly builds
+- `debi pr auto-merge` command and `pr.auto-merge` config key for controlling PR auto-merge at repo, profile, or global scope
+	- `--auto-merge` and `-b`/`--blocked` flags on `debi pr submit` override for a single invocation
+- `debi util yaml-validate` and `debi util toml-validate` validation commands
 - `debi get-conf` command for reading config values from scripts
-- `review.open-mode` config key to control how crit review UI opens (tab, overlay, or browser)
-- Crit is now bundled as a vendored dependency (binary + Claude Code plugin)
-- Catppuccin attribution in THIRD_PARTY_LICENSES.md
-- `debi util yaml-validate <file|->` validates YAML files (multi-document streams supported, empty input rejected)
-- `debi util toml-validate <file|->` validates TOML files (empty input rejected; comment-only files are valid)
-- `debi pr submit` auto-merge is now configurable via `pr.auto-merge` (bool, profile-overridable) in `config.json`; defaults to on when unset
-- New `--auto-merge` flag on `debi pr submit` to force-enable auto-merge for a single invocation, overriding the config
-- Per-repo override for `pr.auto-merge`, stored in git's local config (`devora.pr.auto-merge`) and shared across all linked worktrees of a clone. Precedence: per-repo > profile > global > built-in default (on)
-- `mise clean` task to remove build artifacts (`bin/` and `bundler/macos/3rd-party-apps/`)
-- New `debi pr auto-merge <enable|disable|reset|show> [--scope=repo|profile|global] [--json]` command to manage the default at any of the three scopes. `reset` is idempotent; `show` prints the resolved value plus each layer's contribution
-- A mise command to build and open dev Devora in one go
-- Dev builds set `macos_titlebar_color` to `#F5A97F` (Catppuccin Macchiato peach) so the dev `.app` titlebar is visually distinct from the release build
-- Vim-style Kitty split panes: `cmd+shift+\` (vertical split, new shell to the right) and `cmd+shift+-` (horizontal split, new shell below); `cmd+shift+h/j/k/l` moves focus between panes, `cmd+shift+w` closes the focused pane; new panes inherit the active pane's working directory
-- One-line `install.sh` installer: `curl -fsSL .../install.sh | bash` downloads the latest release DMG, replaces any existing `/Applications/Devora.app`, clears macOS quarantine, and installs the `debi` zsh completion. Pass `--nightly` to install the latest nightly build instead of the latest stable release
-- Judge records permission requests for non-Bash tool types to `~/.claude/cc-judge-unhandled-requests.json` (separate from the existing Bash unsupported-cases file), so we can inspect real payloads and add support
-- Judge now handles `WebFetch` permission requests: blocks `file://` URLs (directing to use the `Read` tool instead), defers `http(s)://` URLs to the user
-- Judge now strips `timeout <duration>` prefix from commands before matching
-- Judge now auto-approves `command -v`, `bash -n` (syntax checking), and `source .venv/bin/activate` commands
-- glimpse-tty is now bundled as a vendored dependency (terminal web viewer binary)
-- Judge now auto-allows reading crit plan and review files (`~/.crit/plans/`, `~/.crit/reviews/`)
-- Bundler test suite and `test-bundler` mise task
+- Judge audit log: every decision is logged to `~/.claude/cc-judge-audit.jsonl` with decision trail and timing data
+	- Queryable via `mise stats` in project-judge (not currently bundled with Devora, but available in the repo)
 
 ### Changed
 
-- Judge now abstains on `AskUserQuestion` and `Edit` permission requests (exits without a decision, deferring to Claude Code's normal permission flow)
-- Updated crit to v0.10.4
-- DMG filename simplified from `Devora_<version>.dmg` to `Devora.dmg` (the version is still embedded inside the app bundle's `Contents/Resources/VERSION` file)
-- Consolidated Catppuccin Mocha palette into a single internal/style package; eliminates duplicated hex literals across the TUI fallback theme, pr check, pr submit, pr close, gst, gcl, and health
-- New workspace-level functionality:
-	- When run at the root of a workspace (instead of in a repo), `debi gst` and `debi gcl` now operate on all repos in the workspace in parallel instead of failing
-	- `debi gst` now prints a per-repo summary (branch, file counts, commits behind origin/<default>, PR status)
-	- `debi gcl` now applies `debi gcl` on every repo in the workspace (after verifying they are clean and detached)
-- `-b, --blocked` on `debi pr submit` is now also a per-invocation override of the new `pr.auto-merge` config (behavior unchanged when the config is unset)
-- Scheduled nightly builds are skipped when `master` has not advanced since the previous nightly
-- `mise mac-install` now automatically runs `download-deps` first, so third-party bundler dependencies are fetched on demand
-- Bootstrap and Kitty tab launchers now honor `$SHELL` (falling back to `/bin/zsh`) instead of hardcoding `zsh`
-- User Guide tab (F1) launches `glow` directly instead of wrapping it in a login/interactive shell (faster startup)
-- Main page tab and shell tab titles are now bracketed (`[Devora]`, `[Shell]`)
-- Titlebar color is now `#181926` (Catppuccin Macchiato crust) instead of the system default, for a consistent look across macOS themes
-- Judge now treats `time` and `watch` as irrelevant prefixes (stripped before matching), and recognizes `NODE_PATH=.` as a harmless env-var prefix
-- Judge's Claude Code hook now matches all permission requests instead of only `Bash`, so non-Bash requests can be inspected and supported incrementally
-- Judge now declines `node`, `bun`, and `shellcheck` commands (directing to use mise tasks)
-- Judge now escalates non-syntax-checking `bash` invocations to the user instead of silently blocking them
-- Claude Code now starts in plan mode by default (via `--permission-mode plan` in `ccc.sh`)
-- Judge no longer intercepts `ExitPlanMode` permission requests (required for crit plan-exit integration)
-- Updated 3rd-party dependencies:
-	- UV v0.11.8 -> v0.11.10
-	- Crit v0.10.4 -> v0.10.5
-	- Glimpse-tty v2.0.9 -> v2.1.0
+- Workspace-level `debi gst` and `debi gcl`: when run at the workspace root, both commands now operate on all repos in parallel; `debi gst` prints per-repo summaries (branch, file counts, commits behind origin, PR status)
+- Judge expanded coverage:
+	- Auto-approves more safe commands (`command -v`, `bash -n`, `source .venv/bin/activate`, crit file reads)
+	- Strips `timeout`/`time`/`watch` prefixes
+	- Declines `node`/`bun`/`shellcheck` (directing to mise tasks)
+- Claude Code now starts in plan mode by default (part of the Crit integration)
+- Titlebar color is now `#181926` (Catppuccin Macchiato crust) for a consistent look across macOS themes
+- Tab titles for Devora pages are now bracketed (`[Devora]`, `[Shell]`, `[Crit]`)
+- Bootstrap and Kitty tab launchers now honor `$SHELL` instead of hardcoding `zsh`
+- User Guide tab (F1) launches `glow` directly for faster startup
+- Updated 3rd-party dependencies: UV v0.11.8→v0.11.10
 
 ### Fixed
 
-- Crit plan-hook integration broken with crit v0.10.4: port detection failed because v0.10.4 changed its stderr format from `on port N` to `http://localhost:N`
-- Crit hook errors and window dismissals no longer silently auto-approve plan exits — the user is now prompted to confirm
-- `download-deps.sh` now tracks dependency versions via `.dep-version` marker files, preventing stale artifacts when versions are bumped in `3rd-party-deps.json`
-- Race condition in Judge's `save_unsupported_case` and `save_unhandled_request` — concurrent writes could corrupt the JSON files. Now uses `fcntl.flock` for exclusive locking
-- Fixed a missing comma in Judge's `git tag -l` approval rule
+- Race condition in Judge's JSON file writes — concurrent writes could corrupt data
+- Missing comma in Judge's `git tag -l` approval rule
 
 ### Removed
 
