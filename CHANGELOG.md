@@ -65,6 +65,10 @@ Types of changes:
 - Judge now escalates non-syntax-checking `bash` invocations to the user instead of silently blocking them
 - Claude Code now starts in plan mode by default (via `--permission-mode plan` in `ccc.sh`)
 - Judge no longer intercepts `ExitPlanMode` permission requests (required for crit plan-exit integration)
+- Updated 3rd-party dependencies:
+	- UV v0.11.8 -> v0.11.10
+	- Crit v0.10.4 -> v0.10.5
+	- Glimpse-tty v2.0.9 -> v2.1.0
 
 ### Fixed
 
