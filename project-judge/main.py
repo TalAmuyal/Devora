@@ -272,22 +272,31 @@ class Detectors:
     ]
 
 
+_DANGEROUS_ENV_VARS = {
+    "PATH",
+    "LD_PRELOAD",
+    "LD_LIBRARY_PATH",
+    "DYLD_INSERT_LIBRARIES",
+    "DYLD_LIBRARY_PATH",
+    "DYLD_FRAMEWORK_PATH",
+    "BASH_ENV",
+    "ENV",
+    "NODE_OPTIONS",
+    "PYTHONSTARTUP",
+    "GIT_EXEC_PATH",
+    "GIT_SSH_COMMAND",
+    "GIT_TEMPLATE_DIR",
+    "EDITOR",
+    "VISUAL",
+    "PAGER",
+}
+
 IRRELEVANT_PREFIXES = {
     # Redirects to another command
     "xargs",
     "do",
     "time",
     "watch",
-    #
-    # A harmless env-vars
-    "MISE_VERBOSE=1",
-    "MISE_PREPARE=false",
-    'MISE_PREPARE="false"',
-    "MISE_PREPARE='false'",
-    "MISE_PREPARE_SKIP=1",
-    "MISE_PREPARE_SKIP=0",
-    "PYTHONPATH=.",
-    "NODE_PATH=.",
 }
 
 
@@ -295,6 +304,13 @@ def _debug_mismatch(expected: str | None, actual: str, reason: str) -> None:
     if expected is None or expected == actual:
         return
     print(f"MISMATCH: expected {expected}, got {actual}: {reason}", file=sys.stderr)
+
+
+def _is_env_var_prefix(token: str) -> bool:
+    if "=" not in token:
+        return False
+    name = token.split("=", 1)[0]
+    return name.isidentifier() and name not in _DANGEROUS_ENV_VARS
 
 
 def remove_irrelevant_parts(command: Command) -> None:
@@ -314,6 +330,9 @@ def remove_irrelevant_parts(command: Command) -> None:
             command.pop(0)  # Remove the duration
             remove_irrelevant_parts(command)
     elif command and command[0] in IRRELEVANT_PREFIXES:
+        command.pop(0)
+        remove_irrelevant_parts(command)
+    elif command and _is_env_var_prefix(command[0]):
         command.pop(0)
         remove_irrelevant_parts(command)
 
@@ -384,6 +403,9 @@ def main(args: dict, expected: str | None) -> None:
 
     for i, cmd in enumerate(commands):
         remove_irrelevant_parts(cmd)
+
+        if not cmd:
+            continue
 
         if (
             cmd[0] == "git"

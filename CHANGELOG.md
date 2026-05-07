@@ -18,6 +18,11 @@ Types of changes:
 
 - User Guide tab (F1) and View Changelog now use `glimpse-tty` instead of `glow` for rendering
 - Always show the Kitty tab bar, even with a single tab
+- Judge now recognizes any env-var prefix (`NAME=VALUE`) generically instead of requiring hardcoded entries
+
+### Fixed
+
+- Judge no longer crashes on commands where all tokens are env-var assignments, which previously bypassed permission checks
 
 ### Removed
 
