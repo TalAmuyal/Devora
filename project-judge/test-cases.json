@@ -75,24 +75,6 @@
         {
             "cwd": "/home/user/project-21A32/file-DF9F8.nvim",
             "tool_input": {
-                "command": "./tests/run_e2e.sh 2>&1"
-            }
-        },
-        "deferred"
-    ],
-    [
-        {
-            "cwd": "/home/user/project-21A32/file-DF9F8.nvim",
-            "tool_input": {
-                "command": "eval \"$(mise activate bash)\" && busted 2>&1"
-            }
-        },
-        "declined"
-    ],
-    [
-        {
-            "cwd": "/home/user/project-21A32/file-DF9F8.nvim",
-            "tool_input": {
                 "command": "eval \"$(mise activate bash)\" && busted 2>&1 && echo \"---\" && ./tests/run_e2e.sh 2>&1"
             }
         },
@@ -106,15 +88,6 @@
             }
         },
         "approved"
-    ],
-    [
-        {
-            "cwd": "/home/user/project-21A32/file-DF9F8.nvim",
-            "tool_input": {
-                "command": "eval \"$(mise activate bash)\" && busted 2>&1"
-            }
-        },
-        "declined"
     ],
     [
         {
@@ -166,24 +139,6 @@
             "cwd": "/home/user/.local/project-F80BB",
             "tool_input": {
                 "command": "cd /home/user/.local/project-F80BB && git diff --stat -- tools/project-F9644/"
-            }
-        },
-        "approved"
-    ],
-    [
-        {
-            "cwd": "/home/user/project-EF260/project-82185",
-            "tool_input": {
-                "command": "find /home/user/project-EF260/project-82185 -name \"*.json\" -not -path \"*/.venv/*\" -not -path \"*/.pants.d/*\" -not -path \"*/__pycache__/*\" | xargs grep -l '\"panels\"\\|\"__inputs\"\\|\"schemaVersion\"' 2>/dev/null | sort"
-            }
-        },
-        "approved"
-    ],
-    [
-        {
-            "cwd": "/home/user/project-21A32/project-85C86",
-            "tool_input": {
-                "command": "python -c \"\nfor i in range(5):\n    if i % 2 == 0:\n        print(f'{i} is even')\n    else:\n        print(f'{i} is odd')\n\""
             }
         },
         "approved"
@@ -460,6 +415,78 @@
             "cwd": "/home/user/project-69E7F/project-6E8D7/project-8B386/project-EEF54",
             "tool_input": {
                 "command": "git -C /home/user/project-69E7F/project-6E8D7/project-8B386/project-EEF54 add src/_test_lint_violation.ts 2>&1"
+            }
+        },
+        "deferred"
+    ],
+    [
+        {
+            "cwd": "/home/user/project-TEST1",
+            "tool_input": {
+                "command": "DEBUG=1 make test"
+            }
+        },
+        "approved"
+    ],
+    [
+        {
+            "cwd": "/home/user/project-TEST1",
+            "tool_input": {
+                "command": "A=1 B=2 make"
+            }
+        },
+        "approved"
+    ],
+    [
+        {
+            "cwd": "/home/user/project-TEST1",
+            "tool_input": {
+                "command": "FOO=bar npm install"
+            }
+        },
+        "declined"
+    ],
+    [
+        {
+            "cwd": "/home/user/project-TEST1",
+            "tool_input": {
+                "command": "GOFLAGS=-count=1 make"
+            }
+        },
+        "approved"
+    ],
+    [
+        {
+            "cwd": "/home/user/project-TEST1",
+            "tool_input": {
+                "command": "FOO= make"
+            }
+        },
+        "approved"
+    ],
+    [
+        {
+            "cwd": "/home/user/project-TEST1",
+            "tool_input": {
+                "command": "PATH=/evil ls"
+            }
+        },
+        "deferred"
+    ],
+    [
+        {
+            "cwd": "/home/user/project-TEST1",
+            "tool_input": {
+                "command": "LD_PRELOAD=/evil.so git diff"
+            }
+        },
+        "deferred"
+    ],
+    [
+        {
+            "cwd": "/home/user/project-TEST1",
+            "tool_input": {
+                "command": "NODE_OPTIONS=--require=/evil.js make"
             }
         },
         "deferred"
