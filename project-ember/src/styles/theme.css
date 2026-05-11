@@ -1,0 +1,106 @@
+:root {
+  /* Catppuccin Macchiato — Base palette */
+  --color-rosewater:  #F4DBD6;
+  --color-flamingo:   #F0C6C6;
+  --color-pink:       #F5BDE6;
+  --color-mauve:      #C6A0F6;
+  --color-red:        #ED8796;
+  --color-maroon:     #EE99A0;
+  --color-peach:      #F5A97F;
+  --color-yellow:     #EED49F;
+  --color-green:      #A6DA95;
+  --color-teal:       #8BD5CA;
+  --color-sky:        #91D7E3;
+  --color-sapphire:   #7DC4E4;
+  --color-blue:       #8AADF4;
+  --color-lavender:   #B7BDF8;
+
+  /* Catppuccin Macchiato — Surface palette */
+  --color-crust:      #181926;
+  --color-mantle:     #1E2030;
+  --color-base:       #24273A;
+  --color-surface0:   #363A4F;
+  --color-surface1:   #494D64;
+  --color-surface2:   #5B6078;
+  --color-overlay0:   #6E738D;
+  --color-overlay1:   #8087A2;
+  --color-overlay2:   #939AB7;
+  --color-subtext0:   #A5ADCB;
+  --color-subtext1:   #B8C0E0;
+  --color-text:       #CAD3F5;
+
+  /* Semantic aliases — UI elements */
+  --color-bg:                var(--color-base);
+  --color-bg-secondary:      var(--color-mantle);
+  --color-bg-overlay:        var(--color-surface0);
+  --color-fg:                var(--color-text);
+  --color-fg-secondary:      var(--color-subtext0);
+  --color-accent:            var(--color-mauve);
+  --color-border:            var(--color-surface1);
+  --color-border-active:     var(--color-lavender);
+
+  /* Tab bar */
+  --color-tab-bar-bg:        var(--color-crust);
+  --color-tab-active-bg:     var(--color-mauve);
+  --color-tab-active-fg:     var(--color-crust);
+  --color-tab-inactive-bg:   var(--color-mantle);
+  --color-tab-inactive-fg:   var(--color-text);
+  --color-tab-hover-bg:      var(--color-surface0);
+
+  /* Terminal */
+  --color-terminal-bg:       var(--color-base);
+  --color-terminal-fg:       var(--color-text);
+  --color-terminal-cursor:   var(--color-rosewater);
+  --color-terminal-selection-bg:  var(--color-rosewater);
+  --color-terminal-selection-fg:  var(--color-base);
+
+  /* Terminal ANSI colors (color0-15) */
+  --color-ansi-black:          #494D64;
+  --color-ansi-red:            #ED8796;
+  --color-ansi-green:          #A6DA95;
+  --color-ansi-yellow:         #EED49F;
+  --color-ansi-blue:           #8AADF4;
+  --color-ansi-magenta:        #F5BDE6;
+  --color-ansi-cyan:           #8BD5CA;
+  --color-ansi-white:          #B8C0E0;
+  --color-ansi-bright-black:   #5B6078;
+  --color-ansi-bright-red:     #ED8796;
+  --color-ansi-bright-green:   #A6DA95;
+  --color-ansi-bright-yellow:  #EED49F;
+  --color-ansi-bright-blue:    #8AADF4;
+  --color-ansi-bright-magenta: #F5BDE6;
+  --color-ansi-bright-cyan:    #8BD5CA;
+  --color-ansi-bright-white:   #A5ADCB;
+
+  /* Workspace status badges */
+  --color-status-clean:    var(--color-green);
+  --color-status-modified: var(--color-yellow);
+  --color-status-error:    var(--color-red);
+  --color-status-info:     var(--color-blue);
+
+  /* Typography */
+  --font-mono:     'JetBrains Mono', 'Fira Code', 'SF Mono', 'Menlo', monospace;
+  --font-ui:       -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --font-size-sm:  0.8rem;
+  --font-size-md:  0.933rem;
+  --font-size-lg:  1.067rem;
+
+  /* Spacing — scales with root font-size */
+  --space-xs:  0.267rem;
+  --space-sm:  0.533rem;
+  --space-md:  0.8rem;
+  --space-lg:  1.067rem;
+  --space-xl:  1.6rem;
+
+  /* Tab bar dimensions */
+  --tab-bar-height: 2.4rem;
+  --tab-border-radius: 0.4rem;
+
+  /* Focus */
+  --color-focus-ring: var(--color-lavender);
+
+  /* Heading typography (for overlay content) */
+  --font-size-h1: 1.867rem;
+  --font-size-h2: 1.467rem;
+  --font-size-h3: 1.333rem;
+}

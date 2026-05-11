@@ -14,6 +14,24 @@ Types of changes:
 
 ## Unreleased
 
+### Added
+
+- **Devora Ember** (experimental): a new variant of Devora that replaces Kitty and Glimpse-TTY with Tauri and xterm.js
+  - Native desktop app built with Tauri (Rust + WebView) and xterm.js terminal emulator
+  - Web-based workspace management panel with hybrid cards (compact, expand on hover), keyboard navigation (j/k, Enter, f to filter, 1/2/3 for active/inactive/all), and workspace creation
+  - Overlay system: tab-covering overlays (workspace panel, User Guide) and panel overlays (Crit review UI tied to session tabs)
+  - Session tabs with tab bar at the bottom, PTY-backed terminals, auto-close on process exit
+  - Dynamic theme loading from `kitty-configs/current-theme.conf` via CSS custom properties
+  - UI scaling via Ctrl+Shift++/-, Ctrl+=, Ctrl+1/2/3 — scales both terminal and UI
+  - Crit integration via HTTP IPC: crit review opens as a panel overlay with submit/dismiss/crash detection
+  - User Guide rendered as themed markdown overlay (F1)
+  - Keyboard shortcuts: Ctrl+S / Shift+Shift (workspace panel), Ctrl+Shift+S (new tab), Ctrl+Left/Right (switch tabs), q/Esc (close overlays)
+  - xterm.js addons: WebGL rendering, clickable URLs, OSC 52 clipboard, Unicode 11, search
+  - Error logging to `/tmp/devora-ember-*.log` with panic hook for crash diagnostics
+  - Build script (`bundler/macos-ember/bundle-ember.sh`) and mise tasks (`ember-dev`, `ember-build`, `ember-test`, `ember-bundle`, `ember-install`)
+  - CI/CD: Ember tests and builds run alongside the Kitty variant in GitHub Actions
+- Crit wrapper detects Ember mode (`DEVORA_EMBER=1`) and routes through HTTP IPC instead of Kitty/Glimpse-TTY
+
 ### Changed
 
 - User Guide tab (F1) and View Changelog now use `glimpse-tty` instead of `glow` for rendering

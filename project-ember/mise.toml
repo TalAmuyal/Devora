@@ -1,0 +1,29 @@
+[settings]
+experimental = true # Required for the 'prepare' feature
+
+[tools]
+node = "22"
+
+[prepare.npm_deps]
+auto = true
+sources = ["package.json", "package-lock.json"]
+run = "test -f package.json && npm install || true"
+description = "Automatically sync npm dependencies"
+
+[tasks.dev]
+run = """
+cargo tauri build --bundles app 2>&1
+"src-tauri/target/release/bundle/macos/Devora Ember.app/Contents/MacOS/devora-ember"
+"""
+raw = true
+description = "Build and run Devora Ember (stderr visible for debugging)"
+
+[tasks.build]
+dir = "src-tauri"
+run = "cargo tauri build"
+description = "Build Devora Ember for release"
+
+[tasks.test]
+dir = "src-tauri"
+run = "cargo test"
+description = "Run Rust tests"

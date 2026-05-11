@@ -1,0 +1,223 @@
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+
+use http_body_util::{BodyExt, Full};
+use hyper::body::{Bytes, Incoming};
+use hyper::server::conn::http1;
+use hyper::service::service_fn;
+use hyper::{Method, Request, Response, StatusCode};
+use serde::{Deserialize, Serialize};
+use tauri::{AppHandle, Emitter};
+use tokio::net::TcpListener;
+use tokio::sync::oneshot;
+
+pub struct IpcState {
+    pending: Arc<Mutex<HashMap<u32, oneshot::Sender<String>>>>,
+    pub port: u16,
+}
+
+impl IpcState {
+    pub fn resolve(&self, pty_id: u32, result: String) {
+        let mut map = self.pending.lock().unwrap();
+        if let Some(sender) = map.remove(&pty_id) {
+            let _ = sender.send(result);
+        }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CritOpenRequest {
+    pty_id: u32,
+    url: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CritDoneRequest {
+    pty_id: u32,
+    reason: String,
+}
+
+#[derive(Serialize)]
+struct CritOpenResponse {
+    result: String,
+}
+
+#[derive(Serialize)]
+struct CritDoneResponse {
+    ok: bool,
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct CritOpenOverlayPayload {
+    pty_id: u32,
+    url: String,
+}
+
+type BoxBody = http_body_util::Full<Bytes>;
+
+fn json_response(status: StatusCode, body: &impl Serialize) -> Response<BoxBody> {
+    let json = serde_json::to_string(body).unwrap_or_else(|_| r#"{"error":"serialize"}"#.into());
+    Response::builder()
+        .status(status)
+        .header("Content-Type", "application/json")
+        .body(Full::new(Bytes::from(json)))
+        .unwrap()
+}
+
+fn error_response(status: StatusCode, message: &str) -> Response<BoxBody> {
+    let body = serde_json::json!({"error": message});
+    json_response(status, &body)
+}
+
+async fn handle_request(
+    req: Request<Incoming>,
+    pending: Arc<Mutex<HashMap<u32, oneshot::Sender<String>>>>,
+    app_handle: AppHandle,
+) -> Result<Response<BoxBody>, hyper::Error> {
+    let (parts, body) = req.into_parts();
+    let path = parts.uri.path();
+
+    match (&parts.method, path) {
+        (&Method::POST, "/crit/open") => {
+            let body_bytes = match body.collect().await {
+                Ok(collected) => collected.to_bytes(),
+                Err(_) => {
+                    return Ok(error_response(
+                        StatusCode::BAD_REQUEST,
+                        "failed to read body",
+                    ));
+                }
+            };
+
+            let req_body: CritOpenRequest = match serde_json::from_slice(&body_bytes) {
+                Ok(r) => r,
+                Err(e) => {
+                    return Ok(error_response(
+                        StatusCode::BAD_REQUEST,
+                        &format!("invalid json: {e}"),
+                    ));
+                }
+            };
+
+            let (sender, receiver) = oneshot::channel::<String>();
+
+            {
+                let mut map = pending.lock().unwrap();
+                // If there is already a pending request for this pty, resolve it as
+                // "dismissed" before replacing it.
+                if let Some(old_sender) = map.remove(&req_body.pty_id) {
+                    let _ = old_sender.send("dismissed".to_string());
+                }
+                map.insert(req_body.pty_id, sender);
+            }
+
+            let payload = CritOpenOverlayPayload {
+                pty_id: req_body.pty_id,
+                url: req_body.url,
+            };
+
+            if app_handle.emit("crit-open-overlay", payload).is_err() {
+                let mut map = pending.lock().unwrap();
+                map.remove(&req_body.pty_id);
+                return Ok(error_response(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "failed to emit event",
+                ));
+            }
+
+            // Block until the overlay is resolved (submitted/dismissed/crashed).
+            let result = match receiver.await {
+                Ok(r) => r,
+                Err(_) => "dismissed".to_string(),
+            };
+
+            Ok(json_response(StatusCode::OK, &CritOpenResponse { result }))
+        }
+
+        (&Method::POST, "/crit/done") => {
+            let body_bytes = match body.collect().await {
+                Ok(collected) => collected.to_bytes(),
+                Err(_) => {
+                    return Ok(error_response(
+                        StatusCode::BAD_REQUEST,
+                        "failed to read body",
+                    ));
+                }
+            };
+
+            let req_body: CritDoneRequest = match serde_json::from_slice(&body_bytes) {
+                Ok(r) => r,
+                Err(e) => {
+                    return Ok(error_response(
+                        StatusCode::BAD_REQUEST,
+                        &format!("invalid json: {e}"),
+                    ));
+                }
+            };
+
+            {
+                let mut map = pending.lock().unwrap();
+                if let Some(sender) = map.remove(&req_body.pty_id) {
+                    let _ = sender.send(req_body.reason.clone());
+                }
+            }
+
+            let _ = app_handle.emit("crit-close-overlay", CritOpenOverlayPayload {
+                pty_id: req_body.pty_id,
+                url: String::new(),
+            });
+
+            Ok(json_response(StatusCode::OK, &CritDoneResponse { ok: true }))
+        }
+
+        _ => {
+            Ok(error_response(StatusCode::NOT_FOUND, "not found"))
+        }
+    }
+}
+
+pub fn start(app_handle: AppHandle) -> IpcState {
+    let pending: Arc<Mutex<HashMap<u32, oneshot::Sender<String>>>> =
+        Arc::new(Mutex::new(HashMap::new()));
+
+    let listener = std::net::TcpListener::bind("127.0.0.1:0")
+        .expect("ipc_server: failed to bind to 127.0.0.1:0");
+    let port = listener
+        .local_addr()
+        .expect("ipc_server: failed to get local addr")
+        .port();
+    listener
+        .set_nonblocking(true)
+        .expect("ipc_server: failed to set nonblocking");
+
+    let pending_clone = pending.clone();
+
+    tauri::async_runtime::spawn(async move {
+        let listener = TcpListener::from_std(listener)
+            .expect("ipc_server: failed to convert std listener to tokio");
+
+        loop {
+            let (stream, _addr) = match listener.accept().await {
+                Ok(conn) => conn,
+                Err(_) => continue,
+            };
+
+            let io = hyper_util::rt::TokioIo::new(stream);
+            let pending_for_conn = pending_clone.clone();
+            let handle_for_conn = app_handle.clone();
+
+            tokio::spawn(async move {
+                let service = service_fn(move |req| {
+                    handle_request(req, pending_for_conn.clone(), handle_for_conn.clone())
+                });
+
+                let _ = http1::Builder::new().serve_connection(io, service).await;
+            });
+        }
+    });
+
+    IpcState { pending, port }
+}
