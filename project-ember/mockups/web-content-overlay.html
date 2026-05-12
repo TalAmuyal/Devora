@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Panel Overlay — Web Content</title>
+  <link rel="stylesheet" href="theme.css">
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100vh;
+      overflow: hidden;
+      background: var(--color-bg);
+      color: var(--color-fg);
+      font-family: var(--font-ui);
+      font-size: var(--font-size-md);
+    }
+
+    /* Top-level layout: overlay content area + tab bar */
+    .layout {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    /* ── Overlay ─────────────────────────────────────── */
+
+    .overlay {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      background: var(--color-bg);
+    }
+
+    /* Overlay header bar */
+    .overlay-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 var(--space-lg);
+      height: var(--tab-bar-height);
+      min-height: var(--tab-bar-height);
+      background: var(--color-bg-secondary);
+      border-bottom: 1px solid var(--color-border);
+      font-family: var(--font-ui);
+      font-size: var(--font-size-md);
+    }
+
+    .overlay-title {
+      color: var(--color-fg);
+      font-weight: 600;
+    }
+
+    .overlay-close {
+      color: var(--color-fg-secondary);
+      background: none;
+      border: none;
+      font-size: 18px;
+      cursor: pointer;
+      padding: var(--space-xs) var(--space-sm);
+      border-radius: 4px;
+      line-height: 1;
+      font-family: var(--font-ui);
+    }
+
+    .overlay-close:hover {
+      color: var(--color-fg);
+      background: var(--color-bg-overlay);
+    }
+
+    .overlay-close:focus-visible {
+      outline: 2px solid var(--color-focus-ring);
+      outline-offset: -2px;
+    }
+
+    /* Scrollable markdown content */
+    .overlay-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: var(--space-xl);
+      max-width: 780px;
+    }
+
+    /* ── Rendered Markdown ────────────────────────────── */
+
+    .overlay-content h1 {
+      color: var(--color-accent);
+      font-family: var(--font-ui);
+      font-size: var(--font-size-h1);
+      font-weight: 700;
+      margin: 0 0 var(--space-lg) 0;
+    }
+
+    .overlay-content h2 {
+      color: var(--color-accent);
+      font-family: var(--font-ui);
+      font-size: var(--font-size-h3);
+      font-weight: 600;
+      margin: var(--space-xl) 0 var(--space-md) 0;
+    }
+
+    .overlay-content p {
+      color: var(--color-fg);
+      font-family: var(--font-ui);
+      font-size: var(--font-size-md);
+      line-height: 1.7;
+      margin: 0 0 var(--space-md) 0;
+    }
+
+    .overlay-content a {
+      color: var(--color-blue);
+      text-decoration: underline;
+    }
+
+    .overlay-content code {
+      background: var(--color-bg-overlay);
+      font-family: var(--font-mono);
+      font-size: var(--font-size-sm);
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+
+    .overlay-content pre {
+      background: var(--color-bg-secondary);
+      color: var(--color-fg);
+      font-family: var(--font-mono);
+      font-size: var(--font-size-sm);
+      padding: var(--space-md) var(--space-lg);
+      border-radius: 6px;
+      overflow-x: auto;
+      margin: 0 0 var(--space-md) 0;
+      line-height: 1.6;
+    }
+
+    .overlay-content pre code {
+      background: none;
+      padding: 0;
+      border-radius: 0;
+    }
+
+    .overlay-content ul {
+      margin: 0 0 var(--space-md) 0;
+      padding-left: var(--space-xl);
+      line-height: 1.7;
+    }
+
+    .overlay-content ul li {
+      margin-bottom: var(--space-xs);
+    }
+
+    .overlay-content ul li::marker {
+      color: var(--color-accent);
+    }
+
+    .overlay-content table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 0 0 var(--space-md) 0;
+      font-size: var(--font-size-md);
+    }
+
+    .overlay-content th {
+      background: var(--color-bg-secondary);
+      color: var(--color-fg);
+      font-weight: 600;
+      text-align: left;
+      padding: var(--space-sm) var(--space-md);
+      border: 1px solid var(--color-border);
+    }
+
+    .overlay-content td {
+      padding: var(--space-sm) var(--space-md);
+      border: 1px solid var(--color-border);
+      color: var(--color-fg);
+    }
+
+    /* ── Tab bar ──────────────────────────────────────── */
+
+    .tab-bar {
+      height: var(--tab-bar-height);
+      background: var(--color-tab-bar-bg);
+      display: flex;
+      align-items: flex-end;
+      padding: 0 var(--space-sm);
+      gap: var(--space-xs);
+      flex-shrink: 0;
+    }
+
+    .tab {
+      display: flex;
+      align-items: center;
+      gap: var(--space-xs);
+      height: calc(var(--tab-bar-height) - 6px);
+      padding: 0 var(--space-md);
+      border-radius: var(--tab-border-radius) var(--tab-border-radius) 0 0;
+      font-family: var(--font-ui);
+      font-size: var(--font-size-sm);
+      cursor: pointer;
+      position: relative;
+      user-select: none;
+    }
+
+    .tab.active {
+      background: var(--color-tab-active-bg);
+      color: var(--color-tab-active-fg);
+    }
+
+    .tab.inactive {
+      background: var(--color-tab-inactive-bg);
+      color: var(--color-tab-inactive-fg);
+    }
+
+    .tab.inactive:hover {
+      background: var(--color-tab-hover-bg);
+    }
+
+    .tab .close-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: var(--font-size-md);
+      line-height: 1;
+      width: 16px;
+      height: 16px;
+      text-align: center;
+      border-radius: 3px;
+      cursor: pointer;
+    }
+
+    .tab.inactive .close-btn {
+      color: var(--color-tab-inactive-bg);
+    }
+
+    .tab.active .close-btn {
+      color: var(--color-tab-active-bg);
+    }
+
+    .tab.inactive:hover .close-btn {
+      color: var(--color-tab-inactive-fg);
+    }
+
+    .tab.active:hover .close-btn {
+      color: var(--color-tab-active-fg);
+    }
+
+    .tab.inactive:hover .close-btn:hover {
+      background: var(--color-surface1);
+    }
+
+    .tab.active .close-btn:hover {
+      background: var(--color-surface2);
+    }
+
+    .tab-spacer {
+      flex: 1;
+    }
+
+    .tab-add {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: calc(var(--tab-bar-height) - 6px);
+      padding: 0 var(--space-sm);
+      font-family: var(--font-ui);
+      font-size: var(--font-size-sm);
+      color: var(--color-fg-secondary);
+      cursor: pointer;
+      border-radius: var(--tab-border-radius) var(--tab-border-radius) 0 0;
+      user-select: none;
+    }
+
+    .tab-add:hover {
+      background: var(--color-tab-hover-bg);
+      color: var(--color-fg);
+    }
+
+    /* Focus indicators */
+    .tab:focus-visible,
+    .tab-add:focus-visible {
+      outline: 2px solid var(--color-focus-ring);
+      outline-offset: -2px;
+    }
+
+    /* Overlay indicator dot on a tab */
+    .overlay-dot {
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--color-accent);
+    }
+
+    /* Active tab with overlay dot needs the dot to match its fg */
+    .tab.active .overlay-dot {
+      background: var(--color-tab-active-fg);
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+
+    <!-- Overlay (covers main panel area, not the tab bar) -->
+    <div class="overlay">
+
+      <!-- Overlay header -->
+      <div class="overlay-header">
+        <span class="overlay-title">User Guide</span>
+        <button class="overlay-close" aria-label="Close overlay">&times;</button>
+      </div>
+
+      <!-- Rendered markdown content -->
+      <div class="overlay-content">
+
+        <h1>Devora User Guide</h1>
+
+        <h2>Getting Started</h2>
+
+        <p>
+          Devora is a terminal-based IDE built for agentic development workflows.
+          It composes existing tools — <a href="#">Claude Code</a>, Kitty, and Neovim —
+          into a focused environment for day-to-day coding. This guide covers
+          installation, profiles, workspaces, and the core commands you will use.
+        </p>
+
+        <p>
+          To install Devora, run the following commands in your terminal:
+        </p>
+
+        <pre><code>curl -fsSL https://raw.githubusercontent.com/TalAmuyal/Devora/master/install.sh | bash
+
+# Verify the installation
+debi health
+
+# Launch Devora
+devora</code></pre>
+
+        <ul>
+          <li>Each Kitty tab holds one <strong>workspace session</strong></li>
+          <li>Use <code>debi</code> to manage workspaces and sessions from within Devora</li>
+          <li>Profiles let you customize settings per project or team</li>
+          <li>Run <code>debi health --strict</code> to check optional dependencies</li>
+        </ul>
+
+        <h2>Keyboard Shortcuts</h2>
+
+        <p>
+          The following shortcuts are available in the default configuration.
+          You can customize them via <code>~/.claude/keybindings.json</code>.
+        </p>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Shortcut</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>Ctrl+Shift+T</code></td>
+              <td>New workspace tab</td>
+            </tr>
+            <tr>
+              <td><code>Ctrl+Shift+W</code></td>
+              <td>Close current tab</td>
+            </tr>
+            <tr>
+              <td><code>Ctrl+Tab</code></td>
+              <td>Next tab</td>
+            </tr>
+            <tr>
+              <td><code>Ctrl+Shift+Tab</code></td>
+              <td>Previous tab</td>
+            </tr>
+            <tr>
+              <td><code>Ctrl+Shift+R</code></td>
+              <td>Open User Guide overlay</td>
+            </tr>
+            <tr>
+              <td><code>Escape</code></td>
+              <td>Dismiss overlay</td>
+            </tr>
+          </tbody>
+        </table>
+
+      </div>
+    </div>
+
+    <!-- Tab bar (bottom) -->
+    <div class="tab-bar">
+      <div class="tab active">
+        <span class="tab-label">Auth flow</span>
+        <span class="close-btn">&times;</span>
+      </div>
+      <div class="tab inactive">
+        <span class="overlay-dot"></span>
+        <span class="tab-label">CI pipeline fix</span>
+        <span class="close-btn">&times;</span>
+      </div>
+      <div class="tab inactive">
+        <span class="tab-label">Shell</span>
+        <span class="close-btn">&times;</span>
+      </div>
+      <div class="tab-spacer"></div>
+      <div class="tab-add">[+]</div>
+    </div>
+
+  </div>
+</body>
+</html>

@@ -77,3 +77,29 @@ ln -sf "$REPO_ROOT/scripts/hooks/pre-commit" "$HOOKS_DIR/pre-commit"
 echo "Installed pre-commit hook: $HOOKS_DIR/pre-commit -> $REPO_ROOT/scripts/hooks/pre-commit"
 """
 description = "Install local git hooks (pre-commit changelog check)"
+
+[tasks.ember-dev]
+description = "Run Devora Ember in development mode with hot reload"
+run = "mise run -C project-ember dev"
+
+[tasks.ember-build]
+description = "Build Devora Ember for release"
+run = "mise run -C project-ember build"
+
+[tasks.ember-test]
+description = "Run Devora Ember tests"
+run = "mise run -C project-ember test"
+
+[tasks.ember-bundle]
+description = "Build the complete Devora Ember.app bundle with all resources"
+run = "./bundler/macos-ember/bundle-ember.sh"
+
+[tasks.ember-install]
+description = "Build and install Devora Ember.app to /Applications"
+run = """
+set -e
+./bundler/macos-ember/bundle-ember.sh
+rm -rf "/Applications/Devora Ember.app"
+mv "project-ember/src-tauri/target/release/bundle/macos/Devora Ember.app" "/Applications/Devora Ember.app"
+echo "Installed to /Applications/Devora Ember.app"
+"""

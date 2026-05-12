@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-get-registered-repos"
+description = "Enables the get_registered_repos command without any pre-configured scope."
+commands.allow = ["get_registered_repos"]
+
+[[permission]]
+identifier = "deny-get-registered-repos"
+description = "Denies the get_registered_repos command without any pre-configured scope."
+commands.deny = ["get_registered_repos"]

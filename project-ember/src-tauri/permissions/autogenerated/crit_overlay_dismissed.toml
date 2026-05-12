@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-crit-overlay-dismissed"
+description = "Enables the crit_overlay_dismissed command without any pre-configured scope."
+commands.allow = ["crit_overlay_dismissed"]
+
+[[permission]]
+identifier = "deny-crit-overlay-dismissed"
+description = "Denies the crit_overlay_dismissed command without any pre-configured scope."
+commands.deny = ["crit_overlay_dismissed"]

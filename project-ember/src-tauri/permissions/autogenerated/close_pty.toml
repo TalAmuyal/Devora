@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-close-pty"
+description = "Enables the close_pty command without any pre-configured scope."
+commands.allow = ["close_pty"]
+
+[[permission]]
+identifier = "deny-close-pty"
+description = "Denies the close_pty command without any pre-configured scope."
+commands.deny = ["close_pty"]

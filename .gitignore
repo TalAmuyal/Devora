@@ -17,3 +17,12 @@ build/
 *.env
 .env*
 __pycache__/
+
+# Ember (Tauri + Vite)
+project-ember/node_modules/
+project-ember/dist/
+project-ember/src-tauri/target/
+project-ember/src-tauri/gen/
+*.log
+*.swp
+*.swo

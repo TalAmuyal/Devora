@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Devora Ember — Main Layout</title>
+  <link rel="stylesheet" href="theme.css">
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100vh;
+      overflow: hidden;
+      background: var(--color-crust);
+    }
+
+    .window {
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Main panel — fills everything above the tab bar */
+    .main-panel {
+      flex: 1;
+      background: var(--color-bg);
+      overflow: hidden;
+    }
+
+    .terminal {
+      padding: var(--space-lg);
+      font-family: var(--font-mono);
+      font-size: var(--font-size-terminal);
+      line-height: 1.6;
+      color: var(--color-terminal-fg);
+    }
+
+    .terminal .prompt {
+      color: var(--color-ansi-green);
+    }
+
+    .terminal .command {
+      color: var(--color-terminal-fg);
+    }
+
+    .terminal .output {
+      color: var(--color-ansi-blue);
+    }
+
+    .terminal .string {
+      color: var(--color-ansi-yellow);
+    }
+
+    .terminal .cursor {
+      display: inline-block;
+      width: 0.6em;
+      height: 1.15em;
+      background: var(--color-terminal-cursor);
+      vertical-align: text-bottom;
+      animation: blink 1s step-end infinite;
+    }
+
+    @keyframes blink {
+      50% { opacity: 0; }
+    }
+
+    /* Tab bar — pinned to the bottom */
+    .tab-bar {
+      height: var(--tab-bar-height);
+      background: var(--color-tab-bar-bg);
+      display: flex;
+      align-items: flex-end;
+      padding: 0 var(--space-sm);
+      gap: var(--space-xs);
+      flex-shrink: 0;
+    }
+
+    .tab {
+      display: flex;
+      align-items: center;
+      gap: var(--space-xs);
+      height: calc(var(--tab-bar-height) - 6px);
+      padding: 0 var(--space-md);
+      border-radius: var(--tab-border-radius) var(--tab-border-radius) 0 0;
+      font-family: var(--font-ui);
+      font-size: var(--font-size-sm);
+      cursor: pointer;
+      position: relative;
+      user-select: none;
+    }
+
+    .tab.inactive {
+      background: var(--color-tab-inactive-bg);
+      color: var(--color-tab-inactive-fg);
+    }
+
+    .tab.inactive:hover {
+      background: var(--color-tab-hover-bg);
+    }
+
+    .tab.active {
+      background: var(--color-tab-active-bg);
+      color: var(--color-tab-active-fg);
+    }
+
+    .tab .close-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: var(--font-size-md);
+      line-height: 1;
+      width: 16px;
+      height: 16px;
+      text-align: center;
+      border-radius: 3px;
+      cursor: pointer;
+    }
+
+    .tab.inactive .close-btn {
+      color: var(--color-tab-inactive-bg);
+    }
+
+    .tab.active .close-btn {
+      color: var(--color-tab-active-bg);
+    }
+
+    .tab.inactive:hover .close-btn {
+      color: var(--color-tab-inactive-fg);
+    }
+
+    .tab.active:hover .close-btn {
+      color: var(--color-tab-active-fg);
+    }
+
+    .tab.inactive:hover .close-btn:hover {
+      background: var(--color-surface1);
+    }
+
+    .tab.active .close-btn:hover {
+      background: var(--color-surface2);
+    }
+
+    .tab-spacer {
+      flex: 1;
+    }
+
+    .tab-add {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: calc(var(--tab-bar-height) - 6px);
+      padding: 0 var(--space-sm);
+      font-family: var(--font-ui);
+      font-size: var(--font-size-sm);
+      color: var(--color-fg-secondary);
+      cursor: pointer;
+      border-radius: var(--tab-border-radius) var(--tab-border-radius) 0 0;
+      user-select: none;
+    }
+
+    .tab-add:hover {
+      background: var(--color-tab-hover-bg);
+      color: var(--color-fg);
+    }
+
+    /* Focus indicators */
+    .tab:focus-visible,
+    .tab-add:focus-visible {
+      outline: 2px solid var(--color-focus-ring);
+      outline-offset: -2px;
+    }
+  </style>
+</head>
+<body>
+  <div class="window">
+    <div class="main-panel">
+      <div class="terminal">
+        <div><span class="prompt">~ $</span> <span class="command">ls</span></div>
+        <div><span class="output">Documents  Downloads  Projects</span></div>
+        <div><span class="prompt">~ $</span> <span class="command">echo</span> <span class="string">"Hello from Devora Ember"</span></div>
+        <div>Hello from Devora Ember</div>
+        <div><span class="prompt">~ $</span> <span class="cursor"></span></div>
+      </div>
+    </div>
+
+    <div class="tab-bar">
+      <div class="tab active">
+        <span class="tab-label">Auth flow</span>
+        <span class="close-btn">&times;</span>
+      </div>
+      <div class="tab inactive">
+        <span class="tab-label">CI pipeline fix</span>
+        <span class="close-btn">&times;</span>
+      </div>
+      <div class="tab inactive">
+        <span class="tab-label">Shell</span>
+        <span class="close-btn">&times;</span>
+      </div>
+      <div class="tab inactive">
+        <span class="tab-label">API refactor</span>
+        <span class="close-btn">&times;</span>
+      </div>
+      <div class="tab-spacer"></div>
+      <div class="tab-add">[+]</div>
+    </div>
+  </div>
+</body>
+</html>

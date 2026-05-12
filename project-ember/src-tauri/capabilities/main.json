@@ -1,0 +1,24 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "main-capability",
+  "description": "Capability for the main window",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "allow-create-pty",
+    "allow-write-pty",
+    "allow-resize-pty",
+    "allow-close-pty",
+    "allow-list-profiles",
+    "allow-list-workspaces",
+    "allow-get-workspace-status",
+    "allow-get-registered-repos",
+    "allow-get-default-app",
+    "allow-create-workspace",
+    "allow-log-error",
+    "allow-read-text-file",
+    "allow-get-user-guide-path",
+    "allow-get-theme",
+    "allow-crit-overlay-dismissed"
+  ]
+}
