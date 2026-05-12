@@ -34,6 +34,12 @@ Types of changes:
 
 ### Changed
 
+- **Devora Ember**: Redesigned workspace panel from expandable cards to a master-detail split layout
+  - Left panel: slim scrollable list of workspace names with status dots
+  - Right panel: full detail for the focused workspace (title, repo table, open button)
+  - Visual states for active, inactive, and invalid (error) workspaces
+  - Responsive layout from phone to ultrawide (5 breakpoints)
+  - Eliminates jarring card expand/collapse animations
 - User Guide tab (F1) and View Changelog now use `glimpse-tty` instead of `glow` for rendering
 - Always show the Kitty tab bar, even with a single tab
 - Judge now recognizes any env-var prefix (`NAME=VALUE`) generically instead of requiring hardcoded entries

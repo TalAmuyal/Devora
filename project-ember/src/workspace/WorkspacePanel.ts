@@ -43,6 +43,7 @@ export class WorkspacePanel {
   private categoryFilter: CategoryFilter = 'active';
 
   private statusCache: Map<string, RepoStatus[]> = new Map();
+  private statusErrors: Map<string, string> = new Map();
 
   private showNewForm = false;
   private availableRepos: RepoInfo[] = [];
@@ -92,28 +93,56 @@ export class WorkspacePanel {
       invoke<RepoStatus[]>('get_workspace_status', { workspacePath: ws.path })
         .then((statuses) => {
           this.statusCache.set(ws.id, statuses);
+          this.statusErrors.delete(ws.id);
           this.updateCardStatus(ws.id, statuses);
         })
-        .catch(() => {});
+        .catch((err) => {
+          const errorMsg = err instanceof Error ? err.message : String(err);
+          this.statusErrors.set(ws.id, errorMsg);
+          this.updateMasterItemError(ws.id);
+        });
+    }
+  }
+
+  private updateMasterItemError(wsId: string): void {
+    const items = this.containerEl.querySelectorAll('.ws-master-item');
+    for (const item of items) {
+      if ((item as HTMLElement).dataset.wsIndex === undefined) continue;
+      const idEl = item.querySelector('.ws-id');
+      if (idEl?.textContent !== wsId) continue;
+
+      item.classList.add('ws-invalid');
+      const dot = item.querySelector('.ws-status-dot');
+      if (dot) {
+        dot.classList.remove('clean', 'modified', 'pending', 'error');
+        dot.classList.add('error');
+      }
+
+      const focused = this.filteredWorkspaces()[this.focusedCardIndex];
+      if (focused && focused.id === wsId) {
+        this.updateDetailPanel();
+      }
+      break;
     }
   }
 
   private updateCardStatus(wsId: string, statuses: RepoStatus[]): void {
-    const cards = this.containerEl.querySelectorAll('.ws-card');
-    for (const card of cards) {
-      const idEl = card.querySelector('.ws-id');
+    const items = this.containerEl.querySelectorAll('.ws-master-item');
+    for (const item of items) {
+      const idEl = item.querySelector('.ws-id');
       if (idEl?.textContent !== wsId) continue;
 
-      const dot = card.querySelector('.ws-status-dot');
+      item.classList.remove('ws-invalid');
+      const dot = item.querySelector('.ws-status-dot');
       if (dot) {
         const hasModifications = statuses.some((r) => r.modified > 0 || r.untracked > 0);
-        dot.classList.remove('clean', 'modified');
+        dot.classList.remove('clean', 'modified', 'pending', 'error');
         dot.classList.add(hasModifications ? 'modified' : 'clean');
       }
 
-      const detail = card.querySelector('.ws-card-detail') as HTMLElement | null;
-      if (detail && detail.children.length === 0) {
-        detail.appendChild(this.renderRepoTable(statuses));
+      const focused = this.filteredWorkspaces()[this.focusedCardIndex];
+      if (focused && focused.id === wsId) {
+        this.updateDetailPanel();
       }
       break;
     }
@@ -127,6 +156,7 @@ export class WorkspacePanel {
     this.showNewForm = false;
     this.showCheatsheet = false;
     this.statusCache.clear();
+    this.statusErrors.clear();
     this.workspaces = [];
     this.profiles = [];
   }
@@ -232,18 +262,27 @@ export class WorkspacePanel {
   }
 
   private updateCardFocus(): void {
-    const cards = this.containerEl.querySelectorAll('.ws-card');
-    cards.forEach((card, i) => {
-      card.classList.toggle('ws-card-focused', i === this.focusedCardIndex);
+    const items = this.containerEl.querySelectorAll('.ws-master-item');
+    items.forEach((item, i) => {
+      item.classList.toggle('ws-master-focused', i === this.focusedCardIndex);
     });
-    const focusedCard = cards[this.focusedCardIndex];
-    if (focusedCard) {
-      focusedCard.scrollIntoView({ block: 'nearest' });
-      const detail = focusedCard.querySelector('.ws-card-detail') as HTMLElement | null;
-      const filtered = this.filteredWorkspaces();
-      if (detail && this.focusedCardIndex < filtered.length) {
-        this.loadAndRenderDetail(filtered[this.focusedCardIndex], detail);
-      }
+    const focusedItem = items[this.focusedCardIndex];
+    if (focusedItem) {
+      focusedItem.scrollIntoView({ block: 'nearest' });
+    }
+    this.updateDetailPanel();
+  }
+
+  private updateDetailPanel(): void {
+    const filtered = this.filteredWorkspaces();
+    const detailPanel = this.containerEl.querySelector('.ws-detail-panel');
+    if (!detailPanel) return;
+
+    detailPanel.innerHTML = '';
+
+    if (this.focusedCardIndex >= 0 && this.focusedCardIndex < filtered.length) {
+      const ws = filtered[this.focusedCardIndex];
+      detailPanel.appendChild(this.renderDetailPanel(ws));
     }
   }
 
@@ -303,10 +342,261 @@ export class WorkspacePanel {
     if (this.profiles.length === 0) {
       this.containerEl.appendChild(this.renderEmptyMessage('No profiles configured'));
     } else {
-      this.containerEl.appendChild(this.renderWorkspaceList());
+      const filtered = this.filteredWorkspaces();
+
+      if (filtered.length > 0 && this.focusedCardIndex < 0) {
+        this.focusedCardIndex = 0;
+      }
+
+      const split = document.createElement('div');
+      split.className = 'ws-split';
+
+      // Master panel (left)
+      const masterPanel = document.createElement('div');
+      masterPanel.className = 'ws-master-panel';
+
+      if (filtered.length === 0) {
+        masterPanel.appendChild(this.renderEmptyMessage('No workspaces found'));
+      } else {
+        for (let i = 0; i < filtered.length; i++) {
+          masterPanel.appendChild(this.renderMasterItem(filtered[i], i));
+        }
+      }
+
+      split.appendChild(masterPanel);
+
+      // Detail panel (right)
+      const detailPanel = document.createElement('div');
+      detailPanel.className = 'ws-detail-panel';
+
+      if (this.focusedCardIndex >= 0 && this.focusedCardIndex < filtered.length) {
+        detailPanel.appendChild(this.renderDetailPanel(filtered[this.focusedCardIndex]));
+      }
+
+      split.appendChild(detailPanel);
+      this.containerEl.appendChild(split);
     }
 
     this.containerEl.appendChild(this.renderLegend());
+  }
+
+  private renderMasterItem(ws: WorkspaceInfo, index: number): HTMLElement {
+    const item = document.createElement('div');
+    item.className = 'ws-master-item';
+    item.tabIndex = 0;
+    item.dataset.wsIndex = String(index);
+
+    if (index === this.focusedCardIndex) {
+      item.classList.add('ws-master-focused');
+    }
+
+    const isInactive = !ws.taskTitle;
+    const isInvalid = this.statusErrors.has(ws.id);
+
+    if (isInactive) {
+      item.classList.add('ws-inactive');
+    }
+    if (isInvalid) {
+      item.classList.add('ws-invalid');
+    }
+
+    // Status dot
+    const dot = document.createElement('div');
+    dot.className = 'ws-status-dot';
+    if (isInvalid) {
+      dot.classList.add('error');
+    } else if (isInactive) {
+      dot.classList.add('pending');
+    } else {
+      const cached = this.statusCache.get(ws.id);
+      if (cached) {
+        const hasModifications = cached.some((r) => r.modified > 0 || r.untracked > 0);
+        dot.classList.add(hasModifications ? 'modified' : 'clean');
+      }
+    }
+    item.appendChild(dot);
+
+    // Task name
+    const taskName = document.createElement('div');
+    taskName.className = 'ws-task-name';
+    taskName.textContent = isInactive ? '(no active task)' : ws.taskTitle;
+    item.appendChild(taskName);
+
+    // Workspace ID
+    const id = document.createElement('span');
+    id.className = 'ws-id';
+    id.textContent = ws.id;
+    item.appendChild(id);
+
+    // Click to focus
+    item.addEventListener('click', () => {
+      this.focusedCardIndex = index;
+      this.updateCardFocus();
+    });
+
+    return item;
+  }
+
+  private renderDetailPanel(ws: WorkspaceInfo): HTMLElement {
+    const detail = document.createElement('div');
+    detail.className = 'ws-detail';
+
+    const isInactive = !ws.taskTitle;
+    const isInvalid = this.statusErrors.has(ws.id);
+    const cached = this.statusCache.get(ws.id);
+
+    // Title
+    const title = document.createElement('h2');
+    title.className = 'ws-detail-title';
+    if (isInactive) {
+      title.textContent = ws.id;
+      title.classList.add('inactive');
+    } else {
+      title.textContent = ws.taskTitle;
+    }
+    detail.appendChild(title);
+
+    // Meta row
+    const meta = document.createElement('div');
+    meta.className = 'ws-detail-meta';
+
+    const detailId = document.createElement('span');
+    detailId.className = 'ws-detail-id';
+    detailId.textContent = ws.id;
+    meta.appendChild(detailId);
+
+    const repoCount = document.createElement('span');
+    repoCount.className = 'ws-detail-repo-count';
+    repoCount.textContent = `${ws.repos.length} ${ws.repos.length === 1 ? 'repo' : 'repos'}`;
+    meta.appendChild(repoCount);
+
+    if (isInvalid) {
+      const badge = document.createElement('span');
+      badge.className = 'ws-detail-badge error';
+      badge.textContent = 'error';
+      meta.appendChild(badge);
+    } else if (isInactive) {
+      const badge = document.createElement('span');
+      badge.className = 'ws-detail-badge inactive';
+      badge.textContent = 'inactive';
+      meta.appendChild(badge);
+    } else if (cached) {
+      const statusSpan = document.createElement('span');
+      const totalModified = cached.reduce((sum, r) => sum + r.modified, 0);
+      const totalUntracked = cached.reduce((sum, r) => sum + r.untracked, 0);
+
+      if (totalModified === 0 && totalUntracked === 0) {
+        statusSpan.className = 'ws-detail-status clean';
+        statusSpan.textContent = 'all clean';
+      } else {
+        statusSpan.className = 'ws-detail-status modified';
+        const parts: string[] = [];
+        if (totalModified > 0) parts.push(`${totalModified} modified`);
+        if (totalUntracked > 0) parts.push(`${totalUntracked} untracked`);
+        statusSpan.textContent = parts.join(', ');
+      }
+      meta.appendChild(statusSpan);
+    }
+
+    detail.appendChild(meta);
+
+    // Error message block (for invalid workspaces)
+    if (isInvalid) {
+      const errorBlock = document.createElement('div');
+      errorBlock.className = 'ws-detail-error';
+      errorBlock.textContent = this.statusErrors.get(ws.id)!;
+      detail.appendChild(errorBlock);
+    }
+
+    // Open button
+    const openBtn = document.createElement('button');
+    openBtn.className = 'ws-open-btn';
+    openBtn.textContent = 'Open Workspace';
+    openBtn.addEventListener('click', () => {
+      this.onOpenWorkspace(ws.path, ws.taskTitle, ws.repos);
+    });
+    detail.appendChild(openBtn);
+
+    // Repo table
+    if (cached) {
+      detail.appendChild(this.renderDetailRepoTable(cached));
+    } else {
+      const loading = document.createElement('div');
+      loading.className = 'ws-detail-loading';
+      loading.textContent = 'Loading...';
+      detail.appendChild(loading);
+    }
+
+    return detail;
+  }
+
+  private renderDetailRepoTable(statuses: RepoStatus[]): HTMLElement {
+    const table = document.createElement('table');
+    table.className = 'ws-detail-repo-table';
+
+    // Header
+    const thead = document.createElement('thead');
+    const headerRow = document.createElement('tr');
+    for (const label of ['Repo', 'Branch', 'Status']) {
+      const th = document.createElement('th');
+      th.textContent = label;
+      headerRow.appendChild(th);
+    }
+    thead.appendChild(headerRow);
+    table.appendChild(thead);
+
+    // Body
+    const tbody = document.createElement('tbody');
+    for (const repo of statuses) {
+      const row = document.createElement('tr');
+
+      // Repo name
+      const nameCell = document.createElement('td');
+      nameCell.className = 'col-name';
+      nameCell.textContent = repo.name;
+      row.appendChild(nameCell);
+
+      // Branch
+      const branchCell = document.createElement('td');
+      branchCell.className = 'col-branch';
+      if (repo.isDetached) {
+        branchCell.classList.add('detached');
+      }
+      branchCell.textContent = repo.branch;
+      row.appendChild(branchCell);
+
+      // Status badges
+      const statusCell = document.createElement('td');
+      const statusContainer = document.createElement('div');
+      statusContainer.className = 'col-status';
+
+      if (repo.modified === 0 && repo.untracked === 0) {
+        const badge = document.createElement('span');
+        badge.className = 'badge badge-clean';
+        badge.textContent = '✓ clean';
+        statusContainer.appendChild(badge);
+      } else {
+        if (repo.modified > 0) {
+          const badge = document.createElement('span');
+          badge.className = 'badge badge-modified';
+          badge.textContent = `~${repo.modified} modified`;
+          statusContainer.appendChild(badge);
+        }
+        if (repo.untracked > 0) {
+          const badge = document.createElement('span');
+          badge.className = 'badge badge-untracked';
+          badge.textContent = `+${repo.untracked} untracked`;
+          statusContainer.appendChild(badge);
+        }
+      }
+
+      statusCell.appendChild(statusContainer);
+      row.appendChild(statusCell);
+      tbody.appendChild(row);
+    }
+    table.appendChild(tbody);
+
+    return table;
   }
 
   private renderHeader(): HTMLElement {
@@ -340,6 +630,7 @@ export class WorkspacePanel {
     select.addEventListener('change', async () => {
       this.activeProfilePath = select.value;
       this.statusCache.clear();
+      this.statusErrors.clear();
       await this.loadWorkspaces();
       this.render();
     });
@@ -506,166 +797,6 @@ export class WorkspacePanel {
     form.appendChild(actions);
 
     return form;
-  }
-
-  private renderWorkspaceList(): HTMLElement {
-    const list = document.createElement('div');
-    list.className = 'ws-list';
-
-    const filtered = this.filteredWorkspaces();
-    if (filtered.length === 0) {
-      list.appendChild(this.renderEmptyMessage('No workspaces found'));
-      return list;
-    }
-
-    for (const ws of filtered) {
-      list.appendChild(this.renderCard(ws));
-    }
-    return list;
-  }
-
-  private renderCard(ws: WorkspaceInfo): HTMLElement {
-    const card = document.createElement('div');
-    card.className = 'ws-card';
-    card.tabIndex = 0;
-
-    // Click to open
-    card.addEventListener('click', () => {
-      this.onOpenWorkspace(ws.path, ws.taskTitle, ws.repos);
-    });
-
-    // Enter key to open
-    card.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        this.onOpenWorkspace(ws.path, ws.taskTitle, ws.repos);
-      }
-    });
-
-    // Compact row (always visible)
-    card.appendChild(this.renderCardCompact(ws));
-
-    // Detail section (expand on hover, lazy-loaded)
-    const detail = document.createElement('div');
-    detail.className = 'ws-card-detail';
-    card.appendChild(detail);
-
-    // Lazy-load repo status on mouseenter
-    card.addEventListener('mouseenter', () => {
-      this.loadAndRenderDetail(ws, detail);
-    });
-
-    return card;
-  }
-
-  private renderCardCompact(ws: WorkspaceInfo): HTMLElement {
-    const compact = document.createElement('div');
-    compact.className = 'ws-card-compact';
-
-    const dot = document.createElement('div');
-    dot.className = 'ws-status-dot';
-    const cached = this.statusCache.get(ws.id);
-    if (cached) {
-      const hasModifications = cached.some((r) => r.modified > 0 || r.untracked > 0);
-      dot.classList.add(hasModifications ? 'modified' : 'clean');
-    }
-    compact.appendChild(dot);
-
-    const taskName = document.createElement('div');
-    taskName.className = 'ws-task-name';
-    taskName.textContent = ws.taskTitle;
-    compact.appendChild(taskName);
-
-    const repoNames = document.createElement('span');
-    repoNames.className = 'ws-repo-names';
-    repoNames.textContent = ws.repos.join(', ');
-    compact.appendChild(repoNames);
-
-    const spacer = document.createElement('div');
-    spacer.style.flex = '1';
-    compact.appendChild(spacer);
-
-    const id = document.createElement('span');
-    id.className = 'ws-id';
-    id.textContent = ws.id;
-    compact.appendChild(id);
-
-    const hint = document.createElement('span');
-    hint.className = 'ws-expand-hint';
-    hint.textContent = '▶';
-    compact.appendChild(hint);
-
-    return compact;
-  }
-
-  private loadAndRenderDetail(
-    ws: WorkspaceInfo,
-    detailEl: HTMLElement,
-  ): void {
-    if (detailEl.children.length > 0) return;
-
-    const statuses = this.statusCache.get(ws.id);
-    if (statuses) {
-      detailEl.appendChild(this.renderRepoTable(statuses));
-    } else {
-      const loading = document.createElement('div');
-      loading.className = 'ws-card-loading';
-      loading.textContent = 'Loading...';
-      detailEl.appendChild(loading);
-    }
-  }
-
-  private renderRepoTable(statuses: RepoStatus[]): HTMLElement {
-    const table = document.createElement('table');
-    table.className = 'ws-repo-table';
-
-    for (const repo of statuses) {
-      const row = document.createElement('tr');
-
-      // Repo name
-      const nameCell = document.createElement('td');
-      nameCell.className = 'ws-repo-table-name';
-      nameCell.textContent = repo.name;
-      row.appendChild(nameCell);
-
-      // Branch
-      const branchCell = document.createElement('td');
-      branchCell.className = 'ws-repo-table-branch';
-      if (repo.isDetached) {
-        branchCell.classList.add('detached');
-      }
-      branchCell.textContent = repo.branch;
-      row.appendChild(branchCell);
-
-      // Status badges
-      const statusCell = document.createElement('td');
-      statusCell.className = 'ws-repo-table-status';
-
-      if (repo.modified === 0 && repo.untracked === 0) {
-        const badge = document.createElement('span');
-        badge.className = 'ws-stat-badge clean';
-        badge.textContent = '✓ clean';
-        statusCell.appendChild(badge);
-      } else {
-        if (repo.modified > 0) {
-          const badge = document.createElement('span');
-          badge.className = 'ws-stat-badge modified';
-          badge.textContent = `~${repo.modified} modified`;
-          statusCell.appendChild(badge);
-        }
-        if (repo.untracked > 0) {
-          const badge = document.createElement('span');
-          badge.className = 'ws-stat-badge untracked';
-          badge.textContent = `+${repo.untracked} untracked`;
-          statusCell.appendChild(badge);
-        }
-      }
-
-      row.appendChild(statusCell);
-      table.appendChild(row);
-    }
-
-    return table;
   }
 
   private renderEmptyMessage(text: string): HTMLElement {
