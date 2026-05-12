@@ -75,6 +75,18 @@ export class OverlayManager {
     return this.panelOverlays.has(sessionId);
   }
 
+  isPanelOverlayVisible(sessionId: number): boolean {
+    const el = this.panelOverlays.get(sessionId);
+    return el !== undefined && el.style.display !== 'none';
+  }
+
+  hasAnyVisiblePanelOverlay(): boolean {
+    for (const el of this.panelOverlays.values()) {
+      if (el.style.display !== 'none') return true;
+    }
+    return false;
+  }
+
   // --- Popup / Dialog (deferred stubs) ---
 
   showPopup(_content: HTMLElement): void {

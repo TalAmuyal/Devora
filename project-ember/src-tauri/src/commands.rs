@@ -7,6 +7,7 @@ use tauri::State;
 use crate::ipc_server::IpcState;
 use crate::logging::LogState;
 use crate::pty::PtyManager;
+use crate::test_harness::TestHarnessState;
 use crate::workspace;
 
 #[tauri::command]
@@ -154,4 +155,14 @@ pub fn crit_overlay_dismissed(
 ) -> Result<(), String> {
     ipc_state.resolve(pty_id, "dismissed".to_string());
     Ok(())
+}
+
+#[tauri::command]
+pub fn __test_report(
+    state: State<'_, TestHarnessState>,
+    id: String,
+    result: Option<String>,
+    error: Option<String>,
+) {
+    state.resolve(&id, result, error);
 }

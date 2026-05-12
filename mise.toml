@@ -90,6 +90,10 @@ run = "mise run -C project-ember build"
 description = "Run Devora Ember tests"
 run = "mise run -C project-ember test"
 
+[tasks.ember-bdd]
+description = "Run Ember acceptance tests"
+run = "mise run -C project-ember bdd"
+
 [tasks.ember-bundle]
 description = "Build the complete Devora Ember.app bundle with all resources"
 run = "./bundler/macos-ember/bundle-ember.sh"

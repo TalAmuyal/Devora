@@ -17,6 +17,7 @@ fn main() {
                 "get_user_guide_path",
                 "get_theme",
                 "crit_overlay_dismissed",
+                "__test_report",
             ]),
         ),
     )

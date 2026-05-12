@@ -128,6 +128,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     const content = WebContentOverlay.createUrlContent(url, 'Crit Review');
     overlayManager.showPanelOverlay(session.id, content, mainPanelEl);
+    overlayManager.onSessionActivated(sessionManager.getActiveSessionId()!);
     tabBar.render();
   });
 
@@ -167,4 +168,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   wsPanel.load();
   overlayManager.showTabCoveringOverlay(wsPanel.getElement());
+
+  (window as any).__test = { sessionManager, overlayManager, tabBar, wsPanel };
 });

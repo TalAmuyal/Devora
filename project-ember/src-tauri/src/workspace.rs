@@ -65,6 +65,9 @@ fn expand_tilde(path: &str) -> Result<String, String> {
 }
 
 fn global_config_path() -> Result<PathBuf, String> {
+    if let Ok(override_path) = std::env::var("DEVORA_CONFIG_PATH") {
+        return Ok(PathBuf::from(override_path));
+    }
     let home = home_dir()?;
     Ok(home.join(".config/devora/config.json"))
 }
@@ -770,6 +773,18 @@ mod tests {
         let repos = discover_repos_from_repos_dir(tmp.path());
         assert_eq!(repos.len(), 1);
         assert_eq!(repos[0].name, "repo-a");
+    }
+
+    #[test]
+    fn test_global_config_path_override() {
+        let original = std::env::var("DEVORA_CONFIG_PATH").ok();
+        std::env::set_var("DEVORA_CONFIG_PATH", "/tmp/test-config.json");
+        let path = global_config_path().unwrap();
+        assert_eq!(path, PathBuf::from("/tmp/test-config.json"));
+        match original {
+            Some(v) => std::env::set_var("DEVORA_CONFIG_PATH", v),
+            None => std::env::remove_var("DEVORA_CONFIG_PATH"),
+        }
     }
 
     #[test]

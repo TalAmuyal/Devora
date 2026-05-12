@@ -71,6 +71,7 @@ export class TerminalPane {
     this.terminal.loadAddon(this.fitAddon);
 
     this.terminal.open(container);
+    (container as any).__xtermTerminal = this.terminal;
 
     // Suppress DECRQM (request mode) sequences — xterm.js v6 has a bug in
     // requestMode that throws ReferenceError during parsing. Register no-op

@@ -27,3 +27,34 @@ description = "Build Devora Ember for release"
 dir = "src-tauri"
 run = "cargo test"
 description = "Run Rust tests"
+
+[tasks._cucumber]
+dir = "."
+run = "node --import tsx ./node_modules/.bin/cucumber-js tests/features/ --import 'tests/steps/*.ts' --import 'tests/support/*.ts' --publish-quiet \"${@}\""
+hide = true
+
+[tasks.bdd]
+dir = "."
+run = "mise run _cucumber -- --tags 'not @local-only'"
+description = "Run Gherkin acceptance tests (excludes @local-only)"
+
+[tasks.bdd-all]
+dir = "."
+run = "mise run _cucumber"
+description = "Run all Gherkin acceptance tests including @local-only"
+
+[tasks.bdd-record]
+dir = "."
+run = "RECORD_MODE=1 mise run _cucumber -- --tags '@real-claude'"
+description = "Record Claude Code API interactions for cassettes"
+
+[tasks.cassette-inspect]
+dir = "."
+run = """
+node -e "
+  const zlib = require('zlib'), fs = require('fs');
+  const f = process.argv[1];
+  console.log(JSON.stringify(JSON.parse(zlib.gunzipSync(fs.readFileSync(f))), null, 2));
+" -- "${@}"
+"""
+description = "Pretty-print a compressed cassette file"

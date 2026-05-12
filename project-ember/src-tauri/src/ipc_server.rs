@@ -1,8 +1,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use http_body_util::{BodyExt, Full};
-use hyper::body::{Bytes, Incoming};
+use hyper::body::Incoming;
 use hyper::server::conn::http1;
 use hyper::service::service_fn;
 use hyper::{Method, Request, Response, StatusCode};
@@ -10,6 +9,8 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
 use tokio::net::TcpListener;
 use tokio::sync::oneshot;
+
+use crate::http_util::{self, BoxBody};
 
 pub struct IpcState {
     pending: Arc<Mutex<HashMap<u32, oneshot::Sender<String>>>>,
@@ -56,22 +57,6 @@ struct CritOpenOverlayPayload {
     url: String,
 }
 
-type BoxBody = http_body_util::Full<Bytes>;
-
-fn json_response(status: StatusCode, body: &impl Serialize) -> Response<BoxBody> {
-    let json = serde_json::to_string(body).unwrap_or_else(|_| r#"{"error":"serialize"}"#.into());
-    Response::builder()
-        .status(status)
-        .header("Content-Type", "application/json")
-        .body(Full::new(Bytes::from(json)))
-        .unwrap()
-}
-
-fn error_response(status: StatusCode, message: &str) -> Response<BoxBody> {
-    let body = serde_json::json!({"error": message});
-    json_response(status, &body)
-}
-
 async fn handle_request(
     req: Request<Incoming>,
     pending: Arc<Mutex<HashMap<u32, oneshot::Sender<String>>>>,
@@ -82,24 +67,9 @@ async fn handle_request(
 
     match (&parts.method, path) {
         (&Method::POST, "/crit/open") => {
-            let body_bytes = match body.collect().await {
-                Ok(collected) => collected.to_bytes(),
-                Err(_) => {
-                    return Ok(error_response(
-                        StatusCode::BAD_REQUEST,
-                        "failed to read body",
-                    ));
-                }
-            };
-
-            let req_body: CritOpenRequest = match serde_json::from_slice(&body_bytes) {
+            let req_body: CritOpenRequest = match http_util::parse_json_body(body).await {
                 Ok(r) => r,
-                Err(e) => {
-                    return Ok(error_response(
-                        StatusCode::BAD_REQUEST,
-                        &format!("invalid json: {e}"),
-                    ));
-                }
+                Err(resp) => return Ok(resp),
             };
 
             let (sender, receiver) = oneshot::channel::<String>();
@@ -122,7 +92,7 @@ async fn handle_request(
             if app_handle.emit("crit-open-overlay", payload).is_err() {
                 let mut map = pending.lock().unwrap();
                 map.remove(&req_body.pty_id);
-                return Ok(error_response(
+                return Ok(http_util::error_response(
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "failed to emit event",
                 ));
@@ -134,28 +104,13 @@ async fn handle_request(
                 Err(_) => "dismissed".to_string(),
             };
 
-            Ok(json_response(StatusCode::OK, &CritOpenResponse { result }))
+            Ok(http_util::json_response(StatusCode::OK, &CritOpenResponse { result }))
         }
 
         (&Method::POST, "/crit/done") => {
-            let body_bytes = match body.collect().await {
-                Ok(collected) => collected.to_bytes(),
-                Err(_) => {
-                    return Ok(error_response(
-                        StatusCode::BAD_REQUEST,
-                        "failed to read body",
-                    ));
-                }
-            };
-
-            let req_body: CritDoneRequest = match serde_json::from_slice(&body_bytes) {
+            let req_body: CritDoneRequest = match http_util::parse_json_body(body).await {
                 Ok(r) => r,
-                Err(e) => {
-                    return Ok(error_response(
-                        StatusCode::BAD_REQUEST,
-                        &format!("invalid json: {e}"),
-                    ));
-                }
+                Err(resp) => return Ok(resp),
             };
 
             {
@@ -170,11 +125,11 @@ async fn handle_request(
                 url: String::new(),
             });
 
-            Ok(json_response(StatusCode::OK, &CritDoneResponse { ok: true }))
+            Ok(http_util::json_response(StatusCode::OK, &CritDoneResponse { ok: true }))
         }
 
         _ => {
-            Ok(error_response(StatusCode::NOT_FOUND, "not found"))
+            Ok(http_util::error_response(StatusCode::NOT_FOUND, "not found"))
         }
     }
 }

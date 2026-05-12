@@ -10,6 +10,14 @@ Repeating tasks should be added to `mise.toml` for easier execution.
 
 Inspect the root `mise.toml` (or the project-specific one) for available commands and tasks.
 
+## Architecture Decision Records
+
+ADRs document significant architectural decisions. They are stored in `docs/adrs/` and listed below.
+
+When making a new architectural decision, create a new ADR file following the format of existing ones and add it to this list.
+
+- [ADR-001: Ember Acceptance Testing Framework](docs/adrs/ADR-001-ember-bdd-testing-framework.md) — Eval bridge + Gherkin acceptance tests + Fake Claude API for testing the Tauri app
+
 ## Pull Request Guidelines
 
 When submitting a PR, update the `## Unreleased` section in `CHANGELOG.md` with a brief description of the change.
