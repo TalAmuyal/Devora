@@ -19,6 +19,7 @@
     "allow-read-text-file",
     "allow-get-user-guide-path",
     "allow-get-theme",
-    "allow-crit-overlay-dismissed"
+    "allow-crit-overlay-dismissed",
+    "allow---test-report"
   ]
 }

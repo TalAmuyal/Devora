@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow---test-report"
+description = "Enables the __test_report command without any pre-configured scope."
+commands.allow = ["__test_report"]
+
+[[permission]]
+identifier = "deny---test-report"
+description = "Denies the __test_report command without any pre-configured scope."
+commands.deny = ["__test_report"]

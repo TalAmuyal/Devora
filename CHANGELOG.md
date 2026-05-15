@@ -31,6 +31,16 @@ Types of changes:
   - Build script (`bundler/macos-ember/bundle-ember.sh`) and mise tasks (`ember-dev`, `ember-build`, `ember-test`, `ember-bundle`, `ember-install`)
   - CI/CD: Ember tests and builds run alongside the Kitty variant in GitHub Actions
 - Crit wrapper detects Ember mode (`DEVORA_EMBER=1`) and routes through HTTP IPC instead of Kitty/Glimpse-TTY
+- **Devora Ember**: Acceptance testing framework with Gherkin scenarios and eval bridge
+  - 19 acceptance scenarios covering themes, sessions, crit overlays, workspace panel, and Claude Code hook integration
+  - Eval bridge: Rust HTTP server inside the Tauri app for driving WKWebView from Cucumber.js tests
+  - Fake Claude API server with cassette record/replay for deterministic `@real-claude` tests
+  - Interactive `ccc` mode: tests launch Claude Code the same way users do (no `--print` shortcuts)
+  - Structured per-scenario API logging at `/tmp/devora-ember-test/` for debugging replay issues
+  - UI interaction layer: `UIDriver`, `ws-panel-helper`, `fixture-helper` for DOM-level testing
+  - Environment isolation: tests use an allowlisted env (HOME, SHELL, PATH, TMPDIR, USER, LANG) with PATH sanitized to strip inherited Devora paths
+  - `pty.rs` detects `bundled-apps/` at runtime and adds it to PATH, making Ember self-sufficient
+  - CI runs all scenarios including `@real-claude` on macOS 15
 
 ### Changed
 

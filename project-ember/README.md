@@ -39,6 +39,52 @@ mise build           # Build only
 mise test            # Run Rust tests
 ```
 
+## Acceptance Testing
+
+Ember uses Gherkin (Given/When/Then) feature files as living documentation and automated verification. Tests drive the real app via an "eval bridge" -- a test control HTTP server that evaluates JavaScript in the WKWebView.
+
+### Running tests
+
+```
+mise bdd          # Run all tests (excludes @local-only)
+mise bdd-all      # Run all tests including @local-only
+mise bdd-record   # Record Claude Code API cassettes (requires real API key)
+```
+
+### Tags
+
+| Tag | Meaning |
+|-----|---------|
+| `@real-claude` | Spawns real Claude Code with fake API server |
+| `@local-only` | Requires macOS Accessibility permissions |
+
+### UI interaction layer
+
+Tests that interact with the DOM use a three-tier helper stack:
+
+| Helper | Path | Purpose |
+|--------|------|---------|
+| `UIDriver` | `tests/support/ui-driver.ts` | Generic DOM interaction: `pressKey`, `click`, `typeIntoInput`, element queries |
+| `ws-panel-helper` | `tests/support/ws-panel-helper.ts` | Workspace panel helpers: reload, open/close, navigate, filter, category selection |
+| `fixture-helper` | `tests/support/fixture-helper.ts` | Create test profiles, workspaces, and repos on disk |
+
+The `DEVORA_CONFIG_PATH` env var overrides the config file location so tests can point the Rust backend at fixture data without affecting real profiles.
+
+### Workspace panel scenarios
+
+7 scenarios covering the workspace-management panel (`tests/features/workspace-panel.feature`): listing workspaces, j/k navigation, Enter to open, q to close, text filtering, category switching, and cheatsheet toggle.
+
+### Recording cassettes
+
+When Claude Code's behavior changes or new `@real-claude` scenarios are added:
+
+1. Authenticate with the real Anthropic API using one of:
+   - **OAuth (account login)**: Log in to Claude Code normally — the OAuth token is forwarded automatically
+   - **API key**: Export `ANTHROPIC_API_KEY` with a real API key
+2. Run `mise bdd-record`
+3. Inspect the cassette: `mise cassette-inspect tests/support/fixtures/cassettes/<name>.json.gz`
+4. Commit the cassette file
+
 ## Architecture
 
 ### Rust Backend (`src-tauri/src/`)
@@ -125,6 +171,10 @@ project-ember/
 │   ├── workspace/WorkspacePanel.ts
 │   ├── webview/WebContentOverlay.ts
 │   └── styles/theme.css, main.css
+├── tests/
+│   ├── features/           # Gherkin .feature files
+│   ├── steps/              # Step definitions
+│   └── support/            # Helpers: app-driver, ui-driver, fixture-helper, ws-panel-helper, fake API server
 ├── mockups/
 ├── docs/PLAN.md
 ├── DEFERRED.md

@@ -70,20 +70,34 @@ impl PtyManager {
         cmd.env("DEVORA_IPC_PORT", ipc_port.to_string());
         cmd.env("DEVORA_PTY_ID", id.to_string());
 
+        let mut extra_paths: Vec<String> = Vec::new();
+
+        // Compile-time: add project-crit-integration/bin if it exists
         let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .and_then(|p| p.parent());
         if let Some(root) = repo_root {
-            let mut extra_paths = Vec::new();
             let cc_plugins = root.join("project-crit-integration").join("bin");
             if cc_plugins.exists() {
                 extra_paths.push(cc_plugins.to_string_lossy().into_owned());
             }
-            if !extra_paths.is_empty() {
-                let current_path = std::env::var("PATH").unwrap_or_default();
-                let new_path = format!("{}:{current_path}", extra_paths.join(":"));
-                cmd.env("PATH", &new_path);
+        }
+
+        // Runtime: detect bundled-apps/ relative to the executable
+        // App bundle structure: Contents/MacOS/devora-ember → Contents/Resources/bundled-apps/
+        if let Ok(exe_path) = std::env::current_exe() {
+            if let Some(contents_dir) = exe_path.parent().and_then(|p| p.parent()) {
+                let bundled_apps = contents_dir.join("Resources").join("bundled-apps");
+                if bundled_apps.exists() {
+                    extra_paths.push(bundled_apps.to_string_lossy().into_owned());
+                }
             }
+        }
+
+        if !extra_paths.is_empty() {
+            let current_path = std::env::var("PATH").unwrap_or_default();
+            let new_path = format!("{}:{current_path}", extra_paths.join(":"));
+            cmd.env("PATH", &new_path);
         }
 
         if let Some(extra_env) = env {
