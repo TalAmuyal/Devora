@@ -41,6 +41,13 @@ Types of changes:
   - Environment isolation: tests use an allowlisted env (HOME, SHELL, PATH, TMPDIR, USER, LANG) with PATH sanitized to strip inherited Devora paths
   - `pty.rs` detects `bundled-apps/` at runtime and adds it to PATH, making Ember self-sufficient
   - CI runs all scenarios including `@real-claude` on macOS 15
+- **Devora Ember**: End-to-end Crit acceptance test (`@real-crit`) that exercises the full flow: workspace creation via UI, crit invocation, overlay verification, and review approval
+- **Devora Ember**: postMessage eval bridge for cross-origin iframe content access in acceptance tests (injected via `initialization_script_for_all_frames`)
+
+### Fixed
+
+- **Devora Ember**: `original-crit` was not bundled with Ember because `ember-bundle`/`ember-install` tasks didn't depend on `download-deps` and used soft `bundle` instead of `bundle_required`
+- **Devora Ember**: `@real-claude` After hook called non-existent `isPanelOverlayActive()`, silently preventing overlay cleanup between scenarios
 
 ### Changed
 

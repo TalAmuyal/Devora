@@ -95,10 +95,12 @@ description = "Run Ember acceptance tests"
 run = "mise run -C project-ember bdd"
 
 [tasks.ember-bundle]
+depends = ["download-deps"]
 description = "Build the complete Devora Ember.app bundle with all resources"
 run = "./bundler/macos-ember/bundle-ember.sh"
 
 [tasks.ember-install]
+depends = ["download-deps"]
 description = "Build and install Devora Ember.app to /Applications"
 run = """
 set -e
