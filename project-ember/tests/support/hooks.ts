@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { AppDriver } from './app-driver';
 import { FakeClaudeServer, STRUCTURED_LOG_BASE_DIR } from './fake-claude-server';
 import { cleanupWorkspace, stopClaudeCode } from './claude-helper';
+import { assertOriginalCritAvailable } from './crit-helper';
 import { cleanupFixtures, writeTestConfig } from './fixture-helper';
 import { EmberWorld } from './world';
 
@@ -189,11 +190,9 @@ After({ tags: '@real-claude' }, async function (this: EmberWorld) {
 
   try {
     await this.driver.eval(`
-      if (window.__test.overlayManager.isPanelOverlayActive()) {
-        const sessions = window.__test.sessionManager.getSessions();
-        for (const s of [...sessions]) {
-          window.__test.overlayManager.dismissPanelOverlay(s.id);
-        }
+      const sessions = window.__test.sessionManager.getSessions();
+      for (const s of [...sessions]) {
+        window.__test.overlayManager.dismissPanelOverlay(s.id);
       }
     `);
   } catch {
@@ -204,9 +203,16 @@ After({ tags: '@real-claude' }, async function (this: EmberWorld) {
   fakeClaudeServer!.reset();
 });
 
+Before({ tags: '@real-crit' }, async function (this: EmberWorld) {
+  assertOriginalCritAvailable();
+});
+
 After(async function (this: EmberWorld) {
   if (this.fixtureRoot) {
     cleanupFixtures(this.fixtureRoot);
+  }
+  if (this.bareRepoPath) {
+    fs.rmSync(this.bareRepoPath, { recursive: true, force: true });
   }
 
   writeTestConfig(testConfigPath!, []);

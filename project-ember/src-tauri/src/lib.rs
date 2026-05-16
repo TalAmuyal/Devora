@@ -8,11 +8,39 @@ mod theme;
 mod workspace;
 
 use std::sync::Mutex;
+use tauri::webview::WebviewWindowBuilder;
 use tauri::Manager;
 
 fn is_test_mode() -> bool {
     std::env::var("DEVORA_TEST_MODE").map_or(false, |v| v == "1")
 }
+
+/// Listens for eval requests from the parent frame and relays results back via postMessage.
+/// Injected into all frames (including iframes) at document start. In production the listener
+/// is registered but does nothing because nothing sends `devora-eval-bridge` messages.
+const IFRAME_EVAL_BRIDGE: &str = r#"
+if (window !== window.parent) {
+  window.addEventListener('message', async (event) => {
+    if (event.data && event.data.type === 'devora-eval-bridge') {
+      try {
+        const fn = new Function(event.data.js);
+        const result = await fn();
+        window.parent.postMessage({
+          type: 'devora-eval-result',
+          id: event.data.id,
+          result: result === undefined ? null : result
+        }, '*');
+      } catch (e) {
+        window.parent.postMessage({
+          type: 'devora-eval-result',
+          id: event.data.id,
+          error: String(e)
+        }, '*');
+      }
+    }
+  });
+}
+"#;
 
 pub fn run() {
     let log_path = logging::init();
@@ -37,6 +65,19 @@ pub fn run() {
         .manage(logging::LogState::new(&log_path))
         .setup(|app| {
             let handle = app.handle().clone();
+
+            let window_config = app
+                .config()
+                .app
+                .windows
+                .first()
+                .expect("tauri.conf.json must have at least one window config")
+                .clone();
+            WebviewWindowBuilder::from_config(&handle, &window_config)
+                .expect("failed to create WebviewWindowBuilder from config")
+                .initialization_script_for_all_frames(IFRAME_EVAL_BRIDGE)
+                .build()
+                .expect("failed to build main window");
 
             let ipc_state = ipc_server::start(handle.clone());
             eprintln!("Devora IPC server on port {}", ipc_state.port);

@@ -1,6 +1,42 @@
 import assert from 'node:assert';
 import { AppDriver } from './app-driver';
 
+export async function assertOverlayHeader(
+  driver: AppDriver,
+  expectedText: string,
+  timeoutMs = 30_000,
+): Promise<void> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const text: string | null = await driver.eval(
+      `return document.querySelector('.web-content-header span')?.textContent ?? null`,
+    );
+    if (text !== null && text.includes(expectedText)) return;
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  throw new Error(
+    `Overlay header did not contain "${expectedText}" within ${timeoutMs}ms`,
+  );
+}
+
+export async function assertOverlayIframeSrc(
+  driver: AppDriver,
+  pattern: RegExp,
+  timeoutMs = 30_000,
+): Promise<void> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const src: string | null = await driver.eval(
+      `return document.querySelector('.web-content-iframe')?.src ?? null`,
+    );
+    if (src !== null && pattern.test(src)) return;
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  throw new Error(
+    `Overlay iframe src did not match ${pattern} within ${timeoutMs}ms`,
+  );
+}
+
 export async function assertActivePanelOverlay(
   driver: AppDriver,
   expected: boolean,

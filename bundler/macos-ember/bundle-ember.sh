@@ -149,11 +149,11 @@ bundle_required "$REPO_ROOT/project-team-work/cc-plugin"       "$BUNDLED_CC_PLUG
 bundle          "$REPO_ROOT/project-crit-integration/cc-plugin" "$BUNDLED_CC_PLUGINS_DIR/crit"
 
 # Third-party: original-crit binary and crit cc-plugin (from downloaded 3rd-party deps)
-bundle "$THIRD_PARTY_APPS_DIR/original-crit"                   "$BUNDLED_APPS_DIR/original-crit"
-bundle "$THIRD_PARTY_APPS_DIR/claude-code"                     "$BUNDLED_CC_PLUGINS_DIR/crit"
+bundle_required "$THIRD_PARTY_APPS_DIR/original-crit"                   "$BUNDLED_APPS_DIR/original-crit"
+bundle_required "$THIRD_PARTY_APPS_DIR/claude-code"                     "$BUNDLED_CC_PLUGINS_DIR/crit"
 
 # Third-party: uv (Python package manager, needed by Judge)
-bundle "$THIRD_PARTY_APPS_DIR/uv"                              "$RESOURCES_DIR/uv"
+bundle_required "$THIRD_PARTY_APPS_DIR/uv"                              "$RESOURCES_DIR/uv"
 if [ -f "$BUNDLER_DIR/uv-license.txt" ]; then
 	bundle "$BUNDLER_DIR/uv-license.txt"                       "$RESOURCES_DIR/."
 fi
