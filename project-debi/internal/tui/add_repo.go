@@ -223,7 +223,7 @@ func (m *AddRepoModel) handleSubmit() tea.Cmd {
 	m.errMsg = ""
 
 	return func() tea.Msg {
-		err := workspace.MakeAndPrepareWorkTree(m.workspacePath, repoName, worktreeDirName)
+		err := workspace.MakeAndPrepareWorktree(m.workspacePath, repoName, worktreeDirName)
 		if err != nil {
 			return addRepoErrorMsg{err: err}
 		}

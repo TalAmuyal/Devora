@@ -89,7 +89,7 @@ Devora builds upon the following tools:
 	- Code exploration and editing
 	- Terminal multiplexer: It can multiplex files, scratch buffers, and terminals in the same session over different Neovim tabs and Neovim windows (splits)
 	- Configurable via `terminal.default-app`: by default each workspace session opens a bare login/interactive shell; set `terminal.default-app` to `nvim` (or any other command) to launch a wrapped app instead
-- Debi (`./project-debi/`), a UI tool for workspace and session management
+- Debi (`./project-debi/`), Devora's CLI for workspace management and utilities
 - Judge (`./project-judge/`), a Claude Code plugin for auto-approving/rejecting permission requests aiming to reduce permission fatigue and speed up the development process
 - Crit for reviewing plans and code changes
 - CCC (`./ccc.sh`), a launcher script for Claude Code that customizes its behavior and integrates it with the rest of the IDE

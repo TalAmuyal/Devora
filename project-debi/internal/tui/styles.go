@@ -27,7 +27,7 @@ type Styles struct {
 	CardTitle      lipgloss.Style
 	Diamond        lipgloss.Style
 	BadgeActive    lipgloss.Style
-	BadgeIdle      lipgloss.Style
+	BadgeInactive  lipgloss.Style
 	BadgeInvalid   lipgloss.Style
 	RepoName       lipgloss.Style
 	RepoBranch     lipgloss.Style
@@ -120,7 +120,7 @@ func NewStyles(palette style.ThemePalette) Styles {
 			Bold(true).
 			Foreground(palette.Success),
 
-		BadgeIdle: lipgloss.NewStyle().
+		BadgeInactive: lipgloss.NewStyle().
 			Foreground(palette.TextMuted),
 
 		BadgeInvalid: lipgloss.NewStyle().

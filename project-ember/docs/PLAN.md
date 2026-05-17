@@ -15,7 +15,7 @@ The PoC is complete. All six phases have been implemented:
 
 - Markdown rendering uses `marked` (JS-side) instead of `markdown-rs` (Rust-side), as the simpler approach was sufficient for the PoC
 - The Crit integration uses a lightweight HTTP server (`ipc_server.rs`) for communication between the crit script and the Tauri app
-- Workspace deletion and deactivation from the WS management panel are deferred (see `DEFERRED.md`)
+- Workspace deletion and deactivation from the Workspace Hub are deferred (see `DEFERRED.md`)
 - Split panes, pop-up overlays, dialog overlays, and tab drag-and-drop are deferred (see `DEFERRED.md`)
 
 ---
@@ -27,8 +27,8 @@ Devora currently uses **Kitty** (terminal emulator) as its UI container and **Gl
 **Why**: Tauri eliminates the need for both Kitty and the Electron-based Glimpse-TTY. The WebView natively renders web content (Crit UI, markdown docs), and xterm.js provides the terminal. This reduces bundled dependencies and opens the door to a richer, more customizable UI.
 
 **Key architectural decisions**:
-- The workspace management UI (currently debi's Bubble Tea TUI) is **reimplemented natively** as a web UI in the Tauri frontend. In Ember mode, debi functions as a CLI tool only — no changes to debi for the PoC.
-- The app uses an **overlay system** for the WS management panel, User Guide, Crit, and future dialogs — taking advantage of web UI capabilities that weren't possible in Kitty.
+- The Workspace Hub (currently debi's Bubble Tea TUI) is **reimplemented natively** as a web UI in the Tauri frontend. In Ember mode, debi functions as a CLI tool only — no changes to debi for the PoC.
+- The app uses an **overlay system** for the Workspace Hub, User Guide, Crit, and future dialogs — taking advantage of web UI capabilities that weren't possible in Kitty.
 - All colors flow through a **centralized CSS custom properties sheet**, enabling future theming.
 
 **Deferred items**: Split panes are out of scope for the initial PoC, though the session tab architecture is designed to accommodate them. `project-ember/DEFERRED.md` tracks deferred items.
@@ -43,10 +43,10 @@ Devora currently uses **Kitty** (terminal emulator) as its UI container and **Gl
 | **Terminal pane** | An xterm.js terminal instance connected to a PTY. Currently each session tab has exactly one. |
 | **Tab bar** | Horizontal strip at the bottom of the window showing all open session tabs. |
 | **Main panel area** | The content area above the tab bar. Displays the active session tab's content (terminal pane, or future split layout). |
-| **Overlay** | A layer rendered on top of the main panel area (and optionally the tab bar). Used for the WS management panel, User Guide, Crit, and future dialogs. |
-| **Tab-covering overlay** | An overlay that covers the entire window including the tab bar. Used for the WS management panel and User Guide. |
+| **Overlay** | A layer rendered on top of the main panel area (and optionally the tab bar). Used for the Workspace Hub, User Guide, Crit, and future dialogs. |
+| **Tab-covering overlay** | An overlay that covers the entire window including the tab bar. Used for the Workspace Hub and User Guide. |
 | **Panel overlay** | An overlay that covers only the main panel area, tied to a specific session tab. The tab bar remains visible. Used for Crit. Follows tab switching (hidden when the tab is inactive, restored when active). |
-| **WS management panel** | The workspace management UI shown as a tab-covering overlay. Lists workspaces for the active profile, allows creating and opening workspaces. |
+| **Workspace Hub** | The workspace management UI shown as a tab-covering overlay. Lists workspaces for the active profile, allows creating and opening workspaces. |
 | **Profile** | A named configuration scope in Devora with its own root directory, repo list, and settings. |
 | **Workspace** | A set of git worktrees (one per repo) tied to a task, stored in `<profile>/workspaces/ws-N/`. |
 
@@ -74,7 +74,7 @@ graph TB
         WV --> ST[Session Tabs<br/>terminal panes]
         WV --> TabUI[Tab Bar<br/>bottom]
         WV --> OVR[Overlay System]
-        OVR --> WSUI[WS Mngmnt Panel<br/>tab-covering]
+        OVR --> WSUI[Workspace Hub<br/>tab-covering]
         OVR --> CritOvr[Crit UI<br/>panel overlay]
         OVR --> UG[User Guide<br/>tab-covering]
         PTY --> Shell2[Shell / Neovim]
@@ -110,14 +110,14 @@ graph TB
 └──────────────────────────────────────────────┘
 ```
 
-Tab-covering overlay (WS management panel, User Guide):
+Tab-covering overlay (Workspace Hub, User Guide):
 
 ```
 ┌──────────────────────────────────────────────┐
 │ ╔══════════════════════════════════════════╗  │
 │ ║                                          ║  │
 │ ║     Tab-Covering Overlay Content         ║  │
-│ ║    (WS mngmnt panel or User Guide)       ║  │
+│ ║    (Workspace Hub or User Guide)       ║  │
 │ ║                                          ║  │
 │ ║                                          ║  │
 │ ║                                          ║  │
@@ -147,7 +147,7 @@ Panel overlay (Crit, tied to a session tab):
 
 | Mode | Covers tab bar? | Tied to tab? | Size | PoC status | Use case |
 |------|----------------|--------------|------|-----------|----------|
-| **Tab-covering** | Yes | No | Full window | Implemented | WS mngmnt panel, User Guide |
+| **Tab-covering** | Yes | No | Full window | Implemented | Workspace Hub, User Guide |
 | **Panel** | No | Yes | Main panel area | Implemented | Crit |
 | **Pop-up** | No | No | ~80% centered | Deferred | Add worktree dialog |
 | **Dialog** | No | No | Small centered | Deferred | Yes/no prompts |
@@ -191,7 +191,7 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-    participant UI as WS Mngmnt Panel<br/>(Overlay)
+    participant UI as Workspace Hub<br/>(Overlay)
     participant Tauri as Tauri Commands<br/>(Rust)
     participant FS as Filesystem
     participant Git as Git CLI
@@ -258,7 +258,7 @@ All mockups use a **centralized CSS custom properties sheet** (`mockups/theme.cs
    - Active/inactive session tab styling
    - Font, colors, spacing
 
-2. **`workspace-panel.html`** — The WS management panel (tab-covering overlay):
+2. **`workspace-hub.html`** — The Workspace Hub (tab-covering overlay):
    - List of workspaces for the **currently-selected profile**
    - Each workspace shows: name, task title, repo count, git status indicators
    - "Open" and "New Workspace" actions
@@ -401,7 +401,7 @@ run = "cd project-ember && cargo tauri build"
 - Not tied to any session tab
 - Only one tab-covering overlay at a time
 - Dismiss on `Escape` or explicit action
-- Used for: WS management panel, User Guide
+- Used for: Workspace Hub, User Guide
 
 **Panel overlay**:
 - Covers only the main panel area; tab bar remains visible
@@ -421,7 +421,7 @@ Pop-up and dialog modes are stubs that log a warning (deferred).
 
 | Shortcut | Action |
 |----------|--------|
-| `Ctrl+S` | Toggle WS management panel (tab-covering overlay) |
+| `Ctrl+S` | Toggle Workspace Hub (tab-covering overlay) |
 | `Shift Shift` | Alias for Ctrl+S (rapid double-press, ~300ms window) |
 | `Ctrl+Shift+S` | New shell session tab |
 | `Ctrl+Left/Right` | Previous/next session tab |
@@ -431,7 +431,7 @@ Pop-up and dialog modes are stubs that log a warning (deferred).
 | `Ctrl+Shift+V`, `Cmd+V` | Paste |
 | `Escape` | Dismiss active overlay |
 
-The "Shift Shift" detection: track `keyup` events for `Shift` (no other key pressed between). Two `Shift` keyups within ~300ms trigger the WS management panel.
+The "Shift Shift" detection: track `keyup` events for `Shift` (no other key pressed between). Two `Shift` keyups within ~300ms trigger the Workspace Hub.
 
 ### 3.5 Tests
 
@@ -448,7 +448,7 @@ The "Shift Shift" detection: track `keyup` events for `Shift` (no other key pres
 
 ## Phase 4: Workspace Management
 
-**Goal**: WS management panel with workspace listing, creation, and opening. No changes to debi.
+**Goal**: Workspace Hub with workspace listing, creation, and opening. No changes to debi.
 
 ### 4.1 Rust workspace commands
 
@@ -476,9 +476,9 @@ These read/write the same files debi uses internally:
 - `<profile-path>/config.json`: profile name, repos, overrides
 - `<profile-path>/workspaces/ws-N/task.json`: task title, metadata
 
-### 4.2 WS management panel component
+### 4.2 Workspace Hub component
 
-`src/workspace/WorkspacePanel.ts`:
+`src/workspace/WorkspaceHub.ts`:
 - Rendered as a **tab-covering overlay** (covers entire window including tab bar)
 - Shows workspaces for the **currently-selected profile** only
 - Each workspace card: name, task title, repo count, git status badges
@@ -491,7 +491,7 @@ These read/write the same files debi uses internally:
 ### 4.3 App startup
 
 When Ember starts:
-1. Open the WS management panel as a tab-covering overlay (no session tabs yet)
+1. Open the Workspace Hub as a tab-covering overlay (no session tabs yet)
 2. User creates or selects a workspace → session tab opens → overlay dismisses
 3. Ctrl+S or Shift+Shift brings the overlay back at any time
 
@@ -511,7 +511,7 @@ Mirror `bootstrap.sh` lines 38-50:
 - Profile-scoped filtering
 - Open workspace: creates session tab with correct cwd and app
 
-**Deliverable**: App opens with WS management panel, user can create and open workspaces in session tabs.
+**Deliverable**: App opens with Workspace Hub, user can create and open workspaces in session tabs.
 
 ---
 
@@ -671,7 +671,7 @@ graph LR
     subgraph "Ember-only (new)"
         ember[project-ember/<br/>Tauri app + web UI]
         bundleember[bundle-ember.sh]
-        wsui[WS Mngmnt Panel<br/>web overlay]
+        wsui[Workspace Hub<br/>web overlay]
     end
 
     subgraph "Modified"
@@ -704,7 +704,7 @@ graph LR
 1. **Phase 1**: HTML mockups reviewed in browser, design approved
 2. **Phase 2**: `mise ember-dev` → Tauri window → type `ls`, `echo hello` → output appears, resize works
 3. **Phase 3**: Ctrl+Shift+S → new session tab → Ctrl+Left/Right switches → tab bar at bottom → tab-covering overlay shows/dismisses on Ctrl+S and Shift+Shift → panel overlay shows on a tab and follows tab switching
-4. **Phase 4**: App opens with WS mngmnt panel overlay → shows workspaces for active profile → create new workspace → session tab opens → open existing workspace works too
+4. **Phase 4**: App opens with Workspace Hub overlay → shows workspaces for active profile → create new workspace → session tab opens → open existing workspace works too
 5. **Phase 5**: F1 → User Guide renders in tab-covering overlay → theme loaded from file → `crit review` opens in panel overlay on current session tab
 6. **Phase 6**: `mise ember-install` → `/Applications/Devora Ember.app` works end-to-end
 
@@ -728,4 +728,4 @@ graph LR
 - Overlay modes: pop-up (~80%), dialog (small)
 - Tab drag-and-drop reordering
 - Embedded Crit in panel overlay (if simple HTTP/socket approach proves insufficient)
-- Workspace deletion/deactivation from WS management panel
+- Workspace deletion/deactivation from Workspace Hub

@@ -6,7 +6,7 @@ const SHIFT_SHIFT_THRESHOLD_MS = 500;
 export class KeyboardShortcuts {
   private sessionManager: SessionManager;
   private overlayManager: OverlayManager;
-  private onToggleWsPanel: () => void;
+  private onToggleWsHub: () => void;
   private onOpenUserGuide: () => void;
 
   private lastShiftUpTime = 0;
@@ -15,12 +15,12 @@ export class KeyboardShortcuts {
   constructor(
     sessionManager: SessionManager,
     overlayManager: OverlayManager,
-    onToggleWsPanel: () => void,
+    onToggleWsHub: () => void,
     onOpenUserGuide: () => void,
   ) {
     this.sessionManager = sessionManager;
     this.overlayManager = overlayManager;
-    this.onToggleWsPanel = onToggleWsPanel;
+    this.onToggleWsHub = onToggleWsHub;
     this.onOpenUserGuide = onOpenUserGuide;
 
     window.addEventListener('keydown', (e) => this.handleKeyDown(e), true);
@@ -61,7 +61,7 @@ export class KeyboardShortcuts {
     if (ctrl && !shift && code === 'KeyS') {
       e.preventDefault();
       e.stopPropagation();
-      this.onToggleWsPanel();
+      this.onToggleWsHub();
       return;
     }
 
@@ -147,7 +147,7 @@ export class KeyboardShortcuts {
         const now = Date.now();
         if (now - this.lastShiftUpTime < SHIFT_SHIFT_THRESHOLD_MS) {
           this.lastShiftUpTime = 0;
-          this.onToggleWsPanel();
+          this.onToggleWsHub();
           return;
         }
         this.lastShiftUpTime = now;

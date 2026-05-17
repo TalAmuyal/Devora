@@ -29,8 +29,8 @@ Cassettes are stored as gzip-compressed JSON at `tests/support/fixtures/cassette
 ### UI interaction conventions
 
 - Use `UIDriver` (`tests/support/ui-driver.ts`) for generic DOM interaction: `pressKey`, `click`, `typeIntoInput`, `getTextContent`, `getElementCount`, `waitForElement`
-- Use `ws-panel-helper.ts` for workspace panel operations: `ensureWsPanelOpen`, `reloadWsPanel`, `getFocusedWorkspaceId`, `waitForWorkspaceItems`, `selectCategory`, `filterWorkspaces`
-- Prefer panel-specific helpers over raw UIDriver calls when they exist
+- Use `ws-hub-helper.ts` for Workspace Hub operations: `ensureWsHubOpen`, `reloadWsHub`, `getFocusedWorkspaceId`, `waitForWorkspaceItems`, `selectCategory`, `filterWorkspaces`
+- Prefer hub-specific helpers over raw UIDriver calls when they exist
 
 ### Fixture conventions
 
@@ -51,6 +51,6 @@ Cassettes are stored as gzip-compressed JSON at `tests/support/fixtures/cassette
 
 ### Overlay system
 
-- **Tab-covering overlay**: covers entire window including tab bar. Used for the WS management panel, User Guide, cheatsheet.
+- **Tab-covering overlay**: covers entire window including tab bar. Used for the Workspace Hub, User Guide, cheatsheet.
 - **Panel overlay**: covers main panel area only, tab bar visible. Tied to a specific session tab. Used for Crit.
 - Both types are dismissible with `q` or `Escape`.

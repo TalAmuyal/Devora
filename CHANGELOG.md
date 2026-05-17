@@ -51,6 +51,7 @@ Types of changes:
 
 ### Changed
 
+- Standardized terminology across codebase and documentation: canonical glossary in CLAUDE.md now defines Workspace Hub, Profile, Worktree, Judge, Debi, CCC, CC Status Line, and Acceptance Test; aligned code and UI strings to match (IDLE badge → INACTIVE, WorkspacePanel → WorkspaceHub, "Add Repo" → "Register existing repo", tracker task disambiguation)
 - **Devora Ember**: Redesigned workspace panel from expandable cards to a master-detail split layout
   - Left panel: slim scrollable list of workspace names with status dots
   - Right panel: full detail for the focused workspace (title, repo table, open button)

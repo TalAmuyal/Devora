@@ -1,4 +1,4 @@
-# Command Validator
+# Judge
 
 I really dislike having to manually go through so many permission prompts.
 This projects extends the ability to allow/denies based on more complex rules.

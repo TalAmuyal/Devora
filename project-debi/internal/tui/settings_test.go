@@ -218,8 +218,8 @@ func TestSettings_JKNavigatesBetweenFields(t *testing.T) {
 	}
 
 	m.Update(settingsKeyMsg('j'))
-	if m.focused != fieldAddRepo {
-		t.Fatalf("expected fieldAddRepo after third j, got %d", m.focused)
+	if m.focused != fieldRegisterRepo {
+		t.Fatalf("expected fieldRegisterRepo after third j, got %d", m.focused)
 	}
 
 	m.Update(settingsKeyMsg('j'))
@@ -274,7 +274,7 @@ func TestSettings_EnterOnPrepareCmdStartsEditing(t *testing.T) {
 
 func TestSettings_EnterOnAddRepoEmitsMessage(t *testing.T) {
 	m := newSettingsModel(t)
-	m.focused = fieldAddRepo
+	m.focused = fieldRegisterRepo
 
 	cmd := m.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
 
@@ -530,8 +530,8 @@ func TestSettings_NavigationWithExplicitRepos(t *testing.T) {
 	}
 
 	m.Update(settingsKeyMsg('j')) // -> addRepo (3)
-	if m.focused != fieldAddRepo {
-		t.Fatalf("expected fieldAddRepo, got %d", m.focused)
+	if m.focused != fieldRegisterRepo {
+		t.Fatalf("expected fieldRegisterRepo, got %d", m.focused)
 	}
 
 	m.Update(settingsKeyMsg('j')) // -> removeRepo-a (4)
@@ -697,8 +697,8 @@ func TestSettings_IsRemoveRepoField(t *testing.T) {
 	if m.isRemoveRepoField(fieldPrepareCmd) {
 		t.Fatal("fieldPrepareCmd should not be a remove repo field")
 	}
-	if m.isRemoveRepoField(fieldAddRepo) {
-		t.Fatal("fieldAddRepo should not be a remove repo field")
+	if m.isRemoveRepoField(fieldRegisterRepo) {
+		t.Fatal("fieldRegisterRepo should not be a remove repo field")
 	}
 	base := m.removeRepoBaseField()
 	if !m.isRemoveRepoField(base) {

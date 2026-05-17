@@ -187,5 +187,5 @@ func (m RegisterRepoModel) ActionBindings() []components.KeyBinding {
 
 // borderTitle returns the title displayed in the border.
 func (m RegisterRepoModel) borderTitle() string {
-	return "Register Repo"
+	return "Register Existing Repo"
 }

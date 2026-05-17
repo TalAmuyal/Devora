@@ -5,7 +5,7 @@ import { SessionManager } from './session/SessionManager';
 import { TabBar } from './ui/TabBar';
 import { OverlayManager } from './ui/OverlayManager';
 import { KeyboardShortcuts } from './ui/KeyboardShortcuts';
-import { WorkspacePanel } from './workspace/WorkspacePanel';
+import { WorkspaceHub } from './workspace/WorkspaceHub';
 import { WebContentOverlay } from './webview/WebContentOverlay';
 
 function logToFile(level: string, message: string): void {
@@ -60,14 +60,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   const tabBar = new TabBar(tabBarEl, sessionManager, overlayManager);
 
-  const dismissWsPanel = () => {
-    wsPanel.unload();
+  const dismissWsHub = () => {
+    wsHub.unload();
     overlayManager.dismissTabCoveringOverlay();
     sessionManager.getActiveSession()?.terminalPane.focus();
   };
 
   const openWorkspace = async (wsPath: string, title: string, repos: string[], profilePath?: string) => {
-    dismissWsPanel();
+    dismissWsHub();
 
     let appCommand: string | undefined;
     if (profilePath) {
@@ -89,18 +89,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   };
 
-  const wsPanel = new WorkspacePanel(
-    (path, title, repos) => openWorkspace(path, title, repos, wsPanel.getActiveProfilePath()),
-    (path, title, repos) => openWorkspace(path, title, repos, wsPanel.getActiveProfilePath()),
-    dismissWsPanel,
+  const wsHub = new WorkspaceHub(
+    (path, title, repos) => openWorkspace(path, title, repos, wsHub.getActiveProfilePath()),
+    (path, title, repos) => openWorkspace(path, title, repos, wsHub.getActiveProfilePath()),
+    dismissWsHub,
   );
 
-  const toggleWsPanel = () => {
+  const toggleWsHub = () => {
     if (overlayManager.isTabCoveringOverlayActive()) {
-      dismissWsPanel();
+      dismissWsHub();
     } else {
-      wsPanel.load();
-      overlayManager.showTabCoveringOverlay(wsPanel.getElement());
+      wsHub.load();
+      overlayManager.showTabCoveringOverlay(wsHub.getElement());
     }
   };
 
@@ -114,7 +114,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   };
 
-  new KeyboardShortcuts(sessionManager, overlayManager, toggleWsPanel, openUserGuide);
+  new KeyboardShortcuts(sessionManager, overlayManager, toggleWsHub, openUserGuide);
 
   // Crit panel overlay integration: listen for backend events requesting
   // a Crit review overlay, and wire overlay dismissal back to the backend.
@@ -166,8 +166,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   tabBar.render();
 
-  wsPanel.load();
-  overlayManager.showTabCoveringOverlay(wsPanel.getElement());
+  wsHub.load();
+  overlayManager.showTabCoveringOverlay(wsHub.getElement());
 
-  (window as any).__test = { sessionManager, overlayManager, tabBar, wsPanel };
+  (window as any).__test = { sessionManager, overlayManager, tabBar, wsHub };
 });

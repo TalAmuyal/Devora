@@ -14,7 +14,7 @@ The CLI has 3 workspace commands, a health command, PR commands (`pr check`, `pr
 
 | Command | Args | Description |
 |---------|------|-------------|
-| `workspace-ui` | none | Open the workspace management TUI |
+| `workspace-ui` | none | Open the Workspace Hub |
 | `add` | none | Open the add-repo TUI (must be inside a workspace) |
 | `rename` | `<new-name>` (positional, required) | Rename the current terminal session |
 
@@ -183,7 +183,7 @@ Behavior:
 usage: debi <command> [args]
 
 Workspace Commands:
-  workspace-ui          Open the workspace management UI
+  workspace-ui          Open the Workspace Hub
   add                   Add a repo to the current workspace
   rename <new-name>     Rename the current terminal session
 

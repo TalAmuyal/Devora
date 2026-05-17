@@ -170,9 +170,9 @@ body {
   outline-offset: -0.133rem;
 }
 
-/* ── Workspace management panel ── */
+/* ── Workspace Hub ── */
 
-.ws-panel {
+.ws-hub {
   width: 100%;
   padding: 0;
   display: flex;
