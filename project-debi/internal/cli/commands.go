@@ -59,7 +59,7 @@ var commands = []Command{
 	// Workspace Commands
 	{
 		Name:        "workspace-ui",
-		Description: "Open the workspace management UI",
+		Description: "Open the Workspace Hub (deprecated — will be removed with Devora OG)",
 		Group:       "Workspace Commands",
 		Run:         func(args []string) error { return runWorkspaceUI() },
 	},

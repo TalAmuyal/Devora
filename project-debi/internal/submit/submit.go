@@ -226,7 +226,7 @@ func Run(w io.Writer, opts Options) error {
 		if err != nil {
 			return fmt.Errorf("create tracker task: %w", err)
 		}
-		fmt.Fprintln(progress, style.Success.Render("\u2713 Task created: "+task.URL))
+		fmt.Fprintln(progress, style.Success.Render("\u2713 Tracker task created: "+task.URL))
 	}
 
 	// Generate branch name, create it, store the task ID (if any), push.

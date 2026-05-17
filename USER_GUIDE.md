@@ -36,7 +36,7 @@ Devora creates the worktrees, opens a terminal session, and you are ready to go.
 
 When you start Devora for the first time, it will prompt you to create your first profile.
 You choose a root directory (defaults to `~/devora`) and give the profile a name.
-Once the profile is created, you land on the workspace list - Devora's home screen.
+Once the profile is created, you land on the Workspace Hub - Devora's home screen.
 
 ### Profiles
 
@@ -56,8 +56,8 @@ Each profile is a self-contained directory with the following structure:
 - `workspaces/` contains the worktrees Devora creates for your tasks
 
 You can have multiple profiles.
-To cycle between them, press `p` from the workspace list.
-To create additional profiles, go to Settings (press `s` from the workspace list) and navigate to "Profiles".
+To cycle between them, press `p` from the Workspace Hub.
+To create additional profiles, go to Settings (press `s` from the Workspace Hub) and navigate to "Profiles".
 
 **Note**: Deleting a profile (also via Settings) only removes it from Devora's registry. The profile directory and all its contents remain on disk.
 
@@ -80,7 +80,7 @@ The actual directory on disk is not affected.
 Workspaces can span multiple repositories simultaneously.
 Devora manages a separate git worktree for each selected repo, so you can work across repos within a single workspace without affecting other tasks.
 
-From the workspace list:
+From the Workspace Hub:
 
 1. Press `n` to start a new task
 2. Select one or more repos from the active profile's repo list
@@ -88,10 +88,10 @@ From the workspace list:
 4. Devora creates a git worktree from each selected repo and opens a terminal session in the workspace directory
 	- If a "prepare command" is set in the profile's settings, it runs in each worktree as part of its setup (e.g., to install dependencies)
 	- An automated `CLAUDE.md` is generated in the workspace root, where you can supplement Claude with task related context and why each repo was included in the workspace
-5. Run the "ccc" command to launch the Customized Claude Code CLI in the workspace context
+5. Run the "ccc" command to launch the Customized Claude Code in the workspace context
 	- Now, Claude Code is ready with all of the Devora features and has access to all of the repos in the workspace
 
-Once a workspace exists, you can manage it from the workspace list:
+Once a workspace exists, you can manage it from the Workspace Hub:
 
 - `d` deactivates a workspace (cleans it up and keeps it on disk as cache for future use). Only available for active workspaces
 - `D` deletes a workspace permanently (removes its worktrees and root directory). Only available for inactive or invalid workspaces (you must deactivate first)
@@ -109,7 +109,7 @@ Inside any specific repo (including a repo that lives inside a workspace), both 
 
 ### Settings
 
-Press `s` from the workspace list to open the settings page.
+Press `s` from the Workspace Hub to open the settings page.
 
 Global settings include:
 
@@ -209,7 +209,7 @@ On macOS, `mise mac-install` automatically generates the zsh completion file for
 
 ## Optional Additions
 
-### Simple Status Line
+### CC Status Line
 
 A Devora-provided status line is available to show the current context-window usage and session cost.
 
@@ -243,7 +243,7 @@ Devora follows a date-based version format: `YYYY-MM-DD.PATCH` (e.g., `2026-03-2
 
 Development builds between releases show as `YYYY-MM-DD.PATCH-dev.N` where N is the number of commits since the last release.
 
-The current version is displayed in the bottom-right corner of the workspace manager.
+The current version is displayed in the bottom-right corner of the Workspace Hub.
 
 To view the full changelog, go to Settings and select "View Changelog".
 
@@ -253,9 +253,9 @@ To view the full changelog, go to Settings and select "View Changelog".
 
 Note: the split-pane shortcuts below operate on Kitty panes (each pane is its own shell). Neovim's own `:sp` / `:vsp` still work independently inside any pane.
 
-- `ctrl + s`: Open workspace manager in a new tab
+- `ctrl + s`: Open Workspace Hub in a new tab
 - `ctrl + shift + s`: Open shell in a new tab
-- `ctrl + left / right`: Navigate between tabs (workspeces)
+- `ctrl + left / right`: Navigate between tabs (workspaces)
 - `ctrl + shift + left / right`: Reorder tabs
 - `ctrl + 1 / 2 / 3`: Set font size to small (12pt) / medium (15pt) / large (26pt)
 - `ctrl + equal / minus`: Increase / decrease font size
@@ -267,7 +267,7 @@ Note: the split-pane shortcuts below operate on Kitty panes (each pane is its ow
 - `cmd + shift + w`: Close the current split pane
 - `F1`: Open this User Guide
 
-### Workspace List
+### Workspace Hub
 
 - `<enter>`: Open selected workspace (closes the current UI and opens a terminal session)
 - `n`: New task (reuses or creates a workspace and opens it in a dedicated tab)

@@ -7,10 +7,10 @@ import {
   createTestWorkspaces, writeTestConfig,
 } from '../support/fixture-helper';
 import {
-  reloadWsPanel, getFocusedWorkspaceId,
+  reloadWsHub, getFocusedWorkspaceId,
   getFocusedWorkspaceTitle, getWorkspaceItemCount, getActiveCategoryFilter,
   waitForWorkspaceItems, filterWorkspaces,
-} from '../support/ws-panel-helper';
+} from '../support/ws-hub-helper';
 
 Given(
   'a profile {string} with {int} active workspaces',
@@ -35,9 +35,9 @@ Given(
 );
 
 Given(
-  'the workspace-management panel is open',
+  'the Workspace Hub is open',
   async function (this: EmberWorld) {
-    await reloadWsPanel(this.driver);
+    await reloadWsHub(this.driver);
   },
 );
 
@@ -66,7 +66,7 @@ When(
 );
 
 Then(
-  'the workspace-management panel should show {int} workspace items',
+  'the Workspace Hub should show {int} workspace items',
   async function (this: EmberWorld, expected: number) {
     await waitForWorkspaceItems(this.driver, expected);
     const count = await getWorkspaceItemCount(this.driver);
@@ -91,7 +91,7 @@ Then(
 );
 
 Then(
-  'the workspace-management panel should be visible',
+  'the Workspace Hub should be visible',
   async function (this: EmberWorld) {
     const visible = await this.driver.eval(
       'return window.__test.overlayManager.isTabCoveringOverlayActive()',
@@ -101,7 +101,7 @@ Then(
 );
 
 Then(
-  'the workspace-management panel should not be visible',
+  'the Workspace Hub should not be visible',
   async function (this: EmberWorld) {
     await this.driver.pollFor(
       'return window.__test.overlayManager.isTabCoveringOverlayActive()',

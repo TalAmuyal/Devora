@@ -1,6 +1,6 @@
 # Devora
 
-Devora is a developer workspace manager. It manages isolated git worktree-based workspaces, each associated with a task, and integrates with the Kitty terminal to create dedicated terminal sessions per workspace. The TUI (`debi`) lets you create, switch between, and manage workspaces, register git repos, and configure profiles.
+Debi is Devora's CLI for workspace management and utilities. It manages isolated git worktree-based workspaces, each associated with a task, and integrates with the Kitty terminal to create dedicated terminal sessions per workspace. The TUI (`debi`) lets you create, switch between, and manage workspaces, register git repos, and configure profiles.
 
 ## Kitty Setup
 

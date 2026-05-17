@@ -556,7 +556,7 @@ func (m AppModel) createWorkspaceCmd(result NewTaskResult, progressCh chan<- tea
 
 			for _, repoName := range result.RepoNames {
 				go func(name string) {
-					err := workspace.MakeAndPrepareWorkTree(wsPath, name, name)
+					err := workspace.MakeAndPrepareWorktree(wsPath, name, name)
 					resCh <- worktreeResult{name: name, err: err}
 				}(repoName)
 			}

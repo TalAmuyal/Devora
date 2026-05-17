@@ -220,7 +220,7 @@ After(async function (this: EmberWorld) {
   try {
     await this.driver.eval(`
       if (window.__test.overlayManager.isTabCoveringOverlayActive()) {
-        window.__test.wsPanel.unload();
+        window.__test.wsHub.unload();
         window.__test.overlayManager.dismissTabCoveringOverlay();
       }
     `);

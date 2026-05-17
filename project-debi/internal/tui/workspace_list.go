@@ -249,7 +249,7 @@ func (m *WorkspaceListModel) renderCard(ws WorkspaceInfo, isSelected bool, inner
 	case CategoryActiveWithSession, CategoryActiveNoSession:
 		badge = m.styles.BadgeActive.Render("ACTIVE")
 	case CategoryInactive:
-		badge = m.styles.BadgeIdle.Render("IDLE")
+		badge = m.styles.BadgeInactive.Render("INACTIVE")
 	case CategoryInvalid:
 		badge = m.styles.BadgeInvalid.Render("INVALID")
 	}

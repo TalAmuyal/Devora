@@ -13,7 +13,7 @@ import {
   createTestProfile,
   writeTestConfig,
 } from '../support/fixture-helper';
-import { reloadWsPanel } from '../support/ws-panel-helper';
+import { reloadWsHub } from '../support/ws-hub-helper';
 import { UIDriver } from '../support/ui-driver';
 import { writeToTerminal } from '../support/terminal-helper';
 import { evalInOverlay, pollInOverlay } from '../support/overlay-eval-helper';
@@ -130,8 +130,8 @@ Given(
     const repoNames = repoList.split(',').map((r) => r.trim());
     const ui = new UIDriver(this.driver);
 
-    // Reload the workspace panel so it picks up the new config/profile data
-    await reloadWsPanel(this.driver);
+    // Reload the Workspace Hub so it picks up the new config/profile data
+    await reloadWsHub(this.driver);
 
     // Open the "New Workspace" form
     await ui.click('.ws-new-btn');
@@ -161,7 +161,7 @@ Given(
     // Submit the form
     await ui.click('.ws-new-form-create');
 
-    // Wait for the workspace panel to close (create_workspace fetches from
+    // Wait for the Workspace Hub to close (create_workspace fetches from
     // git remote and creates worktrees, which takes time)
     await this.driver.pollFor(
       'return window.__test.overlayManager.isTabCoveringOverlayActive()',

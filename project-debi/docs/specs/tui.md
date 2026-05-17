@@ -234,7 +234,7 @@ All form pages that display inline validation errors (`errMsg`) clear the error 
 func NewWorkspaceListModel(styles *Styles) WorkspaceListModel
 ```
 
-Displays workspaces as styled cards. Each card shows task title (or workspace name), a category badge (ACTIVE/IDLE/INVALID), and a per-repo table with branch name and clean/dirty status. Selection is indicated by the `ListModel` bar indicator and a distinct card border style. Cards are pre-rendered into `ListItem.Content` and the `View()` method delegates to `ListModel.View()` for scrollable, viewport-constrained rendering. On terminal resize, card content is refreshed at the new width without resetting the cursor.
+Displays workspaces as styled cards. Each card shows task title (or workspace name), a category badge (ACTIVE/INACTIVE/INVALID), and a per-repo table with branch name and clean/dirty status. Selection is indicated by the `ListModel` bar indicator and a distinct card border style. Cards are pre-rendered into `ListItem.Content` and the `View()` method delegates to `ListModel.View()` for scrollable, viewport-constrained rendering. On terminal resize, card content is refreshed at the new width without resetting the cursor.
 
 **Key bindings:**
 - `1`/`2`/`3` -- switch filter (Active, Inactive, All)

@@ -302,8 +302,8 @@ func TestRun_NoTracker_SkipsTaskCreation(t *testing.T) {
 	if len(s.setBranchConfigs) != 0 {
 		t.Fatalf("expected 0 branch-config writes, got %d: %+v", len(s.setBranchConfigs), s.setBranchConfigs)
 	}
-	if strings.Contains(buf.String(), "Task created") {
-		t.Fatalf("output should not mention Task created when no tracker, got:\n%s", buf.String())
+	if strings.Contains(buf.String(), "Tracker task created") {
+		t.Fatalf("output should not mention Tracker task created when no tracker, got:\n%s", buf.String())
 	}
 }
 
@@ -375,8 +375,8 @@ func TestRun_WithTracker_CreatesTaskAndSetsBranchConfig(t *testing.T) {
 		t.Fatalf("expected double-newline separator before description, got %q", body)
 	}
 
-	if !strings.Contains(buf.String(), "Task created") {
-		t.Fatalf("expected output to mention 'Task created', got:\n%s", buf.String())
+	if !strings.Contains(buf.String(), "Tracker task created") {
+		t.Fatalf("expected output to mention 'Tracker task created', got:\n%s", buf.String())
 	}
 }
 

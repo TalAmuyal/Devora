@@ -4,12 +4,12 @@ Devora Ember is an experimental variant of Devora that replaces Kitty (terminal 
 
 This is a proof-of-concept. See `DEFERRED.md` for items out of scope.
 
-## Key Differences from OG Devora
+## Key Differences from Devora OG
 
 - **No Kitty**: The app window is a Tauri WebView, not a Kitty terminal
 - **No Glimpse-TTY**: Web content (Crit UI, User Guide) renders natively in the WebView via the overlay system
-- **Native workspace management UI**: The workspace panel is a web UI overlay instead of debi's Bubble Tea TUI
-- **Overlay system**: Tab-covering overlays (workspace panel, User Guide, cheatsheet) and panel overlays (Crit) replace Kitty tabs and Glimpse-TTY windows
+- **Native workspace management UI**: The Workspace Hub is a web UI overlay instead of debi's Bubble Tea TUI
+- **Overlay system**: Tab-covering overlays (Workspace Hub, User Guide, cheatsheet) and panel overlays (Crit) replace Kitty tabs and Glimpse-TTY windows
 
 ## Supported Platform
 
@@ -65,14 +65,14 @@ Tests that interact with the DOM use a three-tier helper stack:
 | Helper | Path | Purpose |
 |--------|------|---------|
 | `UIDriver` | `tests/support/ui-driver.ts` | Generic DOM interaction: `pressKey`, `click`, `typeIntoInput`, element queries |
-| `ws-panel-helper` | `tests/support/ws-panel-helper.ts` | Workspace panel helpers: reload, open/close, navigate, filter, category selection |
+| `ws-hub-helper` | `tests/support/ws-hub-helper.ts` | Workspace Hub helpers: reload, open/close, navigate, filter, category selection |
 | `fixture-helper` | `tests/support/fixture-helper.ts` | Create test profiles, workspaces, and repos on disk |
 
 The `DEVORA_CONFIG_PATH` env var overrides the config file location so tests can point the Rust backend at fixture data without affecting real profiles.
 
-### Workspace panel scenarios
+### Workspace Hub scenarios
 
-7 scenarios covering the workspace-management panel (`tests/features/workspace-panel.feature`): listing workspaces, j/k navigation, Enter to open, q to close, text filtering, category switching, and cheatsheet toggle.
+7 scenarios covering the Workspace Hub (`tests/features/workspace-hub.feature`): listing workspaces, j/k navigation, Enter to open, q to close, text filtering, category switching, and cheatsheet toggle.
 
 ### Recording cassettes
 
@@ -109,7 +109,7 @@ When Claude Code's behavior changes or new `@real-claude` scenarios are added:
 | `ui/TabBar.ts` | Bottom tab bar showing all session tabs |
 | `ui/OverlayManager.ts` | Overlay system: tab-covering (full window) and panel (main area only) modes |
 | `ui/KeyboardShortcuts.ts` | Window-level keyboard shortcut handling |
-| `workspace/WorkspacePanel.ts` | Workspace management panel (tab-covering overlay): list, filter, create, open workspaces |
+| `workspace/WorkspaceHub.ts` | Workspace Hub (tab-covering overlay): list, filter, create, open workspaces |
 | `webview/WebContentOverlay.ts` | Web content rendering in panel overlays (URLs via iframe, markdown via `marked`) |
 | `styles/theme.css` | Centralized CSS custom properties (Catppuccin Macchiato defaults, overridden at runtime from theme file) |
 
@@ -117,7 +117,7 @@ When Claude Code's behavior changes or new `@real-claude` scenarios are added:
 
 | Mode | Covers tab bar? | Tied to tab? | Use case |
 |------|----------------|--------------|----------|
-| Tab-covering | Yes | No | Workspace panel, User Guide, cheatsheet |
+| Tab-covering | Yes | No | Workspace Hub, User Guide, cheatsheet |
 | Panel | No | Yes | Crit review UI |
 
 ## Keyboard Shortcuts
@@ -126,8 +126,8 @@ When Claude Code's behavior changes or new `@real-claude` scenarios are added:
 
 | Shortcut | Action |
 |----------|--------|
-| `Ctrl+S` | Toggle workspace panel |
-| `Shift Shift` | Toggle workspace panel (rapid double-tap) |
+| `Ctrl+S` | Toggle Workspace Hub |
+| `Shift Shift` | Toggle Workspace Hub (rapid double-tap) |
 | `Ctrl+Shift+S` | New shell session tab |
 | `Ctrl+Left/Right` | Switch between session tabs |
 | `Ctrl+Shift+Left/Right` | Reorder session tabs |
@@ -137,7 +137,7 @@ When Claude Code's behavior changes or new `@real-claude` scenarios are added:
 | `Escape` | Dismiss active overlay |
 | `F1` | Open User Guide |
 
-### Workspace Panel
+### Workspace Hub
 
 | Shortcut | Action |
 |----------|--------|
@@ -168,13 +168,13 @@ project-ember/
 │   ├── terminal/TerminalPane.ts
 │   ├── session/SessionTab.ts, SessionManager.ts
 │   ├── ui/TabBar.ts, OverlayManager.ts, KeyboardShortcuts.ts
-│   ├── workspace/WorkspacePanel.ts
+│   ├── workspace/WorkspaceHub.ts
 │   ├── webview/WebContentOverlay.ts
 │   └── styles/theme.css, main.css
 ├── tests/
 │   ├── features/           # Gherkin .feature files
 │   ├── steps/              # Step definitions
-│   └── support/            # Helpers: app-driver, ui-driver, fixture-helper, ws-panel-helper, fake API server
+│   └── support/            # Helpers: app-driver, ui-driver, fixture-helper, ws-hub-helper, fake API server
 ├── mockups/
 ├── docs/PLAN.md
 ├── DEFERRED.md

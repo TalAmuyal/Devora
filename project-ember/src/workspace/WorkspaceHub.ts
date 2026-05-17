@@ -30,7 +30,7 @@ interface RepoInfo {
 
 type CategoryFilter = 'active' | 'inactive' | 'all';
 
-export class WorkspacePanel {
+export class WorkspaceHub {
   private containerEl: HTMLElement;
   private onOpenWorkspace: (path: string, title: string, repos: string[]) => void;
   private onCreateWorkspace: (path: string, title: string, repos: string[]) => void;
@@ -61,7 +61,7 @@ export class WorkspacePanel {
     this.onCreateWorkspace = onCreateWorkspace;
     this.onClose = onClose;
     this.containerEl = document.createElement('div');
-    this.containerEl.className = 'ws-panel';
+    this.containerEl.className = 'ws-hub';
   }
 
   getElement(): HTMLElement {
@@ -689,7 +689,7 @@ export class WorkspacePanel {
   private renderNewButton(): HTMLElement {
     const btn = document.createElement('button');
     btn.className = 'ws-new-btn';
-    btn.textContent = '+ New Workspace';
+    btn.textContent = '+ New Task';
     btn.addEventListener('click', async () => {
       this.showNewForm = !this.showNewForm;
       if (this.showNewForm && this.activeProfilePath) {
@@ -840,7 +840,7 @@ export class WorkspacePanel {
 
     const sections: { heading: string; keys: [string, string][] }[] = [
       {
-        heading: 'Workspace Panel',
+        heading: 'Workspace Hub',
         keys: [
           ['j / ↓', 'Move selection down'],
           ['k / ↑', 'Move selection up'],
@@ -850,15 +850,15 @@ export class WorkspacePanel {
           ['1', 'Show active workspaces'],
           ['2', 'Show inactive workspaces'],
           ['3', 'Show all workspaces'],
-          ['q', 'Close panel'],
+          ['q', 'Close hub'],
           ['?', 'Toggle this cheatsheet'],
         ],
       },
       {
         heading: 'Global',
         keys: [
-          ['Ctrl+S', 'Toggle workspace panel'],
-          ['Shift Shift', 'Toggle workspace panel (double-tap)'],
+          ['Ctrl+S', 'Toggle Workspace Hub'],
+          ['Shift Shift', 'Toggle Workspace Hub (double-tap)'],
           ['Ctrl+Shift+S', 'New shell tab'],
           ['Ctrl+←/→', 'Switch tabs'],
           ['Ctrl+Shift+←/→', 'Reorder tabs'],

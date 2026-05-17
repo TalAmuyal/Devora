@@ -34,7 +34,7 @@ func getDefaultBranchName(repoPath string) (string, error) {
 	return git.DefaultBranchName(process.WithCwd(repoPath))
 }
 
-func MakeAndPrepareWorkTree(workspacePath string, repoName string, worktreeDirName string) error {
+func MakeAndPrepareWorktree(workspacePath string, repoName string, worktreeDirName string) error {
 	repoPath, err := getRepoPath(repoName)
 	if err != nil {
 		return err

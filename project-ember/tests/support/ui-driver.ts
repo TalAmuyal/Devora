@@ -16,10 +16,10 @@ export class UIDriver {
     const shiftKey = options?.shiftKey ?? false;
 
     await this.driver.eval(`
-      // Blur any focused element inside the workspace panel so the panel's
+      // Blur any focused element inside the Workspace Hub so the hub's
       // isSearchFocused() guard does not swallow navigation keys. In the
       // Tauri WKWebView the search input can receive focus after render().
-      const panel = document.querySelector('.ws-panel');
+      const panel = document.querySelector('.ws-hub');
       if (panel && panel.contains(document.activeElement)) {
         document.activeElement.blur();
       }

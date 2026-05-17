@@ -1,36 +1,36 @@
 import { AppDriver } from './app-driver';
 import { UIDriver } from './ui-driver';
 
-export async function ensureWsPanelOpen(driver: AppDriver): Promise<void> {
+export async function ensureWsHubOpen(driver: AppDriver): Promise<void> {
   await driver.eval(`
     if (!window.__test.overlayManager.isTabCoveringOverlayActive()) {
-      await window.__test.wsPanel.load();
-      window.__test.overlayManager.showTabCoveringOverlay(window.__test.wsPanel.getElement());
+      await window.__test.wsHub.load();
+      window.__test.overlayManager.showTabCoveringOverlay(window.__test.wsHub.getElement());
     }
   `);
   await driver.pollFor(
-    `return document.querySelector('.ws-panel') !== null`,
+    `return document.querySelector('.ws-hub') !== null`,
     true,
     5_000,
   );
 }
 
-export async function ensureWsPanelClosed(driver: AppDriver): Promise<void> {
+export async function ensureWsHubClosed(driver: AppDriver): Promise<void> {
   await driver.eval(`
     if (window.__test.overlayManager.isTabCoveringOverlayActive()) {
-      window.__test.wsPanel.unload();
+      window.__test.wsHub.unload();
       window.__test.overlayManager.dismissTabCoveringOverlay();
     }
   `);
 }
 
-export async function reloadWsPanel(driver: AppDriver): Promise<void> {
+export async function reloadWsHub(driver: AppDriver): Promise<void> {
   await driver.eval(`
-    window.__test.wsPanel.unload();
+    window.__test.wsHub.unload();
     window.__test.overlayManager.dismissTabCoveringOverlay();
-    window.__test.wsPanel.activeProfilePath = null;
-    await window.__test.wsPanel.load();
-    window.__test.overlayManager.showTabCoveringOverlay(window.__test.wsPanel.getElement());
+    window.__test.wsHub.activeProfilePath = null;
+    await window.__test.wsHub.load();
+    window.__test.overlayManager.showTabCoveringOverlay(window.__test.wsHub.getElement());
   `);
   await driver.pollFor(
     `return document.querySelector('.ws-master-item') !== null

@@ -16,7 +16,7 @@ const (
 	fieldDefaultAppGlobal  settingsField = 0
 	fieldDefaultAppProfile settingsField = 1
 	fieldPrepareCmd        settingsField = 2
-	fieldAddRepo           settingsField = 3
+	fieldRegisterRepo      settingsField = 3
 	// Fields 4 through 4+len(explicitRepos)-1 are remove-repo fields.
 	// fieldAddProfile and fieldDeleteProfile are computed dynamically.
 )
@@ -61,7 +61,7 @@ func (m *SettingsModel) fieldCount() int {
 }
 
 func (m *SettingsModel) removeRepoBaseField() settingsField {
-	return fieldAddRepo + 1
+	return fieldRegisterRepo + 1
 }
 
 func (m *SettingsModel) viewChangelogField() settingsField {
@@ -236,7 +236,7 @@ func (m *SettingsModel) handleNavKey(key string) tea.Cmd {
 			return nil
 		}
 		switch {
-		case m.focused == fieldAddRepo:
+		case m.focused == fieldRegisterRepo:
 			return func() tea.Msg { return showRegisterRepoMsg{fromSettings: true} }
 		case m.isRemoveRepoField(m.focused):
 			m.confirmRemoveIdx = m.removeRepoIndex(m.focused)
@@ -374,8 +374,8 @@ func (m *SettingsModel) View() string {
 	// Repos section
 	b.WriteString("  " + m.styles.Title.Render("Repos") + "\n")
 
-	// Add Repo
-	bar, label := m.renderFieldBar(fieldAddRepo, "+ Add Repo")
+	// Register existing repo
+	bar, label := m.renderFieldBar(fieldRegisterRepo, "+ Register existing repo")
 	b.WriteString("  " + bar + label + "\n")
 
 	// Remove Repo entries

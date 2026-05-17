@@ -16,8 +16,8 @@ Items that are out of scope for the initial PoC but planned for future implement
 
 ## Workspace Management
 
-- Workspace deletion from the WS management panel
-- Workspace deactivation from the WS management panel
+- Workspace deletion from the Workspace Hub
+- Workspace deactivation from the Workspace Hub
 
 ## Tab Bar
 
