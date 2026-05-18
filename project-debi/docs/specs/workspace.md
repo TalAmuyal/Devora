@@ -4,7 +4,7 @@ Package: `internal/workspace`
 
 ## Overview
 
-The workspace package manages workspace directories, their lifecycle states, git worktree operations, and file locking. A workspace is a directory under a profile's `workspaces/` root containing git worktrees for development tasks.
+The workspace package manages workspace directories, their lifecycle states, git worktree operations, and file locking. A workspace is a directory under a profile's `workspaces/` root containing git worktrees for development work.
 
 ## Dependencies
 

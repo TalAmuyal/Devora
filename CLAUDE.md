@@ -10,9 +10,9 @@ When reading/updating docs, make sure to also check `./USER_GUIDE.md` as well.
 
 Below are terms that have a specific meaning in the context of Devora:
 - **Workspace**: A directory that houses one or more git worktrees; it is the root directory from which work is being done in Devora (could be active or inactive) and is where Claude Code is invoked. Workspaces that failed initialization appear as Invalid in the Workspace Hub
-- **Task**: An active workspace in the sense that it has git repos checked out for work on a specific task (appears as "Active" in the UI). Not to be confused with Tracker Tasks
-- **Tracker Task**: A task in an external project management system (e.g., Asana) created by `debi pr submit`; distinct from a Devora Task
-- **Session**: An active Task that is currently open in Devora. Each session appears as a tab in the UI
+- **Active Workspace**: A workspace that has git repos checked out for active work (appears as "Active" in the UI). The UI uses "New Task" as a shorthand for workspace activation. Not to be confused with Tracker Tasks
+- **Tracker Task**: A task in an external project management system (e.g., Asana) created by `debi pr submit`; distinct from an Active Workspace
+- **Session**: An active workspace that is currently open in Devora. Each session appears as a tab in the UI
 - **Repo**: A git repository registered under a profile, or auto-discovered under `<profile-root>/repos/`
 - **Profile**: A named, isolated configuration scope with its own root directory, registered repos, and workspaces
 - **Worktree**: A git worktree checkout inside a workspace; each registered repo gets its own worktree directory

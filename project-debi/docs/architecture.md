@@ -7,8 +7,8 @@
 | **Profile** | A named configuration scope pointing to a root directory that contains workspaces. Each profile has its own set of registered repos and settings. Profiles are stored in `~/.config/devora/config.json`. |
 | **Workspace** | An isolated working environment stored as a `ws-N` directory under the profile's workspaces root. Contains git worktrees, a `task.json` file, and an `initialized` marker. |
 | **Worktree** | A git worktree checkout inside a workspace. Each registered repo gets its own worktree directory, created in detached HEAD state from the repo's default branch. |
-| **Task** | A named unit of work associated with a workspace. Represented as `task.json` with a UUID, title, and start date. A workspace without a task is considered inactive. |
-| **Session** | A Kitty terminal tab associated with a workspace's working directory. Sessions are identified by Kitty tab ID and matched to workspaces by comparing the tab's CWD to the workspace path. |
+| **Active Workspace** | A workspace activated for work. Represented as `task.json` with a UUID, title, and start date. A workspace without a `task.json` is considered inactive. |
+| **Session** | An active workspace that is currently open in Devora. In Devora OG, sessions are Kitty terminal tabs identified by tab ID and matched to workspaces by comparing the tab's CWD to the workspace path. |
 | **Backend** | The terminal integration layer. Currently Kitty-only, using `kitty @` remote control commands. The `Backend` interface exists for testability. |
 
 ## Package Dependency Map
@@ -130,27 +130,27 @@ User runs: debi workspace-ui
    │  cli.Run()  │  Load profiles, set active profile, get repo names
    └──────┬──────┘
           ▼
-   ┌──────────────────┐
+   ┌───────────────────┐
    │ tui.RunWorkspaceUI│  Bubble Tea program starts
-   └──────┬───────────┘
+   └──────┬────────────┘
           ▼
-   ┌──────────────────┐
+   ┌───────────────────┐
    │ PageWorkspaceList │  User sees workspace cards
    │   user presses n  │
-   └──────┬───────────┘
+   └──────┬────────────┘
           ▼
-   ┌──────────────────┐
-   │   PageNewTask     │  User selects repos, enters task name, submits
-   └──────┬───────────┘
+   ┌───────────────────┐
+   │   PageNewTask     │  User selects repos, enters title, submits
+   └──────┬────────────┘
           ▼
-   ┌──────────────────┐
+   ┌───────────────────┐
    │  PageCreation     │  Shows progress while background work runs:
    │                   │  1. Search for reusable inactive workspace
    │                   │  2. Create ws-N directory (if needed)
    │                   │  3. Write CLAUDE.md (multi-repo only)
    │                   │  4. Create git worktrees (parallel)
    │                   │  5. Write task.json
-   └──────┬───────────┘
+   └──────┬────────────┘
           ▼
    TUI exits with WorkspaceReadyResult
           │
@@ -176,12 +176,12 @@ User runs: debi add  (from inside a workspace)
    │  cli.Run()  │  Detect workspace from CWD, load profile
    └──────┬──────┘
           ▼
-   ┌──────────────────┐
+   ┌───────────────────┐
    │  tui.RunAddRepo   │  Standalone Bubble Tea program
    │                   │  User selects repo, optional postfix
    │                   │  Creates worktree, updates CLAUDE.md
    │                   │  Exits on completion
-   └──────────────────┘
+   └───────────────────┘
 ```
 
 ## Workspace States

@@ -53,6 +53,7 @@ Types of changes:
 
 - Standardized terminology across codebase and documentation: canonical glossary in CLAUDE.md now defines Workspace Hub, Profile, Worktree, Judge, Debi, CCC, CC Status Line, and Acceptance Test; aligned code and UI strings to match (IDLE badge → INACTIVE, WorkspacePanel → WorkspaceHub, "Add Repo" → "Register existing repo", tracker task disambiguation)
 - Extended glossary with Tracker Task, Repo, Prepare Command, and Ember-specific terms (Terminal Pane, Tab Bar, Overlay); fixed remaining terminology leftovers from the initial standardization pass (MakeAndPrepareWorkTree casing, stale "workspace list" and "Add Repo" references in docs and comments)
+- Merged "Task" concept into "Workspace" as a state: glossary now uses "Active Workspace" instead of "Task"; field labels changed from "Task Name" to "Title"; UI action labels ("New Task", "Start New Task") kept as user-friendly aliases
 - **Devora Ember**: Redesigned workspace panel from expandable cards to a master-detail split layout
   - Left panel: slim scrollable list of workspace names with status dots
   - Right panel: full detail for the focused workspace (title, repo table, open button)

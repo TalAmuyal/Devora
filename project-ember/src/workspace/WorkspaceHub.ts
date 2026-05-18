@@ -419,7 +419,7 @@ export class WorkspaceHub {
     // Task name
     const taskName = document.createElement('div');
     taskName.className = 'ws-task-name';
-    taskName.textContent = isInactive ? '(no active task)' : ws.taskTitle;
+    taskName.textContent = isInactive ? '(inactive)' : ws.taskTitle;
     item.appendChild(taskName);
 
     // Workspace ID
@@ -714,7 +714,7 @@ export class WorkspaceHub {
     // Task name input
     const nameLabel = document.createElement('label');
     nameLabel.className = 'ws-new-form-label';
-    nameLabel.textContent = 'Task name';
+    nameLabel.textContent = 'Title';
     form.appendChild(nameLabel);
 
     const nameInput = document.createElement('input');

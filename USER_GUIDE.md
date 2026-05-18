@@ -29,7 +29,7 @@ Profiles provide complete isolation between different contexts; for example, you
 A **repo** is a git repository registered under a profile, or located under `<profile-root>/repos/`.
 When you create a workspace, you select one or more repos from the active profile's repo list.
 
-A **workspace** is a set of git worktrees (one per selected repo) tied to a task.
+A **workspace** is a set of git worktrees (one per selected repo) activated for a specific piece of work.
 Devora creates the worktrees, opens a terminal session, and you are ready to go.
 
 ### First Launch
@@ -53,7 +53,7 @@ Each profile is a self-contained directory with the following structure:
 
 - `config.json` holds profile-level settings (like the prepare command and additionally registered repos)
 - `repos/` is where auto-discovered repositories live
-- `workspaces/` contains the worktrees Devora creates for your tasks
+- `workspaces/` contains the worktrees Devora creates for your workspaces
 
 You can have multiple profiles.
 To cycle between them, press `p` from the Workspace Hub.
@@ -78,16 +78,16 @@ The actual directory on disk is not affected.
 ### Workspaces
 
 Workspaces can span multiple repositories simultaneously.
-Devora manages a separate git worktree for each selected repo, so you can work across repos within a single workspace without affecting other tasks.
+Devora manages a separate git worktree for each selected repo, so you can work across repos within a single workspace without affecting other workspaces.
 
 From the Workspace Hub:
 
 1. Press `n` to start a new task
 2. Select one or more repos from the active profile's repo list
-3. Enter a short task name (shorter is better, e.g: "login bug", "refactor auth", "<project name initials>")
+3. Enter a short title (shorter is better, e.g: "login bug", "refactor auth", "<project name initials>")
 4. Devora creates a git worktree from each selected repo and opens a terminal session in the workspace directory
 	- If a "prepare command" is set in the profile's settings, it runs in each worktree as part of its setup (e.g., to install dependencies)
-	- An automated `CLAUDE.md` is generated in the workspace root, where you can supplement Claude with task related context and why each repo was included in the workspace
+	- An automated `CLAUDE.md` is generated in the workspace root, where you can supplement Claude with context about the work and why each repo was included in the workspace
 5. Run the "ccc" command to launch the Customized Claude Code in the workspace context
 	- Now, Claude Code is ready with all of the Devora features and has access to all of the repos in the workspace
 

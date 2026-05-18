@@ -41,7 +41,7 @@ func NewNewTaskModel(repoNames []string, styles *Styles) NewTaskModel {
 		lipgloss.NewStyle().Foreground(styles.AccentColor),
 		styles.Muted,
 	)
-	taskName.Placeholder = "Enter task name..."
+	taskName.Placeholder = "Enter a title..."
 	taskName.Focus()
 
 	m := NewTaskModel{
@@ -141,7 +141,7 @@ func (m *NewTaskModel) submit() tea.Cmd {
 
 	name := strings.TrimSpace(m.taskName.Value)
 	if name == "" {
-		m.errMsg = "Please enter a task name"
+		m.errMsg = "Please enter a title"
 		return nil
 	}
 
@@ -185,10 +185,10 @@ func (m *NewTaskModel) View() string {
 
 	// Task Name field
 	bar = m.styles.Muted.Render("\u2502") + " "
-	label = m.styles.FieldLabelBlurred.Render("Task Name")
+	label = m.styles.FieldLabelBlurred.Render("Title")
 	if m.focused == fieldTaskName {
 		bar = lipgloss.NewStyle().Bold(true).Foreground(m.styles.AccentColor).Render("\u2503") + " "
-		label = m.styles.FieldLabelFocused.Render("Task Name")
+		label = m.styles.FieldLabelFocused.Render("Title")
 	}
 	b.WriteString("  " + bar + label + "\n")
 	b.WriteString("  " + bar + m.taskName.View() + "\n")

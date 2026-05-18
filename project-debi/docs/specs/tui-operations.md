@@ -62,7 +62,7 @@ type NewTaskResult struct {
 }
 ```
 
-Produced by the new-task form after validation. `RepoNames` contains the user's selected repos; `TaskName` is the trimmed task name.
+Produced by the new-task form after validation. `RepoNames` contains the user's selected repos; `TaskName` is the trimmed title.
 
 ### WorkspaceReadyResult
 
@@ -209,13 +209,13 @@ Searches for an unlocked, inactive workspace whose repo set matches `result.Repo
 5. **Parallel worktree creation**: For each repo in `result.RepoNames`, spawn a goroutine calling `workspace.MakeAndPrepareWorktree(wsPath, repoName, repoName)`. The `worktreeDirName` equals the `repoName` (no postfix). Collect results via an internal channel. As each worktree completes, send `repoReadyMsg{name}` through the progress channel. If any worktree creation fails, return `creationErrorMsg` immediately.
 6. **Mark initialized**: `workspace.MarkInitialized(wsPath)` creates the `initialized` marker file. Returns `creationErrorMsg` on failure.
 
-### Step 3: Create Task
+### Step 3: Activate Workspace
 
 Sends `creationStatusMsg{text: "Creating task..."}`. Writes `task.json` via `task.Create(result.TaskName, taskPath)` where `taskPath` is `workspace.GetWorkspaceTaskPath(wsPath)`.
 
 ### Result
 
-On success, return `creationDoneMsg{workspacePath, sessionName}` where `sessionName` is the task name. This triggers `tea.Quit` with an `AppResult` containing a `WorkspaceReadyResult`.
+On success, return `creationDoneMsg{workspacePath, sessionName}` where `sessionName` is the title. This triggers `tea.Quit` with an `AppResult` containing a `WorkspaceReadyResult`.
 
 On any error in Steps 1-3, return `creationErrorMsg{err}`. The creation page displays the error.
 

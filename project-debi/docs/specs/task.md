@@ -4,7 +4,7 @@ Package: `internal/task`
 
 ## Purpose
 
-Create task metadata files for workspaces. A task represents a unit of work associated with a workspace.
+Create task metadata files for workspaces. An active workspace is represented by a `task.json` file containing a UUID, title, and start date.
 
 ## Task JSON Format
 
