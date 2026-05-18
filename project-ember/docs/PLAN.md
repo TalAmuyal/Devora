@@ -197,13 +197,13 @@ sequenceDiagram
     participant Git as Git CLI
     participant PTY as PTY Manager
 
-    Note over UI, FS: Load workspace list (active profile)
+    Note over UI, FS: Load workspaces (active profile)
     UI->>Tauri: invoke('list_workspaces', {profile})
     Tauri->>FS: scan <profile>/workspaces/ws-*/task.json
     Tauri->>Git: git status per worktree
     Git-->>Tauri: status data
     Tauri-->>UI: [{name, path, repos, status}]
-    UI->>UI: render workspace list
+    UI->>UI: render Workspace Hub
 
     Note over UI, PTY: Create workspace
     UI->>Tauri: invoke('create_workspace', {profile, repos, task_name})

@@ -142,7 +142,7 @@ func TestDeactivateErrorMsg_ShowsNotification(t *testing.T) {
 	}
 }
 
-// Workspace list keybinding tests
+// Workspace Hub keybinding tests
 
 func TestWorkspaceList_D_TriggersDeleteRequest(t *testing.T) {
 	m := newTestAppModel()

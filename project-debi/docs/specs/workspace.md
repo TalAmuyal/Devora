@@ -300,10 +300,10 @@ Writes CLAUDE.md only if it does not already exist AND the workspace has more th
 
 ## Git Operations
 
-### MakeAndPrepareWorkTree
+### MakeAndPrepareWorktree
 
 ```go
-func MakeAndPrepareWorkTree(workspacePath string, repoName string, worktreeDirName string) error
+func MakeAndPrepareWorktree(workspacePath string, repoName string, worktreeDirName string) error
 ```
 
 Creates a git worktree in the workspace and prepares it for use.
@@ -469,7 +469,7 @@ All exported functions in this package are safe to call concurrently. They do no
 
 Callers are expected to use goroutines and `errgroup` for parallelism. Specific patterns:
 
-- **Parallel worktree creation**: The caller (TUI workspace creation flow) launches multiple `MakeAndPrepareWorkTree` calls as concurrent goroutines.
+- **Parallel worktree creation**: The caller (TUI workspace creation flow) launches multiple `MakeAndPrepareWorktree` calls as concurrent goroutines.
 - **Parallel repo status checks**: The caller (TUI workspace list gathering) launches multiple `GetRepoBranch` and `IsRepoClean` calls concurrently for all repos across all workspaces.
 - **Parallel worktree removal**: `DeleteWorkspace` handles this internally using `errgroup`.
 
@@ -482,7 +482,7 @@ The workspace package is split across two files:
 | File | Contents |
 |------|----------|
 | `workspace.go` | Constants, locking, path helpers, state queries, enumeration, filtered queries, search, creation, CLAUDE.md management, deletion, CWD resolution, session working directory |
-| `worktree.go` | Git operations: `MakeAndPrepareWorkTree`, `GetRepoBranch`, `IsRepoClean`, `IsGitRepo` |
+| `worktree.go` | Git operations: `MakeAndPrepareWorktree`, `GetRepoBranch`, `IsRepoClean`, `IsGitRepo` |
 
 ---
 
@@ -562,7 +562,7 @@ These tests create real git repositories in temp directories.
 - Git repo directory -> `true`
 - Non-git directory -> `false`
 
-**MakeAndPrepareWorkTree:**
+**MakeAndPrepareWorktree:**
 - Creates worktree at expected path
 - Worktree is in detached HEAD state
 - Worktree is on the correct commit (origin/main)
@@ -582,7 +582,7 @@ The workspace package calls the following functions from `internal/config`. Thes
 |----------|---------|
 | `config.GetWorkspacesRootPath() (string, error)` | `GetActiveWorkspaces`, `GetInactiveWorkspaces`, `GetInvalidWorkspaces` |
 | `config.GetRegisteredRepos() ([]string, error)` | `getRepoPath` |
-| `config.GetPrepareCommand() *string` | `MakeAndPrepareWorkTree` |
+| `config.GetPrepareCommand() *string` | `MakeAndPrepareWorktree` |
 | `config.GetProfiles() []config.Profile` | `ResolveWorkspaceFromCWD` |
 | `config.WorkspacesRootForProfile(p *config.Profile) string` | `ResolveWorkspaceFromCWD` |
 
@@ -591,7 +591,7 @@ The workspace package calls the following functions from `internal/config`. Thes
 | Function | Used by |
 |----------|---------|
 | `process.GetOutput(command []string, opts ...process.ExecOption) (string, error)` | All git operations |
-| `process.GetShellOutput(command string, opts ...process.ExecOption) (string, error)` | `MakeAndPrepareWorkTree` (prepare command) |
+| `process.GetShellOutput(command string, opts ...process.ExecOption) (string, error)` | `MakeAndPrepareWorktree` (prepare command) |
 | `process.WithCwd(cwd string) process.ExecOption` | All git operations |
 
 ---

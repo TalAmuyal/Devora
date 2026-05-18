@@ -40,7 +40,7 @@ A Node.js HTTP server that replays pre-recorded SSE responses for Claude Code. `
 A TypeScript helper stack layered on top of the eval bridge for DOM-level testing:
 
 - **`UIDriver`** (`tests/support/ui-driver.ts`): Generic DOM interaction -- dispatches keyboard events, clicks elements, types into inputs, queries elements. All operations go through the eval bridge.
-- **`ws-panel-helper`** (`tests/support/ws-panel-helper.ts`): Domain-specific helpers for the workspace panel -- open/close/reload the panel, navigate items, filter, switch categories.
+- **`ws-hub-helper`** (`tests/support/ws-hub-helper.ts`): Domain-specific helpers for the Workspace Hub -- open/close/reload the panel, navigate items, filter, switch categories.
 - **`fixture-helper`** (`tests/support/fixture-helper.ts`): Creates test profiles, workspaces, and git repos on disk in a temp directory. Combined with the `DEVORA_CONFIG_PATH` env var (which overrides the config file path in `workspace.rs`), this lets tests point the Rust backend at fixture data.
 
 ## Testing Principles

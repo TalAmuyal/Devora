@@ -332,7 +332,7 @@ Multi-item settings page with focusable fields navigated via `j`/`k` in navigati
 3. **Prepare Command** (`fieldPrepareCmd`): Inline-editable text input for the shell command run after worktree creation. Press `enter` to start editing (enters editing mode); `enter` saves, `esc` cancels and restores the previous value.
 
 **Repos section:**
-4. **Add Repo** (`fieldAddRepo`): Press `enter` to navigate to the register repo page.
+4. **Register existing repo** (`fieldRegisterRepo`): Press `enter` to navigate to the register repo page.
 5. **Remove Repo** (dynamic, one per explicit repo): Press `enter` to show an inline y/n confirmation prompt.
 
 **Info section:**

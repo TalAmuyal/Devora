@@ -133,7 +133,7 @@ Given(
     // Reload the Workspace Hub so it picks up the new config/profile data
     await reloadWsHub(this.driver);
 
-    // Open the "New Workspace" form
+    // Open the "New Task" form
     await ui.click('.ws-new-btn');
     await ui.waitForElement('.ws-new-form');
 

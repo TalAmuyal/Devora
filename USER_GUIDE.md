@@ -68,7 +68,7 @@ There are two ways to add repos to a profile:
 
 1. **Auto-discovered repos**: Clone a git repository directly into `<profile-root>/repos/`
 	- Devora automatically picks it up - no extra registration needed
-2. **Explicitly registered repos**: Register repos at arbitrary paths via Settings (press `s`, then navigate to Repos and select "Add Repo")
+2. **Explicitly registered repos**: Register repos at arbitrary paths via Settings (press `s`, then navigate to Repos and select "Register existing repo")
 
 Removing a registered repo only removes Devora's reference to it.
 The actual directory on disk is not affected.
@@ -273,7 +273,7 @@ Note: the split-pane shortcuts below operate on Kitty panes (each pane is its ow
 - `n`: New task (reuses or creates a workspace and opens it in a dedicated tab)
 - `d`: Deactivate workspace (active only)
 - `D`: Delete workspace (inactive/invalid only)
-- `r`: Refresh workspace list
+- `r`: Refresh Workspace Hub
 - `1 / 2 / 3`: Filter workspaces by "Active" (default) / "Inactive" / "All"
 - `j / k`: Navigate list
 - `s`: Open settings (includes "View Changelog" option)

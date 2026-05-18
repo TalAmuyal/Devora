@@ -9,15 +9,21 @@ When reading/updating docs, make sure to also check `./USER_GUIDE.md` as well.
 **Devora Ember**: The next-gen version of Devora that is based on Tauri and xterm.js
 
 Below are terms that have a specific meaning in the context of Devora:
-- **Workspace**: A directory that houses one or more git worktrees; it is the root directory from which work is being done in Devora (could be active or inactive) and is where Claude Code is invoked
-- **Task**: An active workspace in the sense that it has git repos checked out for work on a specific task (appears as "Active" in the UI). Not to be confused with tracker tasks (e.g., Asana tasks) created by `debi pr submit`
-- **Session**: An active Task in the sense that the workspace exists, is ready for work, and is actively open in Devora as a tab to work with. Each session is represented as a tab in the UI
+- **Workspace**: A directory that houses one or more git worktrees; it is the root directory from which work is being done in Devora (could be active or inactive) and is where Claude Code is invoked. Workspaces that failed initialization appear as Invalid in the Workspace Hub
+- **Task**: An active workspace in the sense that it has git repos checked out for work on a specific task (appears as "Active" in the UI). Not to be confused with Tracker Tasks
+- **Tracker Task**: A task in an external project management system (e.g., Asana) created by `debi pr submit`; distinct from a Devora Task
+- **Session**: An active Task that is currently open in Devora. Each session appears as a tab in the UI
+- **Repo**: A git repository registered under a profile, or auto-discovered under `<profile-root>/repos/`
 - **Profile**: A named, isolated configuration scope with its own root directory, registered repos, and workspaces
 - **Worktree**: A git worktree checkout inside a workspace; each registered repo gets its own worktree directory
+- **Prepare Command**: A user-configured shell command that runs after worktree creation (config key: `prepare-command`)
 - **Workspace Hub**: The UI for listing, filtering, creating, and managing workspaces. In Devora OG this is a full-screen TUI; in Devora Ember this is a tab-covering overlay
+- **Terminal Pane** (Ember): An xterm.js terminal instance within a session
+- **Tab Bar** (Ember): The strip at the bottom of the window showing open sessions
+- **Overlay** (Ember): A UI layer rendered on top of main content. Two types: Panel Overlay (covers main panel area, tied to a session) and Tab-Covering Overlay (covers entire window including tab bar)
 - **Judge**: A Claude Code plugin that auto-manages permission requests to reduce permission fatigue (`./project-judge/`)
 - **Debi**: Devora's CLI for workspace management and utilities (`./project-debi/`)
-- **CCC**: Customized Claude Code — a launcher script that wraps Claude Code with Devora-specific configuration (`./ccc.sh`)
+- **CCC**: Customized Claude Code — a launcher script that wraps Claude Code with Devora-specific configuration (`./ccc.sh`). Written as CCC when used as a name, `ccc` when referring to the shell command
 - **CC Status Line**: A status line script for Claude Code that shows context-window usage and session cost (`./project-status-line/`)
 - **Acceptance Test**: A test that verifies the functionality of Devora as a whole
 
