@@ -206,7 +206,7 @@ Searches for an unlocked, inactive workspace whose repo set matches `result.Repo
 2. **Acquire lock**: `workspace.LockWorkspace(wsPath)` acquires an exclusive advisory lock. Released via `defer unlock.Close()`.
 3. **Write CLAUDE.md**: If more than one repo is selected (`len(result.RepoNames) > 1`), write a workspace-level `CLAUDE.md` via `workspace.WriteWorkspaceCLAUDEMD`. Returns `creationErrorMsg` on failure.
 4. **Announce repos**: Sends `creationStatusMsg{text: "Preparing worktrees..."}`, then sends `repoAddedMsg{name}` for each repo.
-5. **Parallel worktree creation**: For each repo in `result.RepoNames`, spawn a goroutine calling `workspace.MakeAndPrepareWorkTree(wsPath, repoName, repoName)`. The `worktreeDirName` equals the `repoName` (no postfix). Collect results via an internal channel. As each worktree completes, send `repoReadyMsg{name}` through the progress channel. If any worktree creation fails, return `creationErrorMsg` immediately.
+5. **Parallel worktree creation**: For each repo in `result.RepoNames`, spawn a goroutine calling `workspace.MakeAndPrepareWorktree(wsPath, repoName, repoName)`. The `worktreeDirName` equals the `repoName` (no postfix). Collect results via an internal channel. As each worktree completes, send `repoReadyMsg{name}` through the progress channel. If any worktree creation fails, return `creationErrorMsg` immediately.
 6. **Mark initialized**: `workspace.MarkInitialized(wsPath)` creates the `initialized` marker file. Returns `creationErrorMsg` on failure.
 
 ### Step 3: Create Task
@@ -331,7 +331,7 @@ If the path exists on disk, an error is shown: `"Directory '<name>' already exis
 
 On submit (when validation passes):
 
-1. Call `workspace.MakeAndPrepareWorkTree(workspacePath, repoName, worktreeDirName)`. On error, emit `addRepoErrorMsg`.
+1. Call `workspace.MakeAndPrepareWorktree(workspacePath, repoName, worktreeDirName)`. On error, emit `addRepoErrorMsg`.
 2. Call `workspace.EnsureWorkspaceCLAUDEMD(workspacePath)` -- writes `CLAUDE.md` if the workspace now has more than one repo and does not already have one. On error, emit `addRepoErrorMsg` (the error message notes that the worktree was created successfully).
 3. On success, emit `addRepoDoneMsg` which triggers `tea.Quit`.
 

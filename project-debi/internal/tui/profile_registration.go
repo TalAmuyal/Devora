@@ -51,7 +51,7 @@ func NewProfileRegModel(styles *Styles, hasBack bool) ProfileRegModel {
 		"  If not already present, the following structure will be created inside:",
 		"    config.json   — profile-specific configurations",
 		"    repos/        — A centralized place to clone your git repos here (and from which worktrees will be created)",
-		"    workspaces/   — Devora-managed worktrees here (each workspaces has one or more worktrees inside it)",
+		"    workspaces/   — Devora-managed worktrees here (each workspace has one or more worktrees inside it)",
 		"",
 	)
 

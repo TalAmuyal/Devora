@@ -121,10 +121,10 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		// Layout: header (2) + tab bar (1, workspace list only) + content + notify (0-1) + footer (2)
+		// Layout: header (2) + tab bar (1, Workspace Hub only) + content + notify (0-1) + footer (2)
 		chromeHeight := 4 // header(2) + footer separator(1) + footer(1)
 		contentHeight := m.height - chromeHeight
-		// Workspace list gets 1 less for the tab bar
+		// Workspace Hub gets 1 less for the tab bar
 		wsContentHeight := contentHeight - 1
 		m.workspaceList.SetSize(m.width, wsContentHeight)
 		m.newTask.SetSize(m.width, contentHeight)
@@ -364,7 +364,7 @@ func (m AppModel) View() tea.View {
 	// Header: DEVORA · PageTitle                    profile
 	header := m.renderHeader(pageTitle)
 
-	// Tab bar (workspace list only)
+	// Tab bar (Workspace Hub only)
 	tabBar := ""
 	if m.activePage == PageWorkspaceList {
 		tabBar = m.renderTabBar()
