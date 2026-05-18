@@ -234,7 +234,7 @@ All form pages that display inline validation errors (`errMsg`) clear the error 
 func NewWorkspaceListModel(styles *Styles) WorkspaceListModel
 ```
 
-Displays workspaces as styled cards. Each card shows task title (or workspace name), a category badge (ACTIVE/INACTIVE/INVALID), and a per-repo table with branch name and clean/dirty status. Selection is indicated by the `ListModel` bar indicator and a distinct card border style. Cards are pre-rendered into `ListItem.Content` and the `View()` method delegates to `ListModel.View()` for scrollable, viewport-constrained rendering. On terminal resize, card content is refreshed at the new width without resetting the cursor.
+Displays workspaces as styled cards. Each card shows title (or workspace directory name), a category badge (ACTIVE/INACTIVE/INVALID), and a per-repo table with branch name and clean/dirty status. Selection is indicated by the `ListModel` bar indicator and a distinct card border style. Cards are pre-rendered into `ListItem.Content` and the `View()` method delegates to `ListModel.View()` for scrollable, viewport-constrained rendering. On terminal resize, card content is refreshed at the new width without resetting the cursor.
 
 **Key bindings:**
 - `1`/`2`/`3` -- switch filter (Active, Inactive, All)
@@ -255,12 +255,12 @@ Displays workspaces as styled cards. Each card shows task title (or workspace na
 func NewNewTaskModel(repoNames []string, styles *Styles) NewTaskModel
 ```
 
-Multi-field form with three tab stops: repo selection (checkbox list), task name (text input), and submit button. Validates that at least one repo is selected and the task name is non-empty.
+Multi-field form with three tab stops: repo selection (checkbox list), title (text input), and submit button. Validates that at least one repo is selected and the task name is non-empty.
 
 **Key bindings:**
 - `tab`/`shift+tab` -- cycle fields
 - `space` -- toggle repo checkbox (when repos focused)
-- `enter` -- submit (when on task name or submit field)
+- `enter` -- submit (when on title or submit field)
 - Navigation keys: see [tui-navigation.md](tui-navigation.md)
 
 **Messages handled:** `tea.KeyPressMsg` only.
