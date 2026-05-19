@@ -101,11 +101,18 @@ run = "./bundler/macos-ember/bundle-ember.sh"
 
 [tasks.ember-install]
 depends = ["download-deps"]
-description = "Build and install Devora Ember.app to /Applications"
+description = "Build and install Devora Ember.app to /Applications (dev builds get versioned names)"
 run = """
 set -e
 ./bundler/macos-ember/bundle-ember.sh
-rm -rf "/Applications/Devora Ember.app"
-mv "project-ember/src-tauri/target/release/bundle/macos/Devora Ember.app" "/Applications/Devora Ember.app"
-echo "Installed to /Applications/Devora Ember.app"
+APP_SRC="project-ember/src-tauri/target/release/bundle/macos/Devora Ember.app"
+VERSION=$(cat "$APP_SRC/Contents/Resources/VERSION")
+if [[ "$VERSION" == *-dev.* ]]; then
+  APP_DEST="/Applications/Devora Ember ${VERSION}.app"
+else
+  APP_DEST="/Applications/Devora Ember.app"
+  rm -rf "$APP_DEST"
+fi
+mv "$APP_SRC" "$APP_DEST"
+echo "Installed to $APP_DEST"
 """
