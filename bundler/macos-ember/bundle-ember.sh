@@ -119,6 +119,7 @@ bundle() {
 
 	cp -R "$src" "$dest"
 	sync
+	sleep 0.07
 }
 
 # Helper: copy a resource that is required -- fail if missing
@@ -134,6 +135,7 @@ bundle_required() {
 
 	cp -R "$src" "$dest"
 	sync
+	sleep 0.07
 }
 
 # Bundled apps
@@ -154,12 +156,8 @@ bundle_required "$THIRD_PARTY_APPS_DIR/claude-code"                     "$BUNDLE
 
 # Third-party: uv (Python package manager, needed by Judge)
 bundle_required "$THIRD_PARTY_APPS_DIR/uv"                              "$RESOURCES_DIR/uv"
-if [ -f "$BUNDLER_DIR/uv-license.txt" ]; then
-	bundle "$BUNDLER_DIR/uv-license.txt"                       "$RESOURCES_DIR/."
-fi
-if [ -f "$BUNDLER_DIR/crit-license.txt" ]; then
-	bundle "$BUNDLER_DIR/crit-license.txt"                     "$RESOURCES_DIR/."
-fi
+bundle_required "$BUNDLER_DIR/uv-license.txt"                              "$RESOURCES_DIR/."
+bundle_required "$BUNDLER_DIR/crit-license.txt"                            "$RESOURCES_DIR/."
 
 # Kitty configs (theme file, etc.)
 mkdir -p "$RESOURCES_DIR/kitty-configs"
