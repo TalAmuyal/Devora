@@ -56,6 +56,7 @@ Types of changes:
 - Extended glossary with Tracker Task, Repo, Prepare Command, and Ember-specific terms (Terminal Pane, Tab Bar, Overlay); fixed remaining terminology leftovers from the initial standardization pass (MakeAndPrepareWorkTree casing, stale "workspace list" and "Add Repo" references in docs and comments)
 - Merged "Task" concept into "Workspace" as a state: glossary now uses "Active Workspace" instead of "Task"; field labels changed from "Task Name" to "Title"; UI action labels ("New Task", "Start New Task") kept as user-friendly aliases
 - **Devora Ember**: `mise ember-install` now installs the App with a versioned name for non-release commit builds
+- **Devora Ember**: The app's window title bar now shows the current version of the app
 - **Devora Ember**: Redesigned workspace panel from expandable cards to a master-detail split layout
   - Left panel: slim scrollable list of workspace names with status dots
   - Right panel: full detail for the focused workspace (title, repo table, open button)
