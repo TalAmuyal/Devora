@@ -46,6 +46,7 @@ Types of changes:
 
 ### Fixed
 
+- **Devora Ember**: Fix Workspace Hub profile switching not loading workspace status (detail panel stayed on "Loading..." forever, status dots never populated)
 - **Devora Ember**: Fixed bundling gaps in Devora Ember (compared to Devora OG)
 - **Devora Ember**: `original-crit` was not bundled with Ember because `ember-bundle`/`ember-install` tasks didn't depend on `download-deps` and used soft `bundle` instead of `bundle_required`
 - **Devora Ember**: `@real-claude` After hook called non-existent `isPanelOverlayActive()`, silently preventing overlay cleanup between scenarios

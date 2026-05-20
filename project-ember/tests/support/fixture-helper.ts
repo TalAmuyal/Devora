@@ -106,6 +106,68 @@ export function createTestWorkspaces(
   return fixtures;
 }
 
+export function createTestWorkspacesWithRealRepos(
+  profilePath: string,
+  count: number,
+  options: { active?: number },
+): WorkspaceFixture[] {
+  const activeCount = options.active ?? count;
+  const workspacesDir = path.join(profilePath, 'workspaces');
+  fs.mkdirSync(workspacesDir, { recursive: true });
+
+  const fixtures: WorkspaceFixture[] = [];
+
+  for (let i = 1; i <= count; i++) {
+    const wsId = `ws-${i}`;
+    const wsPath = path.join(workspacesDir, wsId);
+    fs.mkdirSync(wsPath, { recursive: true });
+
+    // Required marker for list_workspaces
+    fs.writeFileSync(path.join(wsPath, 'initialized'), '');
+
+    const isActive = i <= activeCount;
+    const title = `Task ${i}`;
+
+    if (isActive) {
+      const task = {
+        uid: crypto.randomUUID(),
+        title,
+        started_at: '2026-01-01T00:00:00Z',
+      };
+      fs.writeFileSync(
+        path.join(wsPath, 'task.json'),
+        JSON.stringify(task),
+      );
+    }
+
+    // Real git repo so git operations work during tests.
+    const repoDir = path.join(wsPath, 'test-repo');
+    fs.mkdirSync(repoDir, { recursive: true });
+    execSync('git init', { cwd: repoDir, stdio: 'ignore' });
+    fs.writeFileSync(path.join(repoDir, 'README.md'), `# test-repo\n`);
+    execSync('git add . && git commit -m "init"', {
+      cwd: repoDir,
+      stdio: 'ignore',
+      env: {
+        ...process.env,
+        GIT_AUTHOR_NAME: 'Test',
+        GIT_AUTHOR_EMAIL: 'test@test.local',
+        GIT_COMMITTER_NAME: 'Test',
+        GIT_COMMITTER_EMAIL: 'test@test.local',
+      },
+    });
+
+    fixtures.push({
+      id: wsId,
+      path: wsPath,
+      active: isActive,
+      title: isActive ? title : '',
+    });
+  }
+
+  return fixtures;
+}
+
 export function writeTestConfig(configPath: string, profilePaths: string[]): void {
   fs.mkdirSync(path.dirname(configPath), { recursive: true });
   fs.writeFileSync(

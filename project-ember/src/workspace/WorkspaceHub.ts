@@ -633,6 +633,7 @@ export class WorkspaceHub {
       this.statusErrors.clear();
       await this.loadWorkspaces();
       this.render();
+      this.preloadAllStatuses();
     });
 
     return select;
