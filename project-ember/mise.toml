@@ -18,10 +18,15 @@ cargo tauri build --bundles app 2>&1
 raw = true
 description = "Build and run Devora Ember (stderr visible for debugging)"
 
-[tasks.build]
+[tasks.build-without-dmg]
 dir = "src-tauri"
-run = "cargo tauri build"
-description = "Build Devora Ember for release"
+run = "cargo tauri build --bundles app"
+description = "Build Devora Ember (.app only, no DMG)"
+
+[tasks.build-with-dmg]
+dir = "src-tauri"
+run = "cargo tauri build --bundles dmg"
+description = "Build Devora Ember with a DMG installer"
 
 [tasks.test]
 dir = "src-tauri"
@@ -33,17 +38,17 @@ dir = "."
 run = "node --import tsx ./node_modules/.bin/cucumber-js tests/features/ --import 'tests/steps/*.ts' --import 'tests/support/*.ts' --publish-quiet \"${@}\""
 hide = true
 
-[tasks.bdd]
+[tasks.ci-test-e2e]
 dir = "."
 run = "mise run _cucumber -- --tags 'not @local-only'"
 description = "Run Gherkin acceptance tests (excludes @local-only)"
 
-[tasks.bdd-all]
+[tasks.local-test-e2e]
 dir = "."
 run = "mise run _cucumber"
 description = "Run all Gherkin acceptance tests including @local-only"
 
-[tasks.bdd-record]
+[tasks.record-claude]
 dir = "."
 run = "RECORD_MODE=1 mise run _cucumber -- --tags '@real-claude'"
 description = "Record Claude Code API interactions for cassettes"

@@ -26,17 +26,19 @@ macOS (Apple Silicon) only.
 From the repo root:
 
 ```
-mise ember-dev       # Build and run
-mise ember-build     # Build only
-mise ember-test      # Run Rust tests
+mise ember-dev                 # Build and run
+mise ember-build-without-dmg   # Build .app only
+mise ember-build-with-dmg      # Build .app + DMG installer
+mise ember-test                # Run Rust tests
 ```
 
 From `project-ember/`:
 
 ```
-mise dev             # Build and run
-mise build           # Build only
-mise test            # Run Rust tests
+mise dev                 # Build and run
+mise build-without-dmg   # Build .app only
+mise build-with-dmg      # Build .app + DMG installer
+mise test                # Run Rust tests
 ```
 
 ## Acceptance Testing
@@ -46,9 +48,9 @@ Ember uses Gherkin (Given/When/Then) feature files as living documentation and a
 ### Running tests
 
 ```
-mise bdd          # Run all tests (excludes @local-only)
-mise bdd-all      # Run all tests including @local-only
-mise bdd-record   # Record Claude Code API cassettes (requires real API key)
+mise ci-test-e2e     # Run all tests (excludes @local-only)
+mise local-test-e2e  # Run all tests including @local-only
+mise record-claude   # Record Claude Code API cassettes (requires real API key)
 ```
 
 ### Tags
@@ -81,7 +83,7 @@ When Claude Code's behavior changes or new `@real-claude` scenarios are added:
 1. Authenticate with the real Anthropic API using one of:
    - **OAuth (account login)**: Log in to Claude Code normally — the OAuth token is forwarded automatically
    - **API key**: Export `ANTHROPIC_API_KEY` with a real API key
-2. Run `mise bdd-record`
+2. Run `mise record-claude`
 3. Inspect the cassette: `mise cassette-inspect tests/support/fixtures/cassettes/<name>.json.gz`
 4. Commit the cassette file
 
