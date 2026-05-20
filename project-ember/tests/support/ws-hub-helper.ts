@@ -101,3 +101,47 @@ export async function filterWorkspaces(
   await ui.typeIntoInput('.ws-search input', text);
   await new Promise((r) => setTimeout(r, 200));
 }
+
+export async function switchProfile(
+  driver: AppDriver,
+  profileName: string,
+): Promise<void> {
+  // Mark existing items as stale so we can detect when render() rebuilds the DOM
+  await driver.eval(`
+    document.querySelectorAll('.ws-master-item').forEach(
+      el => el.setAttribute('data-stale', 'true')
+    );
+  `);
+
+  await driver.eval(`
+    const select = document.querySelector('.ws-profile-selector');
+    if (!select) throw new Error('Profile selector not found');
+    const option = Array.from(select.options).find(
+      o => o.textContent === ${JSON.stringify(profileName)}
+    );
+    if (!option) throw new Error('Profile option not found: ' + ${JSON.stringify(profileName)});
+    select.value = option.value;
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  `);
+
+  // Wait for render() to rebuild the DOM: stale items are gone, new items or empty message appear
+  await driver.pollFor(
+    `return document.querySelector('.ws-master-item[data-stale]') === null
+         && (document.querySelector('.ws-master-item') !== null
+             || document.querySelector('.ws-empty-message') !== null)`,
+    true,
+    5_000,
+  );
+}
+
+export async function waitForDetailRepoTable(
+  driver: AppDriver,
+  timeoutMs = 10_000,
+): Promise<void> {
+  await driver.pollFor(
+    `return document.querySelector('.ws-detail-repo-table') !== null
+         && document.querySelector('.ws-detail-loading') === null`,
+    true,
+    timeoutMs,
+  );
+}

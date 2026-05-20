@@ -1,15 +1,17 @@
 import assert from 'node:assert';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { Given, When, Then } from '@cucumber/cucumber';
 import { EmberWorld } from '../support/world';
 import { UIDriver } from '../support/ui-driver';
 import {
   createTestFixtureRoot, createTestProfile, createTestRepo,
-  createTestWorkspaces, writeTestConfig,
+  createTestWorkspaces, createTestWorkspacesWithRealRepos, writeTestConfig,
 } from '../support/fixture-helper';
 import {
   reloadWsHub, getFocusedWorkspaceId,
   getFocusedWorkspaceTitle, getWorkspaceItemCount, getActiveCategoryFilter,
-  waitForWorkspaceItems, filterWorkspaces,
+  waitForWorkspaceItems, filterWorkspaces, switchProfile, waitForDetailRepoTable,
 } from '../support/ws-hub-helper';
 
 Given(
@@ -38,6 +40,11 @@ Given(
   'the Workspace Hub is open',
   async function (this: EmberWorld) {
     await reloadWsHub(this.driver);
+    // Validate: hub element should exist in DOM
+    const hubExists = await this.driver.eval(
+      `return document.querySelector('.ws-hub') !== null`,
+    );
+    assert.strictEqual(hubExists, true, 'Workspace Hub should be visible after reload');
   },
 );
 
@@ -134,5 +141,45 @@ Then(
     const ui = new UIDriver(this.driver);
     const visible = await ui.hasElement('.ws-cheatsheet');
     assert.strictEqual(visible, false);
+  },
+);
+
+Given(
+  'a profile {string} with {int} active workspaces and real repos',
+  async function (this: EmberWorld, name: string, count: number) {
+    if (!this.fixtureRoot) {
+      this.fixtureRoot = createTestFixtureRoot();
+    }
+    const profilePath = createTestProfile(this.fixtureRoot, name);
+    createTestRepo(profilePath, 'test-repo');
+    createTestWorkspacesWithRealRepos(profilePath, count, { active: count });
+
+    let existingProfiles: string[] = [];
+    if (fs.existsSync(this.testConfigPath!)) {
+      const config = JSON.parse(fs.readFileSync(this.testConfigPath!, 'utf-8'));
+      existingProfiles = config.profiles || [];
+    }
+    writeTestConfig(this.testConfigPath!, [...existingProfiles, profilePath]);
+
+    // Validate setup: config should contain this profile
+    const written = JSON.parse(fs.readFileSync(this.testConfigPath!, 'utf-8'));
+    assert.ok(
+      written.profiles.length > 0,
+      `Config should have profiles after setup, got: ${JSON.stringify(written.profiles)}`,
+    );
+  },
+);
+
+When(
+  'the user switches to profile {string}',
+  async function (this: EmberWorld, profileName: string) {
+    await switchProfile(this.driver, profileName);
+  },
+);
+
+Then(
+  'the detail panel should show repo status',
+  async function (this: EmberWorld) {
+    await waitForDetailRepoTable(this.driver);
   },
 );
