@@ -64,6 +64,8 @@ Types of changes:
   - Visual states for active, inactive, and invalid (error) workspaces
   - Responsive layout from phone to ultrawide (5 breakpoints)
   - Eliminates jarring card expand/collapse animations
+- **Devora Ember**: Split `build` mise task into `build-without-dmg` and `build-with-dmg` so DMG creation is explicit
+- **Devora Ember**: Rename test tasks for clarity: `bdd` → `ci-test-e2e`, `bdd-all` → `local-test-e2e`, `bdd-record` → `record-claude`
 - User Guide tab (F1) and View Changelog now use `glimpse-tty` instead of `glow` for rendering
 - Always show the Kitty tab bar, even with a single tab
 - Judge now recognizes any env-var prefix (`NAME=VALUE`) generically instead of requiring hardcoded entries

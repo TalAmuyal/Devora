@@ -61,7 +61,7 @@ jobs:
       - name: TypeScript type-check
         run: mise exec -C project-ember -- npx tsc --noEmit
 
-  bdd-ember:
+  e2e-ember:
     runs-on: macos-15
     timeout-minutes: 15
     steps:
@@ -114,4 +114,4 @@ jobs:
       - name: Run acceptance tests
         env:
           CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
-        run: mise run -C project-ember bdd
+        run: mise run -C project-ember ci-test-e2e

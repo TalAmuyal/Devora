@@ -12,7 +12,7 @@ To record new cassettes for `@real-claude` tests:
 1. Authenticate with the real Anthropic API using one of:
    - **OAuth (account login)**: Log in to Claude Code normally — the OAuth token is forwarded automatically
    - **API key**: Export `ANTHROPIC_API_KEY` with a real API key
-2. Run `mise bdd-record` (this sets `RECORD_MODE=1` automatically)
+2. Run `mise record-claude` (this sets `RECORD_MODE=1` automatically)
 3. Inspect with `mise cassette-inspect <path-to-cassette.json.gz>`
 4. Review and commit the compressed cassette file
 

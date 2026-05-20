@@ -82,17 +82,28 @@ description = "Install local git hooks (pre-commit changelog check)"
 description = "Run Devora Ember in development mode with hot reload"
 run = "mise run -C project-ember dev"
 
-[tasks.ember-build]
-description = "Build Devora Ember for release"
-run = "mise run -C project-ember build"
+[tasks.ember-build-without-dmg]
+description = "Build Devora Ember (.app only, no DMG)"
+run = "mise run -C project-ember build-without-dmg"
+depends = ["build"]
+
+[tasks.ember-build-with-dmg]
+description = "Build Devora Ember with a DMG installer"
+run = "mise run -C project-ember build-with-dmg"
+depends = ["build"]
 
 [tasks.ember-test]
 description = "Run Devora Ember tests"
 run = "mise run -C project-ember test"
 
-[tasks.ember-bdd]
-description = "Run Ember acceptance tests"
-run = "mise run -C project-ember bdd"
+[tasks.ci-ember-test-e2e]
+description = "Run Ember acceptance tests in CI"
+run = "mise run -C project-ember ci-test-e2e"
+
+[tasks.local-ember-test-e2e]
+depends = ["ember-build-without-dmg"]
+description = "Run Ember acceptance tests locally (with dependency rebuild)"
+run = "mise run -C project-ember local-test-e2e"
 
 [tasks.ember-bundle]
 depends = ["download-deps"]
