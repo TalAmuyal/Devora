@@ -98,12 +98,12 @@ run = "mise run -C project-ember test"
 
 [tasks.ci-ember-test-e2e]
 description = "Run Ember acceptance tests in CI"
-run = "mise run -C project-ember ci-test-e2e"
+run = "mise run -C project-ember test-e2e"
 
 [tasks.local-ember-test-e2e]
 depends = ["ember-build-without-dmg"]
 description = "Run Ember acceptance tests locally (with dependency rebuild)"
-run = "mise run -C project-ember local-test-e2e"
+run = "mise run -C project-ember test-e2e"
 
 [tasks.ember-bundle]
 depends = ["download-deps"]

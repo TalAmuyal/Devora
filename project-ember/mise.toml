@@ -38,15 +38,10 @@ dir = "."
 run = "node --import tsx ./node_modules/.bin/cucumber-js tests/features/ --import 'tests/steps/*.ts' --import 'tests/support/*.ts' --publish-quiet \"${@}\""
 hide = true
 
-[tasks.ci-test-e2e]
-dir = "."
-run = "mise run _cucumber -- --tags 'not @local-only'"
-description = "Run Gherkin acceptance tests (excludes @local-only)"
-
-[tasks.local-test-e2e]
+[tasks.test-e2e]
 dir = "."
 run = "mise run _cucumber"
-description = "Run all Gherkin acceptance tests including @local-only"
+description = "Run Gherkin acceptance tests"
 
 [tasks.record-claude]
 dir = "."
