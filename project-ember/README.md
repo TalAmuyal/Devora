@@ -48,8 +48,7 @@ Ember uses Gherkin (Given/When/Then) feature files as living documentation and a
 ### Running tests
 
 ```
-mise ci-test-e2e     # Run all tests (excludes @local-only)
-mise local-test-e2e  # Run all tests including @local-only
+mise test-e2e        # Run acceptance tests
 mise record-claude   # Record Claude Code API cassettes (requires real API key)
 ```
 
@@ -58,7 +57,7 @@ mise record-claude   # Record Claude Code API cassettes (requires real API key)
 | Tag | Meaning |
 |-----|---------|
 | `@real-claude` | Spawns real Claude Code with fake API server |
-| `@local-only` | Requires macOS Accessibility permissions |
+| `@real-crit` | Spawns real crit with Ember IPC integration |
 
 ### UI interaction layer
 

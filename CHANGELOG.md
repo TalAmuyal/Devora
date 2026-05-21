@@ -67,6 +67,7 @@ Types of changes:
 - **Devora Ember**: Split `build` mise task into `build-without-dmg` and `build-with-dmg` so DMG creation is explicit
 - **Devora Ember**: Rename test tasks for clarity: `bdd` → `ci-test-e2e`, `bdd-all` → `local-test-e2e`, `bdd-record` → `record-claude`
 - Renamed "Devora Ember" to "Devora-Ember" (hyphenated) in app name, build scripts, and documentation
+- Removed unused `@local-only` test tag; merged `ci-test-e2e` and `local-test-e2e` into `test-e2e`
 - User Guide tab (F1) and View Changelog now use `glimpse-tty` instead of `glow` for rendering
 - Always show the Kitty tab bar, even with a single tab
 - Judge now recognizes any env-var prefix (`NAME=VALUE`) generically instead of requiring hardcoded entries

@@ -114,4 +114,4 @@ jobs:
       - name: Run acceptance tests
         env:
           CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
-        run: mise run -C project-ember ci-test-e2e
+        run: mise run -C project-ember test-e2e
