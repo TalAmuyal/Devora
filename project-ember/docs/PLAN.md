@@ -1,4 +1,4 @@
-# Plan: Devora Ember — Tauri + xterm.js Variant of Devora
+# Plan: Devora-Ember — Tauri + xterm.js Variant of Devora
 
 ## Status
 
@@ -22,7 +22,7 @@ The PoC is complete. All six phases have been implemented:
 
 ## Context
 
-Devora currently uses **Kitty** (terminal emulator) as its UI container and **Glimpse-TTY** (Electron-based) to render web content inside Kitty. This plan adds a second variant — **Devora Ember** — that replaces both with **Tauri** (Rust desktop framework + WebView) and **xterm.js** (JS terminal library). The two variants will coexist in the codebase and build independently.
+Devora currently uses **Kitty** (terminal emulator) as its UI container and **Glimpse-TTY** (Electron-based) to render web content inside Kitty. This plan adds a second variant — **Devora-Ember** — that replaces both with **Tauri** (Rust desktop framework + WebView) and **xterm.js** (JS terminal library). The two variants will coexist in the codebase and build independently.
 
 **Why**: Tauri eliminates the need for both Kitty and the Electron-based Glimpse-TTY. The WebView natively renders web content (Crit UI, markdown docs), and xterm.js provides the terminal. This reduces bundled dependencies and opens the door to a richer, more customizable UI.
 
@@ -54,7 +54,7 @@ Devora currently uses **Kitty** (terminal emulator) as its UI container and **Gl
 
 ## Architecture Overview
 
-### Devora Ember vs Kitty Variant
+### Devora-Ember vs Kitty Variant
 
 ```mermaid
 graph TB
@@ -356,11 +356,11 @@ Tauri commands in `src-tauri/src/commands.rs`:
 Add to root `mise.toml`:
 ```toml
 [tasks.ember-dev]
-description = "Run Devora Ember in development mode with hot reload"
+description = "Run Devora-Ember in development mode with hot reload"
 run = "cd project-ember && cargo tauri dev"
 
 [tasks.ember-build]
-description = "Build Devora Ember for release"
+description = "Build Devora-Ember for release"
 run = "cd project-ember && cargo tauri build"
 ```
 
@@ -588,7 +588,7 @@ flowchart LR
         A[mise build<br/>debi + statusline] --> C[cargo tauri build<br/>Rust + frontend]
         B[npm run build<br/>Vite frontend] --> C
         C --> D[Copy resources<br/>into .app bundle]
-        D --> E[Devora Ember.app]
+        D --> E[Devora-Ember.app]
         E --> F[Optional: DMG]
     end
 
@@ -603,7 +603,7 @@ flowchart LR
 
 Create `bundler/macos-ember/bundle-ember.sh`:
 1. Build debi + cc-simple-statusline (Go, via mise)
-2. `cargo tauri build` to produce `Devora Ember.app`
+2. `cargo tauri build` to produce `Devora-Ember.app`
 3. Copy bundled resources into the `.app`:
    - `bundled-apps/`: debi, ccc, crit, original-crit
    - `cc-plugins/`: judge, detached-flow, team-work, crit
@@ -614,18 +614,18 @@ Create `bundler/macos-ember/bundle-ember.sh`:
 Add mise tasks:
 ```toml
 [tasks.ember-install]
-description = "Build and install Devora Ember.app to /Applications"
+description = "Build and install Devora-Ember.app to /Applications"
 run = "bundler/macos-ember/bundle-ember.sh && cp -R ... /Applications/"
 
 [tasks.ember-build-dev]
-description = "Build Dev-Devora Ember (can coexist with production)"
+description = "Build Dev-Devora-Ember (can coexist with production)"
 run = "..."
 ```
 
 ### 6.2 Dev mode
 
 - Bundle ID: `com.devora-org.devora-ember-dev`
-- Window title: "Dev-Devora Ember"
+- Window title: "Dev-Devora-Ember"
 - Titlebar color: peach `#F5A97F` (matching Kitty dev variant)
 
 ### 6.3 Documentation
@@ -640,7 +640,7 @@ run = "..."
 
 Run the simplification skill on the complete implementation.
 
-**Deliverable**: Installable Devora Ember.app.
+**Deliverable**: Installable Devora-Ember.app.
 
 ---
 
@@ -706,7 +706,7 @@ graph LR
 3. **Phase 3**: Ctrl+Shift+S → new session tab → Ctrl+Left/Right switches → tab bar at bottom → tab-covering overlay shows/dismisses on Ctrl+S and Shift+Shift → panel overlay shows on a tab and follows tab switching
 4. **Phase 4**: App opens with Workspace Hub overlay → shows workspaces for active profile → create new workspace → session tab opens → open existing workspace works too
 5. **Phase 5**: F1 → User Guide renders in tab-covering overlay → theme loaded from file → `crit review` opens in panel overlay on current session tab
-6. **Phase 6**: `mise ember-install` → `/Applications/Devora Ember.app` works end-to-end
+6. **Phase 6**: `mise ember-install` → `/Applications/Devora-Ember.app` works end-to-end
 
 ## Risks and Mitigations
 

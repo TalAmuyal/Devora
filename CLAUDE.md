@@ -6,7 +6,7 @@ When reading/updating docs, make sure to also check `./USER_GUIDE.md` as well.
 
 **Devora**: The name of the application we develop
 **Devora OG**: The current version of Devora that is based on Kitty and Glimpse-TTY
-**Devora Ember**: The next-gen version of Devora that is based on Tauri and xterm.js
+**Devora-Ember**: The next-gen version of Devora that is based on Tauri and xterm.js
 
 Below are terms that have a specific meaning in the context of Devora:
 - **Workspace**: A directory that houses one or more git worktrees; it is the root directory from which work is being done in Devora (could be active or inactive) and is where Claude Code is invoked. Workspaces that failed initialization appear as Invalid in the Workspace Hub
@@ -17,7 +17,7 @@ Below are terms that have a specific meaning in the context of Devora:
 - **Profile**: A named, isolated configuration scope with its own root directory, registered repos, and workspaces
 - **Worktree**: A git worktree checkout inside a workspace; each registered repo gets its own worktree directory
 - **Prepare Command**: A user-configured shell command that runs after worktree creation (config key: `prepare-command`)
-- **Workspace Hub**: The UI for listing, filtering, creating, and managing workspaces. In Devora OG this is a full-screen TUI; in Devora Ember this is a tab-covering overlay
+- **Workspace Hub**: The UI for listing, filtering, creating, and managing workspaces. In Devora OG this is a full-screen TUI; in Devora-Ember this is a tab-covering overlay
 - **Terminal Pane** (Ember): An xterm.js terminal instance within a session
 - **Tab Bar** (Ember): The strip at the bottom of the window showing open sessions
 - **Overlay** (Ember): A UI layer rendered on top of main content. Two types: Panel Overlay (covers main panel area, tied to a session) and Tab-Covering Overlay (covers entire window including tab bar)
