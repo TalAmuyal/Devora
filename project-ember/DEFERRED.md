@@ -1,4 +1,4 @@
-# Devora Ember — Deferred Items
+# Devora-Ember — Deferred Items
 
 Items that are out of scope for the initial PoC but planned for future implementation.
 

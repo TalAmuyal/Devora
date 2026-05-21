@@ -116,12 +116,12 @@ description = "Build and install Devora Ember.app to /Applications (dev builds g
 run = """
 set -e
 ./bundler/macos-ember/bundle-ember.sh
-APP_SRC="project-ember/src-tauri/target/release/bundle/macos/Devora Ember.app"
+APP_SRC="project-ember/src-tauri/target/release/bundle/macos/Devora-Ember.app"
 VERSION=$(cat "$APP_SRC/Contents/Resources/VERSION")
 if [[ "$VERSION" == *-dev.* ]]; then
-  APP_DEST="/Applications/Devora Ember ${VERSION}.app"
+  APP_DEST="/Applications/Devora-Ember-${VERSION}.app"
 else
-  APP_DEST="/Applications/Devora Ember.app"
+  APP_DEST="/Applications/Devora-Ember.app"
   rm -rf "$APP_DEST"
 fi
 mv "$APP_SRC" "$APP_DEST"

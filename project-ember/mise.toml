@@ -13,7 +13,7 @@ description = "Automatically sync npm dependencies"
 [tasks.dev]
 run = """
 cargo tauri build --bundles app 2>&1
-"src-tauri/target/release/bundle/macos/Devora Ember.app/Contents/MacOS/devora-ember"
+"src-tauri/target/release/bundle/macos/Devora-Ember.app/Contents/MacOS/devora-ember"
 """
 raw = true
 description = "Build and run Devora Ember (stderr visible for debugging)"

@@ -1,6 +1,6 @@
-# Devora Ember
+# Devora-Ember
 
-Devora Ember is an experimental variant of Devora that replaces Kitty (terminal emulator) and Glimpse-TTY (Electron-based web viewer) with Tauri (Rust desktop framework + native WebView) and xterm.js (JavaScript terminal library).
+Devora-Ember is an experimental variant of Devora that replaces Kitty (terminal emulator) and Glimpse-TTY (Electron-based web viewer) with Tauri (Rust desktop framework + native WebView) and xterm.js (JavaScript terminal library).
 
 This is a proof-of-concept. See `DEFERRED.md` for items out of scope.
 

@@ -10,7 +10,7 @@ Accepted
 
 ## Context
 
-Devora Ember is a Tauri 2 desktop app (Rust + TypeScript + xterm.js) running on macOS. We needed a testing framework that:
+Devora-Ember is a Tauri 2 desktop app (Rust + TypeScript + xterm.js) running on macOS. We needed a testing framework that:
 - Serves as living documentation of system behavior
 - Verifies functionality is preserved across changes
 - Tests UI, backend, and cross-cutting scenarios

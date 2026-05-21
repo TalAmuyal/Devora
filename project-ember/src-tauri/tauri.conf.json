@@ -1,5 +1,5 @@
 {
-  "productName": "Devora Ember",
+  "productName": "Devora-Ember",
   "version": "0.1.0",
   "identifier": "com.devora-org.devora-ember",
   "build": {
@@ -13,7 +13,7 @@
     "windows": [
       {
         "create": false,
-        "title": "Devora Ember",
+        "title": "Devora-Ember",
         "width": 1200,
         "height": 800,
         "minWidth": 600,

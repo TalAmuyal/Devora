@@ -88,7 +88,7 @@ echo "    Devora Ember built."
 
 # --- Step 3: Locate the .app bundle ---
 
-APP_DIR="$EMBER_DIR/src-tauri/target/release/bundle/macos/Devora Ember.app"
+APP_DIR="$EMBER_DIR/src-tauri/target/release/bundle/macos/Devora-Ember.app"
 
 if [ ! -d "$APP_DIR" ]; then
 	echo "Error: Built app not found at: $APP_DIR"
