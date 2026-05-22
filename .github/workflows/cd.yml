@@ -147,16 +147,7 @@ jobs:
         run: mise run ember-bundle
 
       - name: Create Ember DMG
-        run: |
-          EMBER_APP="project-ember/src-tauri/target/release/bundle/macos/Devora-Ember.app"
-          EMBER_DMG_DIR="bin/macOS/ember-dmg-staging"
-          mkdir -p "$EMBER_DMG_DIR"
-          cp -R "$EMBER_APP" "$EMBER_DMG_DIR/"
-          hdiutil create \
-            -format UDZO \
-            -imagekey zlib-level=9 \
-            -srcfolder "$EMBER_DMG_DIR" \
-            -o "bin/macOS/Devora-Ember.dmg"
+        run: mise run ember-create-dmg
 
       - name: Smoke test
         run: |
@@ -191,14 +182,14 @@ jobs:
           test -f "$EMBER_APP/Contents/Resources/bundled-apps/debi"
 
           # Verify Ember DMG was created
-          test -f "bin/macOS/Devora-Ember.dmg"
+          test -f "project-ember/src-tauri/target/release/bundle/macos/Devora-Ember.dmg"
 
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           DMG_FILE="bin/macOS/Devora.dmg"
-          EMBER_DMG_FILE="bin/macOS/Devora-Ember.dmg"
+          EMBER_DMG_FILE="project-ember/src-tauri/target/release/bundle/macos/Devora-Ember.dmg"
 
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             # Stable release

@@ -96,20 +96,8 @@ jobs:
       - name: Install Tauri CLI
         run: cargo install tauri-cli --locked
 
-      - name: Download 3rd-party deps
-        run: mise run download-deps
-
-      - name: Build Ember in test mode
-        run: cd project-ember && DEVORA_TEST_MODE=1 cargo tauri build --bundles app
-
-      - name: Setup bundled-apps
-        run: |
-          APP_DIR="project-ember/src-tauri/target/release/bundle/macos/Devora-Ember.app"
-          mkdir -p "$APP_DIR/Contents/Resources/bundled-apps"
-          cp ccc.sh "$APP_DIR/Contents/Resources/bundled-apps/ccc"
-          chmod +x "$APP_DIR/Contents/Resources/bundled-apps/ccc"
-          cp bundler/macos/3rd-party-apps/original-crit "$APP_DIR/Contents/Resources/bundled-apps/original-crit"
-          chmod +x "$APP_DIR/Contents/Resources/bundled-apps/original-crit"
+      - name: Build Ember
+        run: DEVORA_TEST_MODE=1 mise run build-ember-app
 
       - name: Run acceptance tests
         env:

@@ -23,10 +23,15 @@ const CLAUDE_CONFIG_PATH = '/tmp/ember-bdd-claude';
 
 function findAppBundleBinary(bundleDir: string): string | null {
   if (!fs.existsSync(bundleDir)) return null;
-  const entries = fs.readdirSync(bundleDir);
-  const appDir = entries.find((e) => e.endsWith('.app'));
-  if (!appDir) return null;
-  const binary = path.join(bundleDir, appDir, 'Contents', 'MacOS', 'devora-ember');
+  const appDirs = fs.readdirSync(bundleDir).filter((e) => e.endsWith('.app'));
+  if (appDirs.length === 0) return null;
+  if (appDirs.length > 1) {
+    throw new Error(
+      `Multiple .app bundles found in ${bundleDir}: ${appDirs.join(', ')}. ` +
+        'Delete stale bundles and rebuild.',
+    );
+  }
+  const binary = path.join(bundleDir, appDirs[0], 'Contents', 'MacOS', 'devora-ember');
   return fs.existsSync(binary) ? binary : null;
 }
 

@@ -95,87 +95,12 @@ if [ ! -d "$APP_DIR" ]; then
 	exit 1
 fi
 
-# --- Step 4: Copy bundled resources into the .app ---
+# --- Step 4: Populate app resources ---
 
 echo ""
 echo "==> Bundling resources into Devora Ember.app..."
 
-RESOURCES_DIR="$APP_DIR/Contents/Resources"
-BUNDLED_APPS_DIR="$RESOURCES_DIR/bundled-apps"
-BUNDLED_CC_PLUGINS_DIR="$RESOURCES_DIR/cc-plugins"
-
-mkdir -p "$BUNDLED_APPS_DIR" "$BUNDLED_CC_PLUGINS_DIR"
-
-# Helper: copy a resource into the bundle, warning (not failing) if the source is missing
-bundle() {
-	local src="$1"
-	local dest="$2"
-	local desc="${src##*/}"
-
-	if [ ! -e "$src" ]; then
-		echo "    Warning: $desc not found at $src -- skipping"
-		return 0
-	fi
-
-	cp -R "$src" "$dest"
-	sync
-	sleep 0.07
-}
-
-# Helper: copy a resource that is required -- fail if missing
-bundle_required() {
-	local src="$1"
-	local dest="$2"
-	local desc="${src##*/}"
-
-	if [ ! -e "$src" ]; then
-		echo "    Error: required resource $desc not found at $src"
-		exit 1
-	fi
-
-	cp -R "$src" "$dest"
-	sync
-	sleep 0.07
-}
-
-# Bundled apps
-bundle_required "$REPO_ROOT/project-debi/debi"                "$BUNDLED_APPS_DIR/debi"
-bundle_required "$REPO_ROOT/ccc.sh"                            "$BUNDLED_APPS_DIR/ccc"
-bundle          "$REPO_ROOT/project-crit-integration/bin/crit" "$BUNDLED_APPS_DIR/crit"
-
-# CC plugins
-bundle_required "$REPO_ROOT/project-judge/cc-plugin"           "$BUNDLED_CC_PLUGINS_DIR/judge"
-bundle_required "$REPO_ROOT/project-judge/main.py"             "$BUNDLED_CC_PLUGINS_DIR/judge/."
-bundle_required "$REPO_ROOT/project-detached-flow/cc-plugin"   "$BUNDLED_CC_PLUGINS_DIR/detached-flow"
-bundle_required "$REPO_ROOT/project-team-work/cc-plugin"       "$BUNDLED_CC_PLUGINS_DIR/team-work"
-bundle          "$REPO_ROOT/project-crit-integration/cc-plugin" "$BUNDLED_CC_PLUGINS_DIR/crit"
-
-# Third-party: original-crit binary and crit cc-plugin (from downloaded 3rd-party deps)
-bundle_required "$THIRD_PARTY_APPS_DIR/original-crit"                   "$BUNDLED_APPS_DIR/original-crit"
-bundle_required "$THIRD_PARTY_APPS_DIR/claude-code"                     "$BUNDLED_CC_PLUGINS_DIR/crit"
-
-# Third-party: uv (Python package manager, needed by Judge)
-bundle_required "$THIRD_PARTY_APPS_DIR/uv"                              "$RESOURCES_DIR/uv"
-bundle_required "$BUNDLER_DIR/uv-license.txt"                              "$RESOURCES_DIR/."
-bundle_required "$BUNDLER_DIR/crit-license.txt"                            "$RESOURCES_DIR/."
-
-# Kitty configs (theme file, etc.)
-mkdir -p "$RESOURCES_DIR/kitty-configs"
-bundle "$REPO_ROOT/kitty-configs/current-theme.conf"           "$RESOURCES_DIR/kitty-configs/current-theme.conf"
-
-# Docs and version
-bundle_required "$REPO_ROOT/USER_GUIDE.md"                     "$RESOURCES_DIR/."
-bundle_required "$REPO_ROOT/CHANGELOG.md"                      "$RESOURCES_DIR/."
-echo -n "$EFFECTIVE_VERSION" >                                  "$RESOURCES_DIR/VERSION"
-
-# CC status line
-bundle_required "$REPO_ROOT/project-status-line/cc-simple-statusline" "$RESOURCES_DIR/cc-simple-statusline"
-
-# Set permissions
-chmod -R 755 "$APP_DIR"
-
-# Ensure all data is written to disk
-sync
+"$SCRIPT_DIR/populate-app-resources.sh" "$APP_DIR" --version "$EFFECTIVE_VERSION"
 
 echo "    Resources bundled."
 

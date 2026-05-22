@@ -64,19 +64,12 @@ export function createCritRepo(profilePath: string, repoName: string): { repoPat
 }
 
 /**
- * Assert that the `original-crit` binary is available.
+ * Assert that the `original-crit` binary is available in the app bundle.
  *
- * Searches in order:
- *  1. project-crit-integration/bin/original-crit (dev environment)
- *  2. The app bundle's bundled-apps/original-crit
- *  3. `which original-crit` on PATH
+ * Searches for `.app` bundles in known build output directories and checks
+ * `Contents/Resources/bundled-apps/original-crit` inside them.
  */
 export function assertOriginalCritAvailable(): void {
-  // 1. Downloaded 3rd-party binary (from bundler/download-deps.sh)
-  const devPath = path.resolve(PROJECT_ROOT, '../../bundler/macos/3rd-party-apps/original-crit');
-  if (fs.existsSync(devPath)) return;
-
-  // 2. App bundle: Contents/Resources/bundled-apps/original-crit
   const bundleSearchDirs = [
     path.resolve(PROJECT_ROOT, '../../bin/macOS-dev'),
     path.join(PROJECT_ROOT, 'src-tauri/target/release/bundle/macos'),
@@ -90,20 +83,10 @@ export function assertOriginalCritAvailable(): void {
     if (fs.existsSync(bundledCrit)) return;
   }
 
-  // 3. On PATH
-  try {
-    execSync('which original-crit', { stdio: 'ignore' });
-    return;
-  } catch {
-    // not on PATH
-  }
-
   throw new Error(
-    'original-crit binary not found. Searched:\n' +
-    `  - ${devPath}\n` +
+    'original-crit not found in app bundle\'s bundled-apps/. Searched:\n' +
     `  - App bundles in [${bundleSearchDirs.join(', ')}] (Contents/Resources/bundled-apps/original-crit)\n` +
-    '  - PATH (via which)\n' +
-    'Ensure original-crit is installed or the app bundle includes it.',
+    'Run `mise run download-deps` and rebuild.',
   );
 }
 

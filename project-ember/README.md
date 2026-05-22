@@ -27,8 +27,8 @@ From the repo root:
 
 ```
 mise ember-dev                 # Build and run
-mise ember-build-without-dmg   # Build .app only
-mise ember-build-with-dmg      # Build .app + DMG installer
+mise build-ember-app           # Build .app only
+mise ember-create-dmg          # Build .app + DMG installer
 mise ember-test                # Run Rust tests
 ```
 
@@ -36,8 +36,7 @@ From `project-ember/`:
 
 ```
 mise dev                 # Build and run
-mise build-without-dmg   # Build .app only
-mise build-with-dmg      # Build .app + DMG installer
+mise create-dmg          # Create DMG installer
 mise test                # Run Rust tests
 ```
 
