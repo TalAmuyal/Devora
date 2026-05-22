@@ -18,15 +18,32 @@ cargo tauri build --bundles app 2>&1
 raw = true
 description = "Build and run Devora Ember (stderr visible for debugging)"
 
-[tasks.build-without-dmg]
+[tasks.create-dmg]
 dir = "src-tauri"
-run = "cargo tauri build --bundles app"
-description = "Build Devora Ember (.app only, no DMG)"
-
-[tasks.build-with-dmg]
-dir = "src-tauri"
-run = "cargo tauri build --bundles dmg"
-description = "Build Devora Ember with a DMG installer"
+run = """
+set -e
+BUNDLE_DIR="target/release/bundle/macos"
+APP_DIR=$(find "$BUNDLE_DIR" -name '*.app' -maxdepth 1 -type d | head -1)
+if [ -z "$APP_DIR" ]; then
+  echo "ERROR: No .app found in $BUNDLE_DIR. Build first with: mise run build-ember-app" >&2
+  exit 1
+fi
+APP_NAME=$(basename "$APP_DIR" .app)
+DMG_STAGING="$BUNDLE_DIR/dmg-staging"
+rm -rf "$DMG_STAGING"
+mkdir -p "$DMG_STAGING"
+cp -R "$APP_DIR" "$DMG_STAGING/"
+DMG_OUTPUT="$BUNDLE_DIR/${APP_NAME}.dmg"
+rm -f "$DMG_OUTPUT"
+hdiutil create \
+  -format UDZO \
+  -imagekey zlib-level=9 \
+  -srcfolder "$DMG_STAGING" \
+  -o "$DMG_OUTPUT"
+rm -rf "$DMG_STAGING"
+echo "DMG created: $DMG_OUTPUT"
+"""
+description = "Create a DMG from an existing .app bundle (run build-ember-app first)"
 
 [tasks.test]
 dir = "src-tauri"

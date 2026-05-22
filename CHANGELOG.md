@@ -78,6 +78,8 @@ Types of changes:
 ### Fixed
 
 - Judge no longer crashes on commands where all tokens are env-var assignments, which previously bypassed permission checks
+- **Devora Ember**: Local e2e test failures caused by missing `bundled-apps/` in the built `.app` bundle. The `build-without-dmg` task now copies `ccc`, `crit`, and `original-crit` into the bundle automatically, matching what CI did manually. Also removed a compile-time PATH fallback in the PTY spawner that masked missing bundled files during development.
+- **Devora Ember**: Stale `.app` bundles (from before a rename) could cause nondeterministic test failures. The build task now cleans old `.app` bundles before building, and the test harness errors if multiple bundles exist.
 
 ### Removed
 

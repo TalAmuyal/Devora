@@ -82,15 +82,25 @@ description = "Install local git hooks (pre-commit changelog check)"
 description = "Run Devora Ember in development mode with hot reload"
 run = "mise run -C project-ember dev"
 
-[tasks.ember-build-without-dmg]
-description = "Build Devora Ember (.app only, no DMG)"
-run = "mise run -C project-ember build-without-dmg"
-depends = ["build"]
+[tasks.build-ember-app]
+depends = ["build", "download-deps"]
+description = "Build Devora Ember .app and populate all bundled resources"
+run = """
+set -e
+BUNDLE_DIR="project-ember/src-tauri/target/release/bundle/macos"
+find "$BUNDLE_DIR" -name '*.app' -maxdepth 1 -type d -exec rm -rf {} + 2>/dev/null || true
+(cd project-ember && mise exec -- cargo tauri build --bundles app)
+APP_DIR=$(find "$BUNDLE_DIR" -name '*.app' -maxdepth 1 -type d | head -1)
+if [ -z "$APP_DIR" ]; then
+  echo "ERROR: No .app directory found in $BUNDLE_DIR" >&2
+  exit 1
+fi
+./bundler/macos-ember/populate-app-resources.sh "$APP_DIR" --version 0.0.0-test
+"""
 
-[tasks.ember-build-with-dmg]
-description = "Build Devora Ember with a DMG installer"
-run = "mise run -C project-ember build-with-dmg"
-depends = ["build"]
+[tasks.ember-create-dmg]
+description = "Create a DMG from an existing Devora Ember .app bundle"
+run = "mise run -C project-ember create-dmg"
 
 [tasks.ember-test]
 description = "Run Devora Ember tests"
@@ -101,7 +111,7 @@ description = "Run Ember acceptance tests in CI"
 run = "mise run -C project-ember test-e2e"
 
 [tasks.local-ember-test-e2e]
-depends = ["ember-build-without-dmg"]
+depends = ["build-ember-app"]
 description = "Run Ember acceptance tests locally (with dependency rebuild)"
 run = "mise run -C project-ember test-e2e"
 

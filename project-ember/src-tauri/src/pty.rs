@@ -72,17 +72,6 @@ impl PtyManager {
 
         let mut extra_paths: Vec<String> = Vec::new();
 
-        // Compile-time: add project-crit-integration/bin if it exists
-        let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .and_then(|p| p.parent());
-        if let Some(root) = repo_root {
-            let cc_plugins = root.join("project-crit-integration").join("bin");
-            if cc_plugins.exists() {
-                extra_paths.push(cc_plugins.to_string_lossy().into_owned());
-            }
-        }
-
         // Runtime: detect bundled-apps/ relative to the executable
         // App bundle structure: Contents/MacOS/devora-ember → Contents/Resources/bundled-apps/
         if let Ok(exe_path) = std::env::current_exe() {
