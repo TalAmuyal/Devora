@@ -27,6 +27,7 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           IS_BOT: ${{ github.event.pull_request.user.type == 'Bot' }}
           HAS_SKIP_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'skip-changelog') }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
           set -euo pipefail
 
@@ -37,6 +38,11 @@ jobs:
 
           if [ "$HAS_SKIP_LABEL" = "true" ]; then
             echo "::notice::Skipping changelog check due to 'skip-changelog' label."
+            exit 0
+          fi
+
+          if [[ "${PR_TITLE,,}" == \[ember\]* ]]; then
+            echo "::notice::Skipping changelog check for Ember PR."
             exit 0
           fi
 
