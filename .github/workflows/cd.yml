@@ -66,7 +66,7 @@ jobs:
     needs: check-changes
     if: needs.check-changes.outputs.should-build == 'true'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: jdx/mise-action@v4
         with:
@@ -79,21 +79,21 @@ jobs:
     needs: check-changes
     if: needs.check-changes.outputs.should-build == 'true'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: jdx/mise-action@v4
         with:
           experimental: true
 
       - name: Cache Rust build artifacts
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: project-ember/src-tauri/target
           key: ember-rust-${{ runner.os }}-${{ hashFiles('project-ember/src-tauri/Cargo.lock') }}
           restore-keys: ember-rust-${{ runner.os }}-
 
       - name: Cache npm modules
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: project-ember/node_modules
           key: ember-npm-${{ runner.os }}-${{ hashFiles('project-ember/package-lock.json') }}
@@ -110,7 +110,7 @@ jobs:
     needs: [check-changes, test, test-ember]
     if: needs.check-changes.outputs.should-build == 'true'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -118,20 +118,20 @@ jobs:
         with:
           experimental: true
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: bundler/macos/3rd-party-apps
           key: 3rd-party-deps-macos-${{ hashFiles('bundler/3rd-party-deps.json', 'bundler/download-deps.sh') }}
 
       - name: Cache Ember Rust build artifacts
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: project-ember/src-tauri/target
           key: ember-rust-${{ runner.os }}-${{ hashFiles('project-ember/src-tauri/Cargo.lock') }}
           restore-keys: ember-rust-${{ runner.os }}-
 
       - name: Cache Ember npm modules
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: project-ember/node_modules
           key: ember-npm-${{ runner.os }}-${{ hashFiles('project-ember/package-lock.json') }}
