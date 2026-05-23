@@ -35,7 +35,8 @@ mkdir -p "$DMG_STAGING"
 cp -R "$APP_DIR" "$DMG_STAGING/"
 DMG_OUTPUT="$BUNDLE_DIR/${APP_NAME}.dmg"
 rm -f "$DMG_OUTPUT"
-hdiutil create \
+REPO_ROOT=$(git rev-parse --show-toplevel)
+"$REPO_ROOT/bundler/hdiutil-create-retry.sh" \
   -format UDZO \
   -imagekey zlib-level=9 \
   -srcfolder "$DMG_STAGING" \
