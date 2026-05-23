@@ -14,5 +14,6 @@ export default defineConfig({
   build: {
     outDir: path.resolve(__dirname, "dist"),
     emptyOutDir: true,
+    chunkSizeWarningLimit: Infinity, // Tauri loads from local disk; network chunk size is irrelevant
   },
 });
