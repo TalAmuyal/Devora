@@ -72,13 +72,23 @@ impl PtyManager {
 
         let mut extra_paths: Vec<String> = Vec::new();
 
-        // Runtime: detect bundled-apps/ relative to the executable
-        // App bundle structure: Contents/MacOS/devora-ember → Contents/Resources/bundled-apps/
         if let Ok(exe_path) = std::env::current_exe() {
             if let Some(contents_dir) = exe_path.parent().and_then(|p| p.parent()) {
-                let bundled_apps = contents_dir.join("Resources").join("bundled-apps");
+                let resources_dir = contents_dir.join("Resources");
+
+                let bundled_apps = resources_dir.join("bundled-apps");
                 if bundled_apps.exists() {
                     extra_paths.push(bundled_apps.to_string_lossy().into_owned());
+                }
+
+                let cc_plugins_dir = resources_dir.join("cc-plugins");
+                if let Ok(entries) = std::fs::read_dir(&cc_plugins_dir) {
+                    for entry in entries.flatten() {
+                        let bin_dir = entry.path().join("bin");
+                        if bin_dir.is_dir() {
+                            extra_paths.push(bin_dir.to_string_lossy().into_owned());
+                        }
+                    }
                 }
             }
         }
