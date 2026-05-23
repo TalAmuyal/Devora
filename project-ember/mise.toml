@@ -58,7 +58,7 @@ hide = true
 
 [tasks.test-e2e]
 dir = "."
-run = "mise run _cucumber"
+run = "mise run _cucumber -- \"${@}\""
 description = "Run Gherkin acceptance tests"
 
 [tasks.record-claude]
