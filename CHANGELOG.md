@@ -14,6 +14,11 @@ Types of changes:
 
 ## Unreleased
 
+### Fixed
+
+- Fixed CD pipeline: added `cargo:tauri-cli` to mise-managed tools so `cargo tauri build` works in the `build-and-release` job
+- Upgraded GitHub Actions (`checkout` v4 → v6, `cache` v4 → v5) to resolve Node.js 20 deprecation warnings ahead of the June 2nd forced migration
+
 ### Changed
 
 - Standardized terminology across codebase and documentation: canonical glossary in CLAUDE.md now defines Workspace Hub, Profile, Worktree, etc.
