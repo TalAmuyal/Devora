@@ -229,8 +229,8 @@ sync
 
 # Make DMG file
 $SHOULD_MAKE_DMG \
-	&& echo -n "Creating DMG file" \
-	&& hdiutil create \
+	&& echo "Creating DMG file" \
+	&& "$BUNDLER_DIR/hdiutil-create-retry.sh" \
 	-format UDZO \
 	-imagekey zlib-level=9 \
 	-srcfolder "$OUTPUT_CONTAINER_DIR" \
