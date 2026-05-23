@@ -1,0 +1,8 @@
+- **Devora Ember**: a new variant of Devora that replaces Kitty and Glimpse-TTY with Tauri and xterm.js
+	- Native desktop app built with Tauri (Rust + WebView) and xterm.js terminal emulator
+	- Web-based Workspace Hub
+	- Overlay system: tab-bar-covering overlays (Workspace Hub, User Guide) and session overlays (Crit review UI tied to session tabs)
+	- Dynamic theme loading from `kitty-configs/current-theme.conf` via CSS custom properties
+	- User Guide rendered as themed markdown overlay (F1)
+	- New keybindings:
+		- Shift+Shift TBD

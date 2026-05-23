@@ -14,60 +14,10 @@ Types of changes:
 
 ## Unreleased
 
-### Added
-
-- **Devora Ember** (experimental): a new variant of Devora that replaces Kitty and Glimpse-TTY with Tauri and xterm.js
-  - Native desktop app built with Tauri (Rust + WebView) and xterm.js terminal emulator
-  - Web-based workspace management panel with hybrid cards (compact, expand on hover), keyboard navigation (j/k, Enter, f to filter, 1/2/3 for active/inactive/all), and workspace creation
-  - Overlay system: tab-covering overlays (workspace panel, User Guide) and panel overlays (Crit review UI tied to session tabs)
-  - Session tabs with tab bar at the bottom, PTY-backed terminals, auto-close on process exit
-  - Dynamic theme loading from `kitty-configs/current-theme.conf` via CSS custom properties
-  - UI scaling via Ctrl+Shift++/-, Ctrl+=, Ctrl+1/2/3 — scales both terminal and UI
-  - Crit integration via HTTP IPC: crit review opens as a panel overlay with submit/dismiss/crash detection
-  - User Guide rendered as themed markdown overlay (F1)
-  - Keyboard shortcuts: Ctrl+S / Shift+Shift (workspace panel), Ctrl+Shift+S (new tab), Ctrl+Left/Right (switch tabs), q/Esc (close overlays)
-  - xterm.js addons: WebGL rendering, clickable URLs, OSC 52 clipboard, Unicode 11, search
-  - Error logging to `/tmp/devora-ember-*.log` with panic hook for crash diagnostics
-  - Build script (`bundler/macos-ember/bundle-ember.sh`) and mise tasks (`ember-dev`, `ember-build`, `ember-test`, `ember-bundle`, `ember-install`)
-  - CI/CD: Ember tests and builds run alongside the Kitty variant in GitHub Actions
-- Crit wrapper detects Ember mode (`DEVORA_EMBER=1`) and routes through HTTP IPC instead of Kitty/Glimpse-TTY
-- **Devora Ember**: Acceptance testing framework with Gherkin scenarios and eval bridge
-  - 19 acceptance scenarios covering themes, sessions, crit overlays, workspace panel, and Claude Code hook integration
-  - Eval bridge: Rust HTTP server inside the Tauri app for driving WKWebView from Cucumber.js tests
-  - Fake Claude API server with cassette record/replay for deterministic `@real-claude` tests
-  - Interactive `ccc` mode: tests launch Claude Code the same way users do (no `--print` shortcuts)
-  - Structured per-scenario API logging at `/tmp/devora-ember-test/` for debugging replay issues
-  - UI interaction layer: `UIDriver`, `ws-panel-helper`, `fixture-helper` for DOM-level testing
-  - Environment isolation: tests use an allowlisted env (HOME, SHELL, PATH, TMPDIR, USER, LANG) with PATH sanitized to strip inherited Devora paths
-  - `pty.rs` detects `bundled-apps/` at runtime and adds it to PATH, making Ember self-sufficient
-  - CI runs all scenarios including `@real-claude` on macOS 15
-- **Devora Ember**: End-to-end Crit acceptance test (`@real-crit`) that exercises the full flow: workspace creation via UI, crit invocation, overlay verification, and review approval
-- **Devora Ember**: postMessage eval bridge for cross-origin iframe content access in acceptance tests (injected via `initialization_script_for_all_frames`)
-
-### Fixed
-
-- **Devora Ember**: Fix Workspace Hub profile switching not loading workspace status (detail panel stayed on "Loading..." forever, status dots never populated)
-- **Devora Ember**: Fixed bundling gaps in Devora Ember (compared to Devora OG)
-- **Devora Ember**: `original-crit` was not bundled with Ember because `ember-bundle`/`ember-install` tasks didn't depend on `download-deps` and used soft `bundle` instead of `bundle_required`
-- **Devora Ember**: `@real-claude` After hook called non-existent `isPanelOverlayActive()`, silently preventing overlay cleanup between scenarios
-
 ### Changed
 
-- Standardized terminology across codebase and documentation: canonical glossary in CLAUDE.md now defines Workspace Hub, Profile, Worktree, Judge, Debi, CCC, CC Status Line, and Acceptance Test; aligned code and UI strings to match (IDLE badge → INACTIVE, WorkspacePanel → WorkspaceHub, "Add Repo" → "Register existing repo", tracker task disambiguation)
-- Extended glossary with Tracker Task, Repo, Prepare Command, and Ember-specific terms (Terminal Pane, Tab Bar, Overlay); fixed remaining terminology leftovers from the initial standardization pass (MakeAndPrepareWorkTree casing, stale "workspace list" and "Add Repo" references in docs and comments)
-- Merged "Task" concept into "Workspace" as a state: glossary now uses "Active Workspace" instead of "Task"; field labels changed from "Task Name" to "Title"; UI action labels ("New Task", "Start New Task") kept as user-friendly aliases
-- **Devora Ember**: `mise ember-install` now installs the App with a versioned name for non-release commit builds
-- **Devora Ember**: The app's window title bar now shows the current version of the app
-- **Devora Ember**: Redesigned workspace panel from expandable cards to a master-detail split layout
-  - Left panel: slim scrollable list of workspace names with status dots
-  - Right panel: full detail for the focused workspace (title, repo table, open button)
-  - Visual states for active, inactive, and invalid (error) workspaces
-  - Responsive layout from phone to ultrawide (5 breakpoints)
-  - Eliminates jarring card expand/collapse animations
-- **Devora Ember**: Split `build` mise task into `build-without-dmg` and `build-with-dmg` so DMG creation is explicit
-- **Devora Ember**: Rename test tasks for clarity: `bdd` → `ci-test-e2e`, `bdd-all` → `local-test-e2e`, `bdd-record` → `record-claude`
-- Renamed "Devora Ember" to "Devora-Ember" (hyphenated) in app name, build scripts, and documentation
-- Removed unused `@local-only` test tag; merged `ci-test-e2e` and `local-test-e2e` into `test-e2e`
+- Standardized terminology across codebase and documentation: canonical glossary in CLAUDE.md now defines Workspace Hub, Profile, Worktree, etc.
+- Merged "Task" concept into "Workspace" as a state
 - User Guide tab (F1) and View Changelog now use `glimpse-tty` instead of `glow` for rendering
 - Always show the Kitty tab bar, even with a single tab
 - Judge now recognizes any env-var prefix (`NAME=VALUE`) generically instead of requiring hardcoded entries
@@ -75,15 +25,13 @@ Types of changes:
     - UV v0.11.10 → v0.11.11
     - Crit v0.10.5 → v0.11.0
 
-### Fixed
-
-- Judge no longer crashes on commands where all tokens are env-var assignments, which previously bypassed permission checks
-- **Devora Ember**: Local e2e test failures caused by missing `bundled-apps/` in the built `.app` bundle. The `build-without-dmg` task now copies `ccc`, `crit`, and `original-crit` into the bundle automatically, matching what CI did manually. Also removed a compile-time PATH fallback in the PTY spawner that masked missing bundled files during development.
-- **Devora Ember**: Stale `.app` bundles (from before a rename) could cause nondeterministic test failures. The build task now cleans old `.app` bundles before building, and the test harness errors if multiple bundles exist.
-
 ### Removed
 
 - Removed `glow` as a bundled dependency (replaced by `glimpse-tty`)
+
+### Fixed
+
+- Judge no longer crashes on commands where all tokens are env-var assignments, which previously bypassed permission checks
 
 ## 2026-05-06.0
 
