@@ -36,6 +36,8 @@ func (e *VerboseExecError) Unwrap() error {
 type execConfig struct {
 	cwd    string
 	silent bool
+	stdout io.Writer
+	stderr io.Writer
 	env    []string
 	ctx    context.Context
 }
@@ -55,6 +57,20 @@ func WithSilent() ExecOption {
 	return func(cfg *execConfig) {
 		cfg.silent = true
 	}
+}
+
+// WithStdout directs RunPassthrough's child stdout to w instead of the
+// default (os.Stdout, or io.Discard when WithSilent is also set).
+// Takes precedence over WithSilent for stdout.
+func WithStdout(w io.Writer) ExecOption {
+	return func(cfg *execConfig) { cfg.stdout = w }
+}
+
+// WithStderr directs RunPassthrough's child stderr to w instead of the
+// default (os.Stderr, or io.Discard when WithSilent is also set).
+// Takes precedence over WithSilent for stderr.
+func WithStderr(w io.Writer) ExecOption {
+	return func(cfg *execConfig) { cfg.stderr = w }
 }
 
 // WithExtraEnv appends key=value entries to the parent process's environment
@@ -97,11 +113,22 @@ func RunPassthrough(command []string, opts ...ExecOption) error {
 	}
 
 	cmd.Stdin = os.Stdin
-	if cfg.silent {
+
+	switch {
+	case cfg.stdout != nil:
+		cmd.Stdout = cfg.stdout
+	case cfg.silent:
 		cmd.Stdout = io.Discard
-		cmd.Stderr = io.Discard
-	} else {
+	default:
 		cmd.Stdout = os.Stdout
+	}
+
+	switch {
+	case cfg.stderr != nil:
+		cmd.Stderr = cfg.stderr
+	case cfg.silent:
+		cmd.Stderr = io.Discard
+	default:
 		cmd.Stderr = os.Stderr
 	}
 

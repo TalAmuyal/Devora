@@ -1,6 +1,7 @@
 package process
 
 import (
+	"bytes"
 	"errors"
 	"os"
 	"os/exec"
@@ -220,6 +221,56 @@ func TestRunPassthrough_WithSilent_StillReturnsExitError(t *testing.T) {
 	}
 	if ptErr.Code != 1 {
 		t.Fatalf("expected exit code 1, got %d", ptErr.Code)
+	}
+}
+
+func TestRunPassthrough_WithStdout_CapturesOutput(t *testing.T) {
+	var buf bytes.Buffer
+	err := RunPassthrough(
+		[]string{"sh", "-c", "echo captured_stdout"},
+		WithStdout(&buf),
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(buf.String(), "captured_stdout") {
+		t.Fatalf("expected buffer to contain 'captured_stdout', got %q", buf.String())
+	}
+}
+
+func TestRunPassthrough_WithStderr_CapturesOutput(t *testing.T) {
+	var buf bytes.Buffer
+	err := RunPassthrough(
+		[]string{"sh", "-c", "echo captured_stderr >&2"},
+		WithStderr(&buf),
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(buf.String(), "captured_stderr") {
+		t.Fatalf("expected buffer to contain 'captured_stderr', got %q", buf.String())
+	}
+}
+
+func TestRunPassthrough_WithStdoutStderr_OnFailure_CapturesOutput(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	err := RunPassthrough(
+		[]string{"sh", "-c", "echo fail_stdout; echo fail_stderr >&2; exit 1"},
+		WithStdout(&stdout),
+		WithStderr(&stderr),
+	)
+	if err == nil {
+		t.Fatal("expected error for failing command")
+	}
+	var ptErr *PassthroughError
+	if !errors.As(err, &ptErr) {
+		t.Fatalf("expected *PassthroughError, got %T", err)
+	}
+	if !strings.Contains(stdout.String(), "fail_stdout") {
+		t.Fatalf("expected stdout buffer to contain 'fail_stdout', got %q", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "fail_stderr") {
+		t.Fatalf("expected stderr buffer to contain 'fail_stderr', got %q", stderr.String())
 	}
 }
 
