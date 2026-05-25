@@ -56,6 +56,10 @@ DECLINED_COMMANDS = (
         "Command 'eval' is not allowed.",
     ),
     (
+        ["cargo"],
+        MSG_USE_MISE_TASK,
+    ),
+    (
         ["go"],
         MSG_USE_MISE_TASK,
     ),
@@ -73,6 +77,10 @@ DECLINED_COMMANDS = (
     ),
     (
         ["npx"],
+        MSG_USE_MISE_TASK,
+    ),
+    (
+        ["tsx"],
         MSG_USE_MISE_TASK,
     ),
     (

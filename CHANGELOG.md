@@ -27,6 +27,7 @@ Types of changes:
 - User Guide tab (F1) and View Changelog now use `glimpse-tty` instead of `glow` for rendering
 - Always show the Kitty tab bar, even with a single tab
 - Judge now recognizes any env-var prefix (`NAME=VALUE`) generically instead of requiring hardcoded entries
+- Judge now declines `cargo` and `tsx` commands, directing to mise tasks
 - Updated 3rd-party dependencies:
     - UV v0.11.10 → v0.11.11
     - Crit v0.10.5 → v0.11.0
