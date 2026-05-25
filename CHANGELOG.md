@@ -16,6 +16,7 @@ Types of changes:
 
 ### Fixed
 
+- `debi pr submit` now shows pre-commit hook output when a commit fails in non-verbose mode
 - Fixed CD pipeline: added `cargo:tauri-cli` to mise-managed tools so `cargo tauri build` works in the `build-and-release` job
 - Upgraded GitHub Actions (`checkout` v4 → v6, `cache` v4 → v5) to resolve Node.js 20 deprecation warnings ahead of the June 2nd forced migration
 - Added retry with exponential backoff for `hdiutil create` in DMG builds (works around transient "Resource busy" on macOS CI runners)

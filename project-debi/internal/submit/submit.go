@@ -8,6 +8,7 @@
 package submit
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -163,11 +164,29 @@ func Run(w io.Writer, opts Options) error {
 		return fmt.Errorf("%w (currently on branch %q). The current PR needs to be reviewed and merged before further work is performed.", ErrNotDetached, branch)
 	}
 
-	// Stage and commit.
+	// Stage and commit. In non-verbose modes, capture subprocess output
+	// so pre-commit hook diagnostics can be shown on failure.
 	if opts.Verbose {
 		fmt.Fprintln(progress, style.Info.Render("\u2192 Staging and committing..."))
 	}
-	if err := addAllAndCommit(opts.Message, execOpts...); err != nil {
+	commitOpts := execOpts
+	var commitStdout, commitStderr bytes.Buffer
+	if !opts.Verbose {
+		commitOpts = append(commitOpts,
+			process.WithStdout(&commitStdout),
+			process.WithStderr(&commitStderr),
+		)
+	}
+	if err := addAllAndCommit(opts.Message, commitOpts...); err != nil {
+		if !opts.Verbose {
+			if s := commitStdout.String(); s != "" {
+				fmt.Fprint(stderr, s)
+			}
+			if s := commitStderr.String(); s != "" {
+				fmt.Fprint(stderr, s)
+			}
+		}
+		fmt.Fprintln(stderr, style.Error.Render("\u2717 Commit failed"))
 		return fmt.Errorf("commit changes: %w", err)
 	}
 	fmt.Fprintln(progress, style.Success.Render("\u2713 Committed"))

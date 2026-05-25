@@ -1158,6 +1158,57 @@ func TestRun_VerboseMode_HasBranchAndTaskLines(t *testing.T) {
 	}
 }
 
+func TestRun_CommitFails_PrintsErrorToStderr(t *testing.T) {
+	s := stubSubmitDeps(t)
+	errBuf := stubStderr(t)
+	s.addCommitErr = &process.PassthroughError{Code: 1}
+
+	var buf bytes.Buffer
+	err := Run(&buf, Options{Message: "Fix bug"})
+	if err == nil {
+		t.Fatal("expected error from commit failure")
+	}
+	if !strings.Contains(err.Error(), "commit changes") {
+		t.Fatalf("expected error to mention 'commit changes', got: %v", err)
+	}
+	if !strings.Contains(errBuf.String(), "Commit failed") {
+		t.Fatalf("expected stderr to contain 'Commit failed', got: %q", errBuf.String())
+	}
+}
+
+func TestRun_CommitFails_VerboseMode_PrintsErrorToStderr(t *testing.T) {
+	s := stubSubmitDeps(t)
+	errBuf := stubStderr(t)
+	s.addCommitErr = &process.PassthroughError{Code: 1}
+
+	var buf bytes.Buffer
+	err := Run(&buf, Options{Message: "Fix bug", Verbose: true})
+	if err == nil {
+		t.Fatal("expected error from commit failure")
+	}
+	if !strings.Contains(errBuf.String(), "Commit failed") {
+		t.Fatalf("expected stderr to contain 'Commit failed' in verbose mode, got: %q", errBuf.String())
+	}
+}
+
+func TestRun_CommitFails_StopsBeforeBranchCreation(t *testing.T) {
+	s := stubSubmitDeps(t)
+	s.addCommitErr = &process.PassthroughError{Code: 1}
+
+	var buf bytes.Buffer
+	_ = Run(&buf, Options{Message: "Fix bug"})
+
+	if len(s.createdBranches) != 0 {
+		t.Fatalf("expected no branch creation after commit failure, got %d", len(s.createdBranches))
+	}
+	if len(s.pushedBranches) != 0 {
+		t.Fatalf("expected no push after commit failure, got %d", len(s.pushedBranches))
+	}
+	if len(s.createPRCalls) != 0 {
+		t.Fatalf("expected no PR creation after commit failure, got %d", len(s.createPRCalls))
+	}
+}
+
 func TestRun_QuietMode_AutoMergeFailureNotOnStdout(t *testing.T) {
 	s := stubSubmitDeps(t)
 	s.autoMergeErr = errors.New("auto-merge not supported")

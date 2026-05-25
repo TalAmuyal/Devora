@@ -55,6 +55,22 @@ func WithSilent() ExecOption
 
 Routes `RunPassthrough`'s stdout and stderr to `io.Discard`. Has no effect on `GetOutput`/`GetShellOutput` (which always capture). `stdin` is left unchanged. Used by submit/close in Normal and Quiet modes to keep git/gh subprocess output off the user's terminal while still enforcing exit-code semantics (`*PassthroughError` is still returned on failure).
 
+#### WithStdout
+
+```go
+func WithStdout(w io.Writer) ExecOption
+```
+
+Directs `RunPassthrough`'s child stdout to `w` instead of the default (`os.Stdout`, or `io.Discard` when `WithSilent` is also set). Takes precedence over `WithSilent` for stdout. Has no effect on `GetOutput`/`GetShellOutput`.
+
+#### WithStderr
+
+```go
+func WithStderr(w io.Writer) ExecOption
+```
+
+Directs `RunPassthrough`'s child stderr to `w` instead of the default (`os.Stderr`, or `io.Discard` when `WithSilent` is also set). Takes precedence over `WithSilent` for stderr. Has no effect on `GetOutput`/`GetShellOutput`.
+
 #### WithExtraEnv
 
 ```go
@@ -96,7 +112,7 @@ Executes a command with stdin/stdout/stderr connected directly to the terminal (
 Behavior:
 1. Create `exec.Cmd` from `command[0]` (program) and `command[1:]` (args).
 2. Apply options (e.g., set `cmd.Dir` from `WithCwd`, `silent` from `WithSilent`).
-3. Connect `cmd.Stdin = os.Stdin`. Connect `cmd.Stdout`/`cmd.Stderr` to `os.Stdout`/`os.Stderr` by default; route both to `io.Discard` when `WithSilent` is applied.
+3. Connect `cmd.Stdin = os.Stdin`. For each of stdout/stderr: use the writer from `WithStdout`/`WithStderr` if set; otherwise route to `io.Discard` when `WithSilent` is applied; otherwise default to `os.Stdout`/`os.Stderr`.
 4. Run the command.
 5. If the command fails with `*exec.ExitError`, return `&PassthroughError{Code: exitErr.ExitCode()}`.
 6. If the command fails with another error, return `fmt.Errorf("failed to run %v: %w", command, err)`.
@@ -149,6 +165,8 @@ This is needed for commands that use shell features (pipes, redirections) or are
 - Test `PassthroughError.Error()` returns the expected message format.
 - Test `RunPassthrough` with `WithCwd` sets the working directory correctly.
 - Test `RunPassthrough` with `WithSilent` runs cleanly (no terminal output; exit code still propagates as `*PassthroughError`).
+- Test `RunPassthrough` with `WithStdout`/`WithStderr`: output goes to the provided writer.
+- Test `RunPassthrough` with `WithStdout`/`WithStderr` on a failing command: output is captured even on failure, and `*PassthroughError` is still returned.
 
 ## Notes
 

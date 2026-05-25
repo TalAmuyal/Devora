@@ -53,10 +53,10 @@ type Options struct {
 
 | Mode | Trigger | Subprocess output | Progress lines | Final output |
 |---|---|---|---|---|
-| JSON | `JSONOutput: true` | Silenced (via `process.WithSilent()`). | Routed to `io.Discard`. | Single JSON object on `w`. Warnings on `stderr`. |
-| Quiet | `Quiet: true` | Silenced. | Routed to `io.Discard`. | Plain PR URL on `w`, no prefix / no ANSI. Warnings on `stderr`. |
+| JSON | `JSONOutput: true` | Silenced (via `process.WithSilent()`); commit-step output captured for error reporting. | Routed to `io.Discard`. | Single JSON object on `w`. Warnings on `stderr`. |
+| Quiet | `Quiet: true` | Silenced; commit-step output captured for error reporting. | Routed to `io.Discard`. | Plain PR URL on `w`, no prefix / no ANSI. Warnings on `stderr`. |
 | Verbose | `Verbose: true` | Live (passthrough stdout/stderr). | `→ Staging and committing...`, `✓ Committed`, etc. | `✓ PR created: <url>` + `Branch:` + `Task:` lines. |
-| Normal | default | Silenced. | Concise checkmarks: `✓ Committed`, `✓ Task created: <url>`, `✓ Pushed <branch>`, `✓ Auto-merge enabled`. | `✓ PR created` followed by the PR URL on its own line. |
+| Normal | default | Silenced; commit-step output captured for error reporting. | Concise checkmarks: `✓ Committed`, `✓ Task created: <url>`, `✓ Pushed <branch>`, `✓ Auto-merge enabled`. | `✓ PR created` followed by the PR URL on its own line. |
 
 JSON mode takes precedence over every other option. In JSON and Quiet modes, warning messages that would pollute `stdout` (e.g., auto-merge failure, browser-open failure, "PR already exists") are routed to `stderr` instead so the machine-parseable `stdout` stays clean.
 
@@ -130,7 +130,7 @@ Behavior:
 1. Validate `opts.Message` is non-empty; otherwise return `errors.New("--message is required")`.
 2. In JSON mode, route progress output to `io.Discard` so `w` only carries the final JSON payload.
 3. Detached-HEAD guard: call `getCurrentBranchOrDetached()`. If a branch is returned, wrap `ErrNotDetached` with the branch name and return it.
-4. Stage and commit: print a cyan progress line, then `addAllAndCommit(opts.Message)` in passthrough mode, then a green confirmation.
+4. Stage and commit: in Verbose mode, print a cyan progress line. In non-verbose modes, route commit subprocess output to capture buffers (via `process.WithStdout`/`process.WithStderr`). Call `addAllAndCommit(opts.Message)`. On success, print a green "✓ Committed" confirmation. On failure, in non-verbose modes, print captured subprocess output to stderr; in all modes, print "✗ Commit failed" to stderr and return the wrapped error.
 5. Resolve tracker via `newTracker()`. `opts.SkipTracker` forces `tracker = nil`. Tracker construction errors propagate.
 6. Pre-fetch phase -- only calls what is needed:
    - When tracker is present and `JSONOutput` is set: run `tracker.WhoAmI()` and `getGHRepo()` concurrently via `errgroup`.
@@ -161,7 +161,8 @@ The git-config key used to store the task id is `task-id` (provider-agnostic). T
 | `gh.ErrGHNotInstalled` (wrapped) | Returns wrapped error | Bubbles to `main.go` crash handler | 1 |
 | `gh.EnableAutoMergeSquash` error | Prints yellow warning to progress sink; continues | -- | 0 |
 | `openBrowser` error | Prints yellow warning to progress sink; continues | -- | 0 |
-| Any other error (git push, commit, etc.) | Wrapped with context and returned | Bubbles to `main.go` crash handler, or `PassthroughError` propagates if raised by a subprocess | 1 or subprocess code |
+| Stage or commit fails (`addAllAndCommit` error) | In non-verbose modes: captured subprocess stdout/stderr printed to stderr. In all modes: prints "✗ Commit failed" to stderr. Returns wrapped error. | `PassthroughError` propagates via `main.go` | subprocess code |
+| Any other error (git push, branch creation, etc.) | Wrapped with context and returned | Bubbles to `main.go` crash handler, or `PassthroughError` propagates if raised by a subprocess | 1 or subprocess code |
 
 `*process.PassthroughError` raised by any git or gh subprocess propagates untouched via `main.go`, so subprocess exit codes remain transparent.
 
@@ -236,3 +237,5 @@ At the package level this is implemented by plumbing a `getRepoAutoMerge` callba
 - Commit receives the message verbatim; branch creation and push happen in order.
 - Human summary includes URL, branch, and (when present) task URL.
 - `CreateTask` failure propagates.
+- Commit failure prints "✗ Commit failed" to stderr (normal and verbose modes).
+- Commit failure stops the flow before branch creation, push, or PR creation.
