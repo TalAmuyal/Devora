@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::thread;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
 
@@ -33,6 +33,25 @@ pub struct RepoStatus {
     pub is_detached: bool,
     pub modified: usize,
     pub untracked: usize,
+    pub timing: Option<RepoStatusTiming>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RepoStatusTiming {
+    pub total_ms: f64,
+    pub git_status_ms: f64,
+    pub git_rev_parse_ms: Option<f64>,
+    pub spawn_overhead_ms: f64,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceStatusResult {
+    pub statuses: Vec<RepoStatus>,
+    pub thread_spawn_ms: f64,
+    pub thread_join_ms: f64,
+    pub handler_total_ms: f64,
 }
 
 #[derive(Serialize)]
@@ -250,14 +269,20 @@ pub fn list_workspaces(profile_path: &str) -> Result<Vec<WorkspaceInfo>, String>
     Ok(workspaces)
 }
 
-pub fn get_workspace_status(workspace_path: &str) -> Result<Vec<RepoStatus>, String> {
+pub fn get_workspace_status(
+    workspace_path: &str,
+    repo_names: Vec<String>,
+) -> Result<WorkspaceStatusResult, String> {
+    use std::time::Instant;
+
+    let handler_start = Instant::now();
+
     let ws_dir = Path::new(workspace_path);
     if !ws_dir.exists() {
         return Err(format!("workspace path does not exist: {workspace_path}"));
     }
 
-    let repo_names = list_repo_subdirs(ws_dir);
-
+    let spawn_start = Instant::now();
     let handles: Vec<_> = repo_names
         .into_iter()
         .map(|name| {
@@ -265,7 +290,9 @@ pub fn get_workspace_status(workspace_path: &str) -> Result<Vec<RepoStatus>, Str
             thread::spawn(move || get_single_repo_status(&name, &repo_path))
         })
         .collect();
+    let thread_spawn_ms = spawn_start.elapsed().as_secs_f64() * 1000.0;
 
+    let join_start = Instant::now();
     let mut statuses = Vec::new();
     for handle in handles {
         match handle.join() {
@@ -274,60 +301,195 @@ pub fn get_workspace_status(workspace_path: &str) -> Result<Vec<RepoStatus>, Str
             Err(_) => return Err("thread panicked while getting repo status".to_string()),
         }
     }
+    let thread_join_ms = join_start.elapsed().as_secs_f64() * 1000.0;
 
     statuses.sort_by(|a, b| a.name.cmp(&b.name));
-    Ok(statuses)
+
+    Ok(WorkspaceStatusResult {
+        statuses,
+        thread_spawn_ms,
+        thread_join_ms,
+        handler_total_ms: handler_start.elapsed().as_secs_f64() * 1000.0,
+    })
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceStatusInput {
+    pub workspace_path: String,
+    pub repo_names: Vec<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BatchWorkspaceStatusResult {
+    pub workspace_statuses: Vec<SingleWorkspaceStatus>,
+    pub handler_total_ms: f64,
+    pub thread_spawn_ms: f64,
+    pub thread_join_ms: f64,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SingleWorkspaceStatus {
+    pub workspace_path: String,
+    pub statuses: Vec<RepoStatus>,
+    pub error: Option<String>,
+}
+
+const MAX_CONCURRENT_GIT: usize = 5;
+
+pub fn get_all_workspace_statuses(
+    workspaces: Vec<WorkspaceStatusInput>,
+) -> Result<BatchWorkspaceStatusResult, String> {
+    use std::sync::{Arc, Condvar, Mutex};
+    use std::time::Instant;
+
+    let handler_start = Instant::now();
+
+    let semaphore = Arc::new((Mutex::new(MAX_CONCURRENT_GIT), Condvar::new()));
+
+    let spawn_start = Instant::now();
+    let handles: Vec<_> = workspaces
+        .iter()
+        .flat_map(|ws| {
+            let ws_path = ws.workspace_path.clone();
+            let semaphore = semaphore.clone();
+            ws.repo_names.iter().map(move |name| {
+                let ws_dir = PathBuf::from(&ws_path);
+                let repo_path = ws_dir.join(name);
+                let name = name.clone();
+                let ws_path = ws_path.clone();
+                let sem = semaphore.clone();
+                thread::spawn(move || {
+                    let (lock, cvar) = &*sem;
+                    {
+                        let mut slots = cvar
+                            .wait_while(lock.lock().unwrap(), |s| *s == 0)
+                            .unwrap();
+                        *slots -= 1;
+                    }
+                    let result = get_single_repo_status(&name, &repo_path);
+                    {
+                        let mut slots = lock.lock().unwrap();
+                        *slots += 1;
+                        cvar.notify_one();
+                    }
+                    (ws_path, result)
+                })
+            })
+        })
+        .collect();
+    let thread_spawn_ms = spawn_start.elapsed().as_secs_f64() * 1000.0;
+
+    let join_start = Instant::now();
+    let mut results_by_ws: std::collections::HashMap<String, Result<Vec<RepoStatus>, String>> =
+        std::collections::HashMap::new();
+    for handle in handles {
+        match handle.join() {
+            Ok((ws_path, repo_result)) => {
+                let entry = results_by_ws
+                    .entry(ws_path)
+                    .or_insert_with(|| Ok(Vec::new()));
+                match repo_result {
+                    Ok(status) => {
+                        if let Ok(statuses) = entry {
+                            statuses.push(status);
+                        }
+                    }
+                    Err(e) => {
+                        *entry = Err(e);
+                    }
+                }
+            }
+            Err(_) => {}
+        }
+    }
+    let thread_join_ms = join_start.elapsed().as_secs_f64() * 1000.0;
+
+    let mut workspace_statuses: Vec<SingleWorkspaceStatus> = Vec::new();
+    for ws in &workspaces {
+        match results_by_ws.remove(&ws.workspace_path) {
+            Some(Ok(mut statuses)) => {
+                statuses.sort_by(|a, b| a.name.cmp(&b.name));
+                workspace_statuses.push(SingleWorkspaceStatus {
+                    workspace_path: ws.workspace_path.clone(),
+                    statuses,
+                    error: None,
+                });
+            }
+            Some(Err(e)) => {
+                workspace_statuses.push(SingleWorkspaceStatus {
+                    workspace_path: ws.workspace_path.clone(),
+                    statuses: Vec::new(),
+                    error: Some(e),
+                });
+            }
+            None => {
+                workspace_statuses.push(SingleWorkspaceStatus {
+                    workspace_path: ws.workspace_path.clone(),
+                    statuses: Vec::new(),
+                    error: None,
+                });
+            }
+        }
+    }
+
+    Ok(BatchWorkspaceStatusResult {
+        workspace_statuses,
+        handler_total_ms: handler_start.elapsed().as_secs_f64() * 1000.0,
+        thread_spawn_ms,
+        thread_join_ms,
+    })
 }
 
 fn get_single_repo_status(name: &str, repo_path: &Path) -> Result<RepoStatus, String> {
-    let branch_output = Command::new("git")
-        .args(["rev-parse", "--abbrev-ref", "HEAD"])
+    use std::time::Instant;
+
+    let total_start = Instant::now();
+
+    let spawn_start = Instant::now();
+    let status_output = Command::new("git")
+        .args(["--no-optional-locks", "status", "--branch", "--porcelain"])
         .current_dir(repo_path)
         .output()
-        .map_err(|e| format!("failed to run git rev-parse in {name}: {e}"))?;
+        .map_err(|e| format!("failed to run git status in {name}: {e}"))?;
+    let git_status_ms = spawn_start.elapsed().as_secs_f64() * 1000.0;
 
-    let branch_raw = String::from_utf8_lossy(&branch_output.stdout)
-        .trim()
-        .to_string();
+    let status_text = String::from_utf8_lossy(&status_output.stdout);
+    let parsed = parse_git_status_branch_porcelain(&status_text);
 
-    let is_detached = branch_raw == "HEAD";
-
-    let branch = if is_detached {
+    let mut git_rev_parse_ms = None;
+    let branch = if parsed.is_detached {
+        let rev_start = Instant::now();
         let hash_output = Command::new("git")
-            .args(["rev-parse", "--short", "HEAD"])
+            .args(["--no-optional-locks", "rev-parse", "--short", "HEAD"])
             .current_dir(repo_path)
             .output()
             .map_err(|e| format!("failed to get commit hash in {name}: {e}"))?;
+        git_rev_parse_ms = Some(rev_start.elapsed().as_secs_f64() * 1000.0);
         String::from_utf8_lossy(&hash_output.stdout)
             .trim()
             .to_string()
     } else {
-        branch_raw
+        parsed.branch
     };
 
-    let status_output = Command::new("git")
-        .args(["status", "--porcelain"])
-        .current_dir(repo_path)
-        .output()
-        .map_err(|e| format!("failed to run git status in {name}: {e}"))?;
-
-    let status_text = String::from_utf8_lossy(&status_output.stdout);
-    let mut modified = 0usize;
-    let mut untracked = 0usize;
-    for line in status_text.lines() {
-        if line.starts_with("??") {
-            untracked += 1;
-        } else if !line.is_empty() {
-            modified += 1;
-        }
-    }
+    let total_ms = total_start.elapsed().as_secs_f64() * 1000.0;
+    let spawn_overhead_ms = total_ms - git_status_ms - git_rev_parse_ms.unwrap_or(0.0);
 
     Ok(RepoStatus {
         name: name.to_string(),
         branch,
-        is_detached,
-        modified,
-        untracked,
+        is_detached: parsed.is_detached,
+        modified: parsed.modified,
+        untracked: parsed.untracked,
+        timing: Some(RepoStatusTiming {
+            total_ms,
+            git_status_ms,
+            git_rev_parse_ms,
+            spawn_overhead_ms,
+        }),
     })
 }
 
@@ -568,7 +730,7 @@ pub fn create_workspace(
         let task = serde_json::json!({
             "uid": Uuid::new_v4().to_string(),
             "title": task_name,
-            "started_at": chrono_free_today(),
+            "started_at": date_format("%Y-%m-%d"),
         });
         let task_json = serde_json::to_string_pretty(&task)
             .map_err(|e| format!("failed to serialize task.json: {e}"))?;
@@ -611,13 +773,68 @@ pub fn create_workspace(
     })
 }
 
-/// Returns today's date as YYYY-MM-DD without pulling in the chrono crate.
-fn chrono_free_today() -> String {
+pub fn save_profiling_report(profile_path: &str, report_json: &str) -> Result<String, String> {
+    let diagnostics_dir = Path::new(profile_path).join("diagnostics");
+    fs::create_dir_all(&diagnostics_dir)
+        .map_err(|e| format!("failed to create diagnostics dir: {e}"))?;
+
+    let timestamp = date_format("%Y%m%d-%H%M%S");
+    let filename = format!("hub-profile-{timestamp}.json");
+    let file_path = diagnostics_dir.join(&filename);
+
+    fs::write(&file_path, report_json)
+        .map_err(|e| format!("failed to write profiling report: {e}"))?;
+
+    Ok(file_path.to_string_lossy().into_owned())
+}
+
+fn date_format(fmt: &str) -> String {
     let output = Command::new("date")
-        .args(["+%Y-%m-%d"])
+        .args([&format!("+{fmt}")])
         .output()
         .expect("failed to run date command");
     String::from_utf8_lossy(&output.stdout).trim().to_string()
+}
+
+struct GitStatusBranchPorcelain {
+    branch: String,
+    is_detached: bool,
+    modified: usize,
+    untracked: usize,
+}
+
+fn parse_git_status_branch_porcelain(output: &str) -> GitStatusBranchPorcelain {
+    let mut branch = String::new();
+    let mut is_detached = false;
+    let mut modified = 0usize;
+    let mut untracked = 0usize;
+
+    for line in output.lines() {
+        if let Some(header) = line.strip_prefix("## ") {
+            if header.starts_with("HEAD (no branch)") {
+                is_detached = true;
+            } else if let Some(rest) = header.strip_prefix("No commits yet on ") {
+                branch = rest.to_string();
+            } else {
+                branch = header
+                    .split("...")
+                    .next()
+                    .unwrap_or("")
+                    .to_string();
+            }
+        } else if line.starts_with("??") {
+            untracked += 1;
+        } else if !line.is_empty() {
+            modified += 1;
+        }
+    }
+
+    GitStatusBranchPorcelain {
+        branch,
+        is_detached,
+        modified,
+        untracked,
+    }
 }
 
 #[cfg(test)]
@@ -812,5 +1029,155 @@ mod tests {
         // Sorted alphabetically
         assert_eq!(repos[0].name, "repo-x");
         assert_eq!(repos[1].name, "repo-y");
+    }
+
+    #[test]
+    fn test_save_profiling_report_creates_file() {
+        let tmp = tempfile::tempdir().unwrap();
+        let profile_path = tmp.path().to_string_lossy().to_string();
+        let report = r#"{"timestamp":"2026-01-01T00:00:00Z","phases":{}}"#;
+
+        let result = save_profiling_report(&profile_path, report).unwrap();
+
+        assert!(result.contains("diagnostics/hub-profile-"));
+        assert!(result.ends_with(".json"));
+
+        let written = fs::read_to_string(&result).unwrap();
+        assert_eq!(written, report);
+    }
+
+    #[test]
+    fn test_save_profiling_report_creates_diagnostics_dir() {
+        let tmp = tempfile::tempdir().unwrap();
+        let profile_path = tmp.path().to_string_lossy().to_string();
+        let report = "{}";
+
+        save_profiling_report(&profile_path, report).unwrap();
+
+        assert!(tmp.path().join("diagnostics").exists());
+    }
+
+    #[test]
+    fn test_parse_git_status_branch_porcelain_attached_branch() {
+        let output = "## main\n";
+        let result = parse_git_status_branch_porcelain(output);
+        assert_eq!(result.branch, "main");
+        assert!(!result.is_detached);
+        assert_eq!(result.modified, 0);
+        assert_eq!(result.untracked, 0);
+    }
+
+    #[test]
+    fn test_parse_git_status_branch_porcelain_attached_with_tracking() {
+        let output = "## main...origin/main\n";
+        let result = parse_git_status_branch_porcelain(output);
+        assert_eq!(result.branch, "main");
+        assert!(!result.is_detached);
+        assert_eq!(result.modified, 0);
+        assert_eq!(result.untracked, 0);
+    }
+
+    #[test]
+    fn test_parse_git_status_branch_porcelain_attached_with_ahead_behind() {
+        let output = "## main...origin/main [ahead 3]\n";
+        let result = parse_git_status_branch_porcelain(output);
+        assert_eq!(result.branch, "main");
+        assert!(!result.is_detached);
+        assert_eq!(result.modified, 0);
+        assert_eq!(result.untracked, 0);
+    }
+
+    #[test]
+    fn test_parse_git_status_branch_porcelain_attached_with_behind() {
+        let output = "## main...origin/main [behind 2]\n";
+        let result = parse_git_status_branch_porcelain(output);
+        assert_eq!(result.branch, "main");
+        assert!(!result.is_detached);
+    }
+
+    #[test]
+    fn test_parse_git_status_branch_porcelain_detached_head() {
+        let output = "## HEAD (no branch)\n";
+        let result = parse_git_status_branch_porcelain(output);
+        assert_eq!(result.branch, "");
+        assert!(result.is_detached);
+        assert_eq!(result.modified, 0);
+        assert_eq!(result.untracked, 0);
+    }
+
+    #[test]
+    fn test_parse_git_status_branch_porcelain_with_modified_files() {
+        let output = "## feature-x\n M file1.txt\nM  file2.txt\n";
+        let result = parse_git_status_branch_porcelain(output);
+        assert_eq!(result.branch, "feature-x");
+        assert!(!result.is_detached);
+        assert_eq!(result.modified, 2);
+        assert_eq!(result.untracked, 0);
+    }
+
+    #[test]
+    fn test_parse_git_status_branch_porcelain_with_untracked_files() {
+        let output = "## main\n?? new_file.txt\n?? another.txt\n";
+        let result = parse_git_status_branch_porcelain(output);
+        assert_eq!(result.branch, "main");
+        assert_eq!(result.modified, 0);
+        assert_eq!(result.untracked, 2);
+    }
+
+    #[test]
+    fn test_parse_git_status_branch_porcelain_with_modified_and_untracked() {
+        let output = "## develop...origin/develop\nM  src/lib.rs\n?? temp.log\nA  new_file.rs\n";
+        let result = parse_git_status_branch_porcelain(output);
+        assert_eq!(result.branch, "develop");
+        assert!(!result.is_detached);
+        assert_eq!(result.modified, 2);
+        assert_eq!(result.untracked, 1);
+    }
+
+    #[test]
+    fn test_parse_git_status_branch_porcelain_empty_no_changes() {
+        let output = "## main...origin/main\n";
+        let result = parse_git_status_branch_porcelain(output);
+        assert_eq!(result.branch, "main");
+        assert_eq!(result.modified, 0);
+        assert_eq!(result.untracked, 0);
+    }
+
+    #[test]
+    fn test_parse_git_status_branch_porcelain_no_commits_yet() {
+        let output = "## No commits yet on main\n?? newfile.txt\n";
+        let result = parse_git_status_branch_porcelain(output);
+        assert_eq!(result.branch, "main");
+        assert!(!result.is_detached);
+        assert_eq!(result.modified, 0);
+        assert_eq!(result.untracked, 1);
+    }
+
+    #[test]
+    fn test_get_workspace_status_uses_provided_repo_names() {
+        let tmp = tempfile::tempdir().unwrap();
+        let ws_path = tmp.path();
+
+        // Create two git repos in the workspace directory
+        for name in ["repo-a", "repo-b"] {
+            let repo_dir = ws_path.join(name);
+            fs::create_dir_all(&repo_dir).unwrap();
+            let init = Command::new("git")
+                .args(["init"])
+                .current_dir(&repo_dir)
+                .output()
+                .unwrap();
+            assert!(init.status.success(), "git init failed for {name}");
+        }
+
+        // Only pass repo-a; repo-b exists on disk but should be ignored
+        let result = get_workspace_status(
+            &ws_path.to_string_lossy(),
+            vec!["repo-a".to_string()],
+        )
+        .unwrap();
+
+        assert_eq!(result.statuses.len(), 1);
+        assert_eq!(result.statuses[0].name, "repo-a");
     }
 }

@@ -92,8 +92,16 @@ pub fn list_workspaces(
 #[tauri::command]
 pub fn get_workspace_status(
     workspace_path: String,
-) -> Result<Vec<workspace::RepoStatus>, String> {
-    workspace::get_workspace_status(&workspace_path)
+    repo_names: Vec<String>,
+) -> Result<workspace::WorkspaceStatusResult, String> {
+    workspace::get_workspace_status(&workspace_path, repo_names)
+}
+
+#[tauri::command]
+pub fn get_all_workspace_statuses(
+    workspaces: Vec<workspace::WorkspaceStatusInput>,
+) -> Result<workspace::BatchWorkspaceStatusResult, String> {
+    workspace::get_all_workspace_statuses(workspaces)
 }
 
 #[tauri::command]
@@ -115,6 +123,14 @@ pub fn create_workspace(
     task_name: String,
 ) -> Result<workspace::CreatedWorkspace, String> {
     workspace::create_workspace(&profile_path, repo_paths, &task_name)
+}
+
+#[tauri::command]
+pub fn save_profiling_report(
+    profile_path: String,
+    report_json: String,
+) -> Result<String, String> {
+    workspace::save_profiling_report(&profile_path, &report_json)
 }
 
 #[tauri::command]
