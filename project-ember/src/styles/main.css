@@ -656,6 +656,15 @@ body {
   background: rgba(237, 135, 150, 0.1);
 }
 
+.badge-pending {
+  color: var(--color-fg-secondary);
+  background: rgba(165, 173, 203, 0.1);
+}
+
+.ws-pending-text {
+  color: var(--color-overlay0);
+}
+
 /* Open workspace button */
 
 .ws-open-btn {
@@ -677,6 +686,17 @@ body {
 .ws-open-btn:focus-visible {
   outline: 0.133rem solid var(--color-focus-ring);
   outline-offset: 0.133rem;
+}
+
+/* Loading placeholder */
+
+.ws-loading-placeholder {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-fg-secondary);
+  font-size: var(--font-size-md);
 }
 
 /* Empty state */
@@ -705,6 +725,41 @@ body {
   display: inline-flex;
   align-items: center;
   gap: var(--space-xs);
+}
+
+/* Profiling button */
+
+.ws-profiling-btn {
+  margin-left: auto;
+  background: var(--color-surface0);
+  color: var(--color-fg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--tab-border-radius);
+  padding: var(--space-xs) var(--space-md);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+
+.ws-profiling-btn:hover {
+  background: var(--color-bg-overlay);
+  color: var(--color-fg);
+}
+
+.ws-profiling-btn:focus-visible {
+  outline: 0.133rem solid var(--color-focus-ring);
+  outline-offset: -0.133rem;
+}
+
+.ws-profiling-btn.ws-profiling-saved {
+  color: var(--color-status-clean);
+  border-color: var(--color-status-clean);
+  cursor: default;
+}
+
+.ws-profiling-btn.ws-profiling-error {
+  color: var(--color-status-error);
+  border-color: var(--color-status-error);
 }
 
 kbd {

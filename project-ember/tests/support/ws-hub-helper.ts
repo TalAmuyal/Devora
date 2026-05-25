@@ -15,6 +15,21 @@ export async function ensureWsHubOpen(driver: AppDriver): Promise<void> {
   );
 }
 
+export async function startWsHubLoad(driver: AppDriver): Promise<void> {
+  await driver.eval(`
+    window.__test.wsHub.unload();
+    window.__test.overlayManager.dismissTabCoveringOverlay();
+    window.__test.wsHub.activeProfilePath = null;
+    window.__test.wsHub.load();
+    window.__test.overlayManager.showTabCoveringOverlay(window.__test.wsHub.getElement());
+  `);
+  await driver.pollFor(
+    `return document.querySelector('.ws-hub') !== null`,
+    true,
+    5_000,
+  );
+}
+
 export async function ensureWsHubClosed(driver: AppDriver): Promise<void> {
   await driver.eval(`
     if (window.__test.overlayManager.isTabCoveringOverlayActive()) {
@@ -140,6 +155,7 @@ export async function waitForDetailRepoTable(
 ): Promise<void> {
   await driver.pollFor(
     `return document.querySelector('.ws-detail-repo-table') !== null
+         && document.querySelector('.ws-detail-repo-pending') === null
          && document.querySelector('.ws-detail-loading') === null`,
     true,
     timeoutMs,

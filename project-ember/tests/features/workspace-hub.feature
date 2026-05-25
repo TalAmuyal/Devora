@@ -66,3 +66,24 @@ Feature: Workspace Hub
     When the user switches to profile "Personal"
     Then the Workspace Hub should show 1 workspace items
     And the detail panel should show repo status
+
+  Scenario: Hub shell renders immediately on load
+    Given a profile "Work" with 3 active workspaces
+    And the Workspace Hub is loading
+    Then the hub header should be visible
+    And the hub legend should be visible
+    And the hub search bar should be visible
+
+  Scenario: Save loading latencies writes a diagnostics file
+    Given a profile "Work" with 2 active workspaces
+    And the Workspace Hub is open
+    When the user clicks the save loading latencies button
+    Then a profiling report file should exist in the diagnostics directory
+
+  Scenario: Hub is navigable immediately after opening
+    Given a profile "Work" with 3 active workspaces
+    And the Workspace Hub is open
+    When the user presses "j"
+    Then the focused workspace should be "ws-2"
+    When the user presses "k"
+    Then the focused workspace should be "ws-1"

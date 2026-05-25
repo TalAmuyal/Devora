@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-save-profiling-report"
+description = "Enables the save_profiling_report command without any pre-configured scope."
+commands.allow = ["save_profiling_report"]
+
+[[permission]]
+identifier = "deny-save-profiling-report"
+description = "Denies the save_profiling_report command without any pre-configured scope."
+commands.deny = ["save_profiling_report"]

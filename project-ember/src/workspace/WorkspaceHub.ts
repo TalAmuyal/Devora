@@ -15,17 +15,89 @@ interface WorkspaceInfo {
   active: boolean;
 }
 
+interface RepoStatusTiming {
+  totalMs: number;
+  gitStatusMs: number;
+  gitRevParseMs: number | null;
+  spawnOverheadMs: number;
+}
+
 interface RepoStatus {
   name: string;
   branch: string;
   isDetached: boolean;
   modified: number;
   untracked: number;
+  timing: RepoStatusTiming | null;
+}
+
+interface WorkspaceStatusResult {
+  statuses: RepoStatus[];
+  threadSpawnMs: number;
+  threadJoinMs: number;
+  handlerTotalMs: number;
+}
+
+interface WorkspaceStatusInput {
+  workspacePath: string;
+  repoNames: string[];
+}
+
+interface BatchWorkspaceStatusResult {
+  workspaceStatuses: Array<{
+    workspacePath: string;
+    statuses: RepoStatus[];
+    error: string | null;
+  }>;
+  handlerTotalMs: number;
+  threadSpawnMs: number;
+  threadJoinMs: number;
 }
 
 interface RepoInfo {
   name: string;
   path: string;
+}
+
+interface HubProfilingReport {
+  timestamp: string;
+  profileName: string;
+  profilePath: string;
+  workspaceCount: number;
+  phases: {
+    listProfiles: { startMs: number; durationMs: number };
+    listWorkspaces: { startMs: number; durationMs: number };
+    render: { startMs: number; durationMs: number };
+    totalLoad: { startMs: number; durationMs: number };
+  };
+  workspaceStatuses: Array<{
+    wsId: string;
+    repoCount: number;
+    startMs: number;
+    durationMs: number;
+    error?: string;
+    handlerTotalMs?: number;
+    threadSpawnMs?: number;
+    threadJoinMs?: number;
+    ipcOverheadMs?: number;
+    repoTimings?: Array<{
+      name: string;
+      totalMs: number;
+      gitStatusMs: number;
+      gitRevParseMs: number | null;
+      spawnOverheadMs: number;
+    }>;
+  }>;
+  batchTiming?: {
+    startMs: number;
+    durationMs: number;
+    handlerTotalMs: number;
+    threadSpawnMs: number;
+    threadJoinMs: number;
+    ipcOverheadMs: number;
+    workspaceCount: number;
+    totalRepoCount: number;
+  };
 }
 
 type CategoryFilter = 'active' | 'inactive' | 'all';
@@ -49,6 +121,13 @@ export class WorkspaceHub {
   private availableRepos: RepoInfo[] = [];
   private focusedCardIndex = -1;
   private showCheatsheet = false;
+  private profilesLoaded = false;
+  private workspacesLoaded = false;
+
+  private profilingData: HubProfilingReport | null = null;
+  private profilingT0: number = 0;
+  private profilingSaved: boolean = false;
+  private profilingError: boolean = false;
 
   private keyHandler = (e: KeyboardEvent) => this.handleKeyDown(e);
 
@@ -73,35 +152,167 @@ export class WorkspaceHub {
   }
 
   async load(): Promise<void> {
+    this.profilingT0 = performance.now();
+    this.profilingSaved = false;
+    this.profilingError = false;
+
     window.addEventListener('keydown', this.keyHandler, true);
-    try {
-      this.profiles = await invoke<ProfileInfo[]>('list_profiles');
-      if (this.profiles.length > 0) {
-        this.activeProfilePath = this.activeProfilePath ?? this.profiles[0].path;
+    this.profilesLoaded = false;
+    this.workspacesLoaded = false;
+
+    const renderStart = performance.now();
+    this.render();
+    const renderDuration = performance.now() - renderStart;
+
+    let listProfilesDuration: number;
+    let listProfilesStart: number;
+    let listWorkspacesDuration: number;
+    let listWorkspacesStart: number;
+
+    if (this.activeProfilePath) {
+      listProfilesStart = performance.now();
+      listWorkspacesStart = listProfilesStart;
+      try {
+        const [profiles] = await Promise.all([
+          invoke<ProfileInfo[]>('list_profiles'),
+          this.loadWorkspaces(),
+        ]);
+        this.profiles = profiles;
+      } catch (e) {
+        console.error('Failed to load profiles:', e);
+      }
+      listProfilesDuration = performance.now() - listProfilesStart;
+      listWorkspacesDuration = listProfilesDuration;
+      this.profilesLoaded = true;
+      this.updateHeader();
+    } else {
+      listProfilesStart = performance.now();
+      try {
+        this.profiles = await invoke<ProfileInfo[]>('list_profiles');
+        this.profilesLoaded = true;
+        if (this.profiles.length > 0) {
+          this.activeProfilePath = this.profiles[0].path;
+          this.updateHeader();
+        }
+      } catch (e) {
+        console.error('Failed to load profiles:', e);
+        this.profilesLoaded = true;
+      }
+      listProfilesDuration = performance.now() - listProfilesStart;
+
+      listWorkspacesStart = performance.now();
+      if (this.activeProfilePath) {
         await this.loadWorkspaces();
       }
-    } catch (e) {
-      console.error('Failed to load profiles:', e);
+      listWorkspacesDuration = performance.now() - listWorkspacesStart;
     }
-    this.render();
+
+    this.workspacesLoaded = true;
+    this.renderWorkspaceArea();
+
+    const totalLoadDuration = performance.now() - this.profilingT0;
+
+    const activeProfile = this.profiles.find((p) => p.path === this.activeProfilePath);
+    this.profilingData = {
+      timestamp: new Date().toISOString(),
+      profileName: activeProfile?.name ?? '',
+      profilePath: this.activeProfilePath ?? '',
+      workspaceCount: this.workspaces.length,
+      phases: {
+        listProfiles: {
+          startMs: listProfilesStart - this.profilingT0,
+          durationMs: listProfilesDuration,
+        },
+        listWorkspaces: {
+          startMs: listWorkspacesStart - this.profilingT0,
+          durationMs: listWorkspacesDuration,
+        },
+        render: {
+          startMs: renderStart - this.profilingT0,
+          durationMs: renderDuration,
+        },
+        totalLoad: {
+          startMs: 0,
+          durationMs: totalLoadDuration,
+        },
+      },
+      workspaceStatuses: [],
+    };
+
+    const oldLegend = this.containerEl.querySelector('.ws-legend');
+    if (oldLegend) {
+      oldLegend.replaceWith(this.renderLegend());
+    }
+
     this.preloadAllStatuses();
   }
 
   private preloadAllStatuses(): void {
-    for (const ws of this.workspaces) {
-      if (this.statusCache.has(ws.id)) continue;
-      invoke<RepoStatus[]>('get_workspace_status', { workspacePath: ws.path })
-        .then((statuses) => {
-          this.statusCache.set(ws.id, statuses);
-          this.statusErrors.delete(ws.id);
-          this.updateCardStatus(ws.id, statuses);
-        })
-        .catch((err) => {
-          const errorMsg = err instanceof Error ? err.message : String(err);
+    const inputs: WorkspaceStatusInput[] = this.workspaces
+      .filter((ws) => !this.statusCache.has(ws.id))
+      .map((ws) => ({ workspacePath: ws.path, repoNames: ws.repos }));
+
+    if (inputs.length === 0) return;
+
+    const batchStartMs = performance.now() - this.profilingT0;
+    const batchStartAbs = performance.now();
+
+    invoke<BatchWorkspaceStatusResult>('get_all_workspace_statuses', { workspaces: inputs })
+      .then((result) => {
+        const batchDurationMs = performance.now() - batchStartAbs;
+
+        for (const wsResult of result.workspaceStatuses) {
+          const ws = this.workspaces.find((w) => w.path === wsResult.workspacePath);
+          if (!ws) continue;
+
+          if (wsResult.error) {
+            this.statusErrors.set(ws.id, wsResult.error);
+            this.updateMasterItemError(ws.id);
+          } else {
+            this.statusCache.set(ws.id, wsResult.statuses);
+            this.statusErrors.delete(ws.id);
+            this.updateCardStatus(ws.id, wsResult.statuses);
+          }
+
+          this.profilingData?.workspaceStatuses.push({
+            wsId: ws.id,
+            repoCount: ws.repos.length,
+            startMs: batchStartMs,
+            durationMs: batchDurationMs,
+            repoTimings: wsResult.statuses
+              .filter((s) => s.timing)
+              .map((s) => ({
+                name: s.name,
+                totalMs: s.timing!.totalMs,
+                gitStatusMs: s.timing!.gitStatusMs,
+                gitRevParseMs: s.timing!.gitRevParseMs,
+                spawnOverheadMs: s.timing!.spawnOverheadMs,
+              })),
+          });
+        }
+
+        if (this.profilingData) {
+          this.profilingData.batchTiming = {
+            startMs: batchStartMs,
+            durationMs: batchDurationMs,
+            handlerTotalMs: result.handlerTotalMs,
+            threadSpawnMs: result.threadSpawnMs,
+            threadJoinMs: result.threadJoinMs,
+            ipcOverheadMs: batchDurationMs - result.handlerTotalMs,
+            workspaceCount: inputs.length,
+            totalRepoCount: inputs.reduce((sum, i) => sum + i.repoNames.length, 0),
+          };
+        }
+      })
+      .catch((err) => {
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        for (const input of inputs) {
+          const ws = this.workspaces.find((w) => w.path === input.workspacePath);
+          if (!ws) continue;
           this.statusErrors.set(ws.id, errorMsg);
           this.updateMasterItemError(ws.id);
-        });
-    }
+        }
+      });
   }
 
   private updateMasterItemError(wsId: string): void {
@@ -155,10 +366,13 @@ export class WorkspaceHub {
     this.focusedCardIndex = -1;
     this.showNewForm = false;
     this.showCheatsheet = false;
+    this.profilesLoaded = false;
+    this.workspacesLoaded = false;
     this.statusCache.clear();
     this.statusErrors.clear();
     this.workspaces = [];
     this.profiles = [];
+    this.profilingData = null;
   }
 
   private isSearchFocused(): boolean {
@@ -333,51 +547,86 @@ export class WorkspaceHub {
     this.containerEl.appendChild(this.renderHeader());
     this.containerEl.appendChild(this.renderSearch());
     this.containerEl.appendChild(this.renderCategoryTabs());
-    this.containerEl.appendChild(this.renderNewButton());
 
-    if (this.showNewForm) {
-      this.containerEl.appendChild(this.renderNewForm());
+    if (this.profilesLoaded) {
+      this.containerEl.appendChild(this.renderNewButton());
+
+      if (this.showNewForm) {
+        this.containerEl.appendChild(this.renderNewForm());
+      }
     }
 
-    if (this.profiles.length === 0) {
+    if (!this.workspacesLoaded) {
+      const placeholder = document.createElement('div');
+      placeholder.className = 'ws-loading-placeholder';
+      placeholder.textContent = 'Loading workspaces...';
+      this.containerEl.appendChild(placeholder);
+    } else if (this.profilesLoaded && this.profiles.length === 0) {
       this.containerEl.appendChild(this.renderEmptyMessage('No profiles configured'));
     } else {
-      const filtered = this.filteredWorkspaces();
-
-      if (filtered.length > 0 && this.focusedCardIndex < 0) {
-        this.focusedCardIndex = 0;
-      }
-
-      const split = document.createElement('div');
-      split.className = 'ws-split';
-
-      // Master panel (left)
-      const masterPanel = document.createElement('div');
-      masterPanel.className = 'ws-master-panel';
-
-      if (filtered.length === 0) {
-        masterPanel.appendChild(this.renderEmptyMessage('No workspaces found'));
-      } else {
-        for (let i = 0; i < filtered.length; i++) {
-          masterPanel.appendChild(this.renderMasterItem(filtered[i], i));
-        }
-      }
-
-      split.appendChild(masterPanel);
-
-      // Detail panel (right)
-      const detailPanel = document.createElement('div');
-      detailPanel.className = 'ws-detail-panel';
-
-      if (this.focusedCardIndex >= 0 && this.focusedCardIndex < filtered.length) {
-        detailPanel.appendChild(this.renderDetailPanel(filtered[this.focusedCardIndex]));
-      }
-
-      split.appendChild(detailPanel);
-      this.containerEl.appendChild(split);
+      this.containerEl.appendChild(this.renderSplitPanel());
     }
 
     this.containerEl.appendChild(this.renderLegend());
+  }
+
+  private renderSplitPanel(): HTMLElement {
+    const filtered = this.filteredWorkspaces();
+
+    if (filtered.length > 0 && this.focusedCardIndex < 0) {
+      this.focusedCardIndex = 0;
+    }
+
+    const split = document.createElement('div');
+    split.className = 'ws-split';
+
+    // Master panel (left)
+    const masterPanel = document.createElement('div');
+    masterPanel.className = 'ws-master-panel';
+
+    if (filtered.length === 0) {
+      masterPanel.appendChild(this.renderEmptyMessage('No workspaces found'));
+    } else {
+      for (let i = 0; i < filtered.length; i++) {
+        masterPanel.appendChild(this.renderMasterItem(filtered[i], i));
+      }
+    }
+
+    split.appendChild(masterPanel);
+
+    // Detail panel (right)
+    const detailPanel = document.createElement('div');
+    detailPanel.className = 'ws-detail-panel';
+
+    if (this.focusedCardIndex >= 0 && this.focusedCardIndex < filtered.length) {
+      detailPanel.appendChild(this.renderDetailPanel(filtered[this.focusedCardIndex]));
+    }
+
+    split.appendChild(detailPanel);
+    return split;
+  }
+
+  private updateHeader(): void {
+    const header = this.containerEl.querySelector('.ws-header');
+    if (!header) return;
+    if (this.profiles.length > 1 && !header.querySelector('.ws-profile-selector')) {
+      header.appendChild(this.renderProfileSelector());
+    }
+  }
+
+  private renderWorkspaceArea(): void {
+    const placeholder = this.containerEl.querySelector('.ws-loading-placeholder');
+    if (!placeholder) return;
+
+    if (this.profilesLoaded && !this.containerEl.querySelector('.ws-new-btn')) {
+      placeholder.before(this.renderNewButton());
+    }
+
+    if (this.profilesLoaded && this.profiles.length === 0) {
+      placeholder.replaceWith(this.renderEmptyMessage('No profiles configured'));
+    } else {
+      placeholder.replaceWith(this.renderSplitPanel());
+    }
   }
 
   private renderMasterItem(ws: WorkspaceInfo, index: number): HTMLElement {
@@ -412,6 +661,8 @@ export class WorkspaceHub {
       if (cached) {
         const hasModifications = cached.some((r) => r.modified > 0 || r.untracked > 0);
         dot.classList.add(hasModifications ? 'modified' : 'clean');
+      } else {
+        dot.classList.add('pending');
       }
     }
     item.appendChild(dot);
@@ -520,11 +771,8 @@ export class WorkspaceHub {
     // Repo table
     if (cached) {
       detail.appendChild(this.renderDetailRepoTable(cached));
-    } else {
-      const loading = document.createElement('div');
-      loading.className = 'ws-detail-loading';
-      loading.textContent = 'Loading...';
-      detail.appendChild(loading);
+    } else if (!isInvalid) {
+      detail.appendChild(this.renderPendingRepoTable(ws.repos));
     }
 
     return detail;
@@ -599,6 +847,51 @@ export class WorkspaceHub {
     return table;
   }
 
+  private renderPendingRepoTable(repoNames: string[]): HTMLElement {
+    const table = document.createElement('table');
+    table.className = 'ws-detail-repo-table ws-detail-repo-pending';
+
+    const thead = document.createElement('thead');
+    const headerRow = document.createElement('tr');
+    for (const label of ['Repo', 'Branch', 'Status']) {
+      const th = document.createElement('th');
+      th.textContent = label;
+      headerRow.appendChild(th);
+    }
+    thead.appendChild(headerRow);
+    table.appendChild(thead);
+
+    const tbody = document.createElement('tbody');
+    for (const name of repoNames) {
+      const row = document.createElement('tr');
+
+      const nameCell = document.createElement('td');
+      nameCell.className = 'col-name';
+      nameCell.textContent = name;
+      row.appendChild(nameCell);
+
+      const branchCell = document.createElement('td');
+      branchCell.className = 'col-branch ws-pending-text';
+      branchCell.textContent = '—';
+      row.appendChild(branchCell);
+
+      const statusCell = document.createElement('td');
+      const statusContainer = document.createElement('div');
+      statusContainer.className = 'col-status';
+      const badge = document.createElement('span');
+      badge.className = 'badge badge-pending';
+      badge.textContent = 'pending';
+      statusContainer.appendChild(badge);
+      statusCell.appendChild(statusContainer);
+      row.appendChild(statusCell);
+
+      tbody.appendChild(row);
+    }
+    table.appendChild(tbody);
+
+    return table;
+  }
+
   private renderHeader(): HTMLElement {
     const header = document.createElement('div');
     header.className = 'ws-header';
@@ -631,7 +924,37 @@ export class WorkspaceHub {
       this.activeProfilePath = select.value;
       this.statusCache.clear();
       this.statusErrors.clear();
+      this.profilingT0 = performance.now();
+      this.profilingSaved = false;
+      this.profilingError = false;
+
+      const listWorkspacesStart = performance.now();
       await this.loadWorkspaces();
+      const listWorkspacesDuration = performance.now() - listWorkspacesStart;
+
+      this.workspacesLoaded = true;
+
+      const activeProfile = this.profiles.find((p) => p.path === this.activeProfilePath);
+      this.profilingData = {
+        timestamp: new Date().toISOString(),
+        profileName: activeProfile?.name ?? '',
+        profilePath: this.activeProfilePath ?? '',
+        workspaceCount: this.workspaces.length,
+        phases: {
+          listProfiles: { startMs: 0, durationMs: 0 },
+          listWorkspaces: {
+            startMs: listWorkspacesStart - this.profilingT0,
+            durationMs: listWorkspacesDuration,
+          },
+          render: { startMs: 0, durationMs: 0 },
+          totalLoad: {
+            startMs: 0,
+            durationMs: performance.now() - this.profilingT0,
+          },
+        },
+        workspaceStatuses: [],
+      };
+
       this.render();
       this.preloadAllStatuses();
     });
@@ -825,6 +1148,38 @@ export class WorkspaceHub {
       item.className = 'ws-legend-item';
       item.innerHTML = `<kbd>${key}</kbd> ${desc}`;
       legend.appendChild(item);
+    }
+
+    if (this.profilingData) {
+      const btn = document.createElement('button');
+      btn.className = 'ws-profiling-btn';
+      if (this.profilingSaved) {
+        btn.classList.add('ws-profiling-saved');
+      }
+      btn.textContent = this.profilingSaved ? 'Saved!' : 'Save loading latencies';
+      btn.addEventListener('click', async () => {
+        if (this.profilingSaved || !this.profilingData || !this.activeProfilePath) return;
+        btn.textContent = 'Saving...';
+        btn.disabled = true;
+        btn.classList.remove('ws-profiling-error');
+        this.profilingError = false;
+        try {
+          const savedPath = await invoke<string>('save_profiling_report', {
+            profilePath: this.activeProfilePath,
+            reportJson: JSON.stringify(this.profilingData, null, 2),
+          });
+          this.profilingSaved = true;
+          btn.textContent = `Saved! ${savedPath}`;
+          btn.classList.add('ws-profiling-saved');
+        } catch (e) {
+          console.error('Failed to save profiling report:', e);
+          this.profilingError = true;
+          btn.textContent = 'Save failed';
+          btn.classList.add('ws-profiling-error');
+          btn.disabled = false;
+        }
+      });
+      legend.appendChild(btn);
     }
 
     return legend;

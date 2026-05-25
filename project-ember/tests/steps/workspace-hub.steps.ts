@@ -12,6 +12,7 @@ import {
   reloadWsHub, getFocusedWorkspaceId,
   getFocusedWorkspaceTitle, getWorkspaceItemCount, getActiveCategoryFilter,
   waitForWorkspaceItems, filterWorkspaces, switchProfile, waitForDetailRepoTable,
+  startWsHubLoad,
 } from '../support/ws-hub-helper';
 
 Given(
@@ -183,3 +184,71 @@ Then(
     await waitForDetailRepoTable(this.driver);
   },
 );
+
+Given(
+  'the Workspace Hub is loading',
+  async function (this: EmberWorld) {
+    await startWsHubLoad(this.driver);
+  },
+);
+
+Then(
+  'the hub header should be visible',
+  async function (this: EmberWorld) {
+    const ui = new UIDriver(this.driver);
+    const visible = await ui.hasElement('.ws-header');
+    assert.strictEqual(visible, true, 'Hub header should be visible');
+  },
+);
+
+Then(
+  'the hub legend should be visible',
+  async function (this: EmberWorld) {
+    const ui = new UIDriver(this.driver);
+    const visible = await ui.hasElement('.ws-legend');
+    assert.strictEqual(visible, true, 'Hub legend should be visible');
+  },
+);
+
+Then(
+  'the hub search bar should be visible',
+  async function (this: EmberWorld) {
+    const ui = new UIDriver(this.driver);
+    const visible = await ui.hasElement('.ws-search');
+    assert.strictEqual(visible, true, 'Hub search bar should be visible');
+  },
+);
+
+When(
+  'the user clicks the save loading latencies button',
+  async function (this: EmberWorld) {
+    const ui = new UIDriver(this.driver);
+    await ui.waitForElement('.ws-profiling-btn');
+    await ui.click('.ws-profiling-btn');
+    await this.driver.pollFor(
+      `return document.querySelector('.ws-profiling-saved') !== null`,
+      true,
+      5_000,
+    );
+  },
+);
+
+Then(
+  'a profiling report file should exist in the diagnostics directory',
+  async function (this: EmberWorld) {
+    const profilePath = path.join(this.fixtureRoot!, 'Work');
+    const diagnosticsDir = path.join(profilePath, 'diagnostics');
+    assert.ok(fs.existsSync(diagnosticsDir), `Diagnostics directory should exist at ${diagnosticsDir}`);
+
+    const files = fs.readdirSync(diagnosticsDir).filter((f) => f.startsWith('hub-profile-') && f.endsWith('.json'));
+    assert.ok(files.length > 0, 'At least one profiling report file should exist');
+
+    const reportContent = fs.readFileSync(path.join(diagnosticsDir, files[0]), 'utf-8');
+    const report = JSON.parse(reportContent);
+    assert.ok(report.timestamp, 'Report should have a timestamp');
+    assert.ok(report.phases, 'Report should have phases');
+    assert.ok(report.phases.totalLoad, 'Report should have totalLoad phase');
+    assert.strictEqual(typeof report.workspaceCount, 'number', 'Report should have workspaceCount');
+  },
+);
+
