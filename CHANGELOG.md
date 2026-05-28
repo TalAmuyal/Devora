@@ -28,6 +28,7 @@ Types of changes:
 - Always show the Kitty tab bar, even with a single tab
 - Judge now recognizes any env-var prefix (`NAME=VALUE`) generically instead of requiring hardcoded entries
 - Judge now declines `cargo` and `tsx` commands, directing to mise tasks
+- Judge now evaluates `find -exec` commands by inspecting the executed command rather than blanket-deferring all `-exec` usage
 - Updated 3rd-party dependencies:
     - UV v0.11.10 → v0.11.11
     - Crit v0.10.5 → v0.11.0
