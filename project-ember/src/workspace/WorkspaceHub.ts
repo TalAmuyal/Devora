@@ -490,14 +490,14 @@ export class WorkspaceHub {
 
   private updateDetailPanel(): void {
     const filtered = this.filteredWorkspaces();
-    const detailPanel = this.containerEl.querySelector('.ws-detail-panel');
-    if (!detailPanel) return;
+    const contentEl = this.containerEl.querySelector('.ws-detail-content');
+    if (!contentEl) return;
 
-    detailPanel.innerHTML = '';
+    contentEl.innerHTML = '';
 
     if (this.workspacesLoaded && this.focusedCardIndex >= 0 && this.focusedCardIndex < filtered.length) {
       const ws = filtered[this.focusedCardIndex];
-      detailPanel.appendChild(this.renderDetailPanel(ws));
+      contentEl.appendChild(this.renderDetailPanel(ws));
     }
   }
 
@@ -579,6 +579,10 @@ export class WorkspaceHub {
     }
     masterPanel.appendChild(masterHeader);
 
+    const separator = document.createElement('div');
+    separator.className = 'ws-controls-list-separator';
+    masterPanel.appendChild(separator);
+
     const masterList = document.createElement('div');
     masterList.className = 'ws-master-list';
 
@@ -604,9 +608,18 @@ export class WorkspaceHub {
     const detailPanel = document.createElement('div');
     detailPanel.className = 'ws-detail-panel';
 
+    const accent = document.createElement('div');
+    accent.className = 'ws-right-accent';
+    detailPanel.appendChild(accent);
+
+    const detailContent = document.createElement('div');
+    detailContent.className = 'ws-detail-content';
+
     if (this.workspacesLoaded && this.focusedCardIndex >= 0 && this.focusedCardIndex < filtered.length) {
-      detailPanel.appendChild(this.renderDetailPanel(filtered[this.focusedCardIndex]));
+      detailContent.appendChild(this.renderDetailPanel(filtered[this.focusedCardIndex]));
     }
+
+    detailPanel.appendChild(detailContent);
 
     split.appendChild(detailPanel);
     return split;
@@ -754,7 +767,7 @@ export class WorkspaceHub {
     // Open button
     const openBtn = document.createElement('button');
     openBtn.className = 'ws-open-btn';
-    openBtn.textContent = 'Open Workspace';
+    openBtn.textContent = 'Open';
     openBtn.addEventListener('click', () => {
       this.onOpenWorkspace(ws.path, ws.taskTitle, ws.repos);
     });
@@ -890,7 +903,7 @@ export class WorkspaceHub {
 
     const title = document.createElement('span');
     title.className = 'ws-header-title';
-    title.textContent = 'Devora Ember';
+    title.textContent = 'Devora';
     header.appendChild(title);
 
     if (this.profiles.length > 1) {
@@ -974,6 +987,11 @@ export class WorkspaceHub {
       }
     });
 
+    const icon = document.createElement('span');
+    icon.className = 'ws-search-icon';
+    icon.textContent = '⌕';
+    wrapper.appendChild(icon);
+
     wrapper.appendChild(input);
     return wrapper;
   }
@@ -991,7 +1009,7 @@ export class WorkspaceHub {
     for (const cat of categories) {
       const btn = document.createElement('button');
       btn.className = 'ws-category-btn' + (this.categoryFilter === cat.key ? ' ws-category-active' : '');
-      btn.innerHTML = `${cat.label} <span class="ws-category-shortcut">${cat.shortcut}</span>`;
+      btn.textContent = cat.label;
       btn.addEventListener('click', () => {
         this.categoryFilter = cat.key;
         this.render();
