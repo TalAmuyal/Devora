@@ -36,8 +36,8 @@ Types of changes:
 - Judge now declines `cargo` and `tsx` commands, directing to mise tasks
 - Judge now evaluates `find -exec` commands by inspecting the executed command rather than blanket-deferring all `-exec` usage
 - Updated 3rd-party dependencies:
-    - UV v0.11.10 → v0.11.11
-    - Crit v0.10.5 → v0.11.0
+    - UV v0.11.10 → v0.11.17
+    - Crit v0.10.5 → v0.15.4
 
 ### Removed
 
