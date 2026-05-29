@@ -27,9 +27,6 @@ Types of changes:
 
 ### Changed
 
-- Moved filter, category tabs, and New Task button into the left sidebar of Workspace Hub
-- Changed filter placeholder from "Filter workspaces..." to "Filter..."
-- New Task form now replaces the split panel instead of appearing inline above it
 - Standardized terminology across codebase and documentation: canonical glossary in CLAUDE.md now defines Workspace Hub, Profile, Worktree, etc.
 - Merged "Task" concept into "Workspace" as a state
 - User Guide tab (F1) and View Changelog now use `glimpse-tty` instead of `glow` for rendering
