@@ -152,7 +152,6 @@ DERISKING_FLAGS = {
 
 RISKY_FIND_FLAGS = {
     "-delete",
-    "-exec",
     "-execdir",
     "-ok",
     "-okdir",
@@ -161,7 +160,6 @@ RISKY_FIND_FLAGS = {
 
 def words_decliner(
     command: Command,
-    cwd: str | None,
 ) -> str | None:
     for words, msg in DECLINED_COMMANDS:
         if command[0:len(words)] == words:
@@ -209,14 +207,88 @@ def pop_if_exists(lst: list[str], value: str) -> bool:
     return False
 
 
+def is_safe_prefix(
+    command: Command,
+) -> bool:
+    return any(
+        command[0:len(allowed)] == allowed
+        for allowed in [
+            ["command", "-v"],
+            ["bash", "-n"],
+            ["source", ".venv/bin/activate"],
+            ["git", "diff"],
+            ["git", "grep"],
+            ["git", "show"],
+            ["git", "log"],
+            ["git", "tag", "-l"],
+            ["git", "tag", "--list"],
+            ["git", "config", "--list"],
+            ["git", "notes", "list"],
+            ["git", "ls-files"],
+            ["git", "status"],
+            ["git", "ls-tree"],
+            ["git", "rm"],
+            ["git", "mv"],
+            ["git", "remote", "get-url"],
+            ["git", "remote", "-v"],
+            ["git", "rev-parse"],
+            ["git", "check-ignore"],
+            ["git", "help"],
+            ["go", "doc"],
+            ["helm", "dependency"],
+            ["helm", "version"],
+            ["mise", "help"],
+            ["mise", "ls"],
+            ["mise", "usage"],
+            [".venv/bin/ruff", "check"],
+            [".venv/bin/ruff", "format"],
+            ["jar", "tf"],
+            ["brew", "list"],
+        ]
+    )
+
+
+def is_risky_find(
+    command: Command,
+) -> bool:
+    if RISKY_FIND_FLAGS & set(command):
+        return True
+
+    for i, arg in enumerate(command):
+        if arg != "-exec":
+            continue
+
+        exec_command = command[i + 1:]
+        for delimiter in ("+", r"\;", ";"):
+            if delimiter not in exec_command:
+                continue
+            delimiter_index = exec_command.index(delimiter)
+            exec_command = exec_command[:delimiter_index]
+
+        if not exec_command:
+            continue
+
+        if words_decliner(exec_command):
+            return True
+
+        if exec_command[0] in ALLOWED_COMMANDS:
+            continue
+
+        if is_safe_prefix(exec_command):
+            continue
+
+        return True
+
+    return False
+
 
 class Detectors:
     DECLINED: list[LabeledDeclineDetector] = [
-        ("words_decliner", words_decliner),
+        ("words_decliner", lambda cmd, _: words_decliner(cmd)),
     ]
     KNOWN_TO_NOT_HANDLE: list[LabeledBooleanDetector] = [
         ("dotslash_command", lambda cmd, _: cmd[0].startswith("./")),
-        ("risky_find_flags", lambda cmd, _: cmd[0] == "find" and RISKY_FIND_FLAGS & set(cmd)),
+        ("risky_find", lambda cmd, _: cmd[0] == "find" and is_risky_find(cmd)),
         ("bash_not_syntax_check", lambda cmd, _: cmd[0] == "bash" and cmd[1] != "-n"),
         ("dangerous_command", lambda cmd, _: any(
             cmd[0:len(cmd_start)] == cmd_start
@@ -237,43 +309,7 @@ class Detectors:
             and cmd[1].startswith(cwd + "/")
             and cmd[1].endswith("/.venv/bin/activate")
         )),
-        ("safe_prefix", lambda cmd, _: any(
-            cmd[0:len(allowed)] == allowed
-            for allowed in [
-                ["command", "-v"],
-                ["bash", "-n"],
-                ["source", ".venv/bin/activate"],
-                ["git", "diff"],
-                ["git", "grep"],
-                ["git", "show"],
-                ["git", "log"],
-                ["git", "tag", "-l"],
-                ["git", "tag", "--list"],
-                ["git", "config", "--list"],
-                ["git", "notes", "list"],
-                ["git", "ls-files"],
-                ["git", "status"],
-                ["git", "ls-tree"],
-                ["git", "rm"],
-                ["git", "mv"],
-                ["git", "remote", "get-url"],
-                ["git", "remote", "-v"],
-                ["git", "rev-parse"],
-                ["git", "check-ignore"],
-                ["git", "help"],
-                ["go", "doc"],
-                ["helm", "dependency"],
-                ["helm", "version"],
-                ["mise", "help"],
-                ["mise", "ls"],
-                ["mise", "usage"],
-                [".venv/bin/ruff", "check"],
-                [".venv/bin/ruff", "format"],
-                ["jar", "tf"],
-                ["brew", "list"],
-            ]
-        )),
-        ("safe_find", lambda cmd, _: cmd[0] == "find" and not (RISKY_FIND_FLAGS & set(cmd))),
+        ("safe_prefix", lambda cmd, _: is_safe_prefix(cmd)),
         ("derisking_flags", lambda cmd, _: bool(frozenset(cmd[1:]) & DERISKING_FLAGS)),
         ("validate_sed", validate_sed),
         ("exact_match", lambda cmd, _: tuple(cmd) in ALLOWED_EXACT_MATCHES),

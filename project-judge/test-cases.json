@@ -490,5 +490,104 @@
             }
         },
         "deferred"
+    ],
+    [
+        {
+            "cwd": "/home/user/project-TEST1",
+            "tool_input": {
+                "command": "find . -name '*.py'"
+            }
+        },
+        "approved"
+    ],
+    [
+        {
+            "cwd": "/home/user/project-TEST1",
+            "tool_input": {
+                "command": "find . -name '*.tmp' -delete"
+            }
+        },
+        "deferred"
+    ],
+    [
+        {
+            "cwd": "/home/user/project-TEST1",
+            "tool_input": {
+                "command": "find . -name '*.py' -exec grep -l TODO {} \\;"
+            }
+        },
+        "approved"
+    ],
+    [
+        {
+            "cwd": "/home/user/project-TEST1",
+            "tool_input": {
+                "command": "find . -name '*.tmp' -exec rm {} \\;"
+            }
+        },
+        "deferred"
+    ],
+    [
+        {
+            "cwd": "/home/user/project-TEST1",
+            "tool_input": {
+                "command": "find . -name '*.js' -exec npm install {} \\;"
+            }
+        },
+        "deferred"
+    ],
+    [
+        {
+            "cwd": "/home/user/project-TEST1",
+            "tool_input": {
+                "command": "find . -name '*.py' -exec cat {} +"
+            }
+        },
+        "approved"
+    ],
+    [
+        {
+            "cwd": "/home/user/project-TEST1",
+            "tool_input": {
+                "command": "find . -name '*.py' -exec git log {} \\;"
+            }
+        },
+        "approved"
+    ],
+    [
+        {
+            "cwd": "/home/user/project-TEST1",
+            "tool_input": {
+                "command": "find . -name '*.o' -exec unknown_tool {} +"
+            }
+        },
+        "deferred"
+    ],
+    [
+        {
+            "cwd": "/home/user/project-TEST1",
+            "tool_input": {
+                "command": "find . -name '*.py' -exec grep foo {} + -exec cat {} +"
+            }
+        },
+        "approved"
+    ],
+    [
+        {
+            "cwd": "/home/user/project-TEST1",
+            "tool_input": {
+                "command": "find . -name '*.py' -exec grep foo {} + -exec unknown_tool {} +"
+            }
+        },
+        "deferred"
+    ],
+    [
+        {
+            "cwd": "/home/user/project-TEST1",
+            "tool_input": {
+                "command": "find . -name '*.py' -execdir ls {} \\;"
+            }
+        },
+        "deferred"
     ]
 ]
