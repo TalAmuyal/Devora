@@ -208,7 +208,6 @@ export class WorkspaceHub {
     }
 
     this.workspacesLoaded = true;
-    this.renderWorkspaceArea();
 
     const totalLoadDuration = performance.now() - this.profilingT0;
 
@@ -239,11 +238,7 @@ export class WorkspaceHub {
       workspaceStatuses: [],
     };
 
-    const oldLegend = this.containerEl.querySelector('.ws-legend');
-    if (oldLegend) {
-      oldLegend.replaceWith(this.renderLegend());
-    }
-
+    this.render();
     this.preloadAllStatuses();
   }
 
@@ -472,6 +467,12 @@ export class WorkspaceHub {
           this.onOpenWorkspace(ws.path, ws.taskTitle, ws.repos);
         }
         return;
+      case 'n': {
+        e.preventDefault();
+        e.stopPropagation();
+        this.toggleNewForm();
+        return;
+      }
     }
   }
 
@@ -494,7 +495,7 @@ export class WorkspaceHub {
 
     detailPanel.innerHTML = '';
 
-    if (this.focusedCardIndex >= 0 && this.focusedCardIndex < filtered.length) {
+    if (this.workspacesLoaded && this.focusedCardIndex >= 0 && this.focusedCardIndex < filtered.length) {
       const ws = filtered[this.focusedCardIndex];
       detailPanel.appendChild(this.renderDetailPanel(ws));
     }
@@ -545,24 +546,9 @@ export class WorkspaceHub {
     }
 
     this.containerEl.appendChild(this.renderHeader());
-    this.containerEl.appendChild(this.renderSearch());
-    this.containerEl.appendChild(this.renderCategoryTabs());
 
-    if (this.profilesLoaded) {
-      this.containerEl.appendChild(this.renderNewButton());
-
-      if (this.showNewForm) {
-        this.containerEl.appendChild(this.renderNewForm());
-      }
-    }
-
-    if (!this.workspacesLoaded) {
-      const placeholder = document.createElement('div');
-      placeholder.className = 'ws-loading-placeholder';
-      placeholder.textContent = 'Loading workspaces...';
-      this.containerEl.appendChild(placeholder);
-    } else if (this.profilesLoaded && this.profiles.length === 0) {
-      this.containerEl.appendChild(this.renderEmptyMessage('No profiles configured'));
+    if (this.showNewForm) {
+      this.containerEl.appendChild(this.renderNewForm());
     } else {
       this.containerEl.appendChild(this.renderSplitPanel());
     }
@@ -584,13 +570,33 @@ export class WorkspaceHub {
     const masterPanel = document.createElement('div');
     masterPanel.className = 'ws-master-panel';
 
-    if (filtered.length === 0) {
-      masterPanel.appendChild(this.renderEmptyMessage('No workspaces found'));
+    const masterHeader = document.createElement('div');
+    masterHeader.className = 'ws-master-header';
+    masterHeader.appendChild(this.renderSearch());
+    masterHeader.appendChild(this.renderCategoryTabs());
+    if (this.profilesLoaded) {
+      masterHeader.appendChild(this.renderNewButton());
+    }
+    masterPanel.appendChild(masterHeader);
+
+    const masterList = document.createElement('div');
+    masterList.className = 'ws-master-list';
+
+    if (!this.workspacesLoaded) {
+      const placeholder = document.createElement('div');
+      placeholder.className = 'ws-loading-placeholder';
+      placeholder.textContent = 'Loading workspaces...';
+      masterList.appendChild(placeholder);
+    } else if (this.profilesLoaded && this.profiles.length === 0) {
+      masterList.appendChild(this.renderEmptyMessage('No profiles configured'));
+    } else if (filtered.length === 0) {
+      masterList.appendChild(this.renderEmptyMessage('No workspaces found'));
     } else {
       for (let i = 0; i < filtered.length; i++) {
-        masterPanel.appendChild(this.renderMasterItem(filtered[i], i));
+        masterList.appendChild(this.renderMasterItem(filtered[i], i));
       }
     }
+    masterPanel.appendChild(masterList);
 
     split.appendChild(masterPanel);
 
@@ -598,7 +604,7 @@ export class WorkspaceHub {
     const detailPanel = document.createElement('div');
     detailPanel.className = 'ws-detail-panel';
 
-    if (this.focusedCardIndex >= 0 && this.focusedCardIndex < filtered.length) {
+    if (this.workspacesLoaded && this.focusedCardIndex >= 0 && this.focusedCardIndex < filtered.length) {
       detailPanel.appendChild(this.renderDetailPanel(filtered[this.focusedCardIndex]));
     }
 
@@ -614,20 +620,6 @@ export class WorkspaceHub {
     }
   }
 
-  private renderWorkspaceArea(): void {
-    const placeholder = this.containerEl.querySelector('.ws-loading-placeholder');
-    if (!placeholder) return;
-
-    if (this.profilesLoaded && !this.containerEl.querySelector('.ws-new-btn')) {
-      placeholder.before(this.renderNewButton());
-    }
-
-    if (this.profilesLoaded && this.profiles.length === 0) {
-      placeholder.replaceWith(this.renderEmptyMessage('No profiles configured'));
-    } else {
-      placeholder.replaceWith(this.renderSplitPanel());
-    }
-  }
 
   private renderMasterItem(ws: WorkspaceInfo, index: number): HTMLElement {
     const item = document.createElement('div');
@@ -968,7 +960,7 @@ export class WorkspaceHub {
 
     const input = document.createElement('input');
     input.type = 'text';
-    input.placeholder = 'Filter workspaces...';
+    input.placeholder = 'Filter...';
     input.value = this.searchFilter;
 
     input.addEventListener('input', () => {
@@ -1010,24 +1002,26 @@ export class WorkspaceHub {
     return bar;
   }
 
+  private async toggleNewForm(): Promise<void> {
+    this.showNewForm = !this.showNewForm;
+    if (this.showNewForm && this.activeProfilePath) {
+      try {
+        this.availableRepos = await invoke<RepoInfo[]>('get_registered_repos', {
+          profilePath: this.activeProfilePath,
+        });
+      } catch (e) {
+        console.error('Failed to load repos:', e);
+        this.availableRepos = [];
+      }
+    }
+    this.render();
+  }
+
   private renderNewButton(): HTMLElement {
     const btn = document.createElement('button');
     btn.className = 'ws-new-btn';
     btn.textContent = '+ New Task';
-    btn.addEventListener('click', async () => {
-      this.showNewForm = !this.showNewForm;
-      if (this.showNewForm && this.activeProfilePath) {
-        try {
-          this.availableRepos = await invoke<RepoInfo[]>('get_registered_repos', {
-            profilePath: this.activeProfilePath,
-          });
-        } catch (e) {
-          console.error('Failed to load repos:', e);
-          this.availableRepos = [];
-        }
-      }
-      this.render();
-    });
+    btn.addEventListener('click', () => this.toggleNewForm());
     return btn;
   }
 
@@ -1139,6 +1133,7 @@ export class WorkspaceHub {
       ['Enter', 'open'],
       ['f', 'filter'],
       ['1/2/3', 'active/inactive/all'],
+      ['n', 'new task'],
       ['q/Esc', 'close'],
       ['?', 'all shortcuts'],
     ];
@@ -1206,6 +1201,7 @@ export class WorkspaceHub {
           ['1', 'Show active workspaces'],
           ['2', 'Show inactive workspaces'],
           ['3', 'Show all workspaces'],
+          ['n', 'New task'],
           ['q', 'Close hub'],
           ['?', 'Toggle this cheatsheet'],
         ],
