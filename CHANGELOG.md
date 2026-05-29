@@ -27,6 +27,7 @@ Types of changes:
 
 ### Changed
 
+- Improved team-work skill: structured team roles, added planning interview phase, and delegation guidance
 - Standardized terminology across codebase and documentation: canonical glossary in CLAUDE.md now defines Workspace Hub, Profile, Worktree, etc.
 - Merged "Task" concept into "Workspace" as a state
 - User Guide tab (F1) and View Changelog now use `glimpse-tty` instead of `glow` for rendering
