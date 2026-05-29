@@ -1,4 +1,10 @@
 import { invoke } from '@tauri-apps/api/core';
+import { createEmptyState } from '../ui/components/EmptyState';
+import { createStatusDot } from '../ui/components/StatusDot';
+import { createBadge } from '../ui/components/Badge';
+import { createSegmentedControl } from '../ui/components/SegmentedControl';
+import { createSearchInput, SearchInputHandle } from '../ui/components/SearchInput';
+import { createKeyboardHintBar } from '../ui/components/KeyboardHintBar';
 
 // Types matching the Rust command return values
 interface ProfileInfo {
@@ -128,6 +134,9 @@ export class WorkspaceHub {
   private profilingT0: number = 0;
   private profilingSaved: boolean = false;
   private profilingError: boolean = false;
+
+  private searchHandle: SearchInputHandle | null = null;
+  private masterListEl: HTMLElement | null = null;
 
   private keyHandler = (e: KeyboardEvent) => this.handleKeyDown(e);
 
@@ -318,7 +327,7 @@ export class WorkspaceHub {
       if (idEl?.textContent !== wsId) continue;
 
       item.classList.add('ws-invalid');
-      const dot = item.querySelector('.ws-status-dot');
+      const dot = item.querySelector('.status-dot');
       if (dot) {
         dot.classList.remove('clean', 'modified', 'pending', 'error');
         dot.classList.add('error');
@@ -339,7 +348,7 @@ export class WorkspaceHub {
       if (idEl?.textContent !== wsId) continue;
 
       item.classList.remove('ws-invalid');
-      const dot = item.querySelector('.ws-status-dot');
+      const dot = item.querySelector('.status-dot');
       if (dot) {
         const hasModifications = statuses.some((r) => r.modified > 0 || r.untracked > 0);
         dot.classList.remove('clean', 'modified', 'pending', 'error');
@@ -371,16 +380,11 @@ export class WorkspaceHub {
   }
 
   private isSearchFocused(): boolean {
-    return this.containerEl.querySelector('.ws-search input') === document.activeElement;
+    return this.searchHandle?.element.contains(document.activeElement) ?? false;
   }
 
   private handleKeyDown(e: KeyboardEvent): void {
     if (this.isSearchFocused()) {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        (document.activeElement as HTMLElement)?.blur();
-      }
       return;
     }
 
@@ -416,8 +420,7 @@ export class WorkspaceHub {
       case 'f': {
         e.preventDefault();
         e.stopPropagation();
-        const input = this.containerEl.querySelector<HTMLInputElement>('.ws-search input');
-        input?.focus();
+        this.searchHandle?.focus();
         return;
       }
       case '1':
@@ -488,6 +491,36 @@ export class WorkspaceHub {
     this.updateDetailPanel();
   }
 
+  private updateMasterList(): void {
+    if (!this.masterListEl) return;
+
+    this.masterListEl.innerHTML = '';
+    const filtered = this.filteredWorkspaces();
+
+    if (this.focusedCardIndex >= filtered.length) {
+      this.focusedCardIndex = filtered.length > 0 ? 0 : -1;
+    } else if (this.focusedCardIndex < 0 && filtered.length > 0) {
+      this.focusedCardIndex = 0;
+    }
+
+    if (!this.workspacesLoaded) {
+      const placeholder = document.createElement('div');
+      placeholder.className = 'ws-loading-placeholder';
+      placeholder.textContent = 'Loading workspaces...';
+      this.masterListEl.appendChild(placeholder);
+    } else if (this.profilesLoaded && this.profiles.length === 0) {
+      this.masterListEl.appendChild(createEmptyState('No profiles configured'));
+    } else if (filtered.length === 0) {
+      this.masterListEl.appendChild(createEmptyState('No workspaces found'));
+    } else {
+      for (let i = 0; i < filtered.length; i++) {
+        this.masterListEl.appendChild(this.renderMasterItem(filtered[i], i));
+      }
+    }
+
+    this.updateCardFocus();
+  }
+
   private updateDetailPanel(): void {
     const filtered = this.filteredWorkspaces();
     const contentEl = this.containerEl.querySelector('.ws-detail-content');
@@ -538,6 +571,8 @@ export class WorkspaceHub {
   // --- Rendering ---
 
   private render(): void {
+    this.searchHandle = null;
+    this.masterListEl = null;
     this.containerEl.innerHTML = '';
 
     if (this.showCheatsheet) {
@@ -553,7 +588,18 @@ export class WorkspaceHub {
       this.containerEl.appendChild(this.renderSplitPanel());
     }
 
-    this.containerEl.appendChild(this.renderLegend());
+    this.containerEl.appendChild(createKeyboardHintBar({
+      hints: [
+        { keys: 'j/k', description: 'navigate' },
+        { keys: 'Enter', description: 'open' },
+        { keys: 'f', description: 'filter' },
+        { keys: '1/2/3', description: 'active/inactive/all' },
+        { keys: 'n', description: 'new task' },
+        { keys: 'q/Esc', description: 'close' },
+        { keys: '?', description: 'all shortcuts' },
+      ],
+      trailing: this.renderProfilingButton(),
+    }));
   }
 
   private renderSplitPanel(): HTMLElement {
@@ -572,8 +618,29 @@ export class WorkspaceHub {
 
     const masterHeader = document.createElement('div');
     masterHeader.className = 'ws-master-header';
-    masterHeader.appendChild(this.renderSearch());
-    masterHeader.appendChild(this.renderCategoryTabs());
+    this.searchHandle = createSearchInput({
+      placeholder: 'Filter...',
+      value: this.searchFilter,
+      icon: '⌕',
+      onInput: (value) => {
+        this.searchFilter = value;
+        this.updateMasterList();
+      },
+      onEscape: () => {},
+    });
+    masterHeader.appendChild(this.searchHandle.element);
+    masterHeader.appendChild(createSegmentedControl({
+      items: [
+        { key: 'active' as const, label: 'Active' },
+        { key: 'inactive' as const, label: 'Inactive' },
+        { key: 'all' as const, label: 'All' },
+      ],
+      activeKey: this.categoryFilter,
+      onSelect: (key) => {
+        this.categoryFilter = key;
+        this.render();
+      },
+    }));
     if (this.profilesLoaded) {
       masterHeader.appendChild(this.renderNewButton());
     }
@@ -585,6 +652,7 @@ export class WorkspaceHub {
 
     const masterList = document.createElement('div');
     masterList.className = 'ws-master-list';
+    this.masterListEl = masterList;
 
     if (!this.workspacesLoaded) {
       const placeholder = document.createElement('div');
@@ -592,9 +660,9 @@ export class WorkspaceHub {
       placeholder.textContent = 'Loading workspaces...';
       masterList.appendChild(placeholder);
     } else if (this.profilesLoaded && this.profiles.length === 0) {
-      masterList.appendChild(this.renderEmptyMessage('No profiles configured'));
+      masterList.appendChild(createEmptyState('No profiles configured'));
     } else if (filtered.length === 0) {
-      masterList.appendChild(this.renderEmptyMessage('No workspaces found'));
+      masterList.appendChild(createEmptyState('No workspaces found'));
     } else {
       for (let i = 0; i < filtered.length; i++) {
         masterList.appendChild(this.renderMasterItem(filtered[i], i));
@@ -655,21 +723,21 @@ export class WorkspaceHub {
     }
 
     // Status dot
-    const dot = document.createElement('div');
-    dot.className = 'ws-status-dot';
+    let dotVariant: 'clean' | 'modified' | 'pending' | 'error';
     if (isInvalid) {
-      dot.classList.add('error');
+      dotVariant = 'error';
     } else if (isInactive) {
-      dot.classList.add('pending');
+      dotVariant = 'pending';
     } else {
       const cached = this.statusCache.get(ws.id);
       if (cached) {
         const hasModifications = cached.some((r) => r.modified > 0 || r.untracked > 0);
-        dot.classList.add(hasModifications ? 'modified' : 'clean');
+        dotVariant = hasModifications ? 'modified' : 'clean';
       } else {
-        dot.classList.add('pending');
+        dotVariant = 'pending';
       }
     }
+    const dot = createStatusDot(dotVariant);
     item.appendChild(dot);
 
     // Task name
@@ -727,15 +795,9 @@ export class WorkspaceHub {
     meta.appendChild(repoCount);
 
     if (isInvalid) {
-      const badge = document.createElement('span');
-      badge.className = 'ws-detail-badge error';
-      badge.textContent = 'error';
-      meta.appendChild(badge);
+      meta.appendChild(createBadge('error', 'error'));
     } else if (isInactive) {
-      const badge = document.createElement('span');
-      badge.className = 'ws-detail-badge inactive';
-      badge.textContent = 'inactive';
-      meta.appendChild(badge);
+      meta.appendChild(createBadge('inactive', 'inactive'));
     } else if (cached) {
       const statusSpan = document.createElement('span');
       const totalModified = cached.reduce((sum, r) => sum + r.modified, 0);
@@ -783,11 +845,10 @@ export class WorkspaceHub {
     return detail;
   }
 
-  private renderDetailRepoTable(statuses: RepoStatus[]): HTMLElement {
+  private createRepoTableShell(extraClass?: string): { table: HTMLElement; tbody: HTMLElement } {
     const table = document.createElement('table');
-    table.className = 'ws-detail-repo-table';
+    table.className = 'ws-detail-repo-table' + (extraClass ? ' ' + extraClass : '');
 
-    // Header
     const thead = document.createElement('thead');
     const headerRow = document.createElement('tr');
     for (const label of ['Repo', 'Branch', 'Status']) {
@@ -798,8 +859,15 @@ export class WorkspaceHub {
     thead.appendChild(headerRow);
     table.appendChild(thead);
 
-    // Body
     const tbody = document.createElement('tbody');
+    table.appendChild(tbody);
+
+    return { table, tbody };
+  }
+
+  private renderDetailRepoTable(statuses: RepoStatus[]): HTMLElement {
+    const { table, tbody } = this.createRepoTableShell();
+
     for (const repo of statuses) {
       const row = document.createElement('tr');
 
@@ -824,22 +892,13 @@ export class WorkspaceHub {
       statusContainer.className = 'col-status';
 
       if (repo.modified === 0 && repo.untracked === 0) {
-        const badge = document.createElement('span');
-        badge.className = 'badge badge-clean';
-        badge.textContent = '✓ clean';
-        statusContainer.appendChild(badge);
+        statusContainer.appendChild(createBadge('✓ clean', 'clean'));
       } else {
         if (repo.modified > 0) {
-          const badge = document.createElement('span');
-          badge.className = 'badge badge-modified';
-          badge.textContent = `~${repo.modified} modified`;
-          statusContainer.appendChild(badge);
+          statusContainer.appendChild(createBadge(`~${repo.modified} modified`, 'modified'));
         }
         if (repo.untracked > 0) {
-          const badge = document.createElement('span');
-          badge.className = 'badge badge-untracked';
-          badge.textContent = `+${repo.untracked} untracked`;
-          statusContainer.appendChild(badge);
+          statusContainer.appendChild(createBadge(`+${repo.untracked} untracked`, 'untracked'));
         }
       }
 
@@ -847,26 +906,13 @@ export class WorkspaceHub {
       row.appendChild(statusCell);
       tbody.appendChild(row);
     }
-    table.appendChild(tbody);
 
     return table;
   }
 
   private renderPendingRepoTable(repoNames: string[]): HTMLElement {
-    const table = document.createElement('table');
-    table.className = 'ws-detail-repo-table ws-detail-repo-pending';
+    const { table, tbody } = this.createRepoTableShell('ws-detail-repo-pending');
 
-    const thead = document.createElement('thead');
-    const headerRow = document.createElement('tr');
-    for (const label of ['Repo', 'Branch', 'Status']) {
-      const th = document.createElement('th');
-      th.textContent = label;
-      headerRow.appendChild(th);
-    }
-    thead.appendChild(headerRow);
-    table.appendChild(thead);
-
-    const tbody = document.createElement('tbody');
     for (const name of repoNames) {
       const row = document.createElement('tr');
 
@@ -883,16 +929,12 @@ export class WorkspaceHub {
       const statusCell = document.createElement('td');
       const statusContainer = document.createElement('div');
       statusContainer.className = 'col-status';
-      const badge = document.createElement('span');
-      badge.className = 'badge badge-pending';
-      badge.textContent = 'pending';
-      statusContainer.appendChild(badge);
+      statusContainer.appendChild(createBadge('pending', 'pending'));
       statusCell.appendChild(statusContainer);
       row.appendChild(statusCell);
 
       tbody.appendChild(row);
     }
-    table.appendChild(tbody);
 
     return table;
   }
@@ -965,59 +1007,6 @@ export class WorkspaceHub {
     });
 
     return select;
-  }
-
-  private renderSearch(): HTMLElement {
-    const wrapper = document.createElement('div');
-    wrapper.className = 'ws-search';
-
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.placeholder = 'Filter...';
-    input.value = this.searchFilter;
-
-    input.addEventListener('input', () => {
-      this.searchFilter = input.value;
-      this.render();
-      // Re-focus the input after re-render
-      const newInput = this.containerEl.querySelector<HTMLInputElement>('.ws-search input');
-      if (newInput) {
-        newInput.focus();
-        newInput.setSelectionRange(newInput.value.length, newInput.value.length);
-      }
-    });
-
-    const icon = document.createElement('span');
-    icon.className = 'ws-search-icon';
-    icon.textContent = '⌕';
-    wrapper.appendChild(icon);
-
-    wrapper.appendChild(input);
-    return wrapper;
-  }
-
-  private renderCategoryTabs(): HTMLElement {
-    const bar = document.createElement('div');
-    bar.className = 'ws-category-bar';
-
-    const categories: { key: CategoryFilter; label: string; shortcut: string }[] = [
-      { key: 'active', label: 'Active', shortcut: '1' },
-      { key: 'inactive', label: 'Inactive', shortcut: '2' },
-      { key: 'all', label: 'All', shortcut: '3' },
-    ];
-
-    for (const cat of categories) {
-      const btn = document.createElement('button');
-      btn.className = 'ws-category-btn' + (this.categoryFilter === cat.key ? ' ws-category-active' : '');
-      btn.textContent = cat.label;
-      btn.addEventListener('click', () => {
-        this.categoryFilter = cat.key;
-        this.render();
-      });
-      bar.appendChild(btn);
-    }
-
-    return bar;
   }
 
   private async toggleNewForm(): Promise<void> {
@@ -1135,67 +1124,38 @@ export class WorkspaceHub {
     return form;
   }
 
-  private renderEmptyMessage(text: string): HTMLElement {
-    const msg = document.createElement('div');
-    msg.className = 'ws-empty-message';
-    msg.textContent = text;
-    return msg;
-  }
+  private renderProfilingButton(): HTMLElement | undefined {
+    if (!this.profilingData) return undefined;
 
-  private renderLegend(): HTMLElement {
-    const legend = document.createElement('div');
-    legend.className = 'ws-legend';
-
-    const keys: [string, string][] = [
-      ['j/k', 'navigate'],
-      ['Enter', 'open'],
-      ['f', 'filter'],
-      ['1/2/3', 'active/inactive/all'],
-      ['n', 'new task'],
-      ['q/Esc', 'close'],
-      ['?', 'all shortcuts'],
-    ];
-
-    for (const [key, desc] of keys) {
-      const item = document.createElement('span');
-      item.className = 'ws-legend-item';
-      item.innerHTML = `<kbd>${key}</kbd> ${desc}`;
-      legend.appendChild(item);
+    const btn = document.createElement('button');
+    btn.className = 'ws-profiling-btn';
+    if (this.profilingSaved) {
+      btn.classList.add('ws-profiling-saved');
     }
-
-    if (this.profilingData) {
-      const btn = document.createElement('button');
-      btn.className = 'ws-profiling-btn';
-      if (this.profilingSaved) {
+    btn.textContent = this.profilingSaved ? 'Saved!' : 'Save loading latencies';
+    btn.addEventListener('click', async () => {
+      if (this.profilingSaved || !this.profilingData || !this.activeProfilePath) return;
+      btn.textContent = 'Saving...';
+      btn.disabled = true;
+      btn.classList.remove('ws-profiling-error');
+      this.profilingError = false;
+      try {
+        const savedPath = await invoke<string>('save_profiling_report', {
+          profilePath: this.activeProfilePath,
+          reportJson: JSON.stringify(this.profilingData, null, 2),
+        });
+        this.profilingSaved = true;
+        btn.textContent = `Saved! ${savedPath}`;
         btn.classList.add('ws-profiling-saved');
+      } catch (e) {
+        console.error('Failed to save profiling report:', e);
+        this.profilingError = true;
+        btn.textContent = 'Save failed';
+        btn.classList.add('ws-profiling-error');
+        btn.disabled = false;
       }
-      btn.textContent = this.profilingSaved ? 'Saved!' : 'Save loading latencies';
-      btn.addEventListener('click', async () => {
-        if (this.profilingSaved || !this.profilingData || !this.activeProfilePath) return;
-        btn.textContent = 'Saving...';
-        btn.disabled = true;
-        btn.classList.remove('ws-profiling-error');
-        this.profilingError = false;
-        try {
-          const savedPath = await invoke<string>('save_profiling_report', {
-            profilePath: this.activeProfilePath,
-            reportJson: JSON.stringify(this.profilingData, null, 2),
-          });
-          this.profilingSaved = true;
-          btn.textContent = `Saved! ${savedPath}`;
-          btn.classList.add('ws-profiling-saved');
-        } catch (e) {
-          console.error('Failed to save profiling report:', e);
-          this.profilingError = true;
-          btn.textContent = 'Save failed';
-          btn.classList.add('ws-profiling-error');
-          btn.disabled = false;
-        }
-      });
-      legend.appendChild(btn);
-    }
-
-    return legend;
+    });
+    return btn;
   }
 
   private renderCheatsheet(): HTMLElement {

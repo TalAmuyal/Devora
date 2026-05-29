@@ -46,10 +46,23 @@ echo "DMG created: $DMG_OUTPUT"
 """
 description = "Create a DMG from an existing .app bundle (run build-ember-app first)"
 
-[tasks.test]
+[tasks.test-rust]
 dir = "src-tauri"
 run = "cargo test"
 description = "Run Rust tests"
+
+[tasks.test-unit]
+run = "npx vitest run"
+description = "Run frontend unit tests"
+
+[tasks.test-unit-watch]
+run = "npx vitest"
+description = "Run frontend unit tests in watch mode"
+raw = true
+
+[tasks.test-all]
+depends = ["test-rust", "test-unit"]
+description = "Run all tests (Rust + frontend unit)"
 
 [tasks._cucumber]
 dir = "."

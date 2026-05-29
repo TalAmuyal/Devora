@@ -54,3 +54,23 @@ Cassettes are stored as gzip-compressed JSON at `tests/support/fixtures/cassette
 - **Tab-covering overlay**: covers entire window including tab bar. Used for the Workspace Hub, User Guide, cheatsheet.
 - **Panel overlay**: covers main panel area only, tab bar visible. Tied to a specific session tab. Used for Crit.
 - Both types are dismissible with `q` or `Escape`.
+
+## Reusable UI Components
+
+Components live in `src/ui/components/`, styles in `src/styles/components.css`.
+Re-use existing components where possible, and add new ones as needed.
+
+### Pattern
+
+Factory functions that return `HTMLElement` (or a handle object for stateful components). No framework, no Web Components — plain TypeScript + imperative DOM.
+
+### Adding a new component
+
+- Create the factory in `src/ui/components/` (with a TSDoc)
+- Add CSS to `src/styles/components.css`
+- Add unit test in `src/ui/components/__tests__/`
+
+### Running unit tests
+
+- `mise test-unit` (one-time)
+- `mise test-unit-watch` (watch mode)

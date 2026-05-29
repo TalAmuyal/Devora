@@ -226,86 +226,6 @@ body {
   outline-offset: -0.133rem;
 }
 
-/* Search */
-
-.ws-search {
-  flex-shrink: 0;
-  position: relative;
-}
-
-.ws-search-icon {
-  position: absolute;
-  left: 10px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: var(--color-surface2);
-  font-size: 13px;
-  pointer-events: none;
-}
-
-.ws-search input {
-  width: 100%;
-  box-sizing: border-box;
-  background: rgba(30, 32, 48, 0.8);
-  color: var(--color-fg);
-  border: 1px solid rgba(73, 77, 100, 0.5);
-  border-radius: 8px;
-  padding: 7px 12px 7px 30px;
-  font-family: var(--font-ui);
-  font-size: var(--font-size-md);
-  transition: all 0.15s;
-}
-
-.ws-search input:focus {
-  outline: none;
-  border-color: var(--color-lavender);
-  box-shadow: 0 0 0 2px rgba(183, 189, 248, 0.15);
-}
-
-.ws-search input::placeholder {
-  color: var(--color-fg-secondary);
-}
-
-/* Category filter tabs */
-
-.ws-category-bar {
-  display: flex;
-  align-items: center;
-  background: transparent;
-  border: 1px solid rgba(73, 77, 100, 0.35);
-  border-radius: 999px;
-  padding: 3px;
-  gap: 2px;
-  flex-shrink: 0;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-}
-
-.ws-category-btn {
-  flex: 1;
-  background: transparent;
-  color: var(--color-overlay0);
-  border: none;
-  border-radius: 999px;
-  padding: 4px 0;
-  font-family: var(--font-ui);
-  font-size: var(--font-size-sm);
-  cursor: pointer;
-  transition: all 0.15s;
-  text-align: center;
-}
-
-.ws-category-btn:hover {
-  color: var(--color-subtext0);
-}
-
-.ws-category-btn.ws-category-active {
-  background: var(--color-accent);
-  color: var(--color-crust);
-  font-weight: 600;
-  box-shadow: 0 0 12px rgba(198, 160, 246, 0.3), 0 0 4px rgba(198, 160, 246, 0.15);
-}
-
 /* New workspace button */
 
 .ws-new-btn {
@@ -506,20 +426,6 @@ body {
   color: var(--color-status-error);
 }
 
-/* Status dot */
-
-.ws-status-dot {
-  width: 0.533rem;
-  height: 0.533rem;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.ws-status-dot.clean    { background: var(--color-status-clean); }
-.ws-status-dot.modified { background: var(--color-status-modified); }
-.ws-status-dot.pending  { background: var(--color-overlay0); }
-.ws-status-dot.error    { background: var(--color-status-error); }
-
 /* Shared master-list labels */
 
 .ws-task-name {
@@ -604,25 +510,6 @@ body {
   color: var(--color-status-error);
 }
 
-.ws-detail-badge {
-  display: inline-flex;
-  align-items: center;
-  font-family: var(--font-mono);
-  font-size: var(--font-size-sm);
-  padding: 1px var(--space-sm);
-  border-radius: var(--tab-border-radius);
-}
-
-.ws-detail-badge.inactive {
-  color: var(--color-fg-secondary);
-  background: rgba(165, 173, 203, 0.1);
-}
-
-.ws-detail-badge.error {
-  color: var(--color-status-error);
-  background: rgba(237, 135, 150, 0.1);
-}
-
 /* Error message in detail */
 
 .ws-detail-error {
@@ -692,41 +579,6 @@ body {
   gap: var(--space-sm);
 }
 
-.badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  font-family: var(--font-mono);
-  font-size: var(--font-size-sm);
-  padding: 1px var(--space-sm);
-  border-radius: var(--tab-border-radius);
-}
-
-.badge-clean {
-  color: var(--color-status-clean);
-  background: rgba(166, 218, 149, 0.1);
-}
-
-.badge-modified {
-  color: var(--color-status-modified);
-  background: rgba(238, 212, 159, 0.1);
-}
-
-.badge-untracked {
-  color: var(--color-status-info);
-  background: rgba(138, 173, 244, 0.1);
-}
-
-.badge-error {
-  color: var(--color-status-error);
-  background: rgba(237, 135, 150, 0.1);
-}
-
-.badge-pending {
-  color: var(--color-fg-secondary);
-  background: rgba(165, 173, 203, 0.1);
-}
-
 .ws-pending-text {
   color: var(--color-overlay0);
 }
@@ -763,34 +615,6 @@ body {
   justify-content: center;
   color: var(--color-fg-secondary);
   font-size: var(--font-size-md);
-}
-
-/* Empty state */
-
-.ws-empty-message {
-  color: var(--color-fg-secondary);
-  font-size: var(--font-size-md);
-  text-align: center;
-  padding: var(--space-xl);
-}
-
-/* Keyboard legend */
-
-.ws-legend {
-  flex-shrink: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-md);
-  justify-content: center;
-  padding: 0 8px;
-  color: var(--color-surface2);
-  font-size: var(--font-size-sm);
-}
-
-.ws-legend-item {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-xs);
 }
 
 /* Profiling button */

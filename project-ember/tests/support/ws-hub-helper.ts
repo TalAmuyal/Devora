@@ -49,7 +49,7 @@ export async function reloadWsHub(driver: AppDriver): Promise<void> {
   `);
   await driver.pollFor(
     `return document.querySelector('.ws-master-item') !== null
-         || document.querySelector('.ws-empty-message') !== null`,
+         || document.querySelector('.empty-state') !== null`,
     true,
     5_000,
   );
@@ -78,7 +78,7 @@ export async function getWorkspaceItemCount(driver: AppDriver): Promise<number> 
 
 export async function getActiveCategoryFilter(driver: AppDriver): Promise<string> {
   return await driver.eval(`
-    const btn = document.querySelector('.ws-category-active');
+    const btn = document.querySelector('.segmented-control-active');
     return btn?.textContent?.replace(/\\d/g, '')?.trim() ?? '';
   `);
 }
@@ -113,7 +113,7 @@ export async function filterWorkspaces(
   text: string,
 ): Promise<void> {
   await ui.pressKey('f');
-  await ui.typeIntoInput('.ws-search input', text);
+  await ui.typeIntoInput('.search-input-field', text);
   await new Promise((r) => setTimeout(r, 200));
 }
 
@@ -143,7 +143,7 @@ export async function switchProfile(
   await driver.pollFor(
     `return document.querySelector('.ws-master-item[data-stale]') === null
          && (document.querySelector('.ws-master-item') !== null
-             || document.querySelector('.ws-empty-message') !== null)`,
+             || document.querySelector('.empty-state') !== null)`,
     true,
     5_000,
   );

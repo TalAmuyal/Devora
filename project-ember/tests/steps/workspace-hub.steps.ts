@@ -205,7 +205,7 @@ Then(
   'the hub legend should be visible',
   async function (this: EmberWorld) {
     const ui = new UIDriver(this.driver);
-    const visible = await ui.hasElement('.ws-legend');
+    const visible = await ui.hasElement('.keyboard-hint-bar');
     assert.strictEqual(visible, true, 'Hub legend should be visible');
   },
 );
@@ -214,7 +214,7 @@ Then(
   'the hub search bar should be visible',
   async function (this: EmberWorld) {
     const ui = new UIDriver(this.driver);
-    const visible = await ui.hasElement('.ws-search');
+    const visible = await ui.hasElement('.search-input');
     assert.strictEqual(visible, true, 'Hub search bar should be visible');
   },
 );
