@@ -105,7 +105,7 @@ run = "mise run -C project-ember create-dmg"
 
 [tasks.ember-test]
 description = "Run Devora Ember tests"
-run = "mise run -C project-ember test"
+run = "mise run -C project-ember test-all"
 
 [tasks.ci-ember-test-e2e]
 description = "Run Ember acceptance tests in CI"
