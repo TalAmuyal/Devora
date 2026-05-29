@@ -146,6 +146,7 @@ When Claude Code's behavior changes or new `@real-claude` scenarios are added:
 | `Enter` | Open selected workspace |
 | `f` | Focus filter input |
 | `1` / `2` / `3` | Show active / inactive / all workspaces |
+| `n` | Toggle New Task form |
 | `q` | Close panel |
 | `?` | Toggle full cheatsheet |
 | `Escape` | Unfocus filter / close cheatsheet |
