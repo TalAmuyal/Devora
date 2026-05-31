@@ -25,6 +25,7 @@ Cassettes are stored as gzip-compressed JSON at `tests/support/fixtures/cassette
 - Use `waitForTerminalContent()` for terminal output assertions (polling with timeout)
 - Use `driver.pollFor()` for async state assertions
 - Use `driver.ipcPost()` to simulate external tool communication
+- Steps that change application state and are followed by another step that depends on that state (to further change it or to assert it) must block until the state mutation is complete. For example, a step that clicks a button to start a procedure must await that procedure's completion and verify it succeeded before returning control to the next step.
 
 ### UI interaction conventions
 
@@ -40,6 +41,9 @@ Cassettes are stored as gzip-compressed JSON at `tests/support/fixtures/cassette
 - `createTestWorkspaces()` creates workspace directories with optional active/inactive split
 - `writeTestConfig()` writes a config file pointing at the test profile paths
 - Set `DEVORA_CONFIG_PATH` env var to point the Rust backend at the fixture config file instead of the real one
+- All fixture setup steps (profile creation, workspace creation, repo state modifications) must come **before** the `And the Workspace Hub is open` step. This step triggers a fresh load from the backend, so placing it after all setup ensures the Hub renders correct, up-to-date data.
+- `createRealTestWorkspaces` creates proper source-repo + worktree structure matching production. A real workspace always has worktrees — use this for any test that involves git operations on workspaces.
+- `createFakeTestWorkspaces` creates workspaces with fake `.git` directories. Use only for UI-only tests that don't perform real git operations.
 
 ## UI Conventions
 
@@ -54,6 +58,14 @@ Cassettes are stored as gzip-compressed JSON at `tests/support/fixtures/cassette
 - **Tab-covering overlay**: covers entire window including tab bar. Used for the Workspace Hub, User Guide, cheatsheet.
 - **Panel overlay**: covers main panel area only, tab bar visible. Tied to a specific session tab. Used for Crit.
 - Both types are dismissible with `q` or `Escape`.
+
+## Error Handling
+
+**Non-recoverable errors**: The default and recommended way to handle non-recoverable errors is to:
+1. Log the error to a file at `/tmp/devora-ember-<TS>.log`
+2. Show a persistent notification UI to the user that does not self-dismiss — the user must explicitly dismiss it
+
+This pattern ensures errors are both auditable (via log files) and visible to the user (via the notification).
 
 ## Reusable UI Components
 

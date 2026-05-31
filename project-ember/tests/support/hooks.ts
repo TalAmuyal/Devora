@@ -250,6 +250,13 @@ After(async function (this: EmberWorld) {
   if (this.workspacePath) {
     cleanupWorkspace(this.workspacePath);
   }
+
+  if (this.driver) {
+    const errors = await this.driver.eval('return window.__scrapeErrors ? window.__scrapeErrors() : []');
+    if (errors && errors.length > 0) {
+      throw new Error(`Backend errors during scenario:\n${errors.map((e: string) => `  - ${e}`).join('\n')}`);
+    }
+  }
 });
 
 AfterAll(async function () {

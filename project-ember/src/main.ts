@@ -7,6 +7,7 @@ import { OverlayManager } from './ui/OverlayManager';
 import { KeyboardShortcuts } from './ui/KeyboardShortcuts';
 import { WorkspaceHub } from './workspace/WorkspaceHub';
 import { WebContentOverlay } from './webview/WebContentOverlay';
+import { scrapeErrors } from './errors';
 
 function logToFile(level: string, message: string): void {
   invoke('log_error', { level, message }).catch(() => {});
@@ -31,6 +32,8 @@ console.warn = (...args: unknown[]) => {
   origConsoleWarn(...args);
   logToFile('WARN', args.map(String).join(' '));
 };
+
+(window as any).__scrapeErrors = scrapeErrors;
 
 document.addEventListener('DOMContentLoaded', async () => {
   // Load theme early, before creating any terminals or UI, so CSS custom

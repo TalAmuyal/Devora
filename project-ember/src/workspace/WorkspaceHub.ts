@@ -5,6 +5,9 @@ import { createBadge } from '../ui/components/Badge';
 import { createSegmentedControl } from '../ui/components/SegmentedControl';
 import { createSearchInput, SearchInputHandle } from '../ui/components/SearchInput';
 import { createKeyboardHintBar } from '../ui/components/KeyboardHintBar';
+import { showConfirmationDialog } from '../ui/components/ConfirmationDialog';
+import { createErrorNotification } from '../ui/components/ErrorNotification';
+import { recordError } from '../errors';
 
 // Types matching the Rust command return values
 interface ProfileInfo {
@@ -137,6 +140,7 @@ export class WorkspaceHub {
 
   private searchHandle: SearchInputHandle | null = null;
   private masterListEl: HTMLElement | null = null;
+  private errorMessage: string | null = null;
 
   private keyHandler = (e: KeyboardEvent) => this.handleKeyDown(e);
 
@@ -377,6 +381,7 @@ export class WorkspaceHub {
     this.workspaces = [];
     this.profiles = [];
     this.profilingData = null;
+    this.errorMessage = null;
   }
 
   private isSearchFocused(): boolean {
@@ -582,6 +587,11 @@ export class WorkspaceHub {
 
     this.containerEl.appendChild(this.renderHeader());
 
+    if (this.errorMessage !== null) {
+      const notification = createErrorNotification(this.errorMessage, () => this.dismissError());
+      this.containerEl.appendChild(notification.element);
+    }
+
     if (this.showNewForm) {
       this.containerEl.appendChild(this.renderNewForm());
     } else {
@@ -761,6 +771,110 @@ export class WorkspaceHub {
     return item;
   }
 
+  private showError(message: string): void {
+    this.errorMessage = message;
+    recordError(message);
+    invoke('log_error', { level: 'ERROR', message }).catch(() => {});
+    this.render();
+  }
+
+  private dismissError(): void {
+    this.errorMessage = null;
+    this.render();
+  }
+
+  private async handleRemoveTask(ws: WorkspaceInfo): Promise<void> {
+    const cached = this.statusCache.get(ws.id);
+    const isClean =
+      cached !== undefined &&
+      cached.every((r) => r.isDetached && r.modified === 0 && r.untracked === 0);
+
+    if (!isClean) {
+      const issues: { name: string; reason: string }[] = [];
+      if (cached) {
+        for (const repo of cached) {
+          const reasons: string[] = [];
+          if (repo.modified > 0 || repo.untracked > 0) {
+            reasons.push('uncommitted changes (will be discarded)');
+          }
+          if (!repo.isDetached) {
+            reasons.push(`on branch '${repo.branch}' (will be detached)`);
+          }
+          if (reasons.length > 0) {
+            issues.push({ name: repo.name, reason: reasons.join('; ') });
+          }
+        }
+      }
+
+      const bodyEl = document.createElement('div');
+      const intro = document.createElement('p');
+      intro.textContent = 'The following repos need cleanup:';
+      intro.style.margin = '0 0 8px 0';
+      bodyEl.appendChild(intro);
+
+      const list = document.createElement('ul');
+      list.style.margin = '0 0 8px 0';
+      list.style.paddingLeft = '20px';
+      for (const issue of issues) {
+        const li = document.createElement('li');
+        const name = document.createElement('strong');
+        name.textContent = issue.name;
+        li.appendChild(name);
+        li.appendChild(document.createTextNode(` — ${issue.reason}`));
+        list.appendChild(li);
+      }
+      bodyEl.appendChild(list);
+
+      const warning = document.createElement('p');
+      warning.textContent = 'This cannot be undone.';
+      warning.style.margin = '0';
+      bodyEl.appendChild(warning);
+
+      const confirmed = await showConfirmationDialog({
+        title: `Remove task from "${ws.id}"?`,
+        body: bodyEl,
+        confirmLabel: 'Remove Task',
+      });
+      if (!confirmed) return;
+    }
+
+    try {
+      await invoke('remove_task', { workspacePath: ws.path });
+    } catch (e) {
+      this.showError(`Failed to remove task: ${e}`);
+      return;
+    }
+
+    this.statusCache.delete(ws.id);
+    this.statusErrors.delete(ws.id);
+    await this.loadWorkspaces();
+    const filtered = this.filteredWorkspaces();
+    if (this.focusedCardIndex >= filtered.length) {
+      this.focusedCardIndex = filtered.length > 0 ? filtered.length - 1 : -1;
+    }
+    this.render();
+    this.preloadAllStatuses();
+  }
+
+  private async handleDeleteWorkspace(ws: WorkspaceInfo): Promise<void> {
+    try {
+      await invoke('delete_workspace', { workspacePath: ws.path });
+    } catch (e) {
+      this.showError(`Failed to delete workspace: ${e}`);
+      return;
+    }
+
+    this.statusCache.delete(ws.id);
+    this.statusErrors.delete(ws.id);
+    await this.loadWorkspaces();
+    const filtered = this.filteredWorkspaces();
+    if (this.focusedCardIndex >= filtered.length) {
+      this.focusedCardIndex = filtered.length > 0 ? filtered.length - 1 : -1;
+    }
+    this.render();
+    this.preloadAllStatuses();
+  }
+
   private renderDetailPanel(ws: WorkspaceInfo): HTMLElement {
     const detail = document.createElement('div');
     detail.className = 'ws-detail';
@@ -826,14 +940,33 @@ export class WorkspaceHub {
       detail.appendChild(errorBlock);
     }
 
-    // Open button
+    // Action row (Open + Remove Task / Delete)
+    const actionRow = document.createElement('div');
+    actionRow.className = 'ws-action-row';
+
     const openBtn = document.createElement('button');
     openBtn.className = 'ws-open-btn';
     openBtn.textContent = 'Open';
     openBtn.addEventListener('click', () => {
       this.onOpenWorkspace(ws.path, ws.taskTitle, ws.repos);
     });
-    detail.appendChild(openBtn);
+    actionRow.appendChild(openBtn);
+
+    if (ws.active) {
+      const removeTaskBtn = document.createElement('button');
+      removeTaskBtn.className = 'ws-remove-task-btn';
+      removeTaskBtn.textContent = 'Remove Task';
+      removeTaskBtn.addEventListener('click', () => this.handleRemoveTask(ws));
+      actionRow.appendChild(removeTaskBtn);
+    } else {
+      const deleteBtn = document.createElement('button');
+      deleteBtn.className = 'ws-delete-btn';
+      deleteBtn.textContent = 'Delete';
+      deleteBtn.addEventListener('click', () => this.handleDeleteWorkspace(ws));
+      actionRow.appendChild(deleteBtn);
+    }
+
+    detail.appendChild(actionRow);
 
     // Repo table
     if (cached) {

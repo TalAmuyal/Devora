@@ -1,3 +1,8 @@
+import {
+  showConfirmationDialog,
+  ConfirmationDialogOptions,
+} from './components/ConfirmationDialog';
+
 export class OverlayManager {
   private appEl: HTMLElement;
 
@@ -93,8 +98,8 @@ export class OverlayManager {
     console.warn('Popup overlay mode not yet implemented');
   }
 
-  showDialog(_content: HTMLElement): void {
-    console.warn('Dialog overlay mode not yet implemented');
+  showDialog(options: ConfirmationDialogOptions): Promise<boolean> {
+    return showConfirmationDialog(options);
   }
 
   // --- General ---
