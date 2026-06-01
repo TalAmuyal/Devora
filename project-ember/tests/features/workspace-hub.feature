@@ -58,8 +58,8 @@ Feature: Workspace Hub
     Then the cheatsheet should not be visible
 
   Scenario: Switching profiles loads workspace status
-    Given a profile "Work" with 2 active workspaces and real repos
-    And a profile "Personal" with 1 active workspaces and real repos
+    Given a profile "Work" with 2 active workspaces with worktrees
+    And a profile "Personal" with 1 active workspace with worktrees
     And the Workspace Hub is open
     Then the Workspace Hub should show 2 workspace items
     And the detail panel should show repo status

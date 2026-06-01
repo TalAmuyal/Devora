@@ -56,7 +56,12 @@ export function createTestRepo(profilePath: string, repoName: string): string {
   return repoPath;
 }
 
-export function createTestWorkspaces(
+/**
+ * Create workspaces with fake `.git` directories (no real git repos).
+ * These are suitable for UI-only tests that need workspace entries in the hub
+ * but don't perform any real git operations.
+ */
+export function createFakeTestWorkspaces(
   profilePath: string,
   count: number,
   options: { active?: number },
@@ -106,7 +111,22 @@ export function createTestWorkspaces(
   return fixtures;
 }
 
-export function createTestWorkspacesWithRealRepos(
+export function writeTestConfig(configPath: string, profilePaths: string[]): void {
+  fs.mkdirSync(path.dirname(configPath), { recursive: true });
+  fs.writeFileSync(
+    configPath,
+    JSON.stringify({ profiles: profilePaths }),
+  );
+}
+
+/**
+ * Create workspaces with real git worktrees from a source repo.
+ * A real workspace always has worktrees — this mirrors production structure
+ * where source repos live under `<profile>/repos/` and worktrees are checked
+ * out into `<profile>/workspaces/ws-N/<repo-name>/`.
+ * Use this for any test that involves git operations on workspaces.
+ */
+export function createRealTestWorkspaces(
   profilePath: string,
   count: number,
   options: { active?: number },
@@ -115,6 +135,7 @@ export function createTestWorkspacesWithRealRepos(
   const workspacesDir = path.join(profilePath, 'workspaces');
   fs.mkdirSync(workspacesDir, { recursive: true });
 
+  const sourceRepo = path.join(profilePath, 'repos', 'test-repo');
   const fixtures: WorkspaceFixture[] = [];
 
   for (let i = 1; i <= count; i++) {
@@ -140,21 +161,11 @@ export function createTestWorkspacesWithRealRepos(
       );
     }
 
-    // Real git repo so git operations work during tests.
-    const repoDir = path.join(wsPath, 'test-repo');
-    fs.mkdirSync(repoDir, { recursive: true });
-    execSync('git init', { cwd: repoDir, stdio: 'ignore' });
-    fs.writeFileSync(path.join(repoDir, 'README.md'), `# test-repo\n`);
-    execSync('git add . && git commit -m "init"', {
-      cwd: repoDir,
+    // Create a real git worktree from the profile's source repo.
+    const worktreePath = path.join(wsPath, 'test-repo');
+    execSync(`git worktree add --detach ${JSON.stringify(worktreePath)}`, {
+      cwd: sourceRepo,
       stdio: 'ignore',
-      env: {
-        ...process.env,
-        GIT_AUTHOR_NAME: 'Test',
-        GIT_AUTHOR_EMAIL: 'test@test.local',
-        GIT_COMMITTER_NAME: 'Test',
-        GIT_COMMITTER_EMAIL: 'test@test.local',
-      },
     });
 
     fixtures.push({
@@ -168,12 +179,37 @@ export function createTestWorkspacesWithRealRepos(
   return fixtures;
 }
 
-export function writeTestConfig(configPath: string, profilePaths: string[]): void {
-  fs.mkdirSync(path.dirname(configPath), { recursive: true });
-  fs.writeFileSync(
-    configPath,
-    JSON.stringify({ profiles: profilePaths }),
-  );
+/**
+ * Create bare workspace directories with no repos (inactive, no task.json).
+ *
+ * These workspaces have the `initialized` marker so they appear in
+ * `list_workspaces`, but no repo subdirectories. The hub shows them as
+ * inactive. Since there are no worktrees, `delete_workspace` can remove
+ * the directory directly.
+ */
+export function createInvalidWorkspaces(
+  profilePath: string,
+  count: number,
+): WorkspaceFixture[] {
+  const workspacesDir = path.join(profilePath, 'workspaces');
+  fs.mkdirSync(workspacesDir, { recursive: true });
+
+  const fixtures: WorkspaceFixture[] = [];
+
+  for (let i = 1; i <= count; i++) {
+    const wsId = `ws-${i}`;
+    const wsPath = path.join(workspacesDir, wsId);
+    fs.mkdirSync(wsPath, { recursive: true });
+
+    // Marker required for list_workspaces to include this workspace
+    fs.writeFileSync(path.join(wsPath, 'initialized'), '');
+
+    // No task.json (inactive) and no repo subdirectories.
+
+    fixtures.push({ id: wsId, path: wsPath, active: false, title: '' });
+  }
+
+  return fixtures;
 }
 
 export function cleanupFixtures(fixtureRoot: string): void {

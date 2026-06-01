@@ -124,6 +124,8 @@ pub fn run() {
             commands::get_registered_repos,
             commands::get_default_app,
             commands::create_workspace,
+            commands::remove_task,
+            commands::delete_workspace,
             commands::save_profiling_report,
             commands::log_error,
             commands::read_text_file,

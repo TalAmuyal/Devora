@@ -773,6 +773,104 @@ pub fn create_workspace(
     })
 }
 
+pub fn remove_task(workspace_path: &str) -> Result<(), String> {
+    let ws_dir = Path::new(workspace_path);
+    let task_path = ws_dir.join("task.json");
+
+    if !task_path.exists() {
+        return Ok(());
+    }
+
+    let repo_names = list_repo_subdirs(ws_dir);
+
+    for repo_name in &repo_names {
+        let repo_path = ws_dir.join(repo_name);
+
+        let reset = Command::new("git")
+            .args(["reset", "--hard", "HEAD"])
+            .current_dir(&repo_path)
+            .output()
+            .map_err(|e| format!("failed to run git reset in {repo_name}: {e}"))?;
+        if !reset.status.success() {
+            let stderr = String::from_utf8_lossy(&reset.stderr);
+            return Err(format!("git reset failed in {repo_name}: {stderr}"));
+        }
+
+        let clean = Command::new("git")
+            .args(["clean", "-fd"])
+            .current_dir(&repo_path)
+            .output()
+            .map_err(|e| format!("failed to run git clean in {repo_name}: {e}"))?;
+        if !clean.status.success() {
+            let stderr = String::from_utf8_lossy(&clean.stderr);
+            return Err(format!("git clean failed in {repo_name}: {stderr}"));
+        }
+
+        let detach = Command::new("git")
+            .args(["checkout", "--detach"])
+            .current_dir(&repo_path)
+            .output()
+            .map_err(|e| format!("failed to run git checkout --detach in {repo_name}: {e}"))?;
+        if !detach.status.success() {
+            let stderr = String::from_utf8_lossy(&detach.stderr);
+            return Err(format!(
+                "git checkout --detach failed in {repo_name}: {stderr}"
+            ));
+        }
+    }
+
+    fs::remove_file(&task_path)
+        .map_err(|e| format!("failed to delete task.json: {e}"))?;
+
+    Ok(())
+}
+
+pub fn delete_workspace(workspace_path: &str) -> Result<(), String> {
+    let ws_dir = Path::new(workspace_path);
+    let repo_names = list_repo_subdirs(ws_dir);
+
+    let handles: Vec<_> = repo_names
+        .into_iter()
+        .map(|repo_name| {
+            let repo_path = ws_dir.join(&repo_name).to_path_buf();
+            thread::spawn(move || {
+                let result = Command::new("git")
+                    .args(["worktree", "remove", "--force", "."])
+                    .current_dir(&repo_path)
+                    .output()
+                    .map_err(|e| {
+                        format!("failed to run git worktree remove in {repo_name}: {e}")
+                    })?;
+                if !result.status.success() {
+                    if repo_path.exists() {
+                        let stderr = String::from_utf8_lossy(&result.stderr);
+                        return Err(format!(
+                            "git worktree remove failed in {repo_name}: {stderr}"
+                        ));
+                    }
+                    return Ok(());
+                }
+                Ok(())
+            })
+        })
+        .collect();
+
+    for handle in handles {
+        match handle.join() {
+            Ok(Ok(())) => {}
+            Ok(Err(e)) => return Err(e),
+            Err(_) => {
+                return Err("thread panicked during worktree removal".to_string())
+            }
+        }
+    }
+
+    fs::remove_dir_all(ws_dir)
+        .map_err(|e| format!("failed to remove workspace directory: {e}"))?;
+
+    Ok(())
+}
+
 pub fn save_profiling_report(profile_path: &str, report_json: &str) -> Result<String, String> {
     let diagnostics_dir = Path::new(profile_path).join("diagnostics");
     fs::create_dir_all(&diagnostics_dir)

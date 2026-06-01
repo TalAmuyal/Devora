@@ -606,6 +606,46 @@ body {
   outline-offset: 0.133rem;
 }
 
+/* Action row (Open + Remove Task / Delete) */
+
+.ws-action-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: var(--space-lg);
+}
+
+.ws-action-row .ws-open-btn {
+  margin-bottom: 0;
+}
+
+.ws-remove-task-btn,
+.ws-delete-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: var(--color-red);
+  border: 1px solid var(--color-red);
+  border-radius: var(--tab-border-radius);
+  padding: var(--space-sm) var(--space-xl);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-md);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.ws-remove-task-btn:hover,
+.ws-delete-btn:hover {
+  background: rgba(237, 135, 150, 0.15);
+}
+
+.ws-remove-task-btn:focus-visible,
+.ws-delete-btn:focus-visible {
+  outline: 0.133rem solid var(--color-focus-ring);
+  outline-offset: 0.133rem;
+}
+
 /* Loading placeholder */
 
 .ws-loading-placeholder {

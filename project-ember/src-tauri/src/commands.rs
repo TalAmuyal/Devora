@@ -126,6 +126,16 @@ pub fn create_workspace(
 }
 
 #[tauri::command]
+pub fn remove_task(workspace_path: String) -> Result<(), String> {
+    workspace::remove_task(&workspace_path)
+}
+
+#[tauri::command]
+pub fn delete_workspace(workspace_path: String) -> Result<(), String> {
+    workspace::delete_workspace(&workspace_path)
+}
+
+#[tauri::command]
 pub fn save_profiling_report(
     profile_path: String,
     report_json: String,
