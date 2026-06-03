@@ -17,8 +17,9 @@ export class UIDriver {
 
     await this.driver.eval(`
       // Blur any focused element inside the Workspace Hub so the hub's
-      // isSearchFocused() guard does not swallow navigation keys. In the
-      // Tauri WKWebView the search input can receive focus after render().
+      // isEditableElementFocused() guard does not swallow navigation keys —
+      // any focused input (search or the New-Task form) makes handleKeyDown
+      // return early. In the Tauri WKWebView an input can receive focus after render().
       const panel = document.querySelector('.ws-hub');
       if (panel && panel.contains(document.activeElement)) {
         document.activeElement.blur();
@@ -105,6 +106,27 @@ export class UIDriver {
     return await this.driver.eval(
       `return document.querySelector(${JSON.stringify(selector)})?.getAttribute(${JSON.stringify(attr)}) ?? null`,
     );
+  }
+
+  // Focus the element, then dispatch a keydown on window (mirroring how the
+  // browser routes a real keypress on a focused element to global handlers).
+  // Returns evt.defaultPrevented so callers can assert whether a handler
+  // intercepted the key. Unlike pressKey, focus is NOT blurred first.
+  async dispatchKeyToFocused(selector: string, key: string): Promise<boolean> {
+    const code = deriveCode(key);
+    return await this.driver.eval(`
+      const el = document.querySelector(${JSON.stringify(selector)});
+      if (!el) throw new Error('Element not found: ' + ${JSON.stringify(selector)});
+      el.focus();
+      const evt = new KeyboardEvent('keydown', {
+        key: ${JSON.stringify(key)},
+        code: ${JSON.stringify(code)},
+        bubbles: true,
+        cancelable: true,
+      });
+      window.dispatchEvent(evt);
+      return evt.defaultPrevented;
+    `);
   }
 }
 
