@@ -554,3 +554,46 @@ Then(
   },
 );
 
+// ---------------------------------------------------------------------------
+// New Task form: keyboard handling
+// ---------------------------------------------------------------------------
+
+Given(
+  'the New Task form is open',
+  async function (this: EmberWorld) {
+    const ui = new UIDriver(this.driver);
+    await ui.waitForElement('.ws-new-btn');
+    await ui.click('.ws-new-btn');
+    await this.driver.pollFor(
+      `return document.querySelector('.ws-new-form') !== null`,
+      true,
+      5_000,
+    );
+  },
+);
+
+When(
+  'the user types {string} into the focused task title input',
+  async function (this: EmberWorld, key: string) {
+    const ui = new UIDriver(this.driver);
+    this.lastKeyDefaultPrevented = await ui.dispatchKeyToFocused('.ws-new-form-input', key);
+  },
+);
+
+Then(
+  'the New Task form should still be visible',
+  async function (this: EmberWorld) {
+    await this.driver.pollFor(
+      `return document.querySelector('.ws-new-form') !== null`,
+      true,
+      3_000,
+    );
+  },
+);
+
+Then(
+  'the keypress should not have been intercepted',
+  function (this: EmberWorld) {
+    assert.strictEqual(this.lastKeyDefaultPrevented, false);
+  },
+);

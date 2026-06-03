@@ -384,12 +384,21 @@ export class WorkspaceHub {
     this.errorMessage = null;
   }
 
-  private isSearchFocused(): boolean {
-    return this.searchHandle?.element.contains(document.activeElement) ?? false;
+  private isEditableElementFocused(): boolean {
+    const active = document.activeElement;
+    if (!(active instanceof HTMLElement)) {
+      return false;
+    }
+    return (
+      active.tagName === 'INPUT' ||
+      active.tagName === 'TEXTAREA' ||
+      active.tagName === 'SELECT' ||
+      active.isContentEditable
+    );
   }
 
   private handleKeyDown(e: KeyboardEvent): void {
-    if (this.isSearchFocused()) {
+    if (this.isEditableElementFocused()) {
       return;
     }
 

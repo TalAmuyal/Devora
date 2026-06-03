@@ -11,6 +11,7 @@ export class EmberWorld extends World {
   bareRepoPath?: string;
   testConfigPath?: string;
   stopAutoApprove?: () => void;
+  lastKeyDefaultPrevented?: boolean;
 }
 
 setWorldConstructor(EmberWorld);

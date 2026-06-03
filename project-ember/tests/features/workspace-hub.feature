@@ -87,3 +87,11 @@ Feature: Workspace Hub
     Then the focused workspace should be "ws-2"
     When the user presses "k"
     Then the focused workspace should be "ws-1"
+
+  Scenario: Typing a shortcut key in the New Task form is not intercepted
+    Given a profile "Work" with 1 active workspaces
+    And the Workspace Hub is open
+    And the New Task form is open
+    When the user types "n" into the focused task title input
+    Then the New Task form should still be visible
+    And the keypress should not have been intercepted
