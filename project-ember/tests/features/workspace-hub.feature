@@ -95,3 +95,34 @@ Feature: Workspace Hub
     When the user types "n" into the focused task title input
     Then the New Task form should still be visible
     And the keypress should not have been intercepted
+
+  Scenario: Refresh picks up a newly added workspace
+    Given a profile "Work" with 1 active workspaces
+    And the Workspace Hub is open
+    When a second active workspace is added to profile "Work"
+    And the user presses "R"
+    Then the Workspace Hub should show 2 workspace items
+
+  Scenario: Refresh preserves the current category filter
+    Given a profile "Work" with 2 active and 1 inactive workspaces
+    And the Workspace Hub is open
+    And the category filter is set to "All"
+    When the user presses "R"
+    Then the category filter should still be "All"
+    And the Workspace Hub should show 3 workspace items
+
+  Scenario: Refresh shows progress then success toasts
+    Given a profile "Work" with 1 active workspaces
+    And the Workspace Hub is open
+    When the user presses "R"
+    Then the refresh toast should read "Refreshing"
+    And the refresh toast should read "Refreshed successfully"
+    And the refresh toast should disappear
+
+  Scenario: Pressing refresh again restarts cleanly without leaving stray toasts
+    Given a profile "Work" with 1 active workspaces
+    And the Workspace Hub is open
+    When the user presses "R"
+    And the user presses "R"
+    Then the refresh toast should read "Refreshed successfully"
+    And the refresh toast should disappear

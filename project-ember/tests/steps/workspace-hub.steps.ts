@@ -8,13 +8,13 @@ import { UIDriver } from '../support/ui-driver';
 import {
   createTestFixtureRoot, createTestProfile, createTestRepo,
   createFakeTestWorkspaces, createRealTestWorkspaces,
-  createInvalidWorkspaces, writeTestConfig,
+  createInvalidWorkspaces, createSingleActiveWorkspace, writeTestConfig,
 } from '../support/fixture-helper';
 import {
   reloadWsHub, getFocusedWorkspaceId,
   getFocusedWorkspaceTitle, getWorkspaceItemCount, getActiveCategoryFilter,
   waitForWorkspaceItems, filterWorkspaces, switchProfile, waitForDetailRepoTable,
-  startWsHubLoad,
+  startWsHubLoad, selectCategory,
 } from '../support/ws-hub-helper';
 
 Given(
@@ -595,5 +595,63 @@ Then(
   'the keypress should not have been intercepted',
   function (this: EmberWorld) {
     assert.strictEqual(this.lastKeyDefaultPrevented, false);
+  },
+);
+
+// ---------------------------------------------------------------------------
+// Refresh control
+// ---------------------------------------------------------------------------
+
+When(
+  'a second active workspace is added to profile {string}',
+  function (this: EmberWorld, name: string) {
+    const profilePath = path.join(this.fixtureRoot!, name);
+    createSingleActiveWorkspace(profilePath, 'ws-2', 'Task 2');
+  },
+);
+
+Given(
+  'the category filter is set to {string}',
+  async function (this: EmberWorld, category: string) {
+    const ui = new UIDriver(this.driver);
+    await selectCategory(ui, category.toLowerCase() as 'active' | 'inactive' | 'all');
+
+    const deadline = Date.now() + 3_000;
+    while ((await getActiveCategoryFilter(this.driver)) !== category) {
+      if (Date.now() > deadline) {
+        throw new Error(`Category filter did not switch to "${category}"`);
+      }
+      await new Promise((r) => setTimeout(r, 100));
+    }
+  },
+);
+
+Then(
+  'the category filter should still be {string}',
+  async function (this: EmberWorld, expected: string) {
+    const category = await getActiveCategoryFilter(this.driver);
+    assert.strictEqual(category, expected);
+  },
+);
+
+Then(
+  'the refresh toast should read {string}',
+  async function (this: EmberWorld, expected: string) {
+    await this.driver.pollFor(
+      `return (document.querySelector('.toast')?.textContent ?? '').includes(${JSON.stringify(expected)})`,
+      true,
+      6_000,
+    );
+  },
+);
+
+Then(
+  'the refresh toast should disappear',
+  async function (this: EmberWorld) {
+    await this.driver.pollFor(
+      `return document.querySelector('.toast') === null`,
+      true,
+      6_000,
+    );
   },
 );

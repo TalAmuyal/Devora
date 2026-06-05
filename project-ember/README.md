@@ -72,7 +72,7 @@ The `DEVORA_CONFIG_PATH` env var overrides the config file location so tests can
 
 ### Workspace Hub scenarios
 
-7 scenarios covering the Workspace Hub (`tests/features/workspace-hub.feature`): listing workspaces, j/k navigation, Enter to open, q to close, text filtering, category switching, and cheatsheet toggle.
+Scenarios covering the Workspace Hub (`tests/features/workspace-hub.feature`): listing workspaces, j/k navigation, Enter to open, q to close, text filtering, category switching, cheatsheet toggle, etc.
 
 ### Recording cassettes
 
@@ -147,6 +147,7 @@ When Claude Code's behavior changes or new `@real-claude` scenarios are added:
 | `f` | Focus filter input |
 | `1` / `2` / `3` | Show active / inactive / all workspaces |
 | `n` | Toggle New Task form |
+| `R` / `Shift+R` | Refresh hub (reload workspaces, keep current view) |
 | `q` | Close panel |
 | `?` | Toggle full cheatsheet |
 | `Escape` | Unfocus filter / close cheatsheet |
