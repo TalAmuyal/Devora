@@ -43,6 +43,11 @@ When making a new architectural decision, create a new ADR file following the fo
 
 - [ADR-001: Ember Acceptance Testing Framework](docs/adrs/ADR-001-ember-bdd-testing-framework.md) — Eval bridge + Gherkin acceptance tests + Fake Claude API for testing the Tauri app
 
+## Vision
+
+When planning new features or changes, refer to the relevant vision documents to ensure alignment with the overall goals of the project.
+Vision documents are stored at @docs/vision/
+
 ## Pull Request Guidelines
 
 When submitting a PR, update the `## Unreleased` section in `CHANGELOG.md` with a brief description of the change.

@@ -17,6 +17,7 @@ Types of changes:
 ### Added
 
 - `n` keyboard shortcut to toggle the New Task form in Workspace Hub
+- Vision documents for the project at `docs/vision/`
 
 ### Fixed
 
