@@ -7,23 +7,25 @@ import { EmberWorld } from '../support/world';
 import { UIDriver } from '../support/ui-driver';
 import {
   createTestFixtureRoot, createTestProfile, createTestRepo,
-  createFakeTestWorkspaces, createRealTestWorkspaces,
-  createInvalidWorkspaces, writeTestConfig,
+  createTestWorkspaces,
+  createInvalidWorkspaces, createSingleActiveWorkspace, writeTestConfig,
 } from '../support/fixture-helper';
 import {
   reloadWsHub, getFocusedWorkspaceId,
   getFocusedWorkspaceTitle, getWorkspaceItemCount, getActiveCategoryFilter,
   waitForWorkspaceItems, filterWorkspaces, switchProfile, waitForDetailRepoTable,
-  startWsHubLoad,
+  startWsHubLoad, selectCategory,
 } from '../support/ws-hub-helper';
+
+const TEST_REPO_NAME = 'test-repo';
 
 Given(
   'a profile {string} with {int} active workspaces',
   async function (this: EmberWorld, name: string, count: number) {
     this.fixtureRoot = createTestFixtureRoot();
     const profilePath = createTestProfile(this.fixtureRoot, name);
-    createTestRepo(profilePath, 'test-repo');
-    createFakeTestWorkspaces(profilePath, count, { active: count });
+    createTestRepo(profilePath, TEST_REPO_NAME);
+    createTestWorkspaces(profilePath, count, { active: count }, TEST_REPO_NAME);
     writeTestConfig(this.testConfigPath!, [profilePath]);
   },
 );
@@ -33,8 +35,8 @@ Given(
   async function (this: EmberWorld, name: string, active: number, inactive: number) {
     this.fixtureRoot = createTestFixtureRoot();
     const profilePath = createTestProfile(this.fixtureRoot, name);
-    createTestRepo(profilePath, 'test-repo');
-    createFakeTestWorkspaces(profilePath, active + inactive, { active });
+    createTestRepo(profilePath, TEST_REPO_NAME);
+    createTestWorkspaces(profilePath, active + inactive, { active }, TEST_REPO_NAME);
     writeTestConfig(this.testConfigPath!, [profilePath]);
   },
 );
@@ -154,8 +156,8 @@ Given(
       this.fixtureRoot = createTestFixtureRoot();
     }
     const profilePath = createTestProfile(this.fixtureRoot, name);
-    createTestRepo(profilePath, 'test-repo');
-    createRealTestWorkspaces(profilePath, count, { active: count });
+    createTestRepo(profilePath, TEST_REPO_NAME);
+    createTestWorkspaces(profilePath, count, { active: count }, TEST_REPO_NAME);
 
     let existingProfiles: string[] = [];
     if (fs.existsSync(this.testConfigPath!)) {
@@ -265,10 +267,10 @@ Given(
       this.fixtureRoot = createTestFixtureRoot();
     }
     const profilePath = createTestProfile(this.fixtureRoot, name);
-    createTestRepo(profilePath, 'test-repo');
+    createTestRepo(profilePath, TEST_REPO_NAME);
     // Create workspaces as real worktrees (required for delete_workspace to work),
     // then remove task.json to make them inactive.
-    createRealTestWorkspaces(profilePath, count, { active: count });
+    createTestWorkspaces(profilePath, count, { active: count }, TEST_REPO_NAME);
     for (let i = 1; i <= count; i++) {
       const taskPath = path.join(profilePath, 'workspaces', `ws-${i}`, 'task.json');
       if (fs.existsSync(taskPath)) {
@@ -307,7 +309,7 @@ Given(
   'the workspace repos are clean and detached',
   async function (this: EmberWorld) {
     const wsPath = path.join(this.fixtureRoot!, 'Work', 'workspaces', 'ws-1');
-    const repoDir = path.join(wsPath, 'test-repo');
+    const repoDir = path.join(wsPath, TEST_REPO_NAME);
     execSync('git checkout --detach', {
       cwd: repoDir,
       stdio: 'ignore',
@@ -430,7 +432,7 @@ Then(
   'the workspace repos should be clean and detached',
   async function (this: EmberWorld) {
     const repoDir = path.join(
-      this.fixtureRoot!, 'Work', 'workspaces', 'ws-1', 'test-repo',
+      this.fixtureRoot!, 'Work', 'workspaces', 'ws-1', TEST_REPO_NAME,
     );
     const status = execSync('git status --porcelain', {
       cwd: repoDir,
@@ -450,7 +452,7 @@ Then(
   'the workspace should still have uncommitted changes',
   async function (this: EmberWorld) {
     const repoDir = path.join(
-      this.fixtureRoot!, 'Work', 'workspaces', 'ws-1', 'test-repo',
+      this.fixtureRoot!, 'Work', 'workspaces', 'ws-1', TEST_REPO_NAME,
     );
     const status = execSync('git status --porcelain', {
       cwd: repoDir,
@@ -495,7 +497,7 @@ Then(
   'the worktree directory should still exist',
   async function (this: EmberWorld) {
     const worktreePath = path.join(
-      this.fixtureRoot!, 'Work', 'workspaces', 'ws-1', 'test-repo',
+      this.fixtureRoot!, 'Work', 'workspaces', 'ws-1', TEST_REPO_NAME,
     );
     assert.strictEqual(
       fs.existsSync(worktreePath), true,
@@ -507,13 +509,13 @@ Then(
 Then(
   'the worktree should still be registered in the source repo',
   async function (this: EmberWorld) {
-    const sourceRepo = path.join(this.fixtureRoot!, 'Work', 'repos', 'test-repo');
+    const sourceRepo = path.join(this.fixtureRoot!, 'Work', 'repos', TEST_REPO_NAME);
     const output = execSync('git worktree list', {
       cwd: sourceRepo,
       encoding: 'utf-8',
     });
     assert.ok(
-      output.includes('workspaces/ws-1/test-repo'),
+      output.includes(`workspaces/ws-1/${TEST_REPO_NAME}`),
       `Worktree should be registered in source repo. git worktree list output: ${output}`,
     );
   },
@@ -522,13 +524,13 @@ Then(
 Then(
   'the worktree should not be registered in the source repo',
   async function (this: EmberWorld) {
-    const sourceRepo = path.join(this.fixtureRoot!, 'Work', 'repos', 'test-repo');
+    const sourceRepo = path.join(this.fixtureRoot!, 'Work', 'repos', TEST_REPO_NAME);
     const output = execSync('git worktree list', {
       cwd: sourceRepo,
       encoding: 'utf-8',
     });
     assert.ok(
-      !output.includes('workspaces/ws-1/test-repo'),
+      !output.includes(`workspaces/ws-1/${TEST_REPO_NAME}`),
       `Worktree should not be registered in source repo. git worktree list output: ${output}`,
     );
   },
@@ -537,7 +539,7 @@ Then(
 Then(
   'the source repo should still exist',
   async function (this: EmberWorld) {
-    const repoPath = path.join(this.fixtureRoot!, 'Work', 'repos', 'test-repo');
+    const repoPath = path.join(this.fixtureRoot!, 'Work', 'repos', TEST_REPO_NAME);
     assert.strictEqual(
       fs.existsSync(repoPath), true,
       `Source repo should still exist: ${repoPath}`,
@@ -595,5 +597,63 @@ Then(
   'the keypress should not have been intercepted',
   function (this: EmberWorld) {
     assert.strictEqual(this.lastKeyDefaultPrevented, false);
+  },
+);
+
+// ---------------------------------------------------------------------------
+// Refresh control
+// ---------------------------------------------------------------------------
+
+When(
+  'a second active workspace is added to profile {string}',
+  function (this: EmberWorld, name: string) {
+    const profilePath = path.join(this.fixtureRoot!, name);
+    createSingleActiveWorkspace(profilePath, 'ws-2', 'Task 2', TEST_REPO_NAME);
+  },
+);
+
+Given(
+  'the category filter is set to {string}',
+  async function (this: EmberWorld, category: string) {
+    const ui = new UIDriver(this.driver);
+    await selectCategory(ui, category.toLowerCase() as 'active' | 'inactive' | 'all');
+
+    const deadline = Date.now() + 3_000;
+    while ((await getActiveCategoryFilter(this.driver)) !== category) {
+      if (Date.now() > deadline) {
+        throw new Error(`Category filter did not switch to "${category}"`);
+      }
+      await new Promise((r) => setTimeout(r, 100));
+    }
+  },
+);
+
+Then(
+  'the category filter should still be {string}',
+  async function (this: EmberWorld, expected: string) {
+    const category = await getActiveCategoryFilter(this.driver);
+    assert.strictEqual(category, expected);
+  },
+);
+
+Then(
+  'the refresh toast should read {string}',
+  async function (this: EmberWorld, expected: string) {
+    await this.driver.pollFor(
+      `return (document.querySelector('.toast')?.textContent ?? '').includes(${JSON.stringify(expected)})`,
+      true,
+      6_000,
+    );
+  },
+);
+
+Then(
+  'the refresh toast should disappear',
+  async function (this: EmberWorld) {
+    await this.driver.pollFor(
+      `return document.querySelector('.toast') === null`,
+      true,
+      6_000,
+    );
   },
 );

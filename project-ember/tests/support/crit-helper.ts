@@ -3,6 +3,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { GIT_TEST_IDENTITY } from './git-test-env';
 const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
 /**
@@ -15,13 +16,7 @@ const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 
  * 4. Sets refs/remotes/origin/HEAD so `git symbolic-ref` works
  */
 export function createCritRepo(profilePath: string, repoName: string): { repoPath: string; bareRepoPath: string } {
-  const gitEnv = {
-    ...process.env,
-    GIT_AUTHOR_NAME: 'Test',
-    GIT_AUTHOR_EMAIL: 'test@test.local',
-    GIT_COMMITTER_NAME: 'Test',
-    GIT_COMMITTER_EMAIL: 'test@test.local',
-  };
+  const gitEnv = { ...process.env, ...GIT_TEST_IDENTITY };
 
   // Bare repo as the "origin" remote
   const bareRepoPath = fs.mkdtempSync(path.join(os.tmpdir(), 'ember-crit-bare-'));

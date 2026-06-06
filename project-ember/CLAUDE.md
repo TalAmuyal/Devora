@@ -38,12 +38,12 @@ Cassettes are stored as gzip-compressed JSON at `tests/support/fixtures/cassette
 - Use `fixture-helper.ts` to create test profiles, workspaces, and repos on disk
 - `createTestFixtureRoot()` returns a temp directory; clean up with `cleanupFixtures()`
 - `createTestProfile()` creates the profile directory structure (config.json, workspaces/, repos/)
-- `createTestWorkspaces()` creates workspace directories with optional active/inactive split
+- `createTestWorkspaces()` creates workspaces (`ws-1`..`ws-N`) with optional active/inactive split
 - `writeTestConfig()` writes a config file pointing at the test profile paths
 - Set `DEVORA_CONFIG_PATH` env var to point the Rust backend at the fixture config file instead of the real one
 - All fixture setup steps (profile creation, workspace creation, repo state modifications) must come **before** the `And the Workspace Hub is open` step. This step triggers a fresh load from the backend, so placing it after all setup ensures the Hub renders correct, up-to-date data.
-- `createRealTestWorkspaces` creates proper source-repo + worktree structure matching production. A real workspace always has worktrees — use this for any test that involves git operations on workspaces.
-- `createFakeTestWorkspaces` creates workspaces with fake `.git` directories. Use only for UI-only tests that don't perform real git operations.
+- `createSingleActiveWorkspace()` adds a single active workspace with an explicit id/title (real worktree) alongside existing ones — for tests that add a workspace out-of-band (e.g. verifying refresh)
+- `createInvalidWorkspaces()` creates `initialized` workspaces with no repo subdirs; the hub renders these as invalid
 
 ## UI Conventions
 

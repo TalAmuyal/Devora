@@ -4,6 +4,8 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
+import { GIT_TEST_IDENTITY } from './git-test-env';
+
 export interface WorkspaceFixture {
   id: string;
   path: string;
@@ -44,71 +46,82 @@ export function createTestRepo(profilePath: string, repoName: string): string {
   execSync('git add . && git commit -m "init"', {
     cwd: repoPath,
     stdio: 'ignore',
-    env: {
-      ...process.env,
-      GIT_AUTHOR_NAME: 'Test',
-      GIT_AUTHOR_EMAIL: 'test@test.local',
-      GIT_COMMITTER_NAME: 'Test',
-      GIT_COMMITTER_EMAIL: 'test@test.local',
-    },
+    env: { ...process.env, ...GIT_TEST_IDENTITY },
   });
 
   return repoPath;
 }
 
 /**
- * Create workspaces with fake `.git` directories (no real git repos).
- * These are suitable for UI-only tests that need workspace entries in the hub
- * but don't perform any real git operations.
+ * Scaffold the parts shared by every discoverable workspace at
+ * `<profilePath>/workspaces/<id>`: the directory, the `initialized` marker that
+ * makes `list_workspaces` pick it up, and (for active workspaces) a `task.json`.
+ * The repo subdirectory is left to the caller, since that's the only part that
+ * differs between a workspace with a worktree and an invalid one (no repos).
  */
-export function createFakeTestWorkspaces(
+function scaffoldWorkspace(
   profilePath: string,
-  count: number,
-  options: { active?: number },
-): WorkspaceFixture[] {
-  const activeCount = options.active ?? count;
-  const workspacesDir = path.join(profilePath, 'workspaces');
-  fs.mkdirSync(workspacesDir, { recursive: true });
+  id: string,
+  active: boolean,
+  title: string,
+): WorkspaceFixture {
+  const wsPath = path.join(profilePath, 'workspaces', id);
+  fs.mkdirSync(wsPath, { recursive: true });
 
-  const fixtures: WorkspaceFixture[] = [];
+  // Required marker for list_workspaces
+  fs.writeFileSync(path.join(wsPath, 'initialized'), '');
 
-  for (let i = 1; i <= count; i++) {
-    const wsId = `ws-${i}`;
-    const wsPath = path.join(workspacesDir, wsId);
-    fs.mkdirSync(wsPath, { recursive: true });
-
-    // Required marker for list_workspaces
-    fs.writeFileSync(path.join(wsPath, 'initialized'), '');
-
-    const isActive = i <= activeCount;
-    const title = `Task ${i}`;
-
-    if (isActive) {
-      const task = {
-        uid: crypto.randomUUID(),
-        title,
-        started_at: '2026-01-01T00:00:00Z',
-      };
-      fs.writeFileSync(
-        path.join(wsPath, 'task.json'),
-        JSON.stringify(task),
-      );
-    }
-
-    // Dummy repo subdirectory so list_repo_subdirs finds something.
-    // Needs a .git dir to look like a repo/worktree.
-    const dummyRepoDir = path.join(wsPath, 'test-repo');
-    fs.mkdirSync(path.join(dummyRepoDir, '.git'), { recursive: true });
-
-    fixtures.push({
-      id: wsId,
-      path: wsPath,
-      active: isActive,
-      title: isActive ? title : '',
-    });
+  if (active) {
+    const task = {
+      uid: crypto.randomUUID(),
+      title,
+      started_at: '2026-01-01T00:00:00Z',
+    };
+    fs.writeFileSync(path.join(wsPath, 'task.json'), JSON.stringify(task));
   }
 
-  return fixtures;
+  return { id, path: wsPath, active, title: active ? title : '' };
+}
+
+/**
+ * Write a single discoverable workspace at `<profilePath>/workspaces/<id>` with a git worktree checked out from `<profilePath>/repos/<repoName>`.
+ * This mirrors production, where each workspace holds a worktree per registered repo.
+ * Inactive workspaces omit `task.json` (matching production discovery behaviour).
+ */
+function writeRealWorkspace(
+  profilePath: string,
+  id: string,
+  active: boolean,
+  title: string,
+  repoName: string,
+): WorkspaceFixture {
+  const fixture = scaffoldWorkspace(profilePath, id, active, title);
+
+  const sourceRepo = path.join(profilePath, 'repos', repoName);
+  const worktreePath = path.join(fixture.path, repoName);
+  execSync(`git worktree add --detach ${JSON.stringify(worktreePath)}`, {
+    cwd: sourceRepo,
+    stdio: 'ignore',
+  });
+
+  return fixture;
+}
+
+/**
+ * Create a single active, discoverable workspace with a git worktree.
+ *
+ * Takes an explicit workspace id, title, and repo name instead of restarting numbering at
+ * ws-1, so it can add a workspace alongside existing ones without clobbering
+ * them. Useful for tests that add a workspace out-of-band (e.g. to verify
+ * refresh).
+ */
+export function createSingleActiveWorkspace(
+  profilePath: string,
+  id: string,
+  title: string,
+  repoName: string,
+): WorkspaceFixture {
+  return writeRealWorkspace(profilePath, id, true, title, repoName);
 }
 
 export function writeTestConfig(configPath: string, profilePaths: string[]): void {
@@ -120,60 +133,20 @@ export function writeTestConfig(configPath: string, profilePaths: string[]): voi
 }
 
 /**
- * Create workspaces with real git worktrees from a source repo.
- * A real workspace always has worktrees — this mirrors production structure
- * where source repos live under `<profile>/repos/` and worktrees are checked
- * out into `<profile>/workspaces/ws-N/<repo-name>/`.
- * Use this for any test that involves git operations on workspaces.
+ * Create `count` discoverable workspaces (`ws-1`..`ws-N`) with real git worktrees.
+ * Source repos live under `<profile>/repos/` and worktrees are checked out into
+ * `<profile>/workspaces/ws-N/<repo-name>/`, matching production structure.
  */
-export function createRealTestWorkspaces(
+export function createTestWorkspaces(
   profilePath: string,
   count: number,
   options: { active?: number },
+  repoName: string,
 ): WorkspaceFixture[] {
   const activeCount = options.active ?? count;
-  const workspacesDir = path.join(profilePath, 'workspaces');
-  fs.mkdirSync(workspacesDir, { recursive: true });
-
-  const sourceRepo = path.join(profilePath, 'repos', 'test-repo');
   const fixtures: WorkspaceFixture[] = [];
-
   for (let i = 1; i <= count; i++) {
-    const wsId = `ws-${i}`;
-    const wsPath = path.join(workspacesDir, wsId);
-    fs.mkdirSync(wsPath, { recursive: true });
-
-    // Required marker for list_workspaces
-    fs.writeFileSync(path.join(wsPath, 'initialized'), '');
-
-    const isActive = i <= activeCount;
-    const title = `Task ${i}`;
-
-    if (isActive) {
-      const task = {
-        uid: crypto.randomUUID(),
-        title,
-        started_at: '2026-01-01T00:00:00Z',
-      };
-      fs.writeFileSync(
-        path.join(wsPath, 'task.json'),
-        JSON.stringify(task),
-      );
-    }
-
-    // Create a real git worktree from the profile's source repo.
-    const worktreePath = path.join(wsPath, 'test-repo');
-    execSync(`git worktree add --detach ${JSON.stringify(worktreePath)}`, {
-      cwd: sourceRepo,
-      stdio: 'ignore',
-    });
-
-    fixtures.push({
-      id: wsId,
-      path: wsPath,
-      active: isActive,
-      title: isActive ? title : '',
-    });
+    fixtures.push(writeRealWorkspace(profilePath, `ws-${i}`, i <= activeCount, `Task ${i}`, repoName));
   }
 
   return fixtures;
@@ -191,22 +164,12 @@ export function createInvalidWorkspaces(
   profilePath: string,
   count: number,
 ): WorkspaceFixture[] {
-  const workspacesDir = path.join(profilePath, 'workspaces');
-  fs.mkdirSync(workspacesDir, { recursive: true });
-
   const fixtures: WorkspaceFixture[] = [];
 
   for (let i = 1; i <= count; i++) {
-    const wsId = `ws-${i}`;
-    const wsPath = path.join(workspacesDir, wsId);
-    fs.mkdirSync(wsPath, { recursive: true });
-
-    // Marker required for list_workspaces to include this workspace
-    fs.writeFileSync(path.join(wsPath, 'initialized'), '');
-
-    // No task.json (inactive) and no repo subdirectories.
-
-    fixtures.push({ id: wsId, path: wsPath, active: false, title: '' });
+    // Inactive (no task.json) and intentionally no repo subdirectory — see the
+    // doc comment above for why these appear as invalid.
+    fixtures.push(scaffoldWorkspace(profilePath, `ws-${i}`, false, ''));
   }
 
   return fixtures;

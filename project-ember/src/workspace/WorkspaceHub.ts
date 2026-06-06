@@ -7,7 +7,14 @@ import { createSearchInput, SearchInputHandle } from '../ui/components/SearchInp
 import { createKeyboardHintBar } from '../ui/components/KeyboardHintBar';
 import { showConfirmationDialog } from '../ui/components/ConfirmationDialog';
 import { createErrorNotification } from '../ui/components/ErrorNotification';
+import { createToast, ToastHandle } from '../ui/components/Toast';
 import { recordError } from '../errors';
+
+// "Refreshing…" stays visible at least this long, even when the reload is instant
+const REFRESH_TOAST_MIN_MS = 1000;
+
+// How long the "Refreshed successfully" confirmation stays visible
+const REFRESHED_TOAST_MS = 3000;
 
 // Types matching the Rust command return values
 interface ProfileInfo {
@@ -127,6 +134,8 @@ export class WorkspaceHub {
   private statusErrors: Map<string, string> = new Map();
 
   private showNewForm = false;
+  private refreshToast: ToastHandle | null = null;
+  private refreshSeq = 0;
   private availableRepos: RepoInfo[] = [];
   private focusedCardIndex = -1;
   private showCheatsheet = false;
@@ -255,6 +264,86 @@ export class WorkspaceHub {
     this.preloadAllStatuses();
   }
 
+  async refresh(): Promise<void> {
+    // Latest press wins: bump the token so any in-flight sequence aborts at its next checkpoint, and clear existing toasts so the new one replaces them without overlap
+    const seq = ++this.refreshSeq;
+    this.errorMessage = null;
+    this.removeAllToasts();
+
+    const refreshingToast = createToast('Refreshing…');
+    this.refreshToast = refreshingToast;
+    const startedAt = performance.now();
+    this.statusCache.clear();
+    this.statusErrors.clear();
+
+    let failed = false;
+    try {
+      try {
+        this.profiles = await invoke<ProfileInfo[]>('list_profiles');
+        const error = await this.loadWorkspaces();
+        if (error) {
+          failed = true;
+          this.showError(`Failed to refresh workspaces: ${error}`);
+        }
+      } catch (e) {
+        failed = true;
+        const detail = e instanceof Error ? e.message : String(e);
+        this.showError(`Failed to refresh workspaces: ${detail}`);
+      }
+      // Superseded by a newer press or the hub closing — stop before touching the UI.
+      if (seq !== this.refreshSeq) return;
+      this.renderAfterWorkspaceChange();
+
+      // Keep "Refreshing…" up for at least the minimum, then fade it fully out.
+      const elapsed = performance.now() - startedAt;
+      if (elapsed < REFRESH_TOAST_MIN_MS) {
+        await new Promise((resolve) => setTimeout(resolve, REFRESH_TOAST_MIN_MS - elapsed));
+      }
+      if (seq !== this.refreshSeq) return;
+      await refreshingToast.dismiss();
+      if (seq !== this.refreshSeq) return;
+      this.refreshToast = null;
+
+      // Success only — a failed refresh already surfaced an error notification.
+      if (failed) return;
+      const doneToast = createToast('Refreshed successfully');
+      this.refreshToast = doneToast;
+      await new Promise((resolve) => setTimeout(resolve, REFRESHED_TOAST_MS));
+      if (seq !== this.refreshSeq) return;
+      await doneToast.dismiss();
+      if (seq !== this.refreshSeq) return;
+      this.refreshToast = null;
+    } finally {
+      // Abnormal exit (e.g. a render error) while still the current sequence:
+      // make sure this sequence's toast doesn't linger.
+      if (seq === this.refreshSeq && this.refreshToast) {
+        this.refreshToast.element.remove();
+        this.refreshToast = null;
+      }
+    }
+  }
+
+  /** Remove every toast element from the document (used when starting a fresh
+   * refresh or tearing the hub down) so none can be orphaned on screen. */
+  private removeAllToasts(): void {
+    document.querySelectorAll('.toast').forEach((el) => el.remove());
+    this.refreshToast = null;
+  }
+
+  /**
+   * Re-render after the workspace list changed: keep the focused row within
+   * range (favouring the last row over jumping to the top), redraw, and kick
+   * off a status preload for any newly visible workspaces.
+   */
+  private renderAfterWorkspaceChange(): void {
+    const filtered = this.filteredWorkspaces();
+    if (this.focusedCardIndex >= filtered.length) {
+      this.focusedCardIndex = filtered.length > 0 ? filtered.length - 1 : -1;
+    }
+    this.render();
+    this.preloadAllStatuses();
+  }
+
   private preloadAllStatuses(): void {
     const inputs: WorkspaceStatusInput[] = this.workspaces
       .filter((ws) => !this.statusCache.has(ws.id))
@@ -373,6 +462,8 @@ export class WorkspaceHub {
     this.categoryFilter = 'active';
     this.focusedCardIndex = -1;
     this.showNewForm = false;
+    this.refreshSeq++;
+    this.removeAllToasts();
     this.showCheatsheet = false;
     this.profilesLoaded = false;
     this.workspacesLoaded = false;
@@ -490,6 +581,12 @@ export class WorkspaceHub {
         this.toggleNewForm();
         return;
       }
+      case 'R': {
+        e.preventDefault();
+        e.stopPropagation();
+        void this.refresh();
+        return;
+      }
     }
   }
 
@@ -548,15 +645,19 @@ export class WorkspaceHub {
     }
   }
 
-  private async loadWorkspaces(): Promise<void> {
-    if (!this.activeProfilePath) return;
+  /** Loads workspaces for the active profile. Returns an error message on
+   * failure (leaving the list empty), or null on success. */
+  private async loadWorkspaces(): Promise<string | null> {
+    if (!this.activeProfilePath) return null;
     try {
       this.workspaces = await invoke<WorkspaceInfo[]>('list_workspaces', {
         profilePath: this.activeProfilePath,
       });
+      return null;
     } catch (e) {
       console.error('Failed to load workspaces:', e);
       this.workspaces = [];
+      return e instanceof Error ? e.message : String(e);
     }
   }
 
@@ -614,6 +715,7 @@ export class WorkspaceHub {
         { keys: 'f', description: 'filter' },
         { keys: '1/2/3', description: 'active/inactive/all' },
         { keys: 'n', description: 'new task' },
+        { keys: 'R', description: 'refresh' },
         { keys: 'q/Esc', description: 'close' },
         { keys: '?', description: 'all shortcuts' },
       ],
@@ -857,12 +959,7 @@ export class WorkspaceHub {
     this.statusCache.delete(ws.id);
     this.statusErrors.delete(ws.id);
     await this.loadWorkspaces();
-    const filtered = this.filteredWorkspaces();
-    if (this.focusedCardIndex >= filtered.length) {
-      this.focusedCardIndex = filtered.length > 0 ? filtered.length - 1 : -1;
-    }
-    this.render();
-    this.preloadAllStatuses();
+    this.renderAfterWorkspaceChange();
   }
 
   private async handleDeleteWorkspace(ws: WorkspaceInfo): Promise<void> {
@@ -876,12 +973,7 @@ export class WorkspaceHub {
     this.statusCache.delete(ws.id);
     this.statusErrors.delete(ws.id);
     await this.loadWorkspaces();
-    const filtered = this.filteredWorkspaces();
-    if (this.focusedCardIndex >= filtered.length) {
-      this.focusedCardIndex = filtered.length > 0 ? filtered.length - 1 : -1;
-    }
-    this.render();
-    this.preloadAllStatuses();
+    this.renderAfterWorkspaceChange();
   }
 
   private renderDetailPanel(ws: WorkspaceInfo): HTMLElement {
@@ -1322,6 +1414,7 @@ export class WorkspaceHub {
           ['2', 'Show inactive workspaces'],
           ['3', 'Show all workspaces'],
           ['n', 'New task'],
+          ['R', 'Refresh hub'],
           ['q', 'Close hub'],
           ['?', 'Toggle this cheatsheet'],
         ],
