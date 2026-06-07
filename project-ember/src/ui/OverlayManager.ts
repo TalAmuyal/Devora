@@ -9,6 +9,7 @@ export class OverlayManager {
   // Tab-covering overlay state
   private tabCoveringOverlayEl: HTMLElement | null = null;
   private tabCoveringContentEl: HTMLElement | null = null;
+  private tabCoveringCleanup: (() => void) | null = null;
 
   // Panel overlays tied to session tabs (sessionId -> overlay element)
   private panelOverlays: Map<number, HTMLElement> = new Map();
@@ -20,9 +21,10 @@ export class OverlayManager {
 
   // --- Tab-covering overlay ---
 
-  showTabCoveringOverlay(content: HTMLElement): void {
+  showTabCoveringOverlay(content: HTMLElement, onCleanup?: () => void): void {
     this.dismissTabCoveringOverlay();
 
+    this.tabCoveringCleanup = onCleanup ?? null;
     this.tabCoveringOverlayEl = document.createElement('div');
     this.tabCoveringOverlayEl.className = 'overlay-tab-covering';
 
@@ -33,9 +35,16 @@ export class OverlayManager {
 
   dismissTabCoveringOverlay(): void {
     if (this.tabCoveringOverlayEl) {
+      const cleanup = this.tabCoveringCleanup;
+      this.tabCoveringCleanup = null;
       this.tabCoveringOverlayEl.remove();
       this.tabCoveringOverlayEl = null;
       this.tabCoveringContentEl = null;
+      try {
+        cleanup?.();
+      } catch (e) {
+        console.error('Tab-covering overlay cleanup failed:', e);
+      }
     }
   }
 

@@ -120,6 +120,8 @@ When Claude Code's behavior changes or new `@real-claude` scenarios are added:
 | Tab-covering | Yes | No | Workspace Hub, User Guide, cheatsheet |
 | Panel | No | Yes | Crit review UI |
 
+Tab-covering overlays may register an `onCleanup` hook via `showTabCoveringOverlay`; it runs on every dismissal path. Dismissing the Workspace Hub (`Escape`, `q`, or `Ctrl+S`) fully tears it down and restores terminal focus.
+
 ## Keyboard Shortcuts
 
 ### Global
