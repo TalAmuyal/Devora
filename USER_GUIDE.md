@@ -234,7 +234,7 @@ It can usually replace:
 - [Task](https://mise.jdx.dev/tasks) management tools (like common non-build-system `make` usages)
 
 It can also automate:
-- Programming-language package-managements (`npm`, `poetry`, `uv`, `gem`, `cargo`, etc.) with its [prepare](https://mise.jdx.dev/dev-tools/prepare.html) feature
+- Programming-language package-managements (`npm`, `poetry`, `uv`, `gem`, `cargo`, etc.) with its [deps](https://mise.jdx.dev/dev-tools/deps.html) feature
 - Setting up env-vars
 
 ## Versioning

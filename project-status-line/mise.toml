@@ -4,7 +4,7 @@ experimental = true
 [tools]
 go = "1.25"
 
-[prepare.go_deps]
+[deps.go_deps]
 auto = true
 sources = ["go.mod", "go.sum", "**/*.go"]
 run = "go mod tidy"
