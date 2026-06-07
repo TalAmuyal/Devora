@@ -28,6 +28,7 @@ Types of changes:
 
 ### Changed
 
+- Migrate `mise` from `prepare` to `deps`
 - Reduce Claude effort level from "max" to "xhigh" for better response times
 - Improved team-work skill: structured team roles, added planning interview phase, and delegation guidance
 - Standardized terminology across codebase and documentation: canonical glossary in CLAUDE.md now defines Workspace Hub, Profile, Worktree, etc.

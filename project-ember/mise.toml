@@ -1,10 +1,10 @@
 [settings]
-experimental = true # Required for the 'prepare' feature
+experimental = true # Required for the 'deps' feature
 
 [tools]
 node = "22"
 
-[prepare.npm_deps]
+[deps.npm_deps]
 auto = true
 sources = ["package.json", "package-lock.json"]
 run = "test -f package.json && npm install || true"
