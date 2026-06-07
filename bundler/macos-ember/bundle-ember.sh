@@ -104,10 +104,6 @@ echo "==> Bundling resources into Devora Ember.app..."
 
 echo "    Resources bundled."
 
-# --- Step 5: Open if requested ---
-
-$SHOULD_OPEN && open "$APP_DIR"
-
 # --- Done ---
 
 echo ""

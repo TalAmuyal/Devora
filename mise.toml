@@ -93,8 +93,8 @@ find "$BUNDLE_DIR" -name '*.app' -maxdepth 1 -type d -exec rm -rf {} + 2>/dev/nu
 (cd project-ember && mise exec -- cargo tauri build --bundles app)
 APP_DIR=$(find "$BUNDLE_DIR" -name '*.app' -maxdepth 1 -type d | head -1)
 if [ -z "$APP_DIR" ]; then
-  echo "ERROR: No .app directory found in $BUNDLE_DIR" >&2
-  exit 1
+	echo "ERROR: No .app directory found in $BUNDLE_DIR" >&2
+	exit 1
 fi
 ./bundler/macos-ember/populate-app-resources.sh "$APP_DIR" --version 0.0.0-test
 """
@@ -123,18 +123,27 @@ run = "./bundler/macos-ember/bundle-ember.sh"
 
 [tasks.ember-install]
 depends = ["download-deps"]
-description = "Build and install Devora Ember.app to /Applications (dev builds get versioned names)"
+description = "Build and install Devora Ember.app to /Applications (dev builds get versioned names; --dev installs as Ember-dev.app)"
+usage = '''
+flag "-d --dev"
+'''
 run = """
 set -e
+
+DEV="${usage_dev:-false}"
+
 ./bundler/macos-ember/bundle-ember.sh
+
 APP_SRC="project-ember/src-tauri/target/release/bundle/macos/Devora-Ember.app"
 VERSION=$(cat "$APP_SRC/Contents/Resources/VERSION")
-if [[ "$VERSION" == *-dev.* ]]; then
-  APP_DEST="/Applications/Devora-Ember-${VERSION}.app"
+if [[ "$DEV" == "true" ]]; then
+	APP_DEST="/Applications/Ember-dev.app"
+elif [[ "$VERSION" == *-dev.* ]]; then
+	APP_DEST="/Applications/Devora-Ember-${VERSION}.app"
 else
-  APP_DEST="/Applications/Devora-Ember.app"
-  rm -rf "$APP_DEST"
+	APP_DEST="/Applications/Devora-Ember.app"
 fi
+rm -rf "$APP_DEST"
 mv "$APP_SRC" "$APP_DEST"
 echo "Installed to $APP_DEST"
 """
