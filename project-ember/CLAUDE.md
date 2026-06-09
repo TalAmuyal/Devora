@@ -58,6 +58,7 @@ Cassettes are stored as gzip-compressed JSON at `tests/support/fixtures/cassette
 - **Tab-covering overlay**: covers entire window including tab bar. Used for the Workspace Hub, User Guide, cheatsheet.
 - **Panel overlay**: covers main panel area only, tab bar visible. Tied to a specific session tab. Used for Crit.
 - Both types are dismissible with `q` or `Escape`.
+- Any `window` listeners or state owned by tab-covering overlay content MUST be released via the `onCleanup` hook passed to `showTabCoveringOverlay`; `dismissTabCoveringOverlay()` / `dismissActiveOverlay()` is the single canonical teardown.
 
 ## Error Handling
 

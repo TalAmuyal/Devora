@@ -64,9 +64,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const tabBar = new TabBar(tabBarEl, sessionManager, overlayManager);
 
   const dismissWsHub = () => {
-    wsHub.unload();
     overlayManager.dismissTabCoveringOverlay();
-    sessionManager.getActiveSession()?.terminalPane.focus();
   };
 
   const openWorkspace = async (wsPath: string, title: string, repos: string[], profilePath?: string) => {
@@ -98,12 +96,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     dismissWsHub,
   );
 
+  const teardownWsHub = () => {
+    wsHub.unload();
+    sessionManager.getActiveSession()?.terminalPane.focus();
+  };
+
   const toggleWsHub = () => {
     if (overlayManager.isTabCoveringOverlayActive()) {
       dismissWsHub();
     } else {
       wsHub.load();
-      overlayManager.showTabCoveringOverlay(wsHub.getElement());
+      overlayManager.showTabCoveringOverlay(wsHub.getElement(), teardownWsHub);
     }
   };
 
@@ -170,7 +173,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   tabBar.render();
 
   wsHub.load();
-  overlayManager.showTabCoveringOverlay(wsHub.getElement());
+  overlayManager.showTabCoveringOverlay(wsHub.getElement(), teardownWsHub);
 
   (window as any).__test = { sessionManager, overlayManager, tabBar, wsHub };
 });
