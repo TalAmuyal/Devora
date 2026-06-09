@@ -46,7 +46,6 @@ export class KeyboardShortcuts {
       if (this.overlayManager.dismissActiveOverlay()) {
         e.preventDefault();
         e.stopPropagation();
-        this.sessionManager.getActiveSession()?.terminalPane.focus();
         return;
       }
     }

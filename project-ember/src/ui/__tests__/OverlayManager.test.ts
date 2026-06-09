@@ -76,3 +76,106 @@ describe('OverlayManager tab-covering cleanup hook', () => {
     expect(appEl.querySelector('.overlay-tab-covering')).toBeNull();
   });
 });
+
+describe('OverlayManager tab-covering focus restoration', () => {
+  it('restores focus to the provided Focusable on dismissTabCoveringOverlay', () => {
+    const { manager } = makeManager();
+    const focusable = { focus: vi.fn() };
+
+    manager.showTabCoveringOverlay(document.createElement('div'), undefined, focusable);
+    manager.dismissTabCoveringOverlay();
+
+    expect(focusable.focus).toHaveBeenCalledOnce();
+  });
+
+  it('restores focus via dismissActiveOverlay', () => {
+    const { manager } = makeManager();
+    const focusable = { focus: vi.fn() };
+
+    manager.showTabCoveringOverlay(document.createElement('div'), undefined, focusable);
+    manager.dismissActiveOverlay();
+
+    expect(focusable.focus).toHaveBeenCalledOnce();
+  });
+
+  it('restores focus only after the overlay element has been removed', () => {
+    const { manager, appEl } = makeManager();
+    const focusable = {
+      focus: vi.fn(() => {
+        expect(appEl.querySelector('.overlay-tab-covering')).toBeNull();
+      }),
+    };
+
+    manager.showTabCoveringOverlay(document.createElement('div'), undefined, focusable);
+    manager.dismissTabCoveringOverlay();
+
+    expect(focusable.focus).toHaveBeenCalledOnce();
+  });
+
+  it('runs the cleanup hook before restoring focus', () => {
+    const { manager } = makeManager();
+    const calls: string[] = [];
+    const cleanup = vi.fn(() => calls.push('cleanup'));
+    const focusable = { focus: vi.fn(() => calls.push('focus')) };
+
+    manager.showTabCoveringOverlay(document.createElement('div'), cleanup, focusable);
+    manager.dismissTabCoveringOverlay();
+
+    expect(calls).toEqual(['cleanup', 'focus']);
+  });
+
+  it('dismisses cleanly when no Focusable is provided', () => {
+    const { manager } = makeManager();
+
+    manager.showTabCoveringOverlay(document.createElement('div'));
+
+    expect(() => manager.dismissTabCoveringOverlay()).not.toThrow();
+  });
+});
+
+describe('OverlayManager panel overlay focus restoration', () => {
+  function makeWithPanel(): {
+    manager: OverlayManager;
+    appEl: HTMLElement;
+    mainPanelEl: HTMLElement;
+  } {
+    const appEl = document.createElement('div');
+    const mainPanelEl = document.createElement('div');
+    return { manager: new OverlayManager(appEl), appEl, mainPanelEl };
+  }
+
+  it('restores focus on dismissPanelOverlay when it is the active overlay', () => {
+    const { manager, mainPanelEl } = makeWithPanel();
+    const focusable = { focus: vi.fn() };
+
+    manager.showPanelOverlay(1, document.createElement('div'), mainPanelEl, focusable);
+    manager.dismissPanelOverlay(1);
+
+    expect(focusable.focus).toHaveBeenCalledOnce();
+  });
+
+  it('restores focus on the active panel overlay via dismissActiveOverlay', () => {
+    const { manager, mainPanelEl } = makeWithPanel();
+    const focusable = { focus: vi.fn() };
+
+    manager.showPanelOverlay(1, document.createElement('div'), mainPanelEl, focusable);
+    manager.dismissActiveOverlay();
+
+    expect(focusable.focus).toHaveBeenCalledOnce();
+  });
+
+  it('does not restore focus when dismissing a non-active (hidden) panel overlay', () => {
+    const { manager, mainPanelEl } = makeWithPanel();
+    const focusable1 = { focus: vi.fn() };
+    const focusable2 = { focus: vi.fn() };
+
+    manager.showPanelOverlay(1, document.createElement('div'), mainPanelEl, focusable1);
+    manager.showPanelOverlay(2, document.createElement('div'), mainPanelEl, focusable2);
+    // Session 2 is now the active/visible overlay; overlay 1 is hidden.
+    manager.onSessionActivated(2);
+
+    manager.dismissPanelOverlay(1);
+
+    expect(focusable1.focus).not.toHaveBeenCalled();
+  });
+});

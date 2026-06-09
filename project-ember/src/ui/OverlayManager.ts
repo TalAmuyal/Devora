@@ -3,6 +3,16 @@ import {
   ConfirmationDialogOptions,
 } from './components/ConfirmationDialog';
 
+/** Anything that can take keyboard focus, e.g. a terminal pane or search input. */
+export interface Focusable {
+  focus(): void;
+}
+
+interface PanelOverlayEntry {
+  el: HTMLElement;
+  restoreFocusTo: Focusable | null;
+}
+
 export class OverlayManager {
   private appEl: HTMLElement;
 
@@ -10,9 +20,10 @@ export class OverlayManager {
   private tabCoveringOverlayEl: HTMLElement | null = null;
   private tabCoveringContentEl: HTMLElement | null = null;
   private tabCoveringCleanup: (() => void) | null = null;
+  private tabCoveringRestoreFocusTo: Focusable | null = null;
 
-  // Panel overlays tied to session tabs (sessionId -> overlay element)
-  private panelOverlays: Map<number, HTMLElement> = new Map();
+  // Panel overlays tied to session tabs (sessionId -> overlay entry)
+  private panelOverlays: Map<number, PanelOverlayEntry> = new Map();
   private activePanelOverlaySessionId: number | null = null;
 
   constructor(appEl: HTMLElement) {
@@ -21,10 +32,15 @@ export class OverlayManager {
 
   // --- Tab-covering overlay ---
 
-  showTabCoveringOverlay(content: HTMLElement, onCleanup?: () => void): void {
+  showTabCoveringOverlay(
+    content: HTMLElement,
+    onCleanup?: () => void,
+    restoreFocusTo?: Focusable | null,
+  ): void {
     this.dismissTabCoveringOverlay();
 
     this.tabCoveringCleanup = onCleanup ?? null;
+    this.tabCoveringRestoreFocusTo = restoreFocusTo ?? null;
     this.tabCoveringOverlayEl = document.createElement('div');
     this.tabCoveringOverlayEl.className = 'overlay-tab-covering';
 
@@ -36,7 +52,9 @@ export class OverlayManager {
   dismissTabCoveringOverlay(): void {
     if (this.tabCoveringOverlayEl) {
       const cleanup = this.tabCoveringCleanup;
+      const restoreFocusTo = this.tabCoveringRestoreFocusTo;
       this.tabCoveringCleanup = null;
+      this.tabCoveringRestoreFocusTo = null;
       this.tabCoveringOverlayEl.remove();
       this.tabCoveringOverlayEl = null;
       this.tabCoveringContentEl = null;
@@ -45,6 +63,7 @@ export class OverlayManager {
       } catch (e) {
         console.error('Tab-covering overlay cleanup failed:', e);
       }
+      restoreFocusTo?.focus();
     }
   }
 
@@ -54,7 +73,12 @@ export class OverlayManager {
 
   // --- Panel overlay (tied to session tab) ---
 
-  showPanelOverlay(sessionId: number, content: HTMLElement, mainPanelEl: HTMLElement): void {
+  showPanelOverlay(
+    sessionId: number,
+    content: HTMLElement,
+    mainPanelEl: HTMLElement,
+    restoreFocusTo: Focusable | null,
+  ): void {
     this.dismissPanelOverlay(sessionId);
 
     const overlayEl = document.createElement('div');
@@ -62,25 +86,31 @@ export class OverlayManager {
     overlayEl.appendChild(content);
 
     mainPanelEl.appendChild(overlayEl);
-    this.panelOverlays.set(sessionId, overlayEl);
+    this.panelOverlays.set(sessionId, { el: overlayEl, restoreFocusTo });
     this.activePanelOverlaySessionId = sessionId;
   }
 
   dismissPanelOverlay(sessionId: number): void {
-    const overlayEl = this.panelOverlays.get(sessionId);
-    if (overlayEl) {
-      overlayEl.remove();
+    const entry = this.panelOverlays.get(sessionId);
+    if (entry) {
+      // Only restore focus when dismissing the visible overlay: a backend-initiated
+      // close can target a hidden session, and refocusing it would steal focus.
+      const wasActive = this.activePanelOverlaySessionId === sessionId;
+      entry.el.remove();
       this.panelOverlays.delete(sessionId);
       if (this.activePanelOverlaySessionId === sessionId) {
         this.activePanelOverlaySessionId = null;
+      }
+      if (wasActive) {
+        entry.restoreFocusTo?.focus();
       }
     }
   }
 
   // Called when session tabs switch — show/hide panel overlays accordingly
   onSessionActivated(sessionId: number): void {
-    for (const [id, el] of this.panelOverlays) {
-      el.style.display = id === sessionId ? 'block' : 'none';
+    for (const [id, entry] of this.panelOverlays) {
+      entry.el.style.display = id === sessionId ? 'block' : 'none';
     }
     this.activePanelOverlaySessionId = this.panelOverlays.has(sessionId) ? sessionId : null;
   }
@@ -90,13 +120,13 @@ export class OverlayManager {
   }
 
   isPanelOverlayVisible(sessionId: number): boolean {
-    const el = this.panelOverlays.get(sessionId);
-    return el !== undefined && el.style.display !== 'none';
+    const entry = this.panelOverlays.get(sessionId);
+    return entry !== undefined && entry.el.style.display !== 'none';
   }
 
   hasAnyVisiblePanelOverlay(): boolean {
-    for (const el of this.panelOverlays.values()) {
-      if (el.style.display !== 'none') return true;
+    for (const entry of this.panelOverlays.values()) {
+      if (entry.el.style.display !== 'none') return true;
     }
     return false;
   }
