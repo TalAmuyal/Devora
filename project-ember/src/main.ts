@@ -98,7 +98,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   const teardownWsHub = () => {
     wsHub.unload();
-    sessionManager.getActiveSession()?.terminalPane.focus();
   };
 
   const toggleWsHub = () => {
@@ -106,7 +105,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       dismissWsHub();
     } else {
       wsHub.load();
-      overlayManager.showTabCoveringOverlay(wsHub.getElement(), teardownWsHub);
+      overlayManager.showTabCoveringOverlay(
+        wsHub.getElement(),
+        teardownWsHub,
+        sessionManager.getActiveSession()?.terminalPane,
+      );
     }
   };
 
@@ -114,7 +117,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     try {
       const guidePath = await invoke<string>('get_user_guide_path');
       const content = await WebContentOverlay.createMarkdownContent(guidePath, 'User Guide');
-      overlayManager.showTabCoveringOverlay(content);
+      overlayManager.showTabCoveringOverlay(
+        content,
+        undefined,
+        sessionManager.getActiveSession()?.terminalPane,
+      );
     } catch (e) {
       console.error('Failed to open User Guide:', e);
     }
@@ -133,7 +140,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       return;
     }
     const content = WebContentOverlay.createUrlContent(url, 'Crit Review');
-    overlayManager.showPanelOverlay(session.id, content, mainPanelEl);
+    overlayManager.showPanelOverlay(session.id, content, mainPanelEl, session.terminalPane);
     overlayManager.onSessionActivated(sessionManager.getActiveSessionId()!);
     tabBar.render();
   });
@@ -173,7 +180,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   tabBar.render();
 
   wsHub.load();
-  overlayManager.showTabCoveringOverlay(wsHub.getElement(), teardownWsHub);
+  overlayManager.showTabCoveringOverlay(
+    wsHub.getElement(),
+    teardownWsHub,
+    sessionManager.getActiveSession()?.terminalPane,
+  );
 
   (window as any).__test = { sessionManager, overlayManager, tabBar, wsHub };
 });
