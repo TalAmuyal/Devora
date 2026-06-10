@@ -20,6 +20,10 @@ while [[ $# -gt 0 ]]; do
 			exit 0
 		;;
 
+		--fable)
+			USE_FABLE=1
+			;;
+
 		*)
 			ARGS+=("$1")
 			;;
@@ -40,9 +44,16 @@ CC_HAIKU_4_5="claude-haiku-4-5-20251001"
 CC_SONNET_4_6="claude-sonnet-4-6"
 CC_OPUS_4_6="claude-opus-4-6"
 CC_OPUS_4_7="claude-opus-4-7"
+CC_FABLE_5="claude-fable-5"
 
-export ANTHROPIC_DEFAULT_OPUS_MODEL="$CC_OPUS_4_7"
-export ANTHROPIC_DEFAULT_SONNET_MODEL="$CC_OPUS_4_7"
+if [[ -n "$USE_FABLE" ]]; then
+	export ANTHROPIC_DEFAULT_OPUS_MODEL="$CC_FABLE_5"
+	export ANTHROPIC_DEFAULT_SONNET_MODEL="$CC_FABLE_5"
+else
+	export ANTHROPIC_DEFAULT_OPUS_MODEL="$CC_OPUS_4_7"
+	export ANTHROPIC_DEFAULT_SONNET_MODEL="$CC_OPUS_4_7"
+fi
+
 export ANTHROPIC_DEFAULT_HAIKU_MODEL="$CC_SONNET_4_6"
 
 export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
