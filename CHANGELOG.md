@@ -29,6 +29,7 @@ Types of changes:
 
 ### Changed
 
+- `ccc` now defaults to the Opus 4.8 model (`claude-opus-4-8`) for Opus and Sonnet
 - Migrate `mise` from `prepare` to `deps`
 - Reduce Claude effort level from "max" to "xhigh" for better response times
 - Improved team-work skill: structured team roles, added planning interview phase, and delegation guidance
