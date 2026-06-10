@@ -155,7 +155,7 @@ Run it from within a workspace to start a Claude Code session with all Devora in
 
 What it does:
 
-- **Model upgrades**: Default models are upgraded -- Sonnet is replaced with Opus, and Haiku with Sonnet. This provides stronger reasoning out of the box but does affect billing accordingly
+- **Model upgrades**: Default models are upgraded -- Sonnet is replaced with Opus, and Haiku with Sonnet. This provides stronger reasoning out of the box but does affect billing accordingly. Pass `--fable` to run Opus and Sonnet on the Fable 5 model (`claude-fable-5`) instead
 - **Effort level**: Sets the effort level to "max" by default, so that Claude Code always tries to give the best answer it can (instead of trying to be fast or cost-efficient)
 - **Plan mode**: Claude Code starts in plan permission mode by default, which requires explicit approval before making changes
 - **Privacy**: Disables telemetry and nonessential network traffic

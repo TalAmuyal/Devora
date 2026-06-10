@@ -16,6 +16,7 @@ Types of changes:
 
 ### Added
 
+- `--fable` flag for `ccc` that runs Claude Code on the Fable 5 model (`claude-fable-5`) for Opus and Sonnet
 - `n` keyboard shortcut to toggle the New Task form in Workspace Hub
 - Vision documents for the project at `docs/vision/`
 
