@@ -3,7 +3,7 @@ import {
   ConfirmationDialogOptions,
 } from './components/ConfirmationDialog';
 
-/** Anything that can take keyboard focus, e.g. a terminal pane or search input. */
+/** Anything that can take keyboard focus, e.g. a terminal pane or search input */
 export interface Focusable {
   focus(): void;
 }
@@ -36,6 +36,7 @@ export class OverlayManager {
     content: HTMLElement,
     onCleanup?: () => void,
     restoreFocusTo?: Focusable | null,
+    overlayClass?: string,
   ): void {
     this.dismissTabCoveringOverlay();
 
@@ -43,10 +44,22 @@ export class OverlayManager {
     this.tabCoveringRestoreFocusTo = restoreFocusTo ?? null;
     this.tabCoveringOverlayEl = document.createElement('div');
     this.tabCoveringOverlayEl.className = 'overlay-tab-covering';
+    // Focusable (out of the tab order) so we can move keyboard focus onto the overlay below — see the focus() call
+    this.tabCoveringOverlayEl.tabIndex = -1;
+    if (overlayClass) {
+      this.tabCoveringOverlayEl.classList.add(overlayClass);
+    }
 
     this.tabCoveringContentEl = content;
     this.tabCoveringOverlayEl.appendChild(content);
     this.appEl.appendChild(this.tabCoveringOverlayEl);
+
+    /*
+     * Take keyboard focus away from whatever held it (typically the terminal's textarea).
+     * Without this the overlay's own key handling — and the global q/Escape-to-dismiss — would be suppressed by the editable-element guard until the user clicked the overlay.
+     * Focusing the wrapper (rather than the content) keeps this concern in one place for every tab-covering overlay.
+     */
+    this.tabCoveringOverlayEl.focus();
   }
 
   dismissTabCoveringOverlay(): void {
@@ -93,8 +106,7 @@ export class OverlayManager {
   dismissPanelOverlay(sessionId: number): void {
     const entry = this.panelOverlays.get(sessionId);
     if (entry) {
-      // Only restore focus when dismissing the visible overlay: a backend-initiated
-      // close can target a hidden session, and refocusing it would steal focus.
+      // Only restore focus when dismissing the visible overlay: a backend-initiated close can target a hidden session, and refocusing it would steal focus.
       const wasActive = this.activePanelOverlaySessionId === sessionId;
       entry.el.remove();
       this.panelOverlays.delete(sessionId);

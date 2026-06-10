@@ -5,6 +5,7 @@ import { SessionManager } from './session/SessionManager';
 import { TabBar } from './ui/TabBar';
 import { OverlayManager } from './ui/OverlayManager';
 import { KeyboardShortcuts } from './ui/KeyboardShortcuts';
+import { CommandPalette } from './ui/CommandPalette';
 import { WorkspaceHub } from './workspace/WorkspaceHub';
 import { WebContentOverlay } from './webview/WebContentOverlay';
 import { scrapeErrors } from './errors';
@@ -63,6 +64,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   const tabBar = new TabBar(tabBarEl, sessionManager, overlayManager);
 
+  // The Workspace Hub and Command Palette are mutually-exclusive tab-covering overlays — neither opens while the other is open
+  let commandPaletteOpen = false;
+
   const dismissWsHub = () => {
     overlayManager.dismissTabCoveringOverlay();
   };
@@ -100,17 +104,66 @@ document.addEventListener('DOMContentLoaded', async () => {
     wsHub.unload();
   };
 
+  const openWsHub = () => {
+    wsHub.load();
+    overlayManager.showTabCoveringOverlay(
+      wsHub.getElement(),
+      teardownWsHub,
+      sessionManager.getActiveSession()?.terminalPane,
+    );
+  };
+
   const toggleWsHub = () => {
+    if (commandPaletteOpen) return;
     if (overlayManager.isTabCoveringOverlayActive()) {
       dismissWsHub();
     } else {
-      wsHub.load();
-      overlayManager.showTabCoveringOverlay(
-        wsHub.getElement(),
-        teardownWsHub,
-        sessionManager.getActiveSession()?.terminalPane,
-      );
+      openWsHub();
     }
+  };
+
+  // Every palette command closes the palette (the active tab-covering overlay) before acting
+  const closePaletteThen = (action: () => void) => () => {
+    overlayManager.dismissTabCoveringOverlay();
+    action();
+  };
+
+  const commandPalette = new CommandPalette({
+    commands: [
+      {
+        id: 'workspace-hub',
+        title: 'Workspace Hub',
+        description: 'List, filter and open workspaces',
+        icon: '▦',
+        shortcut: ['⌃', 'S'],
+        run: closePaletteThen(openWsHub),
+      },
+      {
+        id: 'new-shell',
+        title: 'New Shell',
+        description: 'Open a fresh shell tab',
+        icon: '❯',
+        shortcut: ['⌃', '⇧', 'S'],
+        run: closePaletteThen(() => void sessionManager.createSession()),
+      },
+    ],
+  });
+
+  const teardownPalette = () => {
+    commandPalette.unload();
+    commandPaletteOpen = false;
+  };
+
+  const openCommandPalette = () => {
+    if (overlayManager.isTabCoveringOverlayActive()) return;
+    commandPalette.load();
+    overlayManager.showTabCoveringOverlay(
+      commandPalette.getElement(),
+      teardownPalette,
+      sessionManager.getActiveSession()?.terminalPane,
+      'overlay-passthrough',
+    );
+    commandPaletteOpen = true;
   };
 
   const openUserGuide = async () => {
@@ -127,7 +180,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   };
 
-  new KeyboardShortcuts(sessionManager, overlayManager, toggleWsHub, openUserGuide);
+  new KeyboardShortcuts(
+    sessionManager,
+    overlayManager,
+    toggleWsHub,
+    openCommandPalette,
+    openUserGuide,
+  );
 
   // Crit panel overlay integration: listen for backend events requesting
   // a Crit review overlay, and wire overlay dismissal back to the backend.
@@ -179,12 +238,15 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   tabBar.render();
 
-  wsHub.load();
-  overlayManager.showTabCoveringOverlay(
-    wsHub.getElement(),
-    teardownWsHub,
-    sessionManager.getActiveSession()?.terminalPane,
-  );
+  openWsHub();
 
-  (window as any).__test = { sessionManager, overlayManager, tabBar, wsHub };
+  (window as any).__test = {
+    sessionManager,
+    overlayManager,
+    tabBar,
+    wsHub,
+    commandPalette,
+    openCommandPalette,
+    toggleWsHub,
+  };
 });

@@ -129,7 +129,7 @@ Tab-covering overlays may register an `onCleanup` hook via `showTabCoveringOverl
 | Shortcut | Action |
 |----------|--------|
 | `Ctrl+S` | Toggle Workspace Hub |
-| `Shift Shift` | Toggle Workspace Hub (rapid double-tap) |
+| `Shift Shift` | Open Command Palette (rapid double-tap) |
 | `Ctrl+Shift+S` | New shell session tab |
 | `Ctrl+Left/Right` | Switch between session tabs |
 | `Ctrl+Shift+Left/Right` | Reorder session tabs |
@@ -153,6 +153,19 @@ Tab-covering overlays may register an `onCleanup` hook via `showTabCoveringOverl
 | `q` | Close panel |
 | `?` | Toggle full cheatsheet |
 | `Escape` | Unfocus filter / close cheatsheet |
+
+### Command Palette
+
+Opened with `Shift Shift`.
+The Workspace Hub and Command Palette are mutually exclusive — neither opens while the other is open.
+
+| Shortcut | Action |
+|----------|--------|
+| `j` / `Down` | Move selection down |
+| `k` / `Up` | Move selection up |
+| `Enter` | Run selected command |
+| `f` | Focus filter input |
+| `q` / `Escape` | Close palette |
 
 ## Project Structure
 

@@ -6,6 +6,9 @@ export interface SearchInputOptions {
   icon: string;
   onInput: (value: string) => void;
   onEscape: () => void;
+  onArrowDown?: () => void;
+  onArrowUp?: () => void;
+  onEnter?: () => void;
 }
 
 export interface SearchInputHandle {
@@ -39,6 +42,18 @@ export function createSearchInput(options: SearchInputOptions): SearchInputHandl
       e.stopImmediatePropagation();
       input.blur();
       options.onEscape();
+      return;
+    }
+    const navCallbacks: Record<string, (() => void) | undefined> = {
+      ArrowDown: options.onArrowDown,
+      ArrowUp: options.onArrowUp,
+      Enter: options.onEnter,
+    };
+    const navCallback = navCallbacks[e.key];
+    if (navCallback) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      navCallback();
     }
   });
 

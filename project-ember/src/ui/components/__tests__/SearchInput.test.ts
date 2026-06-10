@@ -119,6 +119,85 @@ describe('createSearchInput', () => {
     expect(handle.getValue()).toBe('changed');
   });
 
+  it('ArrowDown fires onArrowDown when provided', () => {
+    const onArrowDown = vi.fn();
+    const handle = createSearchInput({
+      placeholder: '',
+      value: '',
+      icon: '⌕',
+      onInput: () => {},
+      onEscape: () => {},
+      onArrowDown,
+    });
+    const input = handle.element.querySelector('.search-input-field') as HTMLInputElement;
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }));
+    expect(onArrowDown).toHaveBeenCalledOnce();
+  });
+
+  it('ArrowUp fires onArrowUp when provided', () => {
+    const onArrowUp = vi.fn();
+    const handle = createSearchInput({
+      placeholder: '',
+      value: '',
+      icon: '⌕',
+      onInput: () => {},
+      onEscape: () => {},
+      onArrowUp,
+    });
+    const input = handle.element.querySelector('.search-input-field') as HTMLInputElement;
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp' }));
+    expect(onArrowUp).toHaveBeenCalledOnce();
+  });
+
+  it('Enter fires onEnter when provided', () => {
+    const onEnter = vi.fn();
+    const handle = createSearchInput({
+      placeholder: '',
+      value: '',
+      icon: '⌕',
+      onInput: () => {},
+      onEscape: () => {},
+      onEnter,
+    });
+    const input = handle.element.querySelector('.search-input-field') as HTMLInputElement;
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+    expect(onEnter).toHaveBeenCalledOnce();
+  });
+
+  it('arrow/enter callbacks stop propagation when handled', () => {
+    const handle = createSearchInput({
+      placeholder: '',
+      value: '',
+      icon: '⌕',
+      onInput: () => {},
+      onEscape: () => {},
+      onArrowDown: () => {},
+      onEnter: () => {},
+    });
+    const input = handle.element.querySelector('.search-input-field') as HTMLInputElement;
+    const parentHandler = vi.fn();
+    handle.element.addEventListener('keydown', parentHandler);
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    expect(parentHandler).not.toHaveBeenCalled();
+  });
+
+  it('Arrow/Enter keys are ignored (and propagate) when no callback is provided', () => {
+    const handle = createSearchInput({
+      placeholder: '',
+      value: '',
+      icon: '⌕',
+      onInput: () => {},
+      onEscape: () => {},
+    });
+    const input = handle.element.querySelector('.search-input-field') as HTMLInputElement;
+    const parentHandler = vi.fn();
+    handle.element.addEventListener('keydown', parentHandler);
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    expect(parentHandler).toHaveBeenCalledTimes(2);
+  });
+
   it('container has search-input class', () => {
     const handle = createSearchInput({
       placeholder: '',

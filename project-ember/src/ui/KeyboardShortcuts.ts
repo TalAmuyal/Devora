@@ -1,5 +1,6 @@
 import { SessionManager } from '../session/SessionManager';
 import { OverlayManager } from './OverlayManager';
+import { isEditableElementFocused } from './focus';
 
 const SHIFT_SHIFT_THRESHOLD_MS = 500;
 
@@ -7,20 +8,24 @@ export class KeyboardShortcuts {
   private sessionManager: SessionManager;
   private overlayManager: OverlayManager;
   private onToggleWsHub: () => void;
+  private onOpenCommandPalette: () => void;
   private onOpenUserGuide: () => void;
 
-  private lastShiftUpTime = 0;
-  private shiftWasAlone = true;
+  // Shift-Shift detection: the time the previous lone-Shift tap was released, and whether the currently-held Shift has stayed "lone" (no other key pressed while it was down)
+  private lastShiftTapTime = 0;
+  private shiftIsLone = false;
 
   constructor(
     sessionManager: SessionManager,
     overlayManager: OverlayManager,
     onToggleWsHub: () => void,
+    onOpenCommandPalette: () => void,
     onOpenUserGuide: () => void,
   ) {
     this.sessionManager = sessionManager;
     this.overlayManager = overlayManager;
     this.onToggleWsHub = onToggleWsHub;
+    this.onOpenCommandPalette = onOpenCommandPalette;
     this.onOpenUserGuide = onOpenUserGuide;
 
     window.addEventListener('keydown', (e) => this.handleKeyDown(e), true);
@@ -28,19 +33,28 @@ export class KeyboardShortcuts {
   }
 
   private handleKeyDown(e: KeyboardEvent): void {
-    if (e.key !== 'Shift') {
-      this.shiftWasAlone = false;
+    /*
+     * Track Shift-Shift (a rapid double-tap of a lone Shift).
+     * A tap only counts if Shift was pressed and released with no other key in between.
+     * We decide "lone" on the Shift *press* (ignoring auto-repeat) rather than restoring a flag after a release — that's what makes the next double-tap fire reliably right after an intervening key, such as the Escape/q that dismisses the palette.
+     * Any non-Shift key both breaks the current press and discards a pending first tap.
+     */
+    if (e.key === 'Shift') {
+      if (!e.repeat) {
+        this.shiftIsLone = true;
+      }
+    } else {
+      this.shiftIsLone = false;
+      this.lastShiftTapTime = 0;
     }
 
-    // Use e.code (physical key) for matching, because macOS WKWebView
-    // transforms e.key into control characters when Ctrl is held.
+    // Use e.code (physical key) for matching, because macOS WKWebView transforms e.key into control characters when Ctrl is held
     const code = e.code;
     const ctrl = e.ctrlKey;
     const shift = e.shiftKey;
 
     if (e.key === 'Escape' || e.key === 'q') {
-      const tag = document.activeElement?.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
+      if (isEditableElementFocused()) {
         return;
       }
       if (this.overlayManager.dismissActiveOverlay()) {
@@ -141,20 +155,21 @@ export class KeyboardShortcuts {
   }
 
   private handleKeyUp(e: KeyboardEvent): void {
-    if (e.key === 'Shift') {
-      if (this.shiftWasAlone) {
-        const now = Date.now();
-        if (now - this.lastShiftUpTime < SHIFT_SHIFT_THRESHOLD_MS) {
-          this.lastShiftUpTime = 0;
-          this.onToggleWsHub();
-          return;
-        }
-        this.lastShiftUpTime = now;
-      }
-      this.shiftWasAlone = true;
-    } else {
-      this.shiftWasAlone = false;
+    if (e.key !== 'Shift') {
+      return;
     }
+    if (this.shiftIsLone) {
+      const now = Date.now();
+      if (now - this.lastShiftTapTime < SHIFT_SHIFT_THRESHOLD_MS) {
+        this.lastShiftTapTime = 0;
+        this.shiftIsLone = false;
+        this.onOpenCommandPalette();
+        return;
+      }
+      this.lastShiftTapTime = now;
+    }
+    // This Shift press is consumed; the next press starts a fresh candidate.
+    this.shiftIsLone = false;
   }
 
   private changeFontSize(delta: number): void {
