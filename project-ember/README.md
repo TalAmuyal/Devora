@@ -2,18 +2,16 @@
 
 Devora-Ember is an experimental variant of Devora that replaces Kitty (terminal emulator) and Glimpse-TTY (Electron-based web viewer) with Tauri (Rust desktop framework + native WebView) and xterm.js (JavaScript terminal library).
 
-This is a proof-of-concept. See `DEFERRED.md` for items out of scope.
-
 ## Key Differences from Devora OG
 
 - **No Kitty**: The app window is a Tauri WebView, not a Kitty terminal
-- **No Glimpse-TTY**: Web content (Crit UI, User Guide) renders natively in the WebView via the overlay system
+- **No Glimpse-TTY**: Web content (Crit UI, User Guide, etc.) renders natively in the WebView via the overlay system
 - **Native workspace management UI**: The Workspace Hub is a web UI overlay instead of debi's Bubble Tea TUI
 - **Overlay system**: Tab-covering overlays (Workspace Hub, User Guide, cheatsheet) and panel overlays (Crit) replace Kitty tabs and Glimpse-TTY windows
 
 ## Supported Platform
 
-macOS (Apple Silicon) only.
+macOS (Apple Silicon) only for now, but there are plans to add Linux support in the future.
 
 ## Prerequisites
 
@@ -42,7 +40,8 @@ mise test                # Run Rust tests
 
 ## Acceptance Testing
 
-Ember uses Gherkin (Given/When/Then) feature files as living documentation and automated verification. Tests drive the real app via an "eval bridge" -- a test control HTTP server that evaluates JavaScript in the WKWebView.
+Ember uses Gherkin (Given/When/Then) feature files as living documentation and automated verification.
+Tests drive the real app via an "eval bridge" -- a test control HTTP server that evaluates JavaScript in the WKWebView.
 
 ### Running tests
 
@@ -120,7 +119,8 @@ When Claude Code's behavior changes or new `@real-claude` scenarios are added:
 | Tab-covering | Yes | No | Workspace Hub, User Guide, cheatsheet |
 | Panel | No | Yes | Crit review UI |
 
-Tab-covering overlays may register an `onCleanup` hook via `showTabCoveringOverlay`; it runs on every dismissal path. Dismissing the Workspace Hub (`Escape`, `q`, or `Ctrl+S`) fully tears it down and restores terminal focus.
+Tab-covering overlays may register an `onCleanup` hook via `showTabCoveringOverlay`; it runs on every dismissal path.
+Dismissing the Workspace Hub (`Escape`, `q`, or `Ctrl+S`) fully tears it down and restores terminal focus.
 
 ## Keyboard Shortcuts
 
