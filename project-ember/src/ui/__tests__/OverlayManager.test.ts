@@ -66,6 +66,30 @@ describe('OverlayManager tab-covering cleanup hook', () => {
     expect(manager.isTabCoveringOverlayActive()).toBe(false);
   });
 
+  it('applies the optional overlayClass to the wrapper element', () => {
+    const { manager, appEl } = makeManager();
+
+    manager.showTabCoveringOverlay(
+      document.createElement('div'),
+      undefined,
+      undefined,
+      'overlay-passthrough',
+    );
+
+    const wrapper = appEl.querySelector('.overlay-tab-covering');
+    expect(wrapper).not.toBeNull();
+    expect(wrapper?.classList.contains('overlay-passthrough')).toBe(true);
+  });
+
+  it('omits any extra class when overlayClass is not provided', () => {
+    const { manager, appEl } = makeManager();
+
+    manager.showTabCoveringOverlay(document.createElement('div'));
+
+    const wrapper = appEl.querySelector('.overlay-tab-covering') as HTMLElement;
+    expect(wrapper.className).toBe('overlay-tab-covering');
+  });
+
   it('removes the overlay element from appEl on dismissal', () => {
     const { manager, appEl } = makeManager();
 
@@ -74,6 +98,29 @@ describe('OverlayManager tab-covering cleanup hook', () => {
 
     manager.dismissTabCoveringOverlay();
     expect(appEl.querySelector('.overlay-tab-covering')).toBeNull();
+  });
+});
+
+describe('OverlayManager tab-covering focus acquisition', () => {
+  it('moves keyboard focus onto the overlay wrapper when shown', () => {
+    const appEl = document.createElement('div');
+    document.body.appendChild(appEl);
+    const manager = new OverlayManager(appEl);
+
+    // Simulate the terminal textarea holding focus before the overlay opens.
+    const textarea = document.createElement('textarea');
+    document.body.appendChild(textarea);
+    textarea.focus();
+    expect(document.activeElement).toBe(textarea);
+
+    manager.showTabCoveringOverlay(document.createElement('div'));
+
+    const wrapper = appEl.querySelector('.overlay-tab-covering');
+    expect(document.activeElement).toBe(wrapper);
+
+    manager.dismissTabCoveringOverlay();
+    appEl.remove();
+    textarea.remove();
   });
 });
 

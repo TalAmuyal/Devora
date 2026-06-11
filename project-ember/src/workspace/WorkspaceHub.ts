@@ -8,6 +8,7 @@ import { createKeyboardHintBar } from '../ui/components/KeyboardHintBar';
 import { showConfirmationDialog } from '../ui/components/ConfirmationDialog';
 import { createErrorNotification } from '../ui/components/ErrorNotification';
 import { createToast, ToastHandle } from '../ui/components/Toast';
+import { isEditableElementFocused } from '../ui/focus';
 import { recordError } from '../errors';
 
 // "Refreshing…" stays visible at least this long, even when the reload is instant
@@ -475,21 +476,8 @@ export class WorkspaceHub {
     this.errorMessage = null;
   }
 
-  private isEditableElementFocused(): boolean {
-    const active = document.activeElement;
-    if (!(active instanceof HTMLElement)) {
-      return false;
-    }
-    return (
-      active.tagName === 'INPUT' ||
-      active.tagName === 'TEXTAREA' ||
-      active.tagName === 'SELECT' ||
-      active.isContentEditable
-    );
-  }
-
   private handleKeyDown(e: KeyboardEvent): void {
-    if (this.isEditableElementFocused()) {
+    if (isEditableElementFocused()) {
       return;
     }
 
@@ -1423,7 +1411,7 @@ export class WorkspaceHub {
         heading: 'Global',
         keys: [
           ['Ctrl+S', 'Toggle Workspace Hub'],
-          ['Shift Shift', 'Toggle Workspace Hub (double-tap)'],
+          ['Shift Shift', 'Open Command Palette (double-tap)'],
           ['Ctrl+Shift+S', 'New shell tab'],
           ['Ctrl+←/→', 'Switch tabs'],
           ['Ctrl+Shift+←/→', 'Reorder tabs'],

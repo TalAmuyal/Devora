@@ -16,11 +16,9 @@ export class UIDriver {
     const shiftKey = options?.shiftKey ?? false;
 
     await this.driver.eval(`
-      // Blur any focused element inside the Workspace Hub so the hub's
-      // isEditableElementFocused() guard does not swallow navigation keys —
-      // any focused input (search or the New-Task form) makes handleKeyDown
-      // return early. In the Tauri WKWebView an input can receive focus after render().
-      const panel = document.querySelector('.ws-hub');
+      // Blur any focused element inside the Workspace Hub or Command Palette so their isEditableElementFocused() guard does not swallow navigation keys — any focused input (search or the New-Task form) makes handleKeyDown return early.
+      // In the Tauri WKWebView an input can receive focus after render().
+      const panel = document.querySelector('.ws-hub, .command-palette');
       if (panel && panel.contains(document.activeElement)) {
         document.activeElement.blur();
       }
@@ -32,6 +30,22 @@ export class UIDriver {
         shiftKey: ${shiftKey},
         bubbles: true,
         cancelable: true
+      }));
+    `);
+  }
+
+  /*
+   * Dispatch a key on window WITHOUT blurring the focused element first (unlike pressKey).
+   * This faithfully exercises the real focus state, so a key handler that depends on what currently holds focus (e.g. global q/Escape, which bails when an editable element is focused) is genuinely tested.
+   */
+  async pressKeyRaw(key: string, code?: string): Promise<void> {
+    const resolvedCode = code ?? deriveCode(key);
+    await this.driver.eval(`
+      window.dispatchEvent(new KeyboardEvent('keydown', {
+        key: ${JSON.stringify(key)},
+        code: ${JSON.stringify(resolvedCode)},
+        bubbles: true,
+        cancelable: true,
       }));
     `);
   }
