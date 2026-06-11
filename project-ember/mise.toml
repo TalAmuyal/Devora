@@ -71,8 +71,25 @@ hide = true
 
 [tasks.test-e2e]
 dir = "."
-run = "mise run _cucumber -- \"${@}\""
-description = "Run Gherkin acceptance tests"
+usage = '''
+flag "-f --force" help="Rebuild the app bundle before testing, even if it is fresh"
+arg "[cucumber-args]" var=#true
+'''
+run = """
+set -e
+REPO_ROOT=$(git rev-parse --show-toplevel)
+if [ "${usage_force:-false}" = "true" ]; then
+	mise run -C "$REPO_ROOT" build-ember-app
+elif [ "${EMBER_E2E_PREBUILT:-0}" != "1" ]; then
+	if ! node --import tsx scripts/check-app-freshness.ts; then
+		echo "Rebuilding the app bundle…"
+		mise run -C "$REPO_ROOT" build-ember-app
+	fi
+fi
+eval "set -- ${usage_cucumber_args:-}"
+mise run _cucumber -- "$@"
+"""
+description = "Run Gherkin acceptance tests (verifies app-bundle freshness, rebuilds when stale; EMBER_E2E_PREBUILT=1 tests the existing artifact as-is)"
 
 [tasks.record-claude]
 dir = "."

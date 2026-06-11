@@ -2,9 +2,19 @@
 
 ### Testing philosophy
 
-- All acceptance tests must replicate user actions as closely as possible. When tests run, UI changes should look as though a real user is interacting with the app.
-- No shortcuts (like `--print`) that bypass the real user flow. Claude Code must be launched via `ccc` interactively, not via `claude --print`.
-- Use `/exit` (not Ctrl+C or Ctrl+D) to shut down Claude Code in tests -- this is the only consistent way to ensure the process exits cleanly.
+- All acceptance tests must replicate user actions as closely as possible. When tests run, UI changes should look as though a real user is interacting with the app
+- No shortcuts (like `--print`) that bypass the real user flow. Claude Code must be launched via `ccc` interactively, not via `claude --print`
+- Use `/exit` (not Ctrl+C or Ctrl+D) to shut down Claude Code in tests -- this is the only consistent way to ensure the process exits cleanly
+
+### App bundle freshness
+
+Acceptance tests run a **prebuilt** .app bundle — the frontend is embedded at build time, so a stale bundle silently tests stale code.
+`mise test-e2e` guards against this: it compares the bundle's `BUILD_FINGERPRINT` resource to a content hash of the working tree and rebuilds (`build-ember-app`) on mismatch.
+`mise test-e2e -- --force` rebuilds unconditionally (the flag must come after the `--` separator, or mise's task shorthand swallows it).
+The fingerprint has a single implementation, owned by the bundler: `bundler/macos-ember/bundle-fingerprint.sh`, whose input list is derived from `populate-app-resources.sh --list-sources`.
+Never reimplement the hash — invoke the script (see `scripts/app-bundle.ts`).
+- The harness (`tests/support/hooks.ts`) independently refuses stale/incomplete bundles and raw binaries, so even direct `_cucumber` runs are protected.
+- `EMBER_E2E_PREBUILT=1` skips all of this and tests exactly the artifact that exists (raw binaries allowed; bundle-dependent scenarios will fail).
 
 ### Cassette recording
 
