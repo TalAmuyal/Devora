@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from '../invoke';
 import { createEmptyState } from '../ui/components/EmptyState';
 import { createStatusDot } from '../ui/components/StatusDot';
 import { createBadge } from '../ui/components/Badge';
@@ -6,10 +6,8 @@ import { createSegmentedControl } from '../ui/components/SegmentedControl';
 import { createSearchInput, SearchInputHandle } from '../ui/components/SearchInput';
 import { createKeyboardHintBar } from '../ui/components/KeyboardHintBar';
 import { showConfirmationDialog } from '../ui/components/ConfirmationDialog';
-import { createErrorNotification } from '../ui/components/ErrorNotification';
 import { createToast, ToastHandle } from '../ui/components/Toast';
 import { isEditableElementFocused } from '../ui/focus';
-import { recordError } from '../errors';
 
 // "Refreshing…" stays visible at least this long, even when the reload is instant
 const REFRESH_TOAST_MIN_MS = 1000;
@@ -150,7 +148,6 @@ export class WorkspaceHub {
 
   private searchHandle: SearchInputHandle | null = null;
   private masterListEl: HTMLElement | null = null;
-  private errorMessage: string | null = null;
 
   private keyHandler = (e: KeyboardEvent) => this.handleKeyDown(e);
 
@@ -201,8 +198,8 @@ export class WorkspaceHub {
           this.loadWorkspaces(),
         ]);
         this.profiles = profiles;
-      } catch (e) {
-        console.error('Failed to load profiles:', e);
+      } catch (_) {
+        // invoke already surfaced the error
       }
       listProfilesDuration = performance.now() - listProfilesStart;
       listWorkspacesDuration = listProfilesDuration;
@@ -217,8 +214,8 @@ export class WorkspaceHub {
           this.activeProfilePath = this.profiles[0].path;
           this.updateHeader();
         }
-      } catch (e) {
-        console.error('Failed to load profiles:', e);
+      } catch (_) {
+        // invoke already surfaced the error
         this.profilesLoaded = true;
       }
       listProfilesDuration = performance.now() - listProfilesStart;
@@ -268,7 +265,6 @@ export class WorkspaceHub {
   async refresh(): Promise<void> {
     // Latest press wins: bump the token so any in-flight sequence aborts at its next checkpoint, and clear existing toasts so the new one replaces them without overlap
     const seq = ++this.refreshSeq;
-    this.errorMessage = null;
     this.removeAllToasts();
 
     const refreshingToast = createToast('Refreshing…');
@@ -284,12 +280,10 @@ export class WorkspaceHub {
         const error = await this.loadWorkspaces();
         if (error) {
           failed = true;
-          this.showError(`Failed to refresh workspaces: ${error}`);
         }
-      } catch (e) {
+      } catch (_) {
+        // invoke already surfaced the error
         failed = true;
-        const detail = e instanceof Error ? e.message : String(e);
-        this.showError(`Failed to refresh workspaces: ${detail}`);
       }
       // Superseded by a newer press or the hub closing — stop before touching the UI.
       if (seq !== this.refreshSeq) return;
@@ -305,7 +299,7 @@ export class WorkspaceHub {
       if (seq !== this.refreshSeq) return;
       this.refreshToast = null;
 
-      // Success only — a failed refresh already surfaced an error notification.
+      // Success only — a failed refresh already surfaced an error banner.
       if (failed) return;
       const doneToast = createToast('Refreshed successfully');
       this.refreshToast = doneToast;
@@ -473,7 +467,6 @@ export class WorkspaceHub {
     this.workspaces = [];
     this.profiles = [];
     this.profilingData = null;
-    this.errorMessage = null;
   }
 
   private handleKeyDown(e: KeyboardEvent): void {
@@ -643,7 +636,7 @@ export class WorkspaceHub {
       });
       return null;
     } catch (e) {
-      console.error('Failed to load workspaces:', e);
+      // invoke already surfaced the error; the message is returned for flow control
       this.workspaces = [];
       return e instanceof Error ? e.message : String(e);
     }
@@ -684,11 +677,6 @@ export class WorkspaceHub {
     }
 
     this.containerEl.appendChild(this.renderHeader());
-
-    if (this.errorMessage !== null) {
-      const notification = createErrorNotification(this.errorMessage, () => this.dismissError());
-      this.containerEl.appendChild(notification.element);
-    }
 
     if (this.showNewForm) {
       this.containerEl.appendChild(this.renderNewForm());
@@ -870,18 +858,6 @@ export class WorkspaceHub {
     return item;
   }
 
-  private showError(message: string): void {
-    this.errorMessage = message;
-    recordError(message);
-    invoke('log_error', { level: 'ERROR', message }).catch(() => {});
-    this.render();
-  }
-
-  private dismissError(): void {
-    this.errorMessage = null;
-    this.render();
-  }
-
   private async handleRemoveTask(ws: WorkspaceInfo): Promise<void> {
     const cached = this.statusCache.get(ws.id);
     const isClean =
@@ -939,8 +915,8 @@ export class WorkspaceHub {
 
     try {
       await invoke('remove_task', { workspacePath: ws.path });
-    } catch (e) {
-      this.showError(`Failed to remove task: ${e}`);
+    } catch (_) {
+      // invoke already surfaced the error
       return;
     }
 
@@ -953,8 +929,8 @@ export class WorkspaceHub {
   private async handleDeleteWorkspace(ws: WorkspaceInfo): Promise<void> {
     try {
       await invoke('delete_workspace', { workspacePath: ws.path });
-    } catch (e) {
-      this.showError(`Failed to delete workspace: ${e}`);
+    } catch (_) {
+      // invoke already surfaced the error
       return;
     }
 
@@ -1238,8 +1214,8 @@ export class WorkspaceHub {
         this.availableRepos = await invoke<RepoInfo[]>('get_registered_repos', {
           profilePath: this.activeProfilePath,
         });
-      } catch (e) {
-        console.error('Failed to load repos:', e);
+      } catch (_) {
+        // invoke already surfaced the error
         this.availableRepos = [];
       }
     }
@@ -1326,8 +1302,8 @@ export class WorkspaceHub {
         this.render();
         const repoNames = repoPaths.map((p) => p.split('/').pop() ?? p);
         this.onCreateWorkspace(created.path, taskName, repoNames);
-      } catch (e) {
-        console.error('Failed to create workspace:', e);
+      } catch (_) {
+        // invoke already surfaced the error; the form stays open
       }
     });
 
@@ -1369,8 +1345,8 @@ export class WorkspaceHub {
         this.profilingSaved = true;
         btn.textContent = `Saved! ${savedPath}`;
         btn.classList.add('ws-profiling-saved');
-      } catch (e) {
-        console.error('Failed to save profiling report:', e);
+      } catch (_) {
+        // invoke already surfaced the error
         this.profilingError = true;
         btn.textContent = 'Save failed';
         btn.classList.add('ws-profiling-error');

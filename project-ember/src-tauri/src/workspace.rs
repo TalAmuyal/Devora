@@ -211,7 +211,10 @@ pub fn list_profiles() -> Result<Vec<ProfileInfo>, String> {
     Ok(result)
 }
 
-pub fn list_workspaces(profile_path: &str) -> Result<Vec<WorkspaceInfo>, String> {
+pub fn list_workspaces(
+    profile_path: &str,
+    warnings: &mut Vec<String>,
+) -> Result<Vec<WorkspaceInfo>, String> {
     let workspaces_dir = Path::new(profile_path).join("workspaces");
     if !workspaces_dir.exists() {
         return Ok(Vec::new());
@@ -248,7 +251,11 @@ pub fn list_workspaces(profile_path: &str) -> Result<Vec<WorkspaceInfo>, String>
                     .and_then(|v| v.as_str())
                     .unwrap_or("")
                     .to_string(),
-                Err(_) => String::new(),
+                Err(e) => {
+                    // The workspace is still listed (with an empty title), but the corrupt task.json must not go unnoticed
+                    warnings.push(e);
+                    String::new()
+                }
             }
         } else {
             String::new()
@@ -341,6 +348,7 @@ const MAX_CONCURRENT_GIT: usize = 5;
 
 pub fn get_all_workspace_statuses(
     workspaces: Vec<WorkspaceStatusInput>,
+    warnings: &mut Vec<String>,
 ) -> Result<BatchWorkspaceStatusResult, String> {
     use std::sync::{Arc, Condvar, Mutex};
     use std::time::Instant;
@@ -402,7 +410,9 @@ pub fn get_all_workspace_statuses(
                     }
                 }
             }
-            Err(_) => {}
+            Err(_) => {
+                warnings.push("thread panicked while getting repo status".to_string());
+            }
         }
     }
     let thread_join_ms = join_start.elapsed().as_secs_f64() * 1000.0;
@@ -600,10 +610,37 @@ fn mise_available() -> bool {
         .unwrap_or(false)
 }
 
+fn run_mise_trust(worktree_path: &Path) -> Result<(), String> {
+    let output = Command::new("mise")
+        .args(["trust"])
+        .current_dir(worktree_path)
+        .output()
+        .map_err(|e| format!("failed to spawn mise trust: {e}"))?;
+    if output.status.success() {
+        return Ok(());
+    }
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    Err(format!("mise trust exited with {}: {}", output.status, stderr.trim()))
+}
+
+fn run_prepare_command(prepare_cmd: &str, worktree_path: &Path) -> Result<(), String> {
+    let output = Command::new("sh")
+        .args(["-c", prepare_cmd])
+        .current_dir(worktree_path)
+        .output()
+        .map_err(|e| format!("failed to spawn prepare-command: {e}"))?;
+    if output.status.success() {
+        return Ok(());
+    }
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    Err(format!("prepare-command exited with {}: {}", output.status, stderr.trim()))
+}
+
 pub fn create_workspace(
     profile_path: &str,
     repo_paths: Vec<String>,
     task_name: &str,
+    warnings: &mut Vec<String>,
 ) -> Result<CreatedWorkspace, String> {
     let profile_dir = Path::new(profile_path);
     let workspaces_dir = profile_dir.join("workspaces");
@@ -690,12 +727,11 @@ pub fn create_workspace(
                 ));
             }
 
-            // Run mise trust if available
+            // Run mise trust if available — non-fatal, but the failure is reported
             if mise_available() {
-                let _ = Command::new("mise")
-                    .args(["trust"])
-                    .current_dir(&worktree_path)
-                    .output();
+                if let Err(e) = run_mise_trust(&worktree_path) {
+                    warnings.push(format!("{repo_name}: {e}"));
+                }
             }
         }
 
@@ -712,10 +748,10 @@ pub fn create_workspace(
                             .unwrap_or_default();
                         let worktree_path = ws_path.join(&repo_name);
                         if worktree_path.exists() {
-                            let _ = Command::new("sh")
-                                .args(["-c", prepare_cmd])
-                                .current_dir(&worktree_path)
-                                .output();
+                            // Non-fatal, but the failure is reported
+                            if let Err(e) = run_prepare_command(prepare_cmd, &worktree_path) {
+                                warnings.push(format!("{repo_name}: {e}"));
+                            }
                         }
                     }
                 }
@@ -1029,8 +1065,43 @@ mod tests {
     #[test]
     fn test_list_workspaces_empty() {
         let tmp = tempfile::tempdir().unwrap();
-        let result = list_workspaces(&tmp.path().to_string_lossy()).unwrap();
+        let result = list_workspaces(&tmp.path().to_string_lossy(), &mut Vec::new()).unwrap();
         assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_list_workspaces_malformed_task_json_pushes_warning() {
+        let tmp = tempfile::tempdir().unwrap();
+        let ws1 = tmp.path().join("workspaces").join("ws-1");
+        fs::create_dir_all(&ws1).unwrap();
+        fs::write(ws1.join("initialized"), "").unwrap();
+        fs::write(ws1.join("task.json"), "{not json").unwrap();
+
+        let mut warnings = Vec::new();
+        let result = list_workspaces(&tmp.path().to_string_lossy(), &mut warnings).unwrap();
+
+        // The workspace is still listed (active, with an empty title)…
+        assert_eq!(result.len(), 1);
+        assert!(result[0].active);
+        assert_eq!(result[0].task_title, "");
+
+        // …but the parse failure is reported instead of swallowed.
+        assert_eq!(warnings.len(), 1);
+        assert!(warnings[0].contains("failed to parse"), "warning: {}", warnings[0]);
+        assert!(warnings[0].contains("task.json"), "warning: {}", warnings[0]);
+    }
+
+    #[test]
+    fn test_run_prepare_command_success() {
+        let tmp = tempfile::tempdir().unwrap();
+        assert!(run_prepare_command("true", tmp.path()).is_ok());
+    }
+
+    #[test]
+    fn test_run_prepare_command_failure_returns_stderr() {
+        let tmp = tempfile::tempdir().unwrap();
+        let err = run_prepare_command("echo boom >&2; exit 1", tmp.path()).unwrap_err();
+        assert!(err.contains("boom"), "error: {err}");
     }
 
     #[test]
@@ -1058,7 +1129,7 @@ mod tests {
         let ws3 = ws_dir.join("ws-3");
         fs::create_dir_all(&ws3).unwrap();
 
-        let result = list_workspaces(&tmp.path().to_string_lossy()).unwrap();
+        let result = list_workspaces(&tmp.path().to_string_lossy(), &mut Vec::new()).unwrap();
         assert_eq!(result.len(), 2);
 
         assert_eq!(result[0].id, "ws-1");
