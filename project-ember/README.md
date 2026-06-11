@@ -46,9 +46,14 @@ Tests drive the real app via an "eval bridge" -- a test control HTTP server that
 ### Running tests
 
 ```
-mise test-e2e        # Run acceptance tests
-mise record-claude   # Record Claude Code API cassettes (requires real API key)
+mise test-e2e            # Run acceptance tests (rebuilds the app bundle if stale)
+mise test-e2e -- --force # Rebuild the app bundle first, even if it is fresh
+mise record-claude       # Record Claude Code API cassettes (requires real API key)
 ```
+
+The tests run a **prebuilt** app bundle (the frontend is embedded at build time).
+`test-e2e` therefore compares the bundle's `BUILD_FINGERPRINT` resource against a content hash of the working tree (computed by `bundler/macos-ember/bundle-fingerprint.sh`) and rebuilds via `build-ember-app` on mismatch.
+Set `EMBER_E2E_PREBUILT=1` to skip all freshness/completeness checks and test exactly the artifact that exists (also permits a raw `target/release` binary, whose bundle-dependent scenarios will fail).
 
 ### Tags
 

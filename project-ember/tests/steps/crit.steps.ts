@@ -241,30 +241,50 @@ When(
       30_000,
     );
 
-    // Click the button with retry + verification. WKWebView may not process
-    // the click if the iframe isn't the active frame, so we retry up to 3
-    // times, checking for an observable state change after each attempt.
+    /*
+    Click the button with retry + verification.
+    WKWebView may not process the click if the iframe isn't the active frame, so we retry up to 3 times, checking for an observable state change after each attempt.
+    A fast approve closes the whole overlay before the transient state is observable, so the overlay disappearing after a click also counts as submitted -- re-clicking into the closed overlay would throw.
+    */
     const MAX_CLICK_ATTEMPTS = 3;
     let submitted = false;
 
-    for (let attempt = 0; attempt < MAX_CLICK_ATTEMPTS && !submitted; attempt++) {
-      // Click #finishBtn
-      await evalInOverlay(
-        this.driver,
-        `
-          if (document.activeElement && (document.activeElement.tagName === 'TEXTAREA' || document.activeElement.tagName === 'INPUT')) {
-            document.activeElement.blur();
-          }
-          const btn = document.getElementById('finishBtn');
-          if (!btn) throw new Error('finishBtn not found');
-          btn.click();
-          return true;
-        `,
+    const overlayGone = async (): Promise<boolean> => {
+      const present = await this.driver.eval(
+        `return document.querySelector('.web-content-iframe') !== null`,
       );
+      return !present;
+    };
 
-      // Check if the click triggered a state change: either the waiting
-      // overlay appeared (#waitingOverlay.active) or the no-changes
-      // confirmation dialog appeared (#noChangesOverlay.active)
+    for (let attempt = 0; attempt < MAX_CLICK_ATTEMPTS && !submitted; attempt++) {
+      if (await overlayGone()) {
+        submitted = true;
+        break;
+      }
+
+      // Click #finishBtn
+      try {
+        await evalInOverlay(
+          this.driver,
+          `
+            if (document.activeElement && (document.activeElement.tagName === 'TEXTAREA' || document.activeElement.tagName === 'INPUT')) {
+              document.activeElement.blur();
+            }
+            const btn = document.getElementById('finishBtn');
+            if (!btn) throw new Error('finishBtn not found');
+            btn.click();
+            return true;
+          `,
+        );
+      } catch (err) {
+        if (await overlayGone()) {
+          submitted = true;
+          break;
+        }
+        throw err;
+      }
+
+      // Check if the click triggered a state change: either the waiting overlay appeared (#waitingOverlay.active) or the no-changes confirmation dialog appeared (#noChangesOverlay.active)
       try {
         await pollInOverlay(
           this.driver,
@@ -281,13 +301,14 @@ When(
         );
         submitted = true;
       } catch {
-        // Click didn't trigger a state change — retry
+        if (await overlayGone()) {
+          submitted = true;
+        }
+        // Otherwise the click didn't trigger a state change -- retry
       }
     }
 
-    // If clicks didn't work, fall back to calling fetch('/api/finish') from
-    // within the iframe's JS context (same origin, same effect as the button
-    // handler, just bypassing the DOM click)
+    // If clicks didn't work, fall back to calling fetch('/api/finish') from within the iframe's JS context (same origin, same effect as the button handler, just bypassing the DOM click)
     if (!submitted) {
       await evalInOverlay(
         this.driver,
@@ -322,8 +343,7 @@ When(
       // no-changes overlay not present — expected path
     }
 
-    // Wait for the overlay to close. The crit process may exit after
-    // /api/finish (wrapper sends /crit/done), or it may stay alive.
+    // Wait for the overlay to close. The crit process may exit after /api/finish (wrapper sends /crit/done), or it may stay alive.
     const sessionId = await this.driver.eval(
       'return window.__test.sessionManager.getActiveSessionId()',
     );

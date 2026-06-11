@@ -3,15 +3,20 @@ import { spawn, ChildProcess } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import {
+  DEFAULT_BUNDLE_DIR,
+  assertBundleComplete,
+  computeCurrentFingerprint,
+  findAppBundle,
+  findRawBinary,
+  readBundleFingerprint,
+} from '../../scripts/app-bundle';
 import { AppDriver } from './app-driver';
 import { FakeClaudeServer, STRUCTURED_LOG_BASE_DIR } from './fake-claude-server';
 import { cleanupWorkspace, stopClaudeCode } from './claude-helper';
 import { assertOriginalCritAvailable } from './crit-helper';
 import { cleanupFixtures, writeTestConfig } from './fixture-helper';
 import { EmberWorld } from './world';
-
-const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
 let appProcess: ChildProcess | null = null;
 let testHarnessPort: number | null = null;
@@ -21,40 +26,56 @@ let testConfigPath: string | null = null;
 let testConfigDir: string | null = null;
 const CLAUDE_CONFIG_PATH = '/tmp/ember-bdd-claude';
 
-function findAppBundleBinary(bundleDir: string): string | null {
-  if (!fs.existsSync(bundleDir)) return null;
-  const appDirs = fs.readdirSync(bundleDir).filter((e) => e.endsWith('.app'));
-  if (appDirs.length === 0) return null;
-  if (appDirs.length > 1) {
+/*
+ * Resolve the app binary to test, refusing artifacts that would make the run meaningless: a bundle whose BUILD_FINGERPRINT does not match the working tree (tests would silently exercise stale code), an incomplete bundle, or a raw binary (no bundled-apps/, so Claude/Crit scenarios fail confusingly).
+ * EMBER_E2E_PREBUILT=1 opts out of all checks: test exactly what exists.
+ */
+function findAppBinary(): string {
+  const prebuilt = process.env.EMBER_E2E_PREBUILT === '1';
+  const bundle = findAppBundle();
+
+  if (bundle) {
+    if (prebuilt) {
+      console.warn(
+        `EMBER_E2E_PREBUILT=1 -- testing ${bundle.appDir} as-is (freshness and completeness not verified)`,
+      );
+      return bundle.binaryPath;
+    }
+    const builtFingerprint = readBundleFingerprint(bundle.resourcesDir);
+    const currentFingerprint = computeCurrentFingerprint();
+    if (builtFingerprint !== currentFingerprint) {
+      throw new Error(
+        `App bundle at ${bundle.appDir} is stale: its fingerprint ` +
+          `(${builtFingerprint?.slice(0, 12) ?? 'missing'}) does not match the working tree ` +
+          `(${currentFingerprint.slice(0, 12)}…). Run \`mise test-e2e\` (auto-rebuilds) ` +
+          'or set EMBER_E2E_PREBUILT=1 to test it as-is.',
+      );
+    }
+    assertBundleComplete(bundle.resourcesDir);
+    console.log(`Testing ${bundle.appDir} (fingerprint ${currentFingerprint.slice(0, 12)}…)`);
+    return bundle.binaryPath;
+  }
+
+  const rawBinary = findRawBinary();
+  if (!rawBinary) {
     throw new Error(
-      `Multiple .app bundles found in ${bundleDir}: ${appDirs.join(', ')}. ` +
-        'Delete stale bundles and rebuild.',
+      `App binary not found: no .app bundle in ${DEFAULT_BUNDLE_DIR} and no raw binary in ` +
+        'src-tauri/target/{release,debug}. Run `mise test-e2e` (auto-rebuilds) or ' +
+        '`mise run build-ember-app` at the repo root.',
     );
   }
-  const binary = path.join(bundleDir, appDirs[0], 'Contents', 'MacOS', 'devora-ember');
-  return fs.existsSync(binary) ? binary : null;
-}
-
-function findAppBinary(): string {
-  // Prefer bundled .app (has bundled-apps/ directory)
-  const bundleSearchDirs = [
-    path.resolve(PROJECT_ROOT, '../../bin/macOS-dev'),
-    path.join(PROJECT_ROOT, 'src-tauri/target/release/bundle/macos'),
-  ];
-  for (const dir of bundleSearchDirs) {
-    const binary = findAppBundleBinary(dir);
-    if (binary) return binary;
+  if (!prebuilt) {
+    throw new Error(
+      `No app bundle found in ${DEFAULT_BUNDLE_DIR} (only a raw binary at ${rawBinary}). ` +
+        'Run `mise test-e2e` (auto-rebuilds), or set EMBER_E2E_PREBUILT=1 to test the raw ' +
+        'binary -- bundled-apps/ will be unavailable, so Claude/Crit scenarios will fail.',
+    );
   }
-
-  // Fall back to raw binaries (no bundled-apps/ available)
-  const releasePath = path.join(PROJECT_ROOT, 'src-tauri/target/release/devora-ember');
-  const debugPath = path.join(PROJECT_ROOT, 'src-tauri/target/debug/devora-ember');
-  if (fs.existsSync(releasePath)) return releasePath;
-  if (fs.existsSync(debugPath)) return debugPath;
-  throw new Error(
-    `App binary not found. Searched for .app bundles in [${bundleSearchDirs.join(', ')}] ` +
-      `and raw binaries at ${releasePath}, ${debugPath}. Run "cargo tauri build" first.`,
+  console.warn(
+    `EMBER_E2E_PREBUILT=1 -- testing raw binary ${rawBinary}; bundled-apps/ is unavailable, ` +
+      'so Claude/Crit scenarios will fail',
   );
+  return rawBinary;
 }
 
 async function waitForReady(port: number, timeoutMs: number): Promise<void> {
