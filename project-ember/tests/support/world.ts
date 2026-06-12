@@ -12,6 +12,7 @@ export class EmberWorld extends World {
   testConfigPath?: string;
   stopAutoApprove?: () => void;
   lastKeyDefaultPrevented?: boolean;
+  originalTaskUid?: string;
 }
 
 setWorldConstructor(EmberWorld);

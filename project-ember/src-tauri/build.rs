@@ -14,6 +14,8 @@ fn main() {
                 "get_default_app",
                 "create_workspace",
                 "remove_task",
+                "prepare_repurpose_task",
+                "repurpose_task",
                 "delete_workspace",
                 "save_profiling_report",
                 "log_error",

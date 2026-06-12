@@ -17,9 +17,14 @@ export class SessionManager {
     this.onChangeCallback = callback;
   }
 
-  async createSession(title: string = 'Shell', cwd?: string, appCommand?: string): Promise<SessionTab> {
+  async createSession(
+    title: string = 'Shell',
+    cwd?: string,
+    appCommand?: string,
+    workspacePath: string | null = null,
+  ): Promise<SessionTab> {
     const id = this.nextId++;
-    const session = new SessionTab(id, title);
+    const session = new SessionTab(id, title, workspacePath);
 
     session.onTitleChange((_id, _title) => {
       this.onChangeCallback?.();

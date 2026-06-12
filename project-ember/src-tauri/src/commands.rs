@@ -149,6 +149,18 @@ pub fn remove_task(workspace_path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+pub fn prepare_repurpose_task(
+    workspace_path: String,
+) -> Result<workspace::RepurposeContext, String> {
+    workspace::prepare_repurpose_task(&workspace_path)
+}
+
+#[tauri::command]
+pub fn repurpose_task(workspace_path: String, new_title: String) -> Result<(), String> {
+    workspace::repurpose_task(&workspace_path, &new_title)
+}
+
+#[tauri::command]
 pub fn delete_workspace(workspace_path: String) -> Result<(), String> {
     workspace::delete_workspace(&workspace_path)
 }

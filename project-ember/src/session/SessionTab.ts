@@ -3,15 +3,17 @@ import { TerminalPane } from '../terminal/TerminalPane';
 export class SessionTab {
   readonly id: number;
   title: string;
+  readonly workspacePath: string | null; // null for sessions not tied to a workspace (plain shells)
   readonly containerEl: HTMLElement;
   readonly terminalPane: TerminalPane;
   panelOverlayEl: HTMLElement | null = null; // for panel overlay tied to this tab
 
   private onTitleChangeCallback?: (id: number, title: string) => void;
 
-  constructor(id: number, title: string) {
+  constructor(id: number, title: string, workspacePath: string | null) {
     this.id = id;
     this.title = title;
+    this.workspacePath = workspacePath;
 
     // Create a container div for this session's content
     this.containerEl = document.createElement('div');
@@ -29,6 +31,12 @@ export class SessionTab {
 
   onTitleChange(callback: (id: number, title: string) => void): void {
     this.onTitleChangeCallback = callback;
+  }
+
+  /** Programmatic rename; fires the same pipeline as terminal-emitted title changes. */
+  setTitle(title: string): void {
+    this.title = title;
+    this.onTitleChangeCallback?.(this.id, title);
   }
 
   onExit(callback: () => void): void {

@@ -68,6 +68,12 @@ pub struct CreatedWorkspace {
     pub name: String,
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RepurposeContext {
+    pub current_title: String,
+}
+
 fn home_dir() -> Result<PathBuf, String> {
     std::env::var("HOME")
         .map(PathBuf::from)
@@ -245,12 +251,8 @@ pub fn list_workspaces(
         let active = task_path.exists();
 
         let task_title = if active {
-            match read_json_file(&task_path) {
-                Ok(task) => task
-                    .get("title")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("")
-                    .to_string(),
+            match read_task_title(&task_path) {
+                Ok(title) => title,
                 Err(e) => {
                     // The workspace is still listed (with an empty title), but the corrupt task.json must not go unnoticed
                     warnings.push(e);
@@ -763,15 +765,7 @@ pub fn create_workspace(
             .map_err(|e| format!("failed to write initialized marker: {e}"))?;
 
         // Write task.json
-        let task = serde_json::json!({
-            "uid": Uuid::new_v4().to_string(),
-            "title": task_name,
-            "started_at": date_format("%Y-%m-%d"),
-        });
-        let task_json = serde_json::to_string_pretty(&task)
-            .map_err(|e| format!("failed to serialize task.json: {e}"))?;
-        fs::write(ws_path.join("task.json"), task_json)
-            .map_err(|e| format!("failed to write task.json: {e}"))?;
+        write_task_json(&ws_path, task_name)?;
 
         // Write CLAUDE.md template if more than one repo
         if repo_paths.len() > 1 {
@@ -859,6 +853,92 @@ pub fn remove_task(workspace_path: &str) -> Result<(), String> {
         .map_err(|e| format!("failed to delete task.json: {e}"))?;
 
     Ok(())
+}
+
+fn read_task_title(task_path: &Path) -> Result<String, String> {
+    read_json_file(task_path).map(|task| {
+        task.get("title")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string()
+    })
+}
+
+fn write_task_json(ws_path: &Path, title: &str) -> Result<(), String> {
+    let task = serde_json::json!({
+        "uid": Uuid::new_v4().to_string(),
+        "title": title,
+        "started_at": date_format("%Y-%m-%d"),
+    });
+    let task_json = serde_json::to_string_pretty(&task)
+        .map_err(|e| format!("failed to serialize task.json: {e}"))?;
+    fs::write(ws_path.join("task.json"), task_json)
+        .map_err(|e| format!("failed to write task.json: {e}"))
+}
+
+/// Errors unless every repo worktree is idle: clean (no modified or untracked files) and on a detached HEAD.
+/// The error lists each offending repo on a single line (the error banner collapses newlines).
+fn ensure_no_active_work(ws_dir: &Path) -> Result<(), String> {
+    let mut blockers = Vec::new();
+
+    for repo_name in list_repo_subdirs(ws_dir) {
+        let status = get_single_repo_status(&repo_name, &ws_dir.join(&repo_name))?;
+
+        let mut reasons = Vec::new();
+        if !status.is_detached {
+            reasons.push(format!(
+                "on branch '{}' (expected detached HEAD)",
+                status.branch
+            ));
+        }
+        if status.modified > 0 {
+            reasons.push(format!("{} modified", status.modified));
+        }
+        if status.untracked > 0 {
+            reasons.push(format!("{} untracked", status.untracked));
+        }
+
+        if !reasons.is_empty() {
+            blockers.push(format!("{repo_name}: {}", reasons.join(", ")));
+        }
+    }
+
+    if blockers.is_empty() {
+        Ok(())
+    } else {
+        Err(format!(
+            "workspace not ready for a new task — {}",
+            blockers.join("; ")
+        ))
+    }
+}
+
+fn active_task_path(workspace_path: &str) -> Result<PathBuf, String> {
+    let ws_dir = Path::new(workspace_path);
+    if !ws_dir.exists() {
+        return Err(format!("workspace path does not exist: {workspace_path}"));
+    }
+    let task_path = ws_dir.join("task.json");
+    if !task_path.exists() {
+        return Err(format!(
+            "no active task in workspace (task.json not found): {workspace_path}"
+        ));
+    }
+    Ok(task_path)
+}
+
+pub fn prepare_repurpose_task(workspace_path: &str) -> Result<RepurposeContext, String> {
+    let task_path = active_task_path(workspace_path)?;
+    ensure_no_active_work(Path::new(workspace_path))?;
+    let current_title = read_task_title(&task_path)?;
+    Ok(RepurposeContext { current_title })
+}
+
+pub fn repurpose_task(workspace_path: &str, new_title: &str) -> Result<(), String> {
+    active_task_path(workspace_path)?;
+    let ws_dir = Path::new(workspace_path);
+    ensure_no_active_work(ws_dir)?;
+    write_task_json(ws_dir, new_title)
 }
 
 pub fn delete_workspace(workspace_path: &str) -> Result<(), String> {
@@ -1348,5 +1428,167 @@ mod tests {
 
         assert_eq!(result.statuses.len(), 1);
         assert_eq!(result.statuses[0].name, "repo-a");
+    }
+
+    /// Creates a git repo with one committed file, optionally on a detached HEAD.
+    fn init_committed_repo(repo_dir: &Path, detach: bool) {
+        fs::create_dir_all(repo_dir).unwrap();
+        let run = |args: &[&str]| {
+            let out = Command::new("git")
+                .args(args)
+                .current_dir(repo_dir)
+                .output()
+                .unwrap();
+            assert!(
+                out.status.success(),
+                "git {args:?} failed: {}",
+                String::from_utf8_lossy(&out.stderr)
+            );
+        };
+        run(&["init"]);
+        fs::write(repo_dir.join("tracked.txt"), "content\n").unwrap();
+        run(&["add", "tracked.txt"]);
+        run(&[
+            "-c",
+            "user.name=test",
+            "-c",
+            "user.email=test@test",
+            "commit",
+            "-m",
+            "init",
+        ]);
+        if detach {
+            run(&["checkout", "--detach"]);
+        }
+    }
+
+    const TEST_TASK_JSON: &str =
+        r#"{"uid":"old-uid","title":"Old task","started_at":"2026-01-01"}"#;
+
+    #[test]
+    fn test_prepare_repurpose_task_returns_current_title() {
+        let tmp = tempfile::tempdir().unwrap();
+        init_committed_repo(&tmp.path().join("repo-a"), true);
+        fs::write(tmp.path().join("task.json"), TEST_TASK_JSON).unwrap();
+
+        let context = prepare_repurpose_task(&tmp.path().to_string_lossy()).unwrap();
+        assert_eq!(context.current_title, "Old task");
+    }
+
+    #[test]
+    fn test_prepare_repurpose_task_errors_without_task_json() {
+        let tmp = tempfile::tempdir().unwrap();
+        init_committed_repo(&tmp.path().join("repo-a"), true);
+
+        let err = prepare_repurpose_task(&tmp.path().to_string_lossy()).unwrap_err();
+        assert!(err.contains("no active task"), "error: {err}");
+    }
+
+    #[test]
+    fn test_prepare_repurpose_task_blocks_on_untracked_file() {
+        let tmp = tempfile::tempdir().unwrap();
+        let repo = tmp.path().join("repo-a");
+        init_committed_repo(&repo, true);
+        fs::write(repo.join("scratch.txt"), "wip\n").unwrap();
+        fs::write(tmp.path().join("task.json"), TEST_TASK_JSON).unwrap();
+
+        let err = prepare_repurpose_task(&tmp.path().to_string_lossy()).unwrap_err();
+        assert!(err.contains("repo-a: 1 untracked"), "error: {err}");
+        assert!(err.contains("not ready for a new task"), "error: {err}");
+    }
+
+    #[test]
+    fn test_prepare_repurpose_task_blocks_on_modified_file() {
+        let tmp = tempfile::tempdir().unwrap();
+        let repo = tmp.path().join("repo-a");
+        init_committed_repo(&repo, true);
+        fs::write(repo.join("tracked.txt"), "changed\n").unwrap();
+        fs::write(tmp.path().join("task.json"), TEST_TASK_JSON).unwrap();
+
+        let err = prepare_repurpose_task(&tmp.path().to_string_lossy()).unwrap_err();
+        assert!(err.contains("repo-a: 1 modified"), "error: {err}");
+    }
+
+    #[test]
+    fn test_prepare_repurpose_task_blocks_on_attached_branch() {
+        let tmp = tempfile::tempdir().unwrap();
+        let repo = tmp.path().join("repo-a");
+        init_committed_repo(&repo, false);
+        let out = Command::new("git")
+            .args(["checkout", "-b", "wip"])
+            .current_dir(&repo)
+            .output()
+            .unwrap();
+        assert!(out.status.success());
+        fs::write(tmp.path().join("task.json"), TEST_TASK_JSON).unwrap();
+
+        let err = prepare_repurpose_task(&tmp.path().to_string_lossy()).unwrap_err();
+        assert!(
+            err.contains("repo-a: on branch 'wip' (expected detached HEAD)"),
+            "error: {err}"
+        );
+    }
+
+    #[test]
+    fn test_prepare_repurpose_task_aggregates_multiple_repos() {
+        let tmp = tempfile::tempdir().unwrap();
+        let repo_a = tmp.path().join("repo-a");
+        init_committed_repo(&repo_a, true);
+        fs::write(repo_a.join("scratch.txt"), "wip\n").unwrap();
+        let repo_b = tmp.path().join("repo-b");
+        init_committed_repo(&repo_b, false);
+        let out = Command::new("git")
+            .args(["checkout", "-b", "wip"])
+            .current_dir(&repo_b)
+            .output()
+            .unwrap();
+        assert!(out.status.success());
+        fs::write(tmp.path().join("task.json"), TEST_TASK_JSON).unwrap();
+
+        let err = prepare_repurpose_task(&tmp.path().to_string_lossy()).unwrap_err();
+        assert!(err.contains("repo-a: 1 untracked"), "error: {err}");
+        assert!(err.contains("repo-b: on branch 'wip'"), "error: {err}");
+        assert!(err.contains("; "), "error: {err}");
+    }
+
+    #[test]
+    fn test_repurpose_task_writes_new_task_identity() {
+        let tmp = tempfile::tempdir().unwrap();
+        init_committed_repo(&tmp.path().join("repo-a"), true);
+        fs::write(tmp.path().join("task.json"), TEST_TASK_JSON).unwrap();
+
+        repurpose_task(&tmp.path().to_string_lossy(), "Follow-up task").unwrap();
+
+        let task = read_json_file(&tmp.path().join("task.json")).unwrap();
+        assert_eq!(task.get("title").unwrap().as_str().unwrap(), "Follow-up task");
+
+        let uid = task.get("uid").unwrap().as_str().unwrap();
+        assert_ne!(uid, "old-uid");
+        assert_eq!(uid.len(), 36, "uid should be a uuid: {uid}");
+
+        let started_at = task.get("started_at").unwrap().as_str().unwrap();
+        assert_eq!(started_at.len(), 10, "started_at: {started_at}");
+        for (i, c) in started_at.chars().enumerate() {
+            if i == 4 || i == 7 {
+                assert_eq!(c, '-', "started_at: {started_at}");
+            } else {
+                assert!(c.is_ascii_digit(), "started_at: {started_at}");
+            }
+        }
+    }
+
+    #[test]
+    fn test_repurpose_task_revalidates_and_leaves_task_untouched() {
+        let tmp = tempfile::tempdir().unwrap();
+        let repo = tmp.path().join("repo-a");
+        init_committed_repo(&repo, true);
+        fs::write(repo.join("scratch.txt"), "wip\n").unwrap();
+        fs::write(tmp.path().join("task.json"), TEST_TASK_JSON).unwrap();
+
+        let err = repurpose_task(&tmp.path().to_string_lossy(), "Follow-up task").unwrap_err();
+        assert!(err.contains("repo-a: 1 untracked"), "error: {err}");
+
+        let task_content = fs::read_to_string(tmp.path().join("task.json")).unwrap();
+        assert_eq!(task_content, TEST_TASK_JSON);
     }
 }

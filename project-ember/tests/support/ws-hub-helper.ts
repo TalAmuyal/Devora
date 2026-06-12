@@ -2,10 +2,14 @@ import { AppDriver } from './app-driver';
 import { UIDriver } from './ui-driver';
 
 export async function ensureWsHubOpen(driver: AppDriver): Promise<void> {
+  // The cleanup callback mirrors production (main.ts openWsHub): without it, any dismissal leaks the hub's window keydown listener, which then swallows keys (e.g. Enter) meant for later overlays.
   await driver.eval(`
     if (!window.__test.overlayManager.isTabCoveringOverlayActive()) {
       await window.__test.wsHub.load();
-      window.__test.overlayManager.showTabCoveringOverlay(window.__test.wsHub.getElement());
+      window.__test.overlayManager.showTabCoveringOverlay(
+        window.__test.wsHub.getElement(),
+        () => window.__test.wsHub.unload(),
+      );
     }
   `);
   await driver.pollFor(
@@ -21,7 +25,10 @@ export async function startWsHubLoad(driver: AppDriver): Promise<void> {
     window.__test.overlayManager.dismissTabCoveringOverlay();
     window.__test.wsHub.activeProfilePath = null;
     window.__test.wsHub.load();
-    window.__test.overlayManager.showTabCoveringOverlay(window.__test.wsHub.getElement());
+    window.__test.overlayManager.showTabCoveringOverlay(
+      window.__test.wsHub.getElement(),
+      () => window.__test.wsHub.unload(),
+    );
   `);
   await driver.pollFor(
     `return document.querySelector('.ws-hub') !== null`,
@@ -45,7 +52,10 @@ export async function reloadWsHub(driver: AppDriver): Promise<void> {
     window.__test.overlayManager.dismissTabCoveringOverlay();
     window.__test.wsHub.activeProfilePath = null;
     await window.__test.wsHub.load();
-    window.__test.overlayManager.showTabCoveringOverlay(window.__test.wsHub.getElement());
+    window.__test.overlayManager.showTabCoveringOverlay(
+      window.__test.wsHub.getElement(),
+      () => window.__test.wsHub.unload(),
+    );
   `);
   await driver.pollFor(
     `return document.querySelector('.ws-master-item') !== null
