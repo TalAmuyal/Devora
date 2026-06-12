@@ -6,6 +6,7 @@ import { TabBar } from './ui/TabBar';
 import { OverlayManager } from './ui/OverlayManager';
 import { KeyboardShortcuts } from './ui/KeyboardShortcuts';
 import { CommandPalette } from './ui/CommandPalette';
+import { showTextInputDialog } from './ui/components/TextInputDialog';
 import { WorkspaceHub } from './workspace/WorkspaceHub';
 import { WebContentOverlay } from './webview/WebContentOverlay';
 import {
@@ -76,9 +77,35 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const cwd = repos.length === 1 ? `${wsPath}/${repos[0]}` : wsPath;
     try {
-      await sessionManager.createSession(title, cwd, appCommand);
+      await sessionManager.createSession(title, cwd, appCommand, wsPath);
     } catch (e) {
       showError(`Failed to create session: ${e}`);
+    }
+  };
+
+  // Swap the active session's task for a new one in the same workspace: validate the worktrees are idle, prompt for the new task name (pre-filled with the current one), write the new task identity, and rename the tab.
+  const repurposeCurrentSession = async () => {
+    // Capture the session up front so a mid-dialog tab switch cannot retarget the rename
+    const session = sessionManager.getActiveSession();
+    if (!session?.workspacePath) {
+      showError('Cannot repurpose: the current session has no associated workspace');
+      return;
+    }
+    try {
+      const { currentTitle } = await invoke<{ currentTitle: string }>(
+        'prepare_repurpose_task',
+        { workspacePath: session.workspacePath },
+      );
+      const newTitle = await showTextInputDialog({
+        title: 'Repurpose Workspace',
+        initialValue: currentTitle,
+        confirmLabel: 'Repurpose',
+      });
+      if (newTitle === null) return;
+      await invoke('repurpose_task', { workspacePath: session.workspacePath, newTitle });
+      session.setTitle(newTitle);
+    } catch (_) {
+      // invoke already surfaced the error
     }
   };
 
@@ -132,7 +159,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         description: 'Open a fresh shell tab',
         icon: '❯',
         shortcut: ['⌃', '⇧', 'S'],
-        run: closePaletteThen(() => void sessionManager.createSession()),
+        run: closePaletteThen(() => void sessionManager.createSession('Shell', undefined, undefined, null)),
+      },
+      {
+        id: 'repurpose-session',
+        title: 'Repurpose Current Session',
+        description: 'Replace the finished task with a new one in the same workspace',
+        icon: '↻',
+        shortcut: [],
+        run: closePaletteThen(() => void repurposeCurrentSession()),
       },
     ],
   });

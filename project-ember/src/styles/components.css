@@ -243,6 +243,96 @@
   opacity: 0.85;
 }
 
+/* TextInputDialog */
+
+.text-input-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(24, 25, 38, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.text-input-dialog {
+  background: var(--color-bg-overlay);
+  border: 1px solid var(--color-border);
+  border-radius: var(--tab-border-radius);
+  width: 400px;
+  max-width: 90vw;
+  padding: var(--space-xl);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.text-input-dialog-title {
+  font-family: var(--font-ui);
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  color: var(--color-fg);
+}
+
+.text-input-dialog-input {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--color-bg);
+  color: var(--color-fg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--tab-border-radius);
+  padding: var(--space-sm) var(--space-md);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-md);
+}
+
+.text-input-dialog-input:focus {
+  outline: 0.133rem solid var(--color-focus-ring);
+  outline-offset: -0.133rem;
+  border-color: var(--color-border-active);
+}
+
+.text-input-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+  margin-top: var(--space-sm);
+}
+
+.text-input-dialog-cancel {
+  background: transparent;
+  color: var(--color-fg-secondary);
+  border: none;
+  border-radius: var(--tab-border-radius);
+  padding: var(--space-sm) var(--space-md);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-md);
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+.text-input-dialog-cancel:hover {
+  color: var(--color-fg);
+}
+
+.text-input-dialog-confirm {
+  background: var(--color-accent);
+  color: var(--color-crust);
+  border: none;
+  border-radius: var(--tab-border-radius);
+  padding: var(--space-sm) var(--space-md);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-md);
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.text-input-dialog-confirm:hover {
+  opacity: 0.85;
+}
+
 /* ErrorNotification */
 
 .ws-error-notification {

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-prepare-repurpose-task"
+description = "Enables the prepare_repurpose_task command without any pre-configured scope."
+commands.allow = ["prepare_repurpose_task"]
+
+[[permission]]
+identifier = "deny-prepare-repurpose-task"
+description = "Denies the prepare_repurpose_task command without any pre-configured scope."
+commands.deny = ["prepare_repurpose_task"]

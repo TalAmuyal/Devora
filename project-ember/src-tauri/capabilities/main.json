@@ -24,6 +24,8 @@
     "allow-crit-overlay-dismissed",
     "allow---test-report",
     "allow-remove-task",
+    "allow-prepare-repurpose-task",
+    "allow-repurpose-task",
     "allow-delete-workspace"
   ]
 }

@@ -4,6 +4,7 @@
 	- Overlay system: tab-bar-covering overlays (Workspace Hub, User Guide) and session overlays (Crit review UI tied to session tabs)
 	- Dynamic theme loading from `kitty-configs/current-theme.conf` via CSS custom properties
 	- User Guide rendered as themed markdown overlay (F1)
-	- Command Palette: a searchable overlay of actions (commands: Workspace Hub, New Shell), with a filter box, `j`/`k`/arrow navigation, and `Enter` to run
+	- Command Palette: a searchable overlay of actions (commands: Workspace Hub, New Shell, Repurpose Current Session), with a filter box, `j`/`k`/arrow navigation, and `Enter` to run
+		- Repurpose Current Session: replace the finished task with a new one (fresh uid and start date) in the same workspace; requires all worktrees to be clean and on a detached HEAD, and leaves them untouched
 	- New keybindings:
 		- Shift+Shift (rapid double-tap) opens the Command Palette
