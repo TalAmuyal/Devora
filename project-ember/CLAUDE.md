@@ -72,11 +72,16 @@ Cassettes are stored as gzip-compressed JSON at `tests/support/fixtures/cassette
 
 ## Error Handling
 
-**Non-recoverable errors**: The default and recommended way to handle non-recoverable errors is to:
-1. Log the error to a file at `/tmp/devora-ember-<TS>.log`
-2. Show a persistent notification UI to the user that does not self-dismiss — the user must explicitly dismiss it
+There is ONE sanctioned path per side (see ADR-002); errors are surfaced to the user by default:
 
-This pattern ensures errors are both auditable (via log files) and visible to the user (via the notification).
+- **TS**: call `invoke` from `src/invoke.ts` (never `@tauri-apps/api/core` directly — a unit test enforces this). A rejected command automatically calls `showError` (`src/errors.ts`): the error is recorded for test scraping, written to the log file at `/tmp/devora-ember-<TS>.log`, and shown as a persistent banner the user must explicitly dismiss.
+- **TS opt-out**: `invokeLogOnly` (same module) for high-frequency or gracefully-degrading commands — log-file WARN only, no banner. Fire-and-forget callers must append `.catch(() => {})`.
+- **TS, non-invoke errors**: call `showError(message)` directly.
+- **Rust**: call `logging::report_error(app, message)` — writes to the log file and emits the `app-error` event, which the frontend shows via the same banner. Pure functions in `workspace.rs` collect non-fatal failures into a `warnings: &mut Vec<String>` out-parameter; the command layer forwards them to `report_error`.
+
+This keeps errors auditable (log file), visible (banner), and test-asserted (the BDD After-hook fails any scenario with unexpected recorded errors).
+
+Every new Tauri command must be registered in `lib.rs`, `build.rs`, and `capabilities/main.json`; `src-tauri/tests/acl_completeness.rs` fails if the three lists drift.
 
 ## Reusable UI Components
 

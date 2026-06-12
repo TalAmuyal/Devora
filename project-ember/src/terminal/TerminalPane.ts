@@ -5,7 +5,7 @@ import { Unicode11Addon } from '@xterm/addon-unicode11';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { ClipboardAddon } from '@xterm/addon-clipboard';
 import { SearchAddon } from '@xterm/addon-search';
-import { invoke, Channel } from '@tauri-apps/api/core';
+import { invoke, invokeLogOnly, Channel } from '../invoke';
 
 function getThemeFromCSS(): ITheme {
   const style = getComputedStyle(document.documentElement);
@@ -153,7 +153,7 @@ export class TerminalPane {
     try {
       this.ptyId = await invoke<number>('create_pty', params);
     } catch (e) {
-      console.error('Failed to create PTY:', e);
+      // invoke already surfaced the error; also show it inside the pane itself
       this.terminal.write(`\r\nFailed to create PTY: ${e}\r\n`);
       return;
     }
@@ -161,16 +161,17 @@ export class TerminalPane {
     const encoder = new TextEncoder();
 
     this.terminal.onData((data: string) => {
-      invoke('write_pty', {
+      // Fires per keystroke — a banner per failure would flood the UI
+      invokeLogOnly('write_pty', {
         id: this.ptyId,
         data: Array.from(encoder.encode(data)),
-      }).catch((e: unknown) => console.error('write_pty failed:', e));
+      }).catch(() => {});
     });
 
     this.terminal.onResize(({ cols, rows }: { cols: number; rows: number }) => {
       if (this.ptyId !== null) {
-        invoke('resize_pty', { id: this.ptyId, cols, rows })
-          .catch((e: unknown) => console.error('resize_pty failed:', e));
+        // Fires on every resize tick — a banner per failure would flood the UI
+        invokeLogOnly('resize_pty', { id: this.ptyId, cols, rows }).catch(() => {});
       }
     });
 
@@ -218,9 +219,8 @@ export class TerminalPane {
     }
 
     if (this.ptyId !== null) {
-      invoke('close_pty', { id: this.ptyId }).catch((e) => {
-        console.warn('Failed to close PTY:', e);
-      });
+      // Dispose path — failure is benign (the PTY may already be dead)
+      invokeLogOnly('close_pty', { id: this.ptyId }).catch(() => {});
       this.ptyId = null;
     }
 

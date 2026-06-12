@@ -84,9 +84,15 @@ pub fn list_profiles() -> Result<Vec<workspace::ProfileInfo>, String> {
 
 #[tauri::command]
 pub fn list_workspaces(
+    app: tauri::AppHandle,
     profile_path: String,
 ) -> Result<Vec<workspace::WorkspaceInfo>, String> {
-    workspace::list_workspaces(&profile_path)
+    let mut warnings = Vec::new();
+    let result = workspace::list_workspaces(&profile_path, &mut warnings);
+    for warning in &warnings {
+        crate::logging::report_error(&app, warning);
+    }
+    result
 }
 
 #[tauri::command]
@@ -99,9 +105,15 @@ pub fn get_workspace_status(
 
 #[tauri::command]
 pub fn get_all_workspace_statuses(
+    app: tauri::AppHandle,
     workspaces: Vec<workspace::WorkspaceStatusInput>,
 ) -> Result<workspace::BatchWorkspaceStatusResult, String> {
-    workspace::get_all_workspace_statuses(workspaces)
+    let mut warnings = Vec::new();
+    let result = workspace::get_all_workspace_statuses(workspaces, &mut warnings);
+    for warning in &warnings {
+        crate::logging::report_error(&app, warning);
+    }
+    result
 }
 
 #[tauri::command]
@@ -118,11 +130,17 @@ pub fn get_default_app(profile_path: String) -> Result<Option<String>, String> {
 
 #[tauri::command]
 pub fn create_workspace(
+    app: tauri::AppHandle,
     profile_path: String,
     repo_paths: Vec<String>,
     task_name: String,
 ) -> Result<workspace::CreatedWorkspace, String> {
-    workspace::create_workspace(&profile_path, repo_paths, &task_name)
+    let mut warnings = Vec::new();
+    let result = workspace::create_workspace(&profile_path, repo_paths, &task_name, &mut warnings);
+    for warning in &warnings {
+        crate::logging::report_error(&app, warning);
+    }
+    result
 }
 
 #[tauri::command]

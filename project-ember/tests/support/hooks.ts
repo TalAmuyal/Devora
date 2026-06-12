@@ -188,6 +188,11 @@ BeforeAll(async function () {
   testHarnessPort = ports.testHarness;
 
   await waitForReady(testHarnessPort, 30_000);
+
+  // /test/ready only proves the harness HTTP server is up; the frontend may still be inside its DOMContentLoaded handler.
+  // Wait until the app exposes its test namespace so the first scenario cannot race app initialization.
+  const driver = new AppDriver(testHarnessPort, ipcPort);
+  await driver.pollFor("return typeof window.__test !== 'undefined'", true, 30_000);
 });
 
 Before(async function (this: EmberWorld) {
@@ -270,6 +275,14 @@ After(async function (this: EmberWorld) {
 
   if (this.workspacePath) {
     cleanupWorkspace(this.workspacePath);
+  }
+
+  // The app instance is shared across scenarios — leftover banners must not leak into the next scenario's DOM assertions.
+  // (Clearing banners does not clear the scrape list, so the check below still catches unexpected errors.)
+  try {
+    await this.driver.eval('window.__test.clearErrorBanners?.()');
+  } catch {
+    // app may not have fully loaded
   }
 
   if (this.driver) {

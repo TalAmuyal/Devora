@@ -120,10 +120,16 @@ async fn handle_request(
                 }
             }
 
-            let _ = app_handle.emit("crit-close-overlay", CritOpenOverlayPayload {
+            let close_payload = CritOpenOverlayPayload {
                 pty_id: req_body.pty_id,
                 url: String::new(),
-            });
+            };
+            if app_handle.emit("crit-close-overlay", close_payload).is_err() {
+                crate::logging::report_error(
+                    &app_handle,
+                    &format!("failed to emit crit-close-overlay for pty {}", req_body.pty_id),
+                );
+            }
 
             Ok(http_util::json_response(StatusCode::OK, &CritDoneResponse { ok: true }))
         }
@@ -157,7 +163,13 @@ pub fn start(app_handle: AppHandle) -> IpcState {
         loop {
             let (stream, _addr) = match listener.accept().await {
                 Ok(conn) => conn,
-                Err(_) => continue,
+                Err(e) => {
+                    crate::logging::report_error(
+                        &app_handle,
+                        &format!("IPC server accept failed: {e}"),
+                    );
+                    continue;
+                }
             };
 
             let io = hyper_util::rt::TokioIo::new(stream);

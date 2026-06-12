@@ -42,6 +42,7 @@ ADRs document significant architectural decisions. They are stored in `docs/adrs
 When making a new architectural decision, create a new ADR file following the format of existing ones and add it to this list.
 
 - [ADR-001: Ember Acceptance Testing Framework](docs/adrs/ADR-001-ember-bdd-testing-framework.md) — Eval bridge + Gherkin acceptance tests + Fake Claude API for testing the Tauri app
+- [ADR-002: Ember Centralized Error Reporting](docs/adrs/ADR-002-ember-centralized-error-reporting.md) — Single showError/report_error path, invoke wrapper with surfaced-by-default errors, ACL completeness test
 
 ## Vision
 

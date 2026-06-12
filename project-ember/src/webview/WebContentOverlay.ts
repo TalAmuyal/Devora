@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { invokeLogOnly } from '../invoke';
 import { marked } from 'marked';
 
 export class WebContentOverlay {
@@ -20,7 +20,8 @@ export class WebContentOverlay {
     body.className = 'web-content-body';
 
     try {
-      const markdown = await invoke<string>('read_text_file', { path: filePath });
+      // The failure is rendered inline below, so a banner would be redundant
+      const markdown = await invokeLogOnly<string>('read_text_file', { path: filePath });
       body.innerHTML = await marked(markdown);
     } catch (e) {
       body.textContent = `Failed to load: ${e}`;

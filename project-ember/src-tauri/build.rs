@@ -13,6 +13,8 @@ fn main() {
                 "get_registered_repos",
                 "get_default_app",
                 "create_workspace",
+                "remove_task",
+                "delete_workspace",
                 "save_profiling_report",
                 "log_error",
                 "read_text_file",

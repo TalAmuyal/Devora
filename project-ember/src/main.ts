@@ -1,6 +1,6 @@
 import '@xterm/xterm/css/xterm.css';
-import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+import { invoke, invokeLogOnly } from './invoke';
 import { SessionManager } from './session/SessionManager';
 import { TabBar } from './ui/TabBar';
 import { OverlayManager } from './ui/OverlayManager';
@@ -8,45 +8,33 @@ import { KeyboardShortcuts } from './ui/KeyboardShortcuts';
 import { CommandPalette } from './ui/CommandPalette';
 import { WorkspaceHub } from './workspace/WorkspaceHub';
 import { WebContentOverlay } from './webview/WebContentOverlay';
-import { scrapeErrors } from './errors';
+import {
+  clearErrorBanners,
+  installGlobalErrorHandlers,
+  logToFile,
+  scrapeErrors,
+  showError,
+} from './errors';
 
-function logToFile(level: string, message: string): void {
-  invoke('log_error', { level, message }).catch(() => {});
-}
-
-window.addEventListener('error', (e) => {
-  logToFile('ERROR', `${e.message} at ${e.filename}:${e.lineno}:${e.colno}\n${e.error?.stack ?? ''}`);
-});
-
-window.addEventListener('unhandledrejection', (e) => {
-  logToFile('ERROR', `Unhandled rejection: ${e.reason}`);
-});
-
-const origConsoleError = console.error.bind(console);
-console.error = (...args: unknown[]) => {
-  origConsoleError(...args);
-  logToFile('ERROR', args.map(String).join(' '));
-};
-
-const origConsoleWarn = console.warn.bind(console);
-console.warn = (...args: unknown[]) => {
-  origConsoleWarn(...args);
-  logToFile('WARN', args.map(String).join(' '));
-};
+installGlobalErrorHandlers();
 
 (window as any).__scrapeErrors = scrapeErrors;
 
 document.addEventListener('DOMContentLoaded', async () => {
-  // Load theme early, before creating any terminals or UI, so CSS custom
-  // properties are set before first render.
+  // Surface Rust-side errors (logging::report_error) before anything else can emit one, so the window where app-error events are missed is minimal
+  await listen<{ message: string }>('app-error', (event) => {
+    showError(event.payload.message);
+  });
+
+  // Load theme early, before creating any terminals or UI, so CSS custom properties are set before first render
   try {
-    const theme = await invoke<Record<string, string>>('get_theme');
+    const theme = await invokeLogOnly<Record<string, string>>('get_theme');
     const root = document.documentElement;
     for (const [prop, value] of Object.entries(theme)) {
       root.style.setProperty(prop, value);
     }
-  } catch (e) {
-    console.warn('Failed to load theme, using CSS defaults:', e);
+  } catch (_) {
+    // fall back to CSS defaults
   }
 
   const appEl = document.getElementById('app')!;
@@ -77,7 +65,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     let appCommand: string | undefined;
     if (profilePath) {
       try {
-        const defaultApp = await invoke<string | null>('get_default_app', { profilePath });
+        const defaultApp = await invokeLogOnly<string | null>('get_default_app', { profilePath });
         if (defaultApp && defaultApp !== 'shell') {
           appCommand = defaultApp;
         }
@@ -90,7 +78,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     try {
       await sessionManager.createSession(title, cwd, appCommand);
     } catch (e) {
-      logToFile('ERROR', `Failed to create session: ${e}`);
+      showError(`Failed to create session: ${e}`);
     }
   };
 
@@ -175,8 +163,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         undefined,
         sessionManager.getActiveSession()?.terminalPane,
       );
-    } catch (e) {
-      console.error('Failed to open User Guide:', e);
+    } catch (_) {
+      // invoke already surfaced the error
     }
   };
 
@@ -227,9 +215,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       const ptyId = session?.getPtyId();
 
       if (ptyId !== null && ptyId !== undefined) {
-        invoke('crit_overlay_dismissed', { ptyId }).catch((e: unknown) => {
-          logToFile('WARN', `crit_overlay_dismissed failed: ${e}`);
-        });
+        invokeLogOnly('crit_overlay_dismissed', { ptyId }).catch(() => {});
       }
 
       tabBar.render();
@@ -248,5 +234,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     commandPalette,
     openCommandPalette,
     toggleWsHub,
+    showError,
+    clearErrorBanners,
   };
 });
