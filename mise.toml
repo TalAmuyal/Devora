@@ -1,5 +1,6 @@
 [tools]
 shellcheck = "latest"
+rust = "latest"
 "cargo:tauri-cli" = "2.11.1"
 
 [tasks.build]
