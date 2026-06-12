@@ -110,6 +110,7 @@ copy_required "$REPO_ROOT/project-judge/cc-plugin"            "$BUNDLED_CC_PLUGI
 copy_required "$REPO_ROOT/project-judge/main.py"              "$BUNDLED_CC_PLUGINS_DIR/judge/."
 copy_required "$REPO_ROOT/project-detached-flow/cc-plugin"    "$BUNDLED_CC_PLUGINS_DIR/detached-flow"
 copy_required "$REPO_ROOT/project-team-work/cc-plugin"        "$BUNDLED_CC_PLUGINS_DIR/team-work"
+copy_required "$REPO_ROOT/project-crit-integration/cc-plugin" "$BUNDLED_CC_PLUGINS_DIR/crit-integration"
 copy_required "$THIRD_PARTY_APPS_DIR/claude-code"             "$BUNDLED_CC_PLUGINS_DIR/crit"
 
 # --- Resources ---
