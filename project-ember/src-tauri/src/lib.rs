@@ -2,6 +2,7 @@ mod commands;
 mod http_util;
 mod ipc_server;
 mod logging;
+mod profile;
 mod pty;
 mod test_harness;
 mod theme;
@@ -61,6 +62,7 @@ pub fn run() {
     }));
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .manage(Mutex::new(pty::PtyManager::new()))
         .manage(logging::LogState::new(&log_path))
         .setup(|app| {
@@ -118,6 +120,9 @@ pub fn run() {
             commands::close_pty,
             commands::crit_overlay_dismissed,
             commands::list_profiles,
+            commands::register_profile,
+            commands::unregister_profile,
+            commands::validate_profile_path,
             commands::list_workspaces,
             commands::get_workspace_status,
             commands::get_all_workspace_statuses,

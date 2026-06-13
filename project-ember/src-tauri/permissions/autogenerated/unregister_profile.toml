@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-unregister-profile"
+description = "Enables the unregister_profile command without any pre-configured scope."
+commands.allow = ["unregister_profile"]
+
+[[permission]]
+identifier = "deny-unregister-profile"
+description = "Denies the unregister_profile command without any pre-configured scope."
+commands.deny = ["unregister_profile"]

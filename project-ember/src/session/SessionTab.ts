@@ -4,16 +4,23 @@ export class SessionTab {
   readonly id: number;
   title: string;
   readonly workspacePath: string | null; // null for sessions not tied to a workspace (plain shells)
+  readonly profilePath: string | null; // profile the workspace belongs to; null for plain shells
   readonly containerEl: HTMLElement;
   readonly terminalPane: TerminalPane;
   panelOverlayEl: HTMLElement | null = null; // for panel overlay tied to this tab
 
   private onTitleChangeCallback?: (id: number, title: string) => void;
 
-  constructor(id: number, title: string, workspacePath: string | null) {
+  constructor(
+    id: number,
+    title: string,
+    workspacePath: string | null,
+    profilePath: string | null = null,
+  ) {
     this.id = id;
     this.title = title;
     this.workspacePath = workspacePath;
+    this.profilePath = profilePath;
 
     // Create a container div for this session's content
     this.containerEl = document.createElement('div');

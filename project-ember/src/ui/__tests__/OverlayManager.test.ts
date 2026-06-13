@@ -101,6 +101,92 @@ describe('OverlayManager tab-covering cleanup hook', () => {
   });
 });
 
+describe('OverlayManager tab-covering user-dismiss override', () => {
+  it('invokes the override instead of dismissing on dismissActiveOverlay', () => {
+    const { manager } = makeManager();
+    const cleanup = vi.fn();
+    const onUserDismiss = vi.fn();
+
+    manager.showTabCoveringOverlay(
+      document.createElement('div'),
+      cleanup,
+      undefined,
+      undefined,
+      onUserDismiss,
+    );
+    const handled = manager.dismissActiveOverlay();
+
+    expect(handled).toBe(true);
+    expect(onUserDismiss).toHaveBeenCalledOnce();
+    expect(cleanup).not.toHaveBeenCalled();
+    expect(manager.isTabCoveringOverlayActive()).toBe(true);
+  });
+
+  it('dismissTabCoveringOverlay force-dismisses despite an override', () => {
+    const { manager } = makeManager();
+    const cleanup = vi.fn();
+    const onUserDismiss = vi.fn();
+
+    manager.showTabCoveringOverlay(
+      document.createElement('div'),
+      cleanup,
+      undefined,
+      undefined,
+      onUserDismiss,
+    );
+    manager.dismissTabCoveringOverlay();
+
+    expect(onUserDismiss).not.toHaveBeenCalled();
+    expect(cleanup).toHaveBeenCalledOnce();
+    expect(manager.isTabCoveringOverlayActive()).toBe(false);
+  });
+
+  it('lets the override replace the overlay with another one', () => {
+    const { manager } = makeManager();
+    const firstCleanup = vi.fn();
+    const secondCleanup = vi.fn();
+    const onUserDismiss = vi.fn(() => {
+      manager.showTabCoveringOverlay(document.createElement('div'), secondCleanup);
+    });
+
+    manager.showTabCoveringOverlay(
+      document.createElement('div'),
+      firstCleanup,
+      undefined,
+      undefined,
+      onUserDismiss,
+    );
+    manager.dismissActiveOverlay();
+
+    expect(firstCleanup).toHaveBeenCalledOnce();
+    expect(secondCleanup).not.toHaveBeenCalled();
+    expect(manager.isTabCoveringOverlayActive()).toBe(true);
+
+    // The replacement overlay has no override, so the next user dismissal closes it.
+    manager.dismissActiveOverlay();
+    expect(secondCleanup).toHaveBeenCalledOnce();
+    expect(manager.isTabCoveringOverlayActive()).toBe(false);
+  });
+
+  it('clears the override when the overlay is replaced', () => {
+    const { manager } = makeManager();
+    const onUserDismiss = vi.fn();
+
+    manager.showTabCoveringOverlay(
+      document.createElement('div'),
+      undefined,
+      undefined,
+      undefined,
+      onUserDismiss,
+    );
+    manager.showTabCoveringOverlay(document.createElement('div'));
+    manager.dismissActiveOverlay();
+
+    expect(onUserDismiss).not.toHaveBeenCalled();
+    expect(manager.isTabCoveringOverlayActive()).toBe(false);
+  });
+});
+
 describe('OverlayManager tab-covering focus acquisition', () => {
   it('moves keyboard focus onto the overlay wrapper when shown', () => {
     const appEl = document.createElement('div');

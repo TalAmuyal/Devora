@@ -8,6 +8,7 @@ import { KeyboardShortcuts } from './ui/KeyboardShortcuts';
 import { CommandPalette } from './ui/CommandPalette';
 import { showTextInputDialog } from './ui/components/TextInputDialog';
 import { WorkspaceHub } from './workspace/WorkspaceHub';
+import { ProfileManager, ProfileManagerView } from './workspace/ProfileManager';
 import { WebContentOverlay } from './webview/WebContentOverlay';
 import {
   clearErrorBanners,
@@ -77,7 +78,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const cwd = repos.length === 1 ? `${wsPath}/${repos[0]}` : wsPath;
     try {
-      await sessionManager.createSession(title, cwd, appCommand, wsPath);
+      await sessionManager.createSession(title, cwd, appCommand, wsPath, profilePath ?? null);
     } catch (e) {
       showError(`Failed to create session: ${e}`);
     }
@@ -113,6 +114,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     (path, title, repos) => openWorkspace(path, title, repos, wsHub.getActiveProfilePath()),
     (path, title, repos) => openWorkspace(path, title, repos, wsHub.getActiveProfilePath()),
     dismissWsHub,
+    (view) => openProfileManager(view),
   );
 
   const teardownWsHub = () => {
@@ -125,16 +127,41 @@ document.addEventListener('DOMContentLoaded', async () => {
       wsHub.getElement(),
       teardownWsHub,
       sessionManager.getActiveSession()?.terminalPane,
+      undefined,
+      // User dismissal (q/Esc/Ctrl+S) goes through the hub so it can close its cheatsheet first and refuse while zero-profile locked.
+      () => wsHub.handleUserDismiss(),
     );
   };
 
   const toggleWsHub = () => {
     if (commandPaletteOpen) return;
     if (overlayManager.isTabCoveringOverlayActive()) {
-      dismissWsHub();
+      // Respect the active overlay's user-dismiss override (zero-profile lock, Profile-Manager-back-to-hub) instead of force-dismissing.
+      overlayManager.dismissActiveOverlay();
     } else {
       openWsHub();
     }
+  };
+
+  const profileManager = new ProfileManager({
+    getActiveProfilePath: () => wsHub.getActiveProfilePath(),
+    setActiveProfilePath: (path) => wsHub.setActiveProfilePath(path),
+    getOpenSessionsForProfile: (profilePath) =>
+      sessionManager.getSessions().filter((s) => s.profilePath === profilePath),
+    onClose: () => openWsHub(),
+  });
+
+  const openProfileManager = (view: ProfileManagerView = 'list') => {
+    if (commandPaletteOpen) return;
+    void profileManager.load(view);
+    overlayManager.showTabCoveringOverlay(
+      profileManager.getElement(),
+      () => profileManager.unload(),
+      null,
+      undefined,
+      // q/Esc/Ctrl+S on the Profile Manager returns to the Workspace Hub (showTabCoveringOverlay replaces this overlay and runs its cleanup).
+      () => openWsHub(),
+    );
   };
 
   // Every palette command closes the palette (the active tab-covering overlay) before acting
@@ -169,7 +196,41 @@ document.addEventListener('DOMContentLoaded', async () => {
         shortcut: [],
         run: closePaletteThen(() => void repurposeCurrentSession()),
       },
+      {
+        id: 'new-profile',
+        title: 'New Profile',
+        description: 'Create or register a profile root directory',
+        icon: '＋',
+        shortcut: [],
+        run: closePaletteThen(() => openProfileManager('new')),
+      },
+      {
+        id: 'manage-profiles',
+        title: 'Manage Profiles',
+        description: 'List, switch, create, and delete profiles',
+        icon: '⚙',
+        shortcut: [],
+        run: closePaletteThen(() => openProfileManager('list')),
+      },
     ],
+    // One "Switch Profile: X" entry per non-active profile, re-resolved on every palette open so it tracks registrations and the active profile.
+    dynamicCommands: async () => {
+      const profiles = await invokeLogOnly<{ name: string; path: string }[]>('list_profiles');
+      const activePath = wsHub.getActiveProfilePath();
+      return profiles
+        .filter((p) => p.path !== activePath)
+        .map((p) => ({
+          id: `switch-profile:${p.path}`,
+          title: `Switch Profile: ${p.name}`,
+          description: p.path,
+          icon: '⇄',
+          shortcut: [],
+          run: closePaletteThen(() => {
+            wsHub.setActiveProfilePath(p.path);
+            openWsHub();
+          }),
+        }));
+    },
   });
 
   const teardownPalette = () => {
@@ -197,6 +258,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         content,
         undefined,
         sessionManager.getActiveSession()?.terminalPane,
+        undefined,
+        // Opened over the zero-profile welcome there is nothing behind the guide — return to the hub instead of an empty terminal area.
+        () => {
+          if (wsHub.isZeroProfileLocked()) {
+            openWsHub();
+          } else {
+            overlayManager.dismissTabCoveringOverlay();
+          }
+        },
       );
     } catch (_) {
       // invoke already surfaced the error
@@ -266,6 +336,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     overlayManager,
     tabBar,
     wsHub,
+    profileManager,
+    openProfileManager,
     commandPalette,
     openCommandPalette,
     toggleWsHub,

@@ -1,3 +1,6 @@
+[settings]
+experimental = true # Required for the 'deps' feature in sub-project tasks (mise run -C ...)
+
 [tools]
 shellcheck = "latest"
 rust = "latest"

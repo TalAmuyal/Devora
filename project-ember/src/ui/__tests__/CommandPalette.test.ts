@@ -49,6 +49,89 @@ function selectedTitle(): string | null {
   );
 }
 
+function makeCommand(id: string, title: string, run = vi.fn()): Command {
+  return { id, title, description: `${title} description`, icon: '◇', shortcut: [], run };
+}
+
+const flushPromises = async (): Promise<void> => {
+  await Promise.resolve();
+  await Promise.resolve();
+};
+
+describe('CommandPalette dynamic commands', () => {
+  afterEach(() => {
+    document.body.innerHTML = '';
+  });
+
+  it('appends resolved dynamic commands after the static ones', async () => {
+    const palette = new CommandPalette({
+      commands: [makeCommand('static', 'Static Command')],
+      dynamicCommands: async () => [makeCommand('dynamic', 'Switch Profile: Personal')],
+    });
+    document.body.appendChild(palette.getElement());
+    palette.load();
+
+    expect(items()).toHaveLength(1);
+    await flushPromises();
+
+    const rows = items();
+    expect(rows).toHaveLength(2);
+    expect(rows[1].querySelector('.command-palette-item-title')?.textContent).toBe(
+      'Switch Profile: Personal',
+    );
+    palette.unload();
+  });
+
+  it('re-resolves dynamic commands on every load', async () => {
+    const provider = vi.fn(async () => [makeCommand('dynamic', 'Dynamic')]);
+    const palette = new CommandPalette({
+      commands: [makeCommand('static', 'Static Command')],
+      dynamicCommands: provider,
+    });
+    document.body.appendChild(palette.getElement());
+
+    palette.load();
+    await flushPromises();
+    palette.unload();
+    palette.load();
+    await flushPromises();
+
+    expect(provider).toHaveBeenCalledTimes(2);
+    palette.unload();
+  });
+
+  it('discards a resolution that lands after unload', async () => {
+    let resolveProvider!: (commands: Command[]) => void;
+    const palette = new CommandPalette({
+      commands: [makeCommand('static', 'Static Command')],
+      dynamicCommands: () => new Promise((resolve) => (resolveProvider = resolve)),
+    });
+    document.body.appendChild(palette.getElement());
+    palette.load();
+    palette.unload();
+
+    resolveProvider([makeCommand('dynamic', 'Too Late')]);
+    await flushPromises();
+
+    expect(document.querySelectorAll('.command-palette-item')).toHaveLength(0);
+  });
+
+  it('keeps the static list when the provider rejects', async () => {
+    const palette = new CommandPalette({
+      commands: [makeCommand('static', 'Static Command')],
+      dynamicCommands: async () => {
+        throw new Error('boom');
+      },
+    });
+    document.body.appendChild(palette.getElement());
+    palette.load();
+    await flushPromises();
+
+    expect(items()).toHaveLength(1);
+    palette.unload();
+  });
+});
+
 describe('CommandPalette', () => {
   let s: Setup;
 

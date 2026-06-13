@@ -1,0 +1,523 @@
+/**
+ * Profile Manager: a tab-covering overlay page (master/detail split, mirroring the Workspace Hub) for listing profiles, switching the active one, creating/registering new profiles (inline form behind a pinned "New Profile…" master row), and deleting profiles from the registry.
+ * DOM: `div.profile-manager`.
+ *
+ * q/Esc never reach this page directly — KeyboardShortcuts routes user dismissal through the overlay's onUserDismiss override, which main.ts wires to "return to the Workspace Hub".
+ */
+
+import { invoke } from '../invoke';
+import { createBadge } from '../ui/components/Badge';
+import { createStatusDot } from '../ui/components/StatusDot';
+import { createKeyboardHintBar } from '../ui/components/KeyboardHintBar';
+import { showConfirmationDialog } from '../ui/components/ConfirmationDialog';
+import { createTableShell } from '../ui/components/TableShell';
+import { isEditableElementFocused } from '../ui/focus';
+import { pluralize } from '../ui/format';
+import { createProfileForm } from './ProfileForm';
+import { ProfileInfo, RepoInfo, WorkspaceInfo } from './types';
+
+interface ProfileDetail {
+  repos: RepoInfo[];
+  workspaceCount: number;
+  activeTaskCount: number;
+}
+
+export type ProfileManagerView = 'list' | 'new';
+
+export interface ProfileManagerCallbacks {
+  getActiveProfilePath: () => string | undefined;
+  setActiveProfilePath: (path: string | null) => void;
+  /** Open session tabs bound to the given profile (blockers for deletion). */
+  getOpenSessionsForProfile: (profilePath: string) => ReadonlyArray<{ title: string }>;
+  /** Leave the Profile Manager (main.ts reopens the Workspace Hub). */
+  onClose: () => void;
+}
+
+export class ProfileManager {
+  private containerEl: HTMLElement;
+  private callbacks: ProfileManagerCallbacks;
+
+  private profiles: ProfileInfo[] = [];
+  private loaded = false;
+  /** Index into profiles; `profiles.length` is the pinned "New Profile…" row. */
+  private focusedIndex = 0;
+  private detailCache: Map<string, ProfileDetail> = new Map();
+  private detailSeq = 0;
+
+  private keyHandler = (e: KeyboardEvent) => this.handleKeyDown(e);
+
+  constructor(callbacks: ProfileManagerCallbacks) {
+    this.callbacks = callbacks;
+    this.containerEl = document.createElement('div');
+    this.containerEl.className = 'profile-manager';
+  }
+
+  getElement(): HTMLElement {
+    return this.containerEl;
+  }
+
+  async load(view: ProfileManagerView = 'list'): Promise<void> {
+    window.addEventListener('keydown', this.keyHandler, true);
+    this.loaded = false;
+    this.profiles = [];
+    this.detailCache.clear();
+    this.focusedIndex = 0;
+    this.render();
+
+    try {
+      this.profiles = await invoke<ProfileInfo[]>('list_profiles');
+    } catch (_) {
+      // invoke already surfaced the error
+    }
+    this.loaded = true;
+
+    if (view === 'new') {
+      this.focusedIndex = this.profiles.length;
+    } else {
+      const active = this.callbacks.getActiveProfilePath();
+      const activeIndex = this.profiles.findIndex((p) => p.path === active);
+      this.focusedIndex = activeIndex >= 0 ? activeIndex : 0;
+    }
+
+    this.render();
+    void this.loadFocusedDetail();
+  }
+
+  unload(): void {
+    window.removeEventListener('keydown', this.keyHandler, true);
+    this.detailSeq++;
+    this.profiles = [];
+    this.loaded = false;
+    this.detailCache.clear();
+    this.focusedIndex = 0;
+    this.containerEl.innerHTML = '';
+  }
+
+  // --- Keyboard ---
+
+  private handleKeyDown(e: KeyboardEvent): void {
+    if (isEditableElementFocused()) {
+      return;
+    }
+    if (!this.loaded) {
+      return;
+    }
+
+    const lastIndex = this.profiles.length; // pinned New Profile… row
+
+    switch (e.key) {
+      case 'j':
+      case 'ArrowDown':
+        e.preventDefault();
+        e.stopPropagation();
+        this.setFocus(Math.min(this.focusedIndex + 1, lastIndex));
+        return;
+      case 'k':
+      case 'ArrowUp':
+        e.preventDefault();
+        e.stopPropagation();
+        this.setFocus(Math.max(this.focusedIndex - 1, 0));
+        return;
+      case 'Enter': {
+        e.preventDefault();
+        e.stopPropagation();
+        const profile = this.profiles[this.focusedIndex];
+        if (profile) {
+          this.setActiveAndClose(profile);
+        }
+        // On the pinned row the form is already in the detail panel; focus it.
+        if (this.focusedIndex === lastIndex) {
+          this.focusForm();
+        }
+        return;
+      }
+      case 'n':
+        e.preventDefault();
+        e.stopPropagation();
+        this.setFocus(lastIndex);
+        this.focusForm();
+        return;
+      case 'd': {
+        e.preventDefault();
+        e.stopPropagation();
+        const profile = this.profiles[this.focusedIndex];
+        if (profile) {
+          void this.handleDelete(profile);
+        }
+        return;
+      }
+    }
+  }
+
+  private setFocus(index: number): void {
+    if (index === this.focusedIndex) return;
+    this.focusedIndex = index;
+    this.render();
+    void this.loadFocusedDetail();
+  }
+
+  private focusForm(): void {
+    const nameInput = this.containerEl.querySelector<HTMLInputElement>('.pm-form-name');
+    nameInput?.focus();
+  }
+
+  // --- Actions ---
+
+  private setActiveAndClose(profile: ProfileInfo): void {
+    this.callbacks.setActiveProfilePath(profile.path);
+    this.callbacks.onClose();
+  }
+
+  private async handleDelete(profile: ProfileInfo): Promise<void> {
+    const blockers = this.callbacks.getOpenSessionsForProfile(profile.path);
+    if (blockers.length > 0) {
+      const body = document.createElement('div');
+      const intro = document.createElement('p');
+      intro.textContent = 'These open sessions are using it:';
+      intro.style.margin = '0 0 8px 0';
+      body.appendChild(intro);
+      const list = document.createElement('ul');
+      list.style.margin = '0 0 8px 0';
+      list.style.paddingLeft = '20px';
+      for (const session of blockers) {
+        const li = document.createElement('li');
+        li.textContent = session.title;
+        list.appendChild(li);
+      }
+      body.appendChild(list);
+      const hint = document.createElement('p');
+      hint.textContent = 'Close them first, then delete the profile.';
+      hint.style.margin = '0';
+      body.appendChild(hint);
+
+      await showConfirmationDialog({
+        title: `Cannot delete profile "${profile.name}"`,
+        body,
+        confirmLabel: 'OK',
+        hideCancel: true,
+      });
+      return;
+    }
+
+    const confirmed = await showConfirmationDialog({
+      title: `Delete profile "${profile.name}"?`,
+      body:
+        `This removes the profile from Devora's registry only. ` +
+        `The directory ${profile.path} and everything in it remains on disk.`,
+      confirmLabel: 'Delete Profile',
+    });
+    if (!confirmed) return;
+
+    try {
+      await invoke('unregister_profile', { path: profile.path });
+    } catch (_) {
+      // invoke already surfaced the error
+      return;
+    }
+
+    const wasActive = this.callbacks.getActiveProfilePath() === profile.path;
+    this.detailCache.delete(profile.path);
+    try {
+      this.profiles = await invoke<ProfileInfo[]>('list_profiles');
+    } catch (_) {
+      this.profiles = [];
+    }
+
+    if (wasActive) {
+      this.callbacks.setActiveProfilePath(this.profiles[0]?.path ?? null);
+    }
+    if (this.profiles.length === 0) {
+      // Back to the hub, which now shows the first-run welcome.
+      this.callbacks.onClose();
+      return;
+    }
+    this.focusedIndex = Math.min(this.focusedIndex, this.profiles.length - 1);
+    this.render();
+    void this.loadFocusedDetail();
+  }
+
+  private async loadFocusedDetail(): Promise<void> {
+    const profile = this.profiles[this.focusedIndex];
+    if (!profile || this.detailCache.has(profile.path)) return;
+
+    const seq = ++this.detailSeq;
+    try {
+      const [repos, workspaces] = await Promise.all([
+        invoke<RepoInfo[]>('get_registered_repos', { profilePath: profile.path }),
+        invoke<WorkspaceInfo[]>('list_workspaces', { profilePath: profile.path }),
+      ]);
+      if (seq !== this.detailSeq) return;
+      this.detailCache.set(profile.path, {
+        repos,
+        workspaceCount: workspaces.length,
+        activeTaskCount: workspaces.filter((w) => w.active).length,
+      });
+      if (this.profiles[this.focusedIndex]?.path === profile.path) {
+        this.updateDetailPanel();
+      }
+    } catch (_) {
+      // invoke already surfaced the error; the detail panel stays in its loading state
+    }
+  }
+
+  // --- Rendering ---
+
+  private render(): void {
+    this.containerEl.innerHTML = '';
+    this.containerEl.appendChild(this.renderHeader());
+    this.containerEl.appendChild(this.renderSplitPanel());
+    this.containerEl.appendChild(
+      createKeyboardHintBar({
+        hints: [
+          { keys: 'j/k', description: 'navigate' },
+          { keys: 'Enter', description: 'set active' },
+          { keys: 'n', description: 'new profile' },
+          { keys: 'd', description: 'delete' },
+          { keys: 'q/Esc', description: 'back to hub' },
+        ],
+      }),
+    );
+  }
+
+  private renderHeader(): HTMLElement {
+    const header = document.createElement('div');
+    header.className = 'page-header';
+
+    const title = document.createElement('span');
+    title.className = 'page-header-title';
+    title.textContent = 'Devora';
+    const crumb = document.createElement('span');
+    crumb.className = 'pm-header-crumb';
+    crumb.textContent = ' › Profiles';
+    title.appendChild(crumb);
+    header.appendChild(title);
+
+    return header;
+  }
+
+  private renderSplitPanel(): HTMLElement {
+    const split = document.createElement('div');
+    split.className = 'pm-split';
+
+    // Master panel (left)
+    const masterPanel = document.createElement('div');
+    masterPanel.className = 'pm-master-panel';
+    const masterList = document.createElement('div');
+    masterList.className = 'pm-master-list';
+
+    if (!this.loaded) {
+      const placeholder = document.createElement('div');
+      placeholder.className = 'panel-loading-placeholder';
+      placeholder.textContent = 'Loading profiles...';
+      masterList.appendChild(placeholder);
+    } else {
+      const activePath = this.callbacks.getActiveProfilePath();
+      this.profiles.forEach((profile, i) => {
+        masterList.appendChild(this.renderMasterItem(profile, i, profile.path === activePath));
+      });
+      masterList.appendChild(this.renderNewProfileRow());
+    }
+
+    masterPanel.appendChild(masterList);
+    split.appendChild(masterPanel);
+
+    // Detail panel (right)
+    const detailPanel = document.createElement('div');
+    detailPanel.className = 'pm-detail-panel';
+    const accent = document.createElement('div');
+    accent.className = 'panel-accent';
+    detailPanel.appendChild(accent);
+    const detailContent = document.createElement('div');
+    detailContent.className = 'pm-detail-content';
+    if (this.loaded) {
+      detailContent.appendChild(this.renderDetail());
+    }
+    detailPanel.appendChild(detailContent);
+    split.appendChild(detailPanel);
+
+    return split;
+  }
+
+  private renderMasterItem(profile: ProfileInfo, index: number, isActive: boolean): HTMLElement {
+    const item = document.createElement('div');
+    item.className = 'pm-master-item';
+    if (index === this.focusedIndex) {
+      item.classList.add('pm-master-focused');
+    }
+
+    item.appendChild(createStatusDot(isActive ? 'clean' : 'pending'));
+
+    const name = document.createElement('div');
+    name.className = 'pm-name';
+    name.textContent = profile.name;
+    item.appendChild(name);
+
+    const meta = document.createElement('span');
+    meta.className = 'pm-meta';
+    meta.textContent = pluralize(profile.repoCount, 'repo');
+    item.appendChild(meta);
+
+    item.addEventListener('click', () => this.setFocus(index));
+    return item;
+  }
+
+  private renderNewProfileRow(): HTMLElement {
+    const item = document.createElement('div');
+    item.className = 'pm-master-item pm-new-row';
+    if (this.focusedIndex === this.profiles.length) {
+      item.classList.add('pm-master-focused');
+    }
+
+    const plus = document.createElement('span');
+    plus.className = 'pm-new-row-plus';
+    plus.textContent = '＋';
+    item.appendChild(plus);
+
+    const label = document.createElement('div');
+    label.className = 'pm-name';
+    label.textContent = 'New Profile…';
+    item.appendChild(label);
+
+    item.addEventListener('click', () => this.setFocus(this.profiles.length));
+    return item;
+  }
+
+  private renderDetail(): HTMLElement {
+    if (this.focusedIndex === this.profiles.length) {
+      return this.renderNewProfileForm();
+    }
+    const profile = this.profiles[this.focusedIndex];
+    if (!profile) {
+      return document.createElement('div');
+    }
+    return this.renderProfileDetail(profile);
+  }
+
+  private updateDetailPanel(): void {
+    const contentEl = this.containerEl.querySelector('.pm-detail-content');
+    if (!contentEl) return;
+    contentEl.innerHTML = '';
+    contentEl.appendChild(this.renderDetail());
+  }
+
+  private renderNewProfileForm(): HTMLElement {
+    const wrap = document.createElement('div');
+    wrap.className = 'pm-detail';
+
+    const title = document.createElement('h2');
+    title.className = 'pm-detail-title';
+    title.textContent = 'New Profile';
+    wrap.appendChild(title);
+
+    const formHandle = createProfileForm({
+      onRegistered: (profile) => {
+        this.callbacks.setActiveProfilePath(profile.path);
+        this.callbacks.onClose();
+      },
+      onCancel: () => {
+        const active = this.callbacks.getActiveProfilePath();
+        const activeIndex = this.profiles.findIndex((p) => p.path === active);
+        this.setFocus(Math.max(activeIndex, 0));
+      },
+    });
+    wrap.appendChild(formHandle.element);
+    return wrap;
+  }
+
+  private renderProfileDetail(profile: ProfileInfo): HTMLElement {
+    const detail = document.createElement('div');
+    detail.className = 'pm-detail';
+
+    const title = document.createElement('h2');
+    title.className = 'pm-detail-title';
+    title.textContent = profile.name;
+    detail.appendChild(title);
+
+    const path = document.createElement('div');
+    path.className = 'pm-detail-path';
+    path.textContent = profile.path;
+    detail.appendChild(path);
+
+    const cached = this.detailCache.get(profile.path);
+    const isActive = this.callbacks.getActiveProfilePath() === profile.path;
+
+    const badges = document.createElement('div');
+    badges.className = 'pm-detail-badges';
+    if (isActive) {
+      badges.appendChild(createBadge('active', 'clean'));
+    }
+    badges.appendChild(createBadge(pluralize(profile.repoCount, 'repo'), 'inactive'));
+    if (cached) {
+      badges.appendChild(
+        createBadge(pluralize(cached.workspaceCount, 'workspace'), 'inactive'),
+      );
+      badges.appendChild(
+        createBadge(pluralize(cached.activeTaskCount, 'active task'), 'untracked'),
+      );
+    }
+    detail.appendChild(badges);
+
+    const actionRow = document.createElement('div');
+    actionRow.className = 'pm-action-row';
+    const setActiveBtn = document.createElement('button');
+    setActiveBtn.className = 'pm-set-active-btn';
+    setActiveBtn.textContent = 'Set Active';
+    setActiveBtn.disabled = isActive;
+    setActiveBtn.addEventListener('click', () => this.setActiveAndClose(profile));
+    actionRow.appendChild(setActiveBtn);
+    const deleteBtn = document.createElement('button');
+    deleteBtn.className = 'pm-delete-btn';
+    deleteBtn.textContent = 'Delete';
+    deleteBtn.addEventListener('click', () => void this.handleDelete(profile));
+    actionRow.appendChild(deleteBtn);
+    detail.appendChild(actionRow);
+
+    const reposLabel = document.createElement('div');
+    reposLabel.className = 'pm-section-label';
+    reposLabel.textContent = 'Repos';
+    detail.appendChild(reposLabel);
+
+    if (!cached) {
+      const loading = document.createElement('div');
+      loading.className = 'panel-detail-loading';
+      loading.textContent = 'Loading...';
+      detail.appendChild(loading);
+    } else if (cached.repos.length === 0) {
+      const none = document.createElement('div');
+      none.className = 'panel-detail-loading';
+      none.textContent = `No repos yet — clone one into ${profile.path}/repos/`;
+      detail.appendChild(none);
+    } else {
+      detail.appendChild(this.renderRepoTable(cached.repos));
+    }
+
+    return detail;
+  }
+
+  private renderRepoTable(repos: RepoInfo[]): HTMLElement {
+    const { table, tbody } = createTableShell(['Repo', 'Source', 'Path'], 'pm-repo-table');
+
+    for (const repo of repos) {
+      const row = document.createElement('tr');
+
+      const nameCell = document.createElement('td');
+      nameCell.className = 'col-name';
+      nameCell.textContent = repo.name;
+      row.appendChild(nameCell);
+
+      const sourceCell = document.createElement('td');
+      sourceCell.className = 'pm-repo-source';
+      sourceCell.textContent = repo.source;
+      row.appendChild(sourceCell);
+
+      const pathCell = document.createElement('td');
+      pathCell.className = 'pm-repo-path';
+      pathCell.textContent = repo.path;
+      row.appendChild(pathCell);
+
+      tbody.appendChild(row);
+    }
+
+    return table;
+  }
+}

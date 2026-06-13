@@ -22,9 +22,10 @@ export class SessionManager {
     cwd?: string,
     appCommand?: string,
     workspacePath: string | null = null,
+    profilePath: string | null = null,
   ): Promise<SessionTab> {
     const id = this.nextId++;
-    const session = new SessionTab(id, title, workspacePath);
+    const session = new SessionTab(id, title, workspacePath, profilePath);
 
     session.onTitleChange((_id, _title) => {
       this.onChangeCallback?.();

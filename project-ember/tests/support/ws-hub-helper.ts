@@ -2,13 +2,16 @@ import { AppDriver } from './app-driver';
 import { UIDriver } from './ui-driver';
 
 export async function ensureWsHubOpen(driver: AppDriver): Promise<void> {
-  // The cleanup callback mirrors production (main.ts openWsHub): without it, any dismissal leaks the hub's window keydown listener, which then swallows keys (e.g. Enter) meant for later overlays.
+  // The cleanup and user-dismiss callbacks mirror production (main.ts openWsHub): without the cleanup, any dismissal leaks the hub's window keydown listener, which then swallows keys (e.g. Enter) meant for later overlays; without the user-dismiss override, q/Esc would bypass the hub's cheatsheet/zero-profile handling.
   await driver.eval(`
     if (!window.__test.overlayManager.isTabCoveringOverlayActive()) {
       await window.__test.wsHub.load();
       window.__test.overlayManager.showTabCoveringOverlay(
         window.__test.wsHub.getElement(),
         () => window.__test.wsHub.unload(),
+        null,
+        undefined,
+        () => window.__test.wsHub.handleUserDismiss(),
       );
     }
   `);
@@ -28,6 +31,9 @@ export async function startWsHubLoad(driver: AppDriver): Promise<void> {
     window.__test.overlayManager.showTabCoveringOverlay(
       window.__test.wsHub.getElement(),
       () => window.__test.wsHub.unload(),
+      null,
+      undefined,
+      () => window.__test.wsHub.handleUserDismiss(),
     );
   `);
   await driver.pollFor(
@@ -55,11 +61,15 @@ export async function reloadWsHub(driver: AppDriver): Promise<void> {
     window.__test.overlayManager.showTabCoveringOverlay(
       window.__test.wsHub.getElement(),
       () => window.__test.wsHub.unload(),
+      null,
+      undefined,
+      () => window.__test.wsHub.handleUserDismiss(),
     );
   `);
   await driver.pollFor(
     `return document.querySelector('.ws-master-item') !== null
-         || document.querySelector('.empty-state') !== null`,
+         || document.querySelector('.empty-state') !== null
+         || document.querySelector('.ws-welcome') !== null`,
     true,
     5_000,
   );
@@ -138,15 +148,26 @@ export async function switchProfile(
     );
   `);
 
+  // Open the profile dropdown and click the matching option, as a user would
   await driver.eval(`
-    const select = document.querySelector('.ws-profile-selector');
-    if (!select) throw new Error('Profile selector not found');
-    const option = Array.from(select.options).find(
-      o => o.textContent === ${JSON.stringify(profileName)}
+    const trigger = document.querySelector('.ws-profile-dropdown .dropdown-trigger');
+    if (!trigger) throw new Error('Profile dropdown not found');
+    trigger.click();
+  `);
+  await driver.pollFor(
+    `return document.querySelector('.ws-profile-dropdown .dropdown-popup') !== null`,
+    true,
+    3_000,
+  );
+  await driver.eval(`
+    const rows = Array.from(
+      document.querySelectorAll('.ws-profile-dropdown .dropdown-item-option'),
     );
-    if (!option) throw new Error('Profile option not found: ' + ${JSON.stringify(profileName)});
-    select.value = option.value;
-    select.dispatchEvent(new Event('change', { bubbles: true }));
+    const row = rows.find(
+      r => r.querySelector('.dropdown-item-label')?.textContent === ${JSON.stringify(profileName)}
+    );
+    if (!row) throw new Error('Profile option not found: ' + ${JSON.stringify(profileName)});
+    row.click();
   `);
 
   // Wait for render() to rebuild the DOM: stale items are gone, new items or empty message appear
@@ -166,7 +187,7 @@ export async function waitForDetailRepoTable(
   await driver.pollFor(
     `return document.querySelector('.ws-detail-repo-table') !== null
          && document.querySelector('.ws-detail-repo-pending') === null
-         && document.querySelector('.ws-detail-loading') === null`,
+         && document.querySelector('.panel-detail-loading') === null`,
     true,
     timeoutMs,
   );

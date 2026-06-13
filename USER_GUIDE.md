@@ -38,6 +38,10 @@ When you start Devora for the first time, it will prompt you to create your firs
 You choose a root directory (defaults to `~/devora`) and give the profile a name.
 Once the profile is created, you land on the Workspace Hub - Devora's home screen.
 
+In Devora-Ember, this prompt is a welcome card shown in place of the Workspace Hub whenever no profiles are configured.
+It contains the same profile-creation form (name + root path, with a "Browse…" button for the native folder picker) and cannot be dismissed until a profile exists.
+If the chosen directory already contains an initialized profile, Devora detects it and registers it as-is instead of creating a new one.
+
 ### Profiles
 
 Each profile is a self-contained directory with the following structure:
@@ -59,7 +63,13 @@ You can have multiple profiles.
 To cycle between them, press `p` from the Workspace Hub.
 To create additional profiles, go to Settings (press `s` from the Workspace Hub) and navigate to "Profiles".
 
+In Devora-Ember, profiles are managed from the **Profile Manager**, a full-window overlay opened with `P` from the Workspace Hub (or via the profile dropdown in the hub header, or the "Manage Profiles" command in the Command Palette).
+The Profile Manager lists every profile with its repo and workspace counts and a read-only repo inventory.
+From there you can switch the active profile (`Enter`), create or register a profile (`n`), and delete a profile (`d`).
+The active profile can also be switched directly from the hub-header dropdown or the "Switch Profile" Command Palette entries.
+
 **Note**: Deleting a profile (also via Settings) only removes it from Devora's registry. The profile directory and all its contents remain on disk.
+In Devora-Ember, deletion is also blocked while the profile still has open session tabs - close them first.
 
 ### Managing Repos
 
@@ -278,6 +288,7 @@ Note: the split-pane shortcuts below operate on Kitty panes (each pane is its ow
 - `j / k`: Navigate list
 - `s`: Open settings (includes "View Changelog" option)
 - `p`: Cycle active profile
+- `P` (Devora-Ember): Open the Profile Manager (list, switch, create, and delete profiles)
 - `q`: Quit (or back in other pages)
 - `esc`: Same as `q`, and also "unfocuses" on text inputs
 
