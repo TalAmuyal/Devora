@@ -13,6 +13,8 @@ export class EmberWorld extends World {
   stopAutoApprove?: () => void;
   lastKeyDefaultPrevented?: boolean;
   originalTaskUid?: string;
+  // Latest origin commit a reused worktree is expected to refresh to (set by the origin-advanced step).
+  expectedHead?: string;
 }
 
 setWorldConstructor(EmberWorld);

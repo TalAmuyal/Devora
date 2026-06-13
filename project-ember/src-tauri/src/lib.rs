@@ -7,6 +7,7 @@ mod pty;
 mod test_harness;
 mod theme;
 mod workspace;
+mod workspace_creation;
 
 use std::sync::Mutex;
 use tauri::webview::WebviewWindowBuilder;
@@ -64,6 +65,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(Mutex::new(pty::PtyManager::new()))
+        .manage(Mutex::new(workspace_creation::WorkspaceCreationManager::new()))
         .manage(logging::LogState::new(&log_path))
         .setup(|app| {
             let handle = app.handle().clone();
@@ -129,6 +131,7 @@ pub fn run() {
             commands::get_registered_repos,
             commands::get_default_app,
             commands::create_workspace,
+            commands::cancel_workspace_creation,
             commands::remove_task,
             commands::prepare_repurpose_task,
             commands::repurpose_task,

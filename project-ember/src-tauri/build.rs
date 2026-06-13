@@ -16,6 +16,7 @@ fn main() {
                 "get_registered_repos",
                 "get_default_app",
                 "create_workspace",
+                "cancel_workspace_creation",
                 "remove_task",
                 "prepare_repurpose_task",
                 "repurpose_task",

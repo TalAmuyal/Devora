@@ -62,7 +62,7 @@ pub struct RepoInfo {
     pub source: String, // "registered" | "auto-discovered"
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct CreatedWorkspace {
     pub path: String,
@@ -126,7 +126,7 @@ fn get_value_by_dot_path<'a>(root: &'a Value, dot_path: &str) -> Option<&'a Valu
     Some(current)
 }
 
-fn list_repo_subdirs(dir: &Path) -> Vec<String> {
+pub(crate) fn list_repo_subdirs(dir: &Path) -> Vec<String> {
     let Ok(entries) = fs::read_dir(dir) else {
         return Vec::new();
     };
@@ -589,7 +589,7 @@ pub fn get_default_app(profile_path: &str) -> Result<Option<String>, String> {
     }
 }
 
-fn find_next_workspace_id(workspaces_dir: &Path) -> Result<String, String> {
+pub(crate) fn find_next_workspace_id(workspaces_dir: &Path) -> Result<String, String> {
     if !workspaces_dir.exists() {
         return Ok("ws-1".to_string());
     }
@@ -620,203 +620,12 @@ fn find_next_workspace_id(workspaces_dir: &Path) -> Result<String, String> {
     Ok(format!("ws-{next}"))
 }
 
-fn mise_available() -> bool {
+pub(crate) fn mise_available() -> bool {
     Command::new("which")
         .arg("mise")
         .output()
         .map(|o| o.status.success())
         .unwrap_or(false)
-}
-
-fn run_mise_trust(worktree_path: &Path) -> Result<(), String> {
-    let output = Command::new("mise")
-        .args(["trust"])
-        .current_dir(worktree_path)
-        .output()
-        .map_err(|e| format!("failed to spawn mise trust: {e}"))?;
-    if output.status.success() {
-        return Ok(());
-    }
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    Err(format!("mise trust exited with {}: {}", output.status, stderr.trim()))
-}
-
-fn run_prepare_command(prepare_cmd: &str, worktree_path: &Path) -> Result<(), String> {
-    let output = Command::new("sh")
-        .args(["-c", prepare_cmd])
-        .current_dir(worktree_path)
-        .output()
-        .map_err(|e| format!("failed to spawn prepare-command: {e}"))?;
-    if output.status.success() {
-        return Ok(());
-    }
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    Err(format!("prepare-command exited with {}: {}", output.status, stderr.trim()))
-}
-
-pub fn create_workspace(
-    profile_path: &str,
-    repo_paths: Vec<String>,
-    task_name: &str,
-    warnings: &mut Vec<String>,
-) -> Result<CreatedWorkspace, String> {
-    let profile_dir = Path::new(profile_path);
-    let workspaces_dir = profile_dir.join("workspaces");
-
-    fs::create_dir_all(&workspaces_dir)
-        .map_err(|e| format!("failed to create workspaces dir: {e}"))?;
-
-    let ws_name = find_next_workspace_id(&workspaces_dir)?;
-    let ws_path = workspaces_dir.join(&ws_name);
-
-    fs::create_dir_all(&ws_path).map_err(|e| format!("failed to create {}: {e}", ws_name))?;
-
-    // Acquire creation lock
-    let lock_path = workspaces_dir.join(".creation-lock");
-    let lock_file = fs::OpenOptions::new()
-        .create(true)
-        .write(true)
-        .truncate(false)
-        .open(&lock_path)
-        .map_err(|e| format!("failed to open creation lock: {e}"))?;
-
-    use fs2::FileExt;
-    lock_file
-        .lock_exclusive()
-        .map_err(|e| format!("failed to acquire creation lock: {e}"))?;
-
-    let result = (|| -> Result<(), String> {
-        // Determine default branch per repo and create worktrees
-        for repo_path_str in &repo_paths {
-            let expanded = expand_tilde(repo_path_str)?;
-            let source_repo = Path::new(&expanded);
-            let repo_name = source_repo
-                .file_name()
-                .map(|n| n.to_string_lossy().into_owned())
-                .ok_or_else(|| format!("invalid repo path: {expanded}"))?;
-
-            // Determine the default branch
-            let branch_output = Command::new("git")
-                .args(["symbolic-ref", "refs/remotes/origin/HEAD", "--short"])
-                .current_dir(source_repo)
-                .output()
-                .map_err(|e| format!("failed to determine default branch for {repo_name}: {e}"))?;
-
-            let default_branch = if branch_output.status.success() {
-                String::from_utf8_lossy(&branch_output.stdout)
-                    .trim()
-                    .to_string()
-            } else {
-                // Fallback: try origin/main then origin/master
-                "origin/main".to_string()
-            };
-
-            // Fetch the branch
-            let fetch_branch = default_branch.strip_prefix("origin/").unwrap_or(&default_branch);
-            let fetch_result = Command::new("git")
-                .args(["fetch", "origin", fetch_branch])
-                .current_dir(source_repo)
-                .output()
-                .map_err(|e| format!("failed to fetch for {repo_name}: {e}"))?;
-
-            if !fetch_result.status.success() {
-                let stderr = String::from_utf8_lossy(&fetch_result.stderr);
-                return Err(format!("git fetch failed for {repo_name}: {stderr}"));
-            }
-
-            // Create worktree
-            let worktree_path = ws_path.join(&repo_name);
-            let worktree_result = Command::new("git")
-                .args([
-                    "worktree",
-                    "add",
-                    "--detach",
-                    &worktree_path.to_string_lossy(),
-                    &default_branch,
-                ])
-                .current_dir(source_repo)
-                .output()
-                .map_err(|e| format!("failed to create worktree for {repo_name}: {e}"))?;
-
-            if !worktree_result.status.success() {
-                let stderr = String::from_utf8_lossy(&worktree_result.stderr);
-                return Err(format!(
-                    "git worktree add failed for {repo_name}: {stderr}"
-                ));
-            }
-
-            // Run mise trust if available — non-fatal, but the failure is reported
-            if mise_available() {
-                if let Err(e) = run_mise_trust(&worktree_path) {
-                    warnings.push(format!("{repo_name}: {e}"));
-                }
-            }
-        }
-
-        // Run prepare-command if configured
-        let global_config_path = global_config_path()?;
-        if global_config_path.exists() {
-            if let Ok(config) = read_json_file(&global_config_path) {
-                if let Some(prepare_cmd) = config.get("prepare-command").and_then(|v| v.as_str()) {
-                    for repo_path_str in &repo_paths {
-                        let expanded = expand_tilde(repo_path_str)?;
-                        let repo_name = Path::new(&expanded)
-                            .file_name()
-                            .map(|n| n.to_string_lossy().into_owned())
-                            .unwrap_or_default();
-                        let worktree_path = ws_path.join(&repo_name);
-                        if worktree_path.exists() {
-                            // Non-fatal, but the failure is reported
-                            if let Err(e) = run_prepare_command(prepare_cmd, &worktree_path) {
-                                warnings.push(format!("{repo_name}: {e}"));
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Write initialized marker
-        fs::write(ws_path.join("initialized"), "")
-            .map_err(|e| format!("failed to write initialized marker: {e}"))?;
-
-        // Write task.json
-        write_task_json(&ws_path, task_name)?;
-
-        // Write CLAUDE.md template if more than one repo
-        if repo_paths.len() > 1 {
-            let repo_names: Vec<String> = repo_paths
-                .iter()
-                .filter_map(|p| {
-                    Path::new(p)
-                        .file_name()
-                        .map(|n| n.to_string_lossy().into_owned())
-                })
-                .collect();
-            let repos_list = repo_names
-                .iter()
-                .map(|n| format!("- `{n}/`"))
-                .collect::<Vec<_>>()
-                .join("\n");
-            let claude_md = format!(
-                "## The Workspace\n\nThis workspace contains the following repositories:\n\n{repos_list}\n"
-            );
-            fs::write(ws_path.join("CLAUDE.md"), claude_md)
-                .map_err(|e| format!("failed to write CLAUDE.md: {e}"))?;
-        }
-
-        Ok(())
-    })();
-
-    // Release lock (happens automatically on drop, but be explicit)
-    let _ = lock_file.unlock();
-
-    result?;
-
-    Ok(CreatedWorkspace {
-        path: ws_path.to_string_lossy().into_owned(),
-        name: ws_name,
-    })
 }
 
 pub fn remove_task(workspace_path: &str) -> Result<(), String> {
@@ -880,7 +689,7 @@ fn read_task_title(task_path: &Path) -> Result<String, String> {
     })
 }
 
-fn write_task_json(ws_path: &Path, title: &str) -> Result<(), String> {
+pub(crate) fn write_task_json(ws_path: &Path, title: &str) -> Result<(), String> {
     let task = serde_json::json!({
         "uid": Uuid::new_v4().to_string(),
         "title": title,
@@ -1189,19 +998,6 @@ mod tests {
         assert_eq!(warnings.len(), 1);
         assert!(warnings[0].contains("failed to parse"), "warning: {}", warnings[0]);
         assert!(warnings[0].contains("task.json"), "warning: {}", warnings[0]);
-    }
-
-    #[test]
-    fn test_run_prepare_command_success() {
-        let tmp = tempfile::tempdir().unwrap();
-        assert!(run_prepare_command("true", tmp.path()).is_ok());
-    }
-
-    #[test]
-    fn test_run_prepare_command_failure_returns_stderr() {
-        let tmp = tempfile::tempdir().unwrap();
-        let err = run_prepare_command("echo boom >&2; exit 1", tmp.path()).unwrap_err();
-        assert!(err.contains("boom"), "error: {err}");
     }
 
     #[test]

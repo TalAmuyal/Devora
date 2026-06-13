@@ -61,7 +61,8 @@ Feature: Profile management
     And the Workspace Hub is open
     Then the Workspace Hub should show 2 workspace items
     When the user presses "P"
-    And the user presses "j"
+    Then the Profile Manager should list 2 profiles and a New Profile row
+    When the user presses "j"
     Then the focused profile should be "Personal"
     When the user presses "Enter"
     Then the Workspace Hub overlay should be present
@@ -73,7 +74,8 @@ Feature: Profile management
     And a profile "Personal" with 1 active workspace with worktrees
     And the Workspace Hub is open
     When the user presses "P"
-    And the user presses "j"
+    Then the Profile Manager should list 2 profiles and a New Profile row
+    When the user presses "j"
     And the user presses "d"
     Then a confirmation dialog should be visible
     And the confirmation dialog should mention "remains on disk"
@@ -89,7 +91,8 @@ Feature: Profile management
     Then a workspace session should be open
     When the Workspace Hub is open
     And the user presses "P"
-    And the user presses "d"
+    Then the Profile Manager should list 1 profile and a New Profile row
+    When the user presses "d"
     Then a notice dialog titled "Cannot delete profile" should be visible
     And the notice dialog should have no cancel button
     When the user confirms the dialog
@@ -122,7 +125,8 @@ Feature: Profile management
     Given a profile "Work" with 0 active workspaces
     And the Workspace Hub is open
     When the user presses "P"
-    And the user presses "d"
+    Then the Profile Manager should list 1 profile and a New Profile row
+    When the user presses "d"
     And the user confirms the dialog
     Then the Workspace Hub overlay should be present
     And the first-run welcome card should be visible
