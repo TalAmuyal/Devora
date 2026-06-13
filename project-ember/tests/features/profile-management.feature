@@ -32,7 +32,8 @@ Feature: Profile management
     Given a profile "Work" with 1 active workspaces
     And the Workspace Hub is open
     When the user presses "P"
-    And the user presses "n"
+    Then the Profile Manager should list 1 profile and a New Profile row
+    When the user presses "n"
     And the user enters profile name "Personal" and path "personal" under the fixture root
     Then the profile form should report a new profile
     When the user submits the profile form
@@ -45,7 +46,8 @@ Feature: Profile management
     And an unregistered initialized profile directory "Legacy"
     And the Workspace Hub is open
     When the user presses "P"
-    And the user presses "n"
+    Then the Profile Manager should list 1 profile and a New Profile row
+    When the user presses "n"
     And the user enters path "Legacy" under the fixture root in the profile form
     Then the profile form should detect the existing profile "Legacy"
     And the profile form submit button should read "Register Profile"
