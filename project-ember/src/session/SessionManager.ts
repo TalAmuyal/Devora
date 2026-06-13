@@ -24,6 +24,26 @@ export class SessionManager {
     workspacePath: string | null = null,
     profilePath: string | null = null,
   ): Promise<SessionTab> {
+    const session = this.addSession(title, workspacePath, profilePath);
+    await session.connect(cwd, appCommand);
+
+    this.onChangeCallback?.();
+    return session;
+  }
+
+  /** Add an activated tab without connecting a PTY yet — used while a task is being created.
+   * The caller sets the workspace path and connects once creation completes. */
+  createPendingSession(title: string, profilePath: string | null = null): SessionTab {
+    const session = this.addSession(title, null, profilePath);
+    this.onChangeCallback?.();
+    return session;
+  }
+
+  private addSession(
+    title: string,
+    workspacePath: string | null,
+    profilePath: string | null,
+  ): SessionTab {
     const id = this.nextId++;
     const session = new SessionTab(id, title, workspacePath, profilePath);
 
@@ -39,9 +59,6 @@ export class SessionManager {
     this.sessions.push(session);
 
     this.activateSession(id);
-    await session.connect(cwd, appCommand);
-
-    this.onChangeCallback?.();
     return session;
   }
 

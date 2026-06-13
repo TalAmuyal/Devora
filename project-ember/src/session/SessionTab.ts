@@ -3,7 +3,8 @@ import { TerminalPane } from '../terminal/TerminalPane';
 export class SessionTab {
   readonly id: number;
   title: string;
-  readonly workspacePath: string | null; // null for sessions not tied to a workspace (plain shells)
+  // null for sessions not tied to a workspace (plain shells) or while a task is still being created; set once via setWorkspacePath when the workspace becomes available.
+  private _workspacePath: string | null;
   readonly profilePath: string | null; // profile the workspace belongs to; null for plain shells
   readonly containerEl: HTMLElement;
   readonly terminalPane: TerminalPane;
@@ -19,7 +20,7 @@ export class SessionTab {
   ) {
     this.id = id;
     this.title = title;
-    this.workspacePath = workspacePath;
+    this._workspacePath = workspacePath;
     this.profilePath = profilePath;
 
     // Create a container div for this session's content
@@ -34,6 +35,15 @@ export class SessionTab {
       this.title = newTitle;
       this.onTitleChangeCallback?.(this.id, newTitle);
     });
+  }
+
+  get workspacePath(): string | null {
+    return this._workspacePath;
+  }
+
+  /** Set the workspace once it becomes available (e.g. after a pending task creation completes). */
+  setWorkspacePath(workspacePath: string): void {
+    this._workspacePath = workspacePath;
   }
 
   onTitleChange(callback: (id: number, title: string) => void): void {

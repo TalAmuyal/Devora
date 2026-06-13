@@ -10,6 +10,7 @@ use crate::profile;
 use crate::pty::PtyManager;
 use crate::test_harness::TestHarnessState;
 use crate::workspace;
+use crate::workspace_creation::{self, WorkspaceCreationManager};
 
 #[tauri::command]
 pub fn create_pty(
@@ -149,19 +150,42 @@ pub fn get_default_app(profile_path: String) -> Result<Option<String>, String> {
     workspace::get_default_app(&profile_path)
 }
 
+/// Start a non-blocking task creation.
+/// Returns a creation id immediately; progress (steps + streamed subprocess output) and the terminal outcome arrive on `on_event`.
+/// The worker reuses a matching inactive workspace (refreshing it) or builds a fresh one.
 #[tauri::command]
 pub fn create_workspace(
     app: tauri::AppHandle,
+    state: State<'_, Mutex<WorkspaceCreationManager>>,
     profile_path: String,
     repo_paths: Vec<String>,
     task_name: String,
-) -> Result<workspace::CreatedWorkspace, String> {
-    let mut warnings = Vec::new();
-    let result = workspace::create_workspace(&profile_path, repo_paths, &task_name, &mut warnings);
-    for warning in &warnings {
-        crate::logging::report_error(&app, warning);
-    }
-    result
+    on_event: Channel<workspace_creation::CreationEvent>,
+) -> Result<u32, String> {
+    let (id, handle) = {
+        let mut manager = state
+            .lock()
+            .map_err(|e| format!("failed to lock creation manager: {e}"))?;
+        manager.register()
+    };
+
+    std::thread::spawn(move || {
+        workspace_creation::run(app, id, handle, profile_path, repo_paths, task_name, on_event);
+    });
+
+    Ok(id)
+}
+
+#[tauri::command]
+pub fn cancel_workspace_creation(
+    state: State<'_, Mutex<WorkspaceCreationManager>>,
+    id: u32,
+) -> Result<(), String> {
+    let mut manager = state
+        .lock()
+        .map_err(|e| format!("failed to lock creation manager: {e}"))?;
+    manager.cancel(id);
+    Ok(())
 }
 
 #[tauri::command]

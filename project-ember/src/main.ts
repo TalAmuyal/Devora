@@ -8,6 +8,7 @@ import { KeyboardShortcuts } from './ui/KeyboardShortcuts';
 import { CommandPalette } from './ui/CommandPalette';
 import { showTextInputDialog } from './ui/components/TextInputDialog';
 import { WorkspaceHub } from './workspace/WorkspaceHub';
+import { TaskCreationController } from './workspace/TaskCreationController';
 import { ProfileManager, ProfileManagerView } from './workspace/ProfileManager';
 import { WebContentOverlay } from './webview/WebContentOverlay';
 import {
@@ -61,27 +62,46 @@ document.addEventListener('DOMContentLoaded', async () => {
     overlayManager.dismissTabCoveringOverlay();
   };
 
+  // Resolve the per-profile terminal app command (e.g. nvim); undefined falls back to a plain shell.
+  const resolveAppCommand = async (profilePath: string | null): Promise<string | undefined> => {
+    if (!profilePath) return undefined;
+    try {
+      const defaultApp = await invokeLogOnly<string | null>('get_default_app', { profilePath });
+      if (defaultApp && defaultApp !== 'shell') {
+        return defaultApp;
+      }
+    } catch (_) {
+      // fall back to plain shell
+    }
+    return undefined;
+  };
+
   const openWorkspace = async (wsPath: string, title: string, repos: string[], profilePath?: string) => {
     dismissWsHub();
 
-    let appCommand: string | undefined;
-    if (profilePath) {
-      try {
-        const defaultApp = await invokeLogOnly<string | null>('get_default_app', { profilePath });
-        if (defaultApp && defaultApp !== 'shell') {
-          appCommand = defaultApp;
-        }
-      } catch (_) {
-        // fall back to plain shell
-      }
-    }
-
+    const appCommand = await resolveAppCommand(profilePath ?? null);
     const cwd = repos.length === 1 ? `${wsPath}/${repos[0]}` : wsPath;
     try {
       await sessionManager.createSession(title, cwd, appCommand, wsPath, profilePath ?? null);
     } catch (e) {
       showError(`Failed to create session: ${e}`);
     }
+  };
+
+  const taskCreationController = new TaskCreationController({
+    sessionManager,
+    overlayManager,
+    mainPanelEl,
+    resolveAppCommand,
+    onChange: () => tabBar.render(),
+  });
+
+  // Hand a new task off to the controller: close the Hub, then open a tab + progress overlay and run creation asynchronously so the window never freezes.
+  const startTaskCreation = (taskName: string, repoPaths: string[]) => {
+    const profilePath = wsHub.getActiveProfilePath();
+    if (!profilePath) return;
+    dismissWsHub();
+    void taskCreationController.start(taskName, repoPaths, profilePath);
   };
 
   // Swap the active session's task for a new one in the same workspace: validate the worktrees are idle, prompt for the new task name (pre-filled with the current one), write the new task identity, and rename the tab.
@@ -112,7 +132,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   const wsHub = new WorkspaceHub(
     (path, title, repos) => openWorkspace(path, title, repos, wsHub.getActiveProfilePath()),
-    (path, title, repos) => openWorkspace(path, title, repos, wsHub.getActiveProfilePath()),
+    startTaskCreation,
     dismissWsHub,
     (view) => openProfileManager(view),
   );
@@ -311,6 +331,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Patch dismissPanelOverlay to notify the backend when a crit overlay is
   // dismissed by the user (q/Esc/tab close).
   overlayManager.dismissPanelOverlay = (sessionId: number) => {
+    // A creation overlay owns its own dismissal: Esc/q cancels the in-flight creation (or closes it after a failure).
+    // The controller removes the overlay itself once that resolves.
+    if (taskCreationController.isCreating(sessionId) && overlayManager.hasPanelOverlay(sessionId)) {
+      taskCreationController.handleDismiss(sessionId);
+      return;
+    }
+
     const hadOverlay = overlayManager.hasPanelOverlay(sessionId);
 
     origDismissPanelOverlay(sessionId);

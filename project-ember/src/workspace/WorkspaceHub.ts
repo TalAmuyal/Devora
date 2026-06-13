@@ -106,7 +106,8 @@ type CategoryFilter = 'active' | 'inactive' | 'all';
 export class WorkspaceHub {
   private containerEl: HTMLElement;
   private onOpenWorkspace: (path: string, title: string, repos: string[]) => void;
-  private onCreateWorkspace: (path: string, title: string, repos: string[]) => void;
+  // Hand off a new task: the controller opens a tab + progress overlay and runs creation asynchronously.
+  private onStartTaskCreation: (taskName: string, repoPaths: string[]) => void;
   private onClose: () => void;
   private onOpenProfileManager: (view: 'list' | 'new') => void;
 
@@ -143,12 +144,12 @@ export class WorkspaceHub {
 
   constructor(
     onOpenWorkspace: (path: string, title: string, repos: string[]) => void,
-    onCreateWorkspace: (path: string, title: string, repos: string[]) => void,
+    onStartTaskCreation: (taskName: string, repoPaths: string[]) => void,
     onClose: () => void,
     onOpenProfileManager: (view: 'list' | 'new') => void,
   ) {
     this.onOpenWorkspace = onOpenWorkspace;
-    this.onCreateWorkspace = onCreateWorkspace;
+    this.onStartTaskCreation = onStartTaskCreation;
     this.onClose = onClose;
     this.onOpenProfileManager = onOpenProfileManager;
     this.containerEl = document.createElement('div');
@@ -1389,7 +1390,7 @@ export class WorkspaceHub {
     const createBtn = document.createElement('button');
     createBtn.className = 'ws-new-form-create';
     createBtn.textContent = 'Create';
-    createBtn.addEventListener('click', async () => {
+    createBtn.addEventListener('click', () => {
       const taskName = nameInput.value.trim();
       if (!taskName || !this.activeProfilePath) return;
 
@@ -1398,20 +1399,10 @@ export class WorkspaceHub {
       );
       const repoPaths = Array.from(checkboxes).map((cb) => cb.value);
 
-      try {
-        const created = await invoke<{ path: string; name: string }>('create_workspace', {
-          profilePath: this.activeProfilePath,
-          repoPaths,
-          taskName,
-        });
-        this.showNewForm = false;
-        await this.loadWorkspaces();
-        this.render();
-        const repoNames = repoPaths.map((p) => p.split('/').pop() ?? p);
-        this.onCreateWorkspace(created.path, taskName, repoNames);
-      } catch (_) {
-        // invoke already surfaced the error; the form stays open
-      }
+      // Hand off immediately: the controller closes the Hub, opens a tab, and streams progress.
+      // Creation no longer blocks here, so the window never freezes.
+      this.showNewForm = false;
+      this.onStartTaskCreation(taskName, repoPaths);
     });
 
     const cancelBtn = document.createElement('button');
