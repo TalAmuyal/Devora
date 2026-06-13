@@ -108,7 +108,6 @@ pub fn run() {
                 let port = harness_state.port;
                 app.manage(harness_state);
                 eprintln!("Devora test harness on port {port}");
-                let _ = std::fs::write("/tmp/devora-ember-test-port", port.to_string());
             } else {
                 app.manage(test_harness::TestHarnessState::inactive());
             }
