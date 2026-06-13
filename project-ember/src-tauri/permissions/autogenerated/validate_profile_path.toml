@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-validate-profile-path"
+description = "Enables the validate_profile_path command without any pre-configured scope."
+commands.allow = ["validate_profile_path"]
+
+[[permission]]
+identifier = "deny-validate-profile-path"
+description = "Denies the validate_profile_path command without any pre-configured scope."
+commands.deny = ["validate_profile_path"]

@@ -200,7 +200,7 @@ Then(
   'the hub header should be visible',
   async function (this: EmberWorld) {
     const ui = new UIDriver(this.driver);
-    const visible = await ui.hasElement('.ws-header');
+    const visible = await ui.hasElement('.page-header');
     assert.strictEqual(visible, true, 'Hub header should be visible');
   },
 );

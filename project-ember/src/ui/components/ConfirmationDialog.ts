@@ -5,6 +5,8 @@ export interface ConfirmationDialogOptions {
   body: string | HTMLElement;
   confirmLabel: string;
   cancelLabel?: string;
+  /** Render only the confirm button (for pure notices); Escape still resolves `false`. */
+  hideCancel?: boolean;
 }
 
 /**
@@ -60,11 +62,13 @@ export function showConfirmationDialog(options: ConfirmationDialogOptions): Prom
     const actions = document.createElement('div');
     actions.className = 'confirmation-dialog-actions';
 
-    const cancelBtn = document.createElement('button');
-    cancelBtn.className = 'confirmation-dialog-cancel';
-    cancelBtn.textContent = options.cancelLabel ?? 'Cancel';
-    cancelBtn.addEventListener('click', () => finish(false));
-    actions.appendChild(cancelBtn);
+    if (!options.hideCancel) {
+      const cancelBtn = document.createElement('button');
+      cancelBtn.className = 'confirmation-dialog-cancel';
+      cancelBtn.textContent = options.cancelLabel ?? 'Cancel';
+      cancelBtn.addEventListener('click', () => finish(false));
+      actions.appendChild(cancelBtn);
+    }
 
     const confirmBtn = document.createElement('button');
     confirmBtn.className = 'confirmation-dialog-confirm';

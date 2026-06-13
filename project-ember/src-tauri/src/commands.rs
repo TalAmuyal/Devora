@@ -6,6 +6,7 @@ use tauri::State;
 
 use crate::ipc_server::IpcState;
 use crate::logging::LogState;
+use crate::profile;
 use crate::pty::PtyManager;
 use crate::test_harness::TestHarnessState;
 use crate::workspace;
@@ -80,6 +81,26 @@ pub fn close_pty(state: State<'_, Mutex<PtyManager>>, id: u32) -> Result<(), Str
 #[tauri::command]
 pub fn list_profiles() -> Result<Vec<workspace::ProfileInfo>, String> {
     workspace::list_profiles()
+}
+
+#[tauri::command]
+pub fn register_profile(
+    path: String,
+    name: String,
+) -> Result<profile::RegisteredProfile, String> {
+    let config_path = workspace::global_config_path()?;
+    profile::register_profile(&config_path, &path, &name)
+}
+
+#[tauri::command]
+pub fn unregister_profile(path: String) -> Result<(), String> {
+    let config_path = workspace::global_config_path()?;
+    profile::unregister_profile(&config_path, &path)
+}
+
+#[tauri::command]
+pub fn validate_profile_path(path: String) -> Result<profile::ProfilePathValidation, String> {
+    profile::validate_profile_path(&path)
 }
 
 #[tauri::command]

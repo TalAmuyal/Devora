@@ -59,6 +59,7 @@ pub struct WorkspaceStatusResult {
 pub struct RepoInfo {
     pub name: String,
     pub path: String,
+    pub source: String, // "registered" | "auto-discovered"
 }
 
 #[derive(Serialize)]
@@ -80,7 +81,10 @@ fn home_dir() -> Result<PathBuf, String> {
         .map_err(|_| "HOME environment variable not set".to_string())
 }
 
-fn expand_tilde(path: &str) -> Result<String, String> {
+pub(crate) fn expand_tilde(path: &str) -> Result<String, String> {
+    if path == "~" {
+        return Ok(home_dir()?.to_string_lossy().into_owned());
+    }
     if let Some(rest) = path.strip_prefix("~/") {
         let home = home_dir()?;
         Ok(home.join(rest).to_string_lossy().into_owned())
@@ -89,7 +93,7 @@ fn expand_tilde(path: &str) -> Result<String, String> {
     }
 }
 
-fn global_config_path() -> Result<PathBuf, String> {
+pub(crate) fn global_config_path() -> Result<PathBuf, String> {
     if let Ok(override_path) = std::env::var("DEVORA_CONFIG_PATH") {
         return Ok(PathBuf::from(override_path));
     }
@@ -97,11 +101,21 @@ fn global_config_path() -> Result<PathBuf, String> {
     Ok(home.join(".config/devora/config.json"))
 }
 
-fn read_json_file(path: &Path) -> Result<Value, String> {
+pub(crate) fn read_json_file(path: &Path) -> Result<Value, String> {
     let content =
         fs::read_to_string(path).map_err(|e| format!("failed to read {}: {e}", path.display()))?;
     serde_json::from_str(&content)
         .map_err(|e| format!("failed to parse {}: {e}", path.display()))
+}
+
+pub(crate) fn write_pretty_json(path: &Path, value: &Value) -> Result<(), String> {
+    let mut buf = Vec::new();
+    let formatter = serde_json::ser::PrettyFormatter::with_indent(b"    ");
+    let mut serializer = serde_json::Serializer::with_formatter(&mut buf, formatter);
+    value
+        .serialize(&mut serializer)
+        .map_err(|e| format!("failed to serialize {}: {e}", path.display()))?;
+    fs::write(path, buf).map_err(|e| format!("failed to write {}: {e}", path.display()))
 }
 
 fn get_value_by_dot_path<'a>(root: &'a Value, dot_path: &str) -> Option<&'a Value> {
@@ -154,6 +168,7 @@ fn discover_repos_from_repos_dir(profile_path: &Path) -> Vec<RepoInfo> {
                 Some(RepoInfo {
                     name,
                     path: subdir_path.to_string_lossy().into_owned(),
+                    source: "auto-discovered".to_string(),
                 })
             } else {
                 None
@@ -525,6 +540,7 @@ pub fn get_registered_repos(profile_path: &str) -> Result<Vec<RepoInfo>, String>
                     repos.push(RepoInfo {
                         name,
                         path: expanded,
+                        source: "registered".to_string(),
                     });
                 }
             }
@@ -870,10 +886,7 @@ fn write_task_json(ws_path: &Path, title: &str) -> Result<(), String> {
         "title": title,
         "started_at": date_format("%Y-%m-%d"),
     });
-    let task_json = serde_json::to_string_pretty(&task)
-        .map_err(|e| format!("failed to serialize task.json: {e}"))?;
-    fs::write(ws_path.join("task.json"), task_json)
-        .map_err(|e| format!("failed to write task.json: {e}"))
+    write_pretty_json(&ws_path.join("task.json"), &task)
 }
 
 /// Errors unless every repo worktree is idle: clean (no modified or untracked files) and on a detached HEAD.
@@ -1067,6 +1080,13 @@ mod tests {
     fn test_expand_tilde_without_tilde() {
         let result = expand_tilde("/absolute/path").unwrap();
         assert_eq!(result, "/absolute/path");
+    }
+
+    #[test]
+    fn test_expand_tilde_bare() {
+        let result = expand_tilde("~").unwrap();
+        let home = std::env::var("HOME").unwrap();
+        assert_eq!(result, home);
     }
 
     #[test]
@@ -1277,7 +1297,9 @@ mod tests {
         assert_eq!(repos.len(), 2);
         // Sorted alphabetically
         assert_eq!(repos[0].name, "repo-x");
+        assert_eq!(repos[0].source, "registered");
         assert_eq!(repos[1].name, "repo-y");
+        assert_eq!(repos[1].source, "auto-discovered");
     }
 
     #[test]
@@ -1575,6 +1597,16 @@ mod tests {
                 assert!(c.is_ascii_digit(), "started_at: {started_at}");
             }
         }
+    }
+
+    #[test]
+    fn test_task_json_written_with_four_space_indent() {
+        let tmp = tempfile::tempdir().unwrap();
+
+        write_task_json(tmp.path(), "Some task").unwrap();
+
+        let raw = fs::read_to_string(tmp.path().join("task.json")).unwrap();
+        assert!(raw.contains("\n    \"title\""), "expected 4-space indent, got: {raw}");
     }
 
     #[test]

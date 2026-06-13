@@ -21,6 +21,7 @@ export class OverlayManager {
   private tabCoveringContentEl: HTMLElement | null = null;
   private tabCoveringCleanup: (() => void) | null = null;
   private tabCoveringRestoreFocusTo: Focusable | null = null;
+  private tabCoveringUserDismiss: (() => void) | null = null;
 
   // Panel overlays tied to session tabs (sessionId -> overlay entry)
   private panelOverlays: Map<number, PanelOverlayEntry> = new Map();
@@ -37,11 +38,13 @@ export class OverlayManager {
     onCleanup?: () => void,
     restoreFocusTo?: Focusable | null,
     overlayClass?: string,
+    onUserDismiss?: (() => void) | null,
   ): void {
     this.dismissTabCoveringOverlay();
 
     this.tabCoveringCleanup = onCleanup ?? null;
     this.tabCoveringRestoreFocusTo = restoreFocusTo ?? null;
+    this.tabCoveringUserDismiss = onUserDismiss ?? null;
     this.tabCoveringOverlayEl = document.createElement('div');
     this.tabCoveringOverlayEl.className = 'overlay-tab-covering';
     // Focusable (out of the tab order) so we can move keyboard focus onto the overlay below — see the focus() call
@@ -68,6 +71,7 @@ export class OverlayManager {
       const restoreFocusTo = this.tabCoveringRestoreFocusTo;
       this.tabCoveringCleanup = null;
       this.tabCoveringRestoreFocusTo = null;
+      this.tabCoveringUserDismiss = null;
       this.tabCoveringOverlayEl.remove();
       this.tabCoveringOverlayEl = null;
       this.tabCoveringContentEl = null;
@@ -157,6 +161,12 @@ export class OverlayManager {
 
   dismissActiveOverlay(): boolean {
     if (this.tabCoveringOverlayEl) {
+      // A user-dismiss override owns the decision: it may veto the dismissal (e.g. zero-profile lock) or replace this overlay with another one.
+      // Programmatic teardown must use dismissTabCoveringOverlay() directly.
+      if (this.tabCoveringUserDismiss) {
+        this.tabCoveringUserDismiss();
+        return true;
+      }
       this.dismissTabCoveringOverlay();
       return true;
     }

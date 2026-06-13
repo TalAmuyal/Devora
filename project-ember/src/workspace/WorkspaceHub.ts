@@ -7,7 +7,12 @@ import { createSearchInput, SearchInputHandle } from '../ui/components/SearchInp
 import { createKeyboardHintBar } from '../ui/components/KeyboardHintBar';
 import { showConfirmationDialog } from '../ui/components/ConfirmationDialog';
 import { createToast, ToastHandle } from '../ui/components/Toast';
+import { createDropdownMenu, DropdownItem } from '../ui/components/DropdownMenu';
+import { createTableShell } from '../ui/components/TableShell';
 import { isEditableElementFocused } from '../ui/focus';
+import { pluralize } from '../ui/format';
+import { createProfileForm } from './ProfileForm';
+import { ProfileInfo, RepoInfo, WorkspaceInfo } from './types';
 
 // "Refreshing…" stays visible at least this long, even when the reload is instant
 const REFRESH_TOAST_MIN_MS = 1000;
@@ -16,20 +21,6 @@ const REFRESH_TOAST_MIN_MS = 1000;
 const REFRESHED_TOAST_MS = 3000;
 
 // Types matching the Rust command return values
-interface ProfileInfo {
-  name: string;
-  path: string;
-  repoCount: number;
-}
-
-interface WorkspaceInfo {
-  id: string;
-  path: string;
-  taskTitle: string;
-  repos: string[];
-  active: boolean;
-}
-
 interface RepoStatusTiming {
   totalMs: number;
   gitStatusMs: number;
@@ -67,11 +58,6 @@ interface BatchWorkspaceStatusResult {
   handlerTotalMs: number;
   threadSpawnMs: number;
   threadJoinMs: number;
-}
-
-interface RepoInfo {
-  name: string;
-  path: string;
 }
 
 interface HubProfilingReport {
@@ -122,9 +108,13 @@ export class WorkspaceHub {
   private onOpenWorkspace: (path: string, title: string, repos: string[]) => void;
   private onCreateWorkspace: (path: string, title: string, repos: string[]) => void;
   private onClose: () => void;
+  private onOpenProfileManager: (view: 'list' | 'new') => void;
 
   private profiles: ProfileInfo[] = [];
   private activeProfilePath: string | null = null;
+  // Whether the last completed load found zero profiles.
+  // Deliberately NOT reset in unload(): main.ts consults it (via isZeroProfileLocked) while other overlays cover the hub, e.g. to decide where q/Esc should land.
+  private zeroProfiles = false;
   private workspaces: WorkspaceInfo[] = [];
   private searchFilter: string = '';
   private categoryFilter: CategoryFilter = 'active';
@@ -155,10 +145,12 @@ export class WorkspaceHub {
     onOpenWorkspace: (path: string, title: string, repos: string[]) => void,
     onCreateWorkspace: (path: string, title: string, repos: string[]) => void,
     onClose: () => void,
+    onOpenProfileManager: (view: 'list' | 'new') => void,
   ) {
     this.onOpenWorkspace = onOpenWorkspace;
     this.onCreateWorkspace = onCreateWorkspace;
     this.onClose = onClose;
+    this.onOpenProfileManager = onOpenProfileManager;
     this.containerEl = document.createElement('div');
     this.containerEl.className = 'ws-hub';
   }
@@ -169,6 +161,34 @@ export class WorkspaceHub {
 
   getActiveProfilePath(): string | undefined {
     return this.activeProfilePath ?? undefined;
+  }
+
+  /**
+   * Switch the active profile from outside the hub (Profile Manager, command palette).
+   * No render — the next load() picks the new profile up.
+   */
+  setActiveProfilePath(path: string | null): void {
+    this.activeProfilePath = path;
+    this.statusCache.clear();
+    this.statusErrors.clear();
+  }
+
+  /** True when the last load found zero profiles: the hub shows the first-run welcome and must not be dismissible (there is nothing behind it). */
+  isZeroProfileLocked(): boolean {
+    return this.zeroProfiles;
+  }
+
+  /** Single entry point for user-initiated dismissal (q/Esc/Ctrl+S, routed through the overlay's onUserDismiss override): closes the cheatsheet if open, refuses while zero-profile locked, otherwise closes the hub. */
+  handleUserDismiss(): void {
+    if (this.showCheatsheet) {
+      this.showCheatsheet = false;
+      this.render();
+      return;
+    }
+    if (this.isZeroProfileLocked()) {
+      return;
+    }
+    this.onClose();
   }
 
   async load(): Promise<void> {
@@ -198,8 +218,19 @@ export class WorkspaceHub {
           this.loadWorkspaces(),
         ]);
         this.profiles = profiles;
+        this.zeroProfiles = profiles.length === 0;
+        // The remembered profile may have been deleted since the last load.
+        if (!profiles.some((p) => p.path === this.activeProfilePath)) {
+          this.activeProfilePath = profiles[0]?.path ?? null;
+          this.statusCache.clear();
+          this.statusErrors.clear();
+          this.workspaces = [];
+          if (this.activeProfilePath) {
+            await this.loadWorkspaces();
+          }
+        }
       } catch (_) {
-        // invoke already surfaced the error
+        // invoke already surfaced the error; keep the previous zeroProfiles verdict — a transient listing failure must not lock the hub.
       }
       listProfilesDuration = performance.now() - listProfilesStart;
       listWorkspacesDuration = listProfilesDuration;
@@ -210,10 +241,11 @@ export class WorkspaceHub {
       try {
         this.profiles = await invoke<ProfileInfo[]>('list_profiles');
         this.profilesLoaded = true;
+        this.zeroProfiles = this.profiles.length === 0;
         if (this.profiles.length > 0) {
           this.activeProfilePath = this.profiles[0].path;
-          this.updateHeader();
         }
+        this.updateHeader();
       } catch (_) {
         // invoke already surfaced the error
         this.profilesLoaded = true;
@@ -474,6 +506,11 @@ export class WorkspaceHub {
       return;
     }
 
+    // First-run welcome: only the form is interactive (q/Esc are already swallowed upstream by the overlay's user-dismiss override).
+    if (this.isZeroProfileLocked()) {
+      return;
+    }
+
     if (this.showCheatsheet && e.key === 'Escape') {
       e.preventDefault();
       e.stopImmediatePropagation();
@@ -568,6 +605,12 @@ export class WorkspaceHub {
         void this.refresh();
         return;
       }
+      case 'P': {
+        e.preventDefault();
+        e.stopPropagation();
+        this.onOpenProfileManager('list');
+        return;
+      }
     }
   }
 
@@ -597,11 +640,9 @@ export class WorkspaceHub {
 
     if (!this.workspacesLoaded) {
       const placeholder = document.createElement('div');
-      placeholder.className = 'ws-loading-placeholder';
+      placeholder.className = 'panel-loading-placeholder';
       placeholder.textContent = 'Loading workspaces...';
       this.masterListEl.appendChild(placeholder);
-    } else if (this.profilesLoaded && this.profiles.length === 0) {
-      this.masterListEl.appendChild(createEmptyState('No profiles configured'));
     } else if (filtered.length === 0) {
       this.masterListEl.appendChild(createEmptyState('No workspaces found'));
     } else {
@@ -678,6 +719,17 @@ export class WorkspaceHub {
 
     this.containerEl.appendChild(this.renderHeader());
 
+    if (this.profilesLoaded && this.profiles.length === 0) {
+      this.containerEl.appendChild(this.renderWelcome());
+      this.containerEl.appendChild(createKeyboardHintBar({
+        hints: [
+          { keys: 'Tab', description: 'next field' },
+          { keys: 'Enter', description: 'create profile' },
+        ],
+      }));
+      return;
+    }
+
     if (this.showNewForm) {
       this.containerEl.appendChild(this.renderNewForm());
     } else {
@@ -691,12 +743,63 @@ export class WorkspaceHub {
         { keys: 'f', description: 'filter' },
         { keys: '1/2/3', description: 'active/inactive/all' },
         { keys: 'n', description: 'new task' },
+        { keys: 'P', description: 'profiles' },
         { keys: 'R', description: 'refresh' },
         { keys: 'q/Esc', description: 'close' },
         { keys: '?', description: 'all shortcuts' },
       ],
       trailing: this.renderProfilingButton(),
     }));
+  }
+
+  /**
+   * First-run (or all-profiles-deleted) welcome: a centered card with the profile creation form.
+   * Shown instead of the split panel; the hub is not dismissible in this state.
+   */
+  private renderWelcome(): HTMLElement {
+    const wrap = document.createElement('div');
+    wrap.className = 'ws-welcome';
+
+    const card = document.createElement('div');
+    card.className = 'ws-welcome-card';
+
+    const accent = document.createElement('div');
+    accent.className = 'panel-accent';
+    card.appendChild(accent);
+
+    const inner = document.createElement('div');
+    inner.className = 'ws-welcome-inner';
+
+    const glyph = document.createElement('div');
+    glyph.className = 'ws-welcome-glyph';
+    glyph.textContent = 'D';
+    inner.appendChild(glyph);
+
+    const title = document.createElement('h2');
+    title.className = 'ws-welcome-title';
+    title.textContent = 'Welcome to Devora';
+    inner.appendChild(title);
+
+    const sub = document.createElement('p');
+    sub.className = 'ws-welcome-sub';
+    sub.textContent =
+      'Create your first profile to get started. A profile is an isolated scope ' +
+      'with its own repos and workspaces — for example, one for work and one for ' +
+      'personal projects.';
+    inner.appendChild(sub);
+
+    const form = createProfileForm({
+      initialPath: '~/devora',
+      onRegistered: (profile) => {
+        this.setActiveProfilePath(profile.path);
+        void this.load();
+      },
+    });
+    inner.appendChild(form.element);
+
+    card.appendChild(inner);
+    wrap.appendChild(card);
+    return wrap;
   }
 
   private renderSplitPanel(): HTMLElement {
@@ -753,11 +856,9 @@ export class WorkspaceHub {
 
     if (!this.workspacesLoaded) {
       const placeholder = document.createElement('div');
-      placeholder.className = 'ws-loading-placeholder';
+      placeholder.className = 'panel-loading-placeholder';
       placeholder.textContent = 'Loading workspaces...';
       masterList.appendChild(placeholder);
-    } else if (this.profilesLoaded && this.profiles.length === 0) {
-      masterList.appendChild(createEmptyState('No profiles configured'));
     } else if (filtered.length === 0) {
       masterList.appendChild(createEmptyState('No workspaces found'));
     } else {
@@ -774,7 +875,7 @@ export class WorkspaceHub {
     detailPanel.className = 'ws-detail-panel';
 
     const accent = document.createElement('div');
-    accent.className = 'ws-right-accent';
+    accent.className = 'panel-accent';
     detailPanel.appendChild(accent);
 
     const detailContent = document.createElement('div');
@@ -791,10 +892,11 @@ export class WorkspaceHub {
   }
 
   private updateHeader(): void {
-    const header = this.containerEl.querySelector('.ws-header');
+    const header = this.containerEl.querySelector('.page-header');
     if (!header) return;
-    if (this.profiles.length > 1 && !header.querySelector('.ws-profile-selector')) {
-      header.appendChild(this.renderProfileSelector());
+    header.querySelector('.ws-profile-dropdown')?.remove();
+    if (this.profilesLoaded && this.profiles.length > 0) {
+      header.appendChild(this.buildProfileDropdown());
     }
   }
 
@@ -970,7 +1072,7 @@ export class WorkspaceHub {
 
     const repoCount = document.createElement('span');
     repoCount.className = 'ws-detail-repo-count';
-    repoCount.textContent = `${ws.repos.length} ${ws.repos.length === 1 ? 'repo' : 'repos'}`;
+    repoCount.textContent = pluralize(ws.repos.length, 'repo');
     meta.appendChild(repoCount);
 
     if (isInvalid) {
@@ -1044,23 +1146,8 @@ export class WorkspaceHub {
   }
 
   private createRepoTableShell(extraClass?: string): { table: HTMLElement; tbody: HTMLElement } {
-    const table = document.createElement('table');
-    table.className = 'ws-detail-repo-table' + (extraClass ? ' ' + extraClass : '');
-
-    const thead = document.createElement('thead');
-    const headerRow = document.createElement('tr');
-    for (const label of ['Repo', 'Branch', 'Status']) {
-      const th = document.createElement('th');
-      th.textContent = label;
-      headerRow.appendChild(th);
-    }
-    thead.appendChild(headerRow);
-    table.appendChild(thead);
-
-    const tbody = document.createElement('tbody');
-    table.appendChild(tbody);
-
-    return { table, tbody };
+    const className = 'ws-detail-repo-table' + (extraClass ? ' ' + extraClass : '');
+    return createTableShell(['Repo', 'Branch', 'Status'], className);
   }
 
   private renderDetailRepoTable(statuses: RepoStatus[]): HTMLElement {
@@ -1139,72 +1226,92 @@ export class WorkspaceHub {
 
   private renderHeader(): HTMLElement {
     const header = document.createElement('div');
-    header.className = 'ws-header';
+    header.className = 'page-header';
 
     const title = document.createElement('span');
-    title.className = 'ws-header-title';
+    title.className = 'page-header-title';
     title.textContent = 'Devora';
     header.appendChild(title);
 
-    if (this.profiles.length > 1) {
-      header.appendChild(this.renderProfileSelector());
+    if (this.profilesLoaded && this.profiles.length > 0) {
+      header.appendChild(this.buildProfileDropdown());
     }
 
     return header;
   }
 
-  private renderProfileSelector(): HTMLElement {
-    const select = document.createElement('select');
-    select.className = 'ws-profile-selector';
-
-    for (const profile of this.profiles) {
-      const option = document.createElement('option');
-      option.value = profile.path;
-      option.textContent = profile.name;
-      option.selected = profile.path === this.activeProfilePath;
-      select.appendChild(option);
-    }
-
-    select.addEventListener('change', async () => {
-      this.activeProfilePath = select.value;
-      this.statusCache.clear();
-      this.statusErrors.clear();
-      this.profilingT0 = performance.now();
-      this.profilingSaved = false;
-      this.profilingError = false;
-
-      const listWorkspacesStart = performance.now();
-      await this.loadWorkspaces();
-      const listWorkspacesDuration = performance.now() - listWorkspacesStart;
-
-      this.workspacesLoaded = true;
-
-      const activeProfile = this.profiles.find((p) => p.path === this.activeProfilePath);
-      this.profilingData = {
-        timestamp: new Date().toISOString(),
-        profileName: activeProfile?.name ?? '',
-        profilePath: this.activeProfilePath ?? '',
-        workspaceCount: this.workspaces.length,
-        phases: {
-          listProfiles: { startMs: 0, durationMs: 0 },
-          listWorkspaces: {
-            startMs: listWorkspacesStart - this.profilingT0,
-            durationMs: listWorkspacesDuration,
-          },
-          render: { startMs: 0, durationMs: 0 },
-          totalLoad: {
-            startMs: 0,
-            durationMs: performance.now() - this.profilingT0,
-          },
-        },
-        workspaceStatuses: [],
-      };
-
-      this.render();
-      this.preloadAllStatuses();
+  private buildProfileDropdown(): HTMLElement {
+    const activeProfile = this.profiles.find((p) => p.path === this.activeProfilePath);
+    const items: DropdownItem[] = [
+      ...this.profiles.map(
+        (profile): DropdownItem => ({
+          kind: 'option',
+          label: profile.name,
+          detail: pluralize(profile.repoCount, 'repo'),
+          checked: profile.path === this.activeProfilePath,
+          onSelect: () => void this.switchToProfile(profile.path),
+        }),
+      ),
+      { kind: 'separator' },
+      {
+        kind: 'action',
+        label: 'New Profile…',
+        icon: '＋',
+        onSelect: () => this.onOpenProfileManager('new'),
+      },
+      {
+        kind: 'action',
+        label: 'Manage Profiles…',
+        icon: '⚙',
+        onSelect: () => this.onOpenProfileManager('list'),
+      },
+    ];
+    const handle = createDropdownMenu({
+      triggerLabel: activeProfile?.name ?? 'Profiles',
+      items,
     });
+    handle.element.classList.add('ws-profile-dropdown');
+    return handle.element;
+  }
 
-    return select;
+  private async switchToProfile(path: string): Promise<void> {
+    if (path === this.activeProfilePath) return;
+    this.activeProfilePath = path;
+    this.statusCache.clear();
+    this.statusErrors.clear();
+    this.profilingT0 = performance.now();
+    this.profilingSaved = false;
+    this.profilingError = false;
+
+    const listWorkspacesStart = performance.now();
+    await this.loadWorkspaces();
+    const listWorkspacesDuration = performance.now() - listWorkspacesStart;
+
+    this.workspacesLoaded = true;
+
+    const activeProfile = this.profiles.find((p) => p.path === this.activeProfilePath);
+    this.profilingData = {
+      timestamp: new Date().toISOString(),
+      profileName: activeProfile?.name ?? '',
+      profilePath: this.activeProfilePath ?? '',
+      workspaceCount: this.workspaces.length,
+      phases: {
+        listProfiles: { startMs: 0, durationMs: 0 },
+        listWorkspaces: {
+          startMs: listWorkspacesStart - this.profilingT0,
+          durationMs: listWorkspacesDuration,
+        },
+        render: { startMs: 0, durationMs: 0 },
+        totalLoad: {
+          startMs: 0,
+          durationMs: performance.now() - this.profilingT0,
+        },
+      },
+      workspaceStatuses: [],
+    };
+
+    this.render();
+    this.preloadAllStatuses();
   }
 
   private async toggleNewForm(): Promise<void> {
@@ -1378,6 +1485,7 @@ export class WorkspaceHub {
           ['2', 'Show inactive workspaces'],
           ['3', 'Show all workspaces'],
           ['n', 'New task'],
+          ['P', 'Open Profile Manager'],
           ['R', 'Refresh hub'],
           ['q', 'Close hub'],
           ['?', 'Toggle this cheatsheet'],

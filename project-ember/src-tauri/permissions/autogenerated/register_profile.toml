@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-register-profile"
+description = "Enables the register_profile command without any pre-configured scope."
+commands.allow = ["register_profile"]
+
+[[permission]]
+identifier = "deny-register-profile"
+description = "Denies the register_profile command without any pre-configured scope."
+commands.deny = ["register_profile"]

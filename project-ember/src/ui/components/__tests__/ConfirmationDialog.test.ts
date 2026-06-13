@@ -214,4 +214,26 @@ describe('showConfirmationDialog', () => {
     const cancel = document.querySelector('.confirmation-dialog-cancel');
     expect(cancel?.tagName).toBe('BUTTON');
   });
+
+  it('omits the cancel button when hideCancel is set', () => {
+    showConfirmationDialog({
+      title: 'Cannot delete profile',
+      body: 'Close the blocking sessions first.',
+      confirmLabel: 'OK',
+      hideCancel: true,
+    });
+    expect(document.querySelector('.confirmation-dialog-cancel')).toBeNull();
+    expect(document.querySelector('.confirmation-dialog-confirm')).not.toBeNull();
+  });
+
+  it('still resolves false on Escape when hideCancel is set', async () => {
+    const promise = showConfirmationDialog({
+      title: 'Notice',
+      body: 'Body',
+      confirmLabel: 'OK',
+      hideCancel: true,
+    });
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(await promise).toBe(false);
+  });
 });
