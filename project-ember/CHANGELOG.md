@@ -9,3 +9,4 @@
 - New keybindings:
 	- Shift+Shift (rapid double-tap) opens the Command Palette
 - Profile management: create, register, unregister, and switch profiles - with Command Palette entries
+- Git shortcuts in session shells: Debi's git shortcuts work as bare commands (e.g. `gcl` runs `debi gcl`) in any shell, including non-zsh sub-shells; disable via the `terminal.git-shortcuts` config key

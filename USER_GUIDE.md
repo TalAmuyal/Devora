@@ -141,6 +141,7 @@ Some settings are configured directly in `config.json` (global or per-profile) r
 | Key | Values | Default | Scope |
 |-----|--------|---------|-------|
 | `review.open-mode` | `"tab"`, `"overlay"`, `"browser"` | `"tab"` | profile-overridable |
+| `terminal.git-shortcuts` | `true`, `false` | `true` | profile-overridable |
 
 **`review.open-mode`** controls how the crit review UI opens:
 
@@ -157,6 +158,9 @@ Example:
   }
 }
 ```
+
+**`terminal.git-shortcuts`** controls whether Devora-Ember session shells expose Debi's git shortcuts as bare commands (see [Git shortcuts in session shells](#git-shortcuts-in-session-shells)).
+Set it to `false` to disable.
 
 ## The `ccc` Command
 
@@ -193,6 +197,23 @@ Highlights:
 - **Health check**: `debi health` verifies that all required dependencies are installed
 - **Read config**: `debi get-conf [--profile <name>] <key>` reads a resolved config value and prints it to stdout, intended for use in shell scripts
 - **Shell completions**: See [Recommended: Shell Completions](#recommended-shell-completions)
+
+### Git shortcuts in session shells
+
+In Devora-Ember, every session shell exposes Debi's git shortcuts as bare commands: typing `gcl` runs `debi gcl`, `gst` runs `debi gst`, and so on for every shortcut listed by `debi --help`.
+This works in any shell -- zsh, bash, fish, and nested sub-shells -- because the shortcuts are installed as small executables on the session's `PATH`.
+
+If you already define a command, alias, or function with the same name (for example, oh-my-zsh's `gcl`), your own definition takes precedence; the Debi shortcut only applies to names you haven't already bound.
+
+To turn this off, set `terminal.git-shortcuts` to `false` in `config.json` (globally or per-profile):
+
+```json
+{
+  "terminal": {
+    "git-shortcuts": false
+  }
+}
+```
 
 ## Recommended: Shell Completions
 

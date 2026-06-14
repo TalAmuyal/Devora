@@ -589,6 +589,29 @@ pub fn get_default_app(profile_path: &str) -> Result<Option<String>, String> {
     }
 }
 
+/// Resolves whether Debi git-shortcut command shims should be placed on the PATH of session shells.
+/// Profile-level `terminal.git-shortcuts` wins, then global config, then defaults to `true` (feature enabled).
+/// A malformed or unreadable config degrades to the default rather than failing PTY creation.
+pub fn get_git_shortcuts_enabled(profile_path: Option<&str>) -> bool {
+    if let Some(profile_path) = profile_path {
+        let profile_config_path = Path::new(profile_path).join("config.json");
+        if profile_config_path.exists() {
+            if let Ok(profile_config) = read_json_file(&profile_config_path) {
+                if let Some(val) = get_value_by_dot_path(&profile_config, "terminal.git-shortcuts") {
+                    if let Some(b) = val.as_bool() {
+                        return b;
+                    }
+                }
+            }
+        }
+    }
+
+    match get_config_value("terminal.git-shortcuts") {
+        Ok(Some(val)) => val.as_bool().unwrap_or(true),
+        _ => true,
+    }
+}
+
 pub(crate) fn find_next_workspace_id(workspaces_dir: &Path) -> Result<String, String> {
     if !workspaces_dir.exists() {
         return Ok("ws-1".to_string());
@@ -1063,6 +1086,43 @@ mod tests {
         std::env::set_var("DEVORA_CONFIG_PATH", "/tmp/test-config.json");
         let path = global_config_path().unwrap();
         assert_eq!(path, PathBuf::from("/tmp/test-config.json"));
+        match original {
+            Some(v) => std::env::set_var("DEVORA_CONFIG_PATH", v),
+            None => std::env::remove_var("DEVORA_CONFIG_PATH"),
+        }
+    }
+
+    #[test]
+    fn test_get_git_shortcuts_enabled() {
+        let original = std::env::var("DEVORA_CONFIG_PATH").ok();
+
+        // Point the global config at a guaranteed-absent file so global resolution is deterministic (returns None -> default true).
+        let tmp = tempfile::tempdir().unwrap();
+        let global_config = tmp.path().join("global-config.json");
+        std::env::set_var("DEVORA_CONFIG_PATH", &global_config);
+
+        // No profile, no global config file -> default true.
+        assert!(get_git_shortcuts_enabled(None));
+
+        // Global config disables it (no profile override present).
+        fs::write(&global_config, r#"{"terminal":{"git-shortcuts":false}}"#).unwrap();
+        assert!(!get_git_shortcuts_enabled(None));
+
+        // Profile override wins over global.
+        let profile_dir = tmp.path().join("profile");
+        fs::create_dir_all(&profile_dir).unwrap();
+        fs::write(
+            profile_dir.join("config.json"),
+            r#"{"terminal":{"git-shortcuts":true}}"#,
+        )
+        .unwrap();
+        let profile_path = profile_dir.to_string_lossy().to_string();
+        assert!(get_git_shortcuts_enabled(Some(&profile_path)));
+
+        // Profile with the key absent falls through to global (false here).
+        fs::write(profile_dir.join("config.json"), r#"{"name":"p"}"#).unwrap();
+        assert!(!get_git_shortcuts_enabled(Some(&profile_path)));
+
         match original {
             Some(v) => std::env::set_var("DEVORA_CONFIG_PATH", v),
             None => std::env::remove_var("DEVORA_CONFIG_PATH"),
