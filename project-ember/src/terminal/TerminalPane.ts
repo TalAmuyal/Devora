@@ -48,6 +48,7 @@ function getFontSizeFromCSS(): number {
 const RESIZE_DEBOUNCE_MS = 50;
 
 export class TerminalPane {
+  private container: HTMLElement;
   private terminal: Terminal;
   private fitAddon: FitAddon;
   private webglAddon: WebglAddon | null = null;
@@ -58,6 +59,7 @@ export class TerminalPane {
   private onExitCallback: ((ptyId: number) => void) | null = null;
 
   constructor(container: HTMLElement) {
+    this.container = container;
     this.terminal = new Terminal({
       theme: getThemeFromCSS(),
       fontFamily: getFontFamilyFromCSS(),
@@ -101,7 +103,7 @@ export class TerminalPane {
         clearTimeout(this.resizeDebounceTimer);
       }
       this.resizeDebounceTimer = setTimeout(() => {
-        this.fitAddon.fit();
+        this.fit();
         this.resizeDebounceTimer = null;
       }, RESIZE_DEBOUNCE_MS);
     });
@@ -125,7 +127,7 @@ export class TerminalPane {
   }
 
   async connect(cwd?: string, appCommand?: string, profilePath?: string): Promise<void> {
-    this.fitAddon.fit();
+    this.fit();
 
     const outputChannel = new Channel<number[]>();
     outputChannel.onmessage = (data: number[]) => {
@@ -183,9 +185,20 @@ export class TerminalPane {
     this.terminal.focus();
   }
 
+  /**
+   * Fit the terminal to its container.
+   * No-op when the pane has no layout box (e.g. an inactive tab hidden via display:none) — fitting then would shrink the terminal, and the PTY via onResize, to xterm's minimum width and squash the shell's output.
+   */
+  fit(): void {
+    if (this.container.clientWidth === 0 || this.container.clientHeight === 0) {
+      return;
+    }
+    this.fitAddon.fit();
+  }
+
   setFontSize(size: number): void {
     this.terminal.options.fontSize = size;
-    this.fitAddon.fit();
+    this.fit();
   }
 
   getFontSize(): number {

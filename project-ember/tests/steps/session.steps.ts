@@ -1,5 +1,5 @@
 import assert from 'node:assert';
-import { When, Then } from '@cucumber/cucumber';
+import { Given, When, Then } from '@cucumber/cucumber';
 import { EmberWorld } from '../support/world';
 import { writeToTerminal, waitForTerminalContent } from '../support/terminal-helper';
 
@@ -72,5 +72,36 @@ Then(
   'the terminal should contain {string}',
   async function (this: EmberWorld, expected: string) {
     await waitForTerminalContent(this.driver, expected, 10_000);
+  },
+);
+
+Given(
+  "the active session's terminal width is recorded",
+  async function (this: EmberWorld) {
+    this.recordedTerminalCols = await this.driver.eval(`
+      const session = window.__test.sessionManager.getActiveSession();
+      return session.containerEl.__xtermTerminal.cols;
+    `);
+  },
+);
+
+When('the terminal font size is decreased', async function (this: EmberWorld) {
+  // Dispatch the real Ctrl+Shift+Minus shortcut, which fits every session synchronously — including backgrounded ones — so the assertion needs no wait.
+  await this.driver.eval(`
+    window.dispatchEvent(new KeyboardEvent('keydown', {
+      key: '-', code: 'Minus', ctrlKey: true, shiftKey: true,
+      bubbles: true, cancelable: true,
+    }));
+  `);
+});
+
+Then(
+  "the recorded session's terminal width should be unchanged",
+  async function (this: EmberWorld) {
+    const cols = await this.driver.eval(`
+      const session = window.__test.sessionManager.getSessions()[0];
+      return session.containerEl.__xtermTerminal.cols;
+    `);
+    assert.strictEqual(cols, this.recordedTerminalCols);
   },
 );

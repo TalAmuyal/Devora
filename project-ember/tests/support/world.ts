@@ -15,6 +15,8 @@ export class EmberWorld extends World {
   originalTaskUid?: string;
   // Latest origin commit a reused worktree is expected to refresh to (set by the origin-advanced step).
   expectedHead?: string;
+  // Terminal column count of a session captured while active, to assert it survives backgrounding.
+  recordedTerminalCols?: number;
 }
 
 setWorldConstructor(EmberWorld);

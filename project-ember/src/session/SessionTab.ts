@@ -70,6 +70,8 @@ export class SessionTab {
 
   show(): void {
     this.containerEl.style.display = 'block';
+    // Now that the pane has a layout box again, snap it to the current size — covers a window resize that happened while this tab was hidden.
+    this.terminalPane.fit();
     this.terminalPane.focus();
   }
 
