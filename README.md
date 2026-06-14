@@ -56,9 +56,23 @@ curl -fsSL https://raw.githubusercontent.com/TalAmuyal/Devora/master/install.sh 
 
 Both commands download the latest DMG, replace any existing `/Applications/Devora.app`, clear the macOS quarantine attribute (so Gatekeeper won't block first launch), and install the `debi` zsh completion.
 
+##### Devora-Ember (next-gen)
+
+To install Devora-Ember (the next-gen Tauri build) instead, add `--ember`. It installs as `/Applications/Devora-Ember.app`, side by side with the default Devora:
+
+```
+curl -fsSL https://raw.githubusercontent.com/TalAmuyal/Devora/master/install.sh | bash -s -- --ember
+```
+
+Combine with `--nightly` for the latest Ember nightly:
+
+```
+curl -fsSL https://raw.githubusercontent.com/TalAmuyal/Devora/master/install.sh | bash -s -- --ember --nightly
+```
+
 #### Manual install
 
-Download the latest `.dmg` from the [GitHub Releases](https://github.com/TalAmuyal/Devora/releases) page and drag Devora.app to `/Applications`.
+Download the latest `.dmg` from the [GitHub Releases](https://github.com/TalAmuyal/Devora/releases) page and drag Devora.app (or Devora-Ember.app) to `/Applications`.
 
 If Gatekeeper blocks the app on first launch, clear the quarantine attribute manually:
 

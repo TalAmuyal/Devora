@@ -159,6 +159,22 @@ ensure_dir() {
 	mkdir -p "$1"
 }
 
+# The .app bundle icon, generated post-build from the canonical brand asset shared with the Kitty variant rather than committed as a derived .icns.
+# (Tauri's separate compile-time window icon is the committed src-tauri/icons/icon.png.)
+# Routed through the manifest so base-icon.png counts as a fingerprint source.
+gen_app_icon() {
+	if [[ "$LIST_SOURCES" -eq 1 ]]; then
+		echo "base-icon.png"
+		return
+	fi
+	"$BUNDLER_DIR/macos/gen-icon.sh" \
+		--base-icon "$REPO_ROOT/base-icon.png" \
+		--output-dir "$RESOURCES_DIR"
+	# gen-icon.sh emits app.icns; drop any default icns Tauri injected and point the bundle at ours (CFBundleIconFile is extensionless, as in the Kitty variant).
+	find "$RESOURCES_DIR" -maxdepth 1 -name '*.icns' ! -name 'app.icns' -delete
+	plutil -replace CFBundleIconFile -string "app" "$APP_DIR/Contents/Info.plist"
+}
+
 # --- Bundled apps ---
 
 copy_repo        "ccc.sh"                                     "$BUNDLED_APPS_DIR/ccc"
@@ -187,6 +203,10 @@ copy_repo        "USER_GUIDE.md"                              "$RESOURCES_DIR/."
 copy_repo        "CHANGELOG.md"                               "$RESOURCES_DIR/."
 copy_built       "project-status-line/cc-simple-statusline"   "$RESOURCES_DIR/cc-simple-statusline" "project-status-line"
 
+# --- App icon ---
+
+gen_app_icon
+
 if [[ "$LIST_SOURCES" -eq 1 ]]; then
 	exit 0
 fi
@@ -200,6 +220,12 @@ fi
 # --- Version & fingerprint ---
 
 echo -n "$VERSION" > "$RESOURCES_DIR/VERSION"
+
+# Tauri stamps Info.plist from tauri.conf.json's placeholder version; overwrite it with the real build version so macOS (Get Info / About) matches the bundled VERSION file.
+# plutil -replace is used because the plist is Tauri-generated.
+INFO_PLIST="$APP_DIR/Contents/Info.plist"
+plutil -replace CFBundleShortVersionString -string "$VERSION" "$INFO_PLIST"
+plutil -replace CFBundleVersion -string "$VERSION" "$INFO_PLIST"
 
 FINGERPRINT="$("$SCRIPT_DIR/bundle-fingerprint.sh")"
 echo -n "$FINGERPRINT" > "$RESOURCES_DIR/BUILD_FINGERPRINT"

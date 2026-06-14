@@ -181,6 +181,17 @@ jobs:
           # Verify bundled resources were copied
           test -f "$EMBER_APP/Contents/Resources/bundled-apps/debi"
 
+          # Verify version was patched in Info.plist (should not be the tauri.conf.json placeholder)
+          EMBER_VERSION=$(plutil -extract CFBundleShortVersionString raw "$EMBER_APP/Contents/Info.plist")
+          echo "Ember version in plist: $EMBER_VERSION"
+          if [ "$EMBER_VERSION" = "0.1.0" ]; then
+            echo "Error: Ember version was not patched in Info.plist"
+            exit 1
+          fi
+
+          # Verify the brand app icon was generated into the bundle
+          test -f "$EMBER_APP/Contents/Resources/app.icns"
+
           # Verify Ember DMG was created
           test -f "project-ember/src-tauri/target/release/bundle/macos/Devora-Ember.dmg"
 
