@@ -65,7 +65,7 @@ export class SessionTab {
   }
 
   async connect(cwd?: string, appCommand?: string): Promise<void> {
-    await this.terminalPane.connect(cwd, appCommand);
+    await this.terminalPane.connect(cwd, appCommand, this.profilePath ?? undefined);
   }
 
   show(): void {

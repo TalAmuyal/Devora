@@ -10,6 +10,7 @@ import (
 	"devora/internal/jsonvalidate"
 	"devora/internal/process"
 	"devora/internal/prstatus"
+	"devora/internal/shellinit"
 	"devora/internal/style"
 	"devora/internal/submit"
 	"devora/internal/task"
@@ -678,6 +679,21 @@ func runCompletion(args []string) error {
 	default:
 		return &UsageError{Message: fmt.Sprintf("unsupported shell: %s\nusage: debi completion <bash|zsh|fish>", shell)}
 	}
+}
+
+const gitShortcutShimsUsage = `usage: debi git-shortcut-shims <dir>
+
+Write a command shim into <dir> for each git shortcut, so the bare shortcut
+(e.g. gcl) runs "debi gcl" when <dir> is on PATH. Used by the bundler to
+populate the Devora-Ember session-shell shims.`
+
+func runGitShortcutShims(args []string) error {
+	dir := args[0]
+	if dir == "-h" || dir == "--help" {
+		fmt.Println(gitShortcutShimsUsage)
+		return nil
+	}
+	return shellinit.WriteShims(dir, CommandInfos())
 }
 
 func runUtil(args []string) error {

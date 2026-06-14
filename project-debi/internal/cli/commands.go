@@ -338,6 +338,15 @@ func init() {
 		ValidArgs:   []string{"bash", "zsh", "fish"},
 	})
 
+	commands = append(commands, Command{
+		Name:        "git-shortcut-shims",
+		Description: "Write git-shortcut command shims into <dir>",
+		ArgsHint:    "<dir>",
+		Group:       "Utility",
+		MinArgs:     1,
+		Run:         func(args []string) error { return runGitShortcutShims(args) },
+	})
+
 	commandIndex = make(map[string]*Command)
 	for i := range commands {
 		cmd := &commands[i]

@@ -124,7 +124,7 @@ export class TerminalPane {
     }
   }
 
-  async connect(cwd?: string, appCommand?: string): Promise<void> {
+  async connect(cwd?: string, appCommand?: string, profilePath?: string): Promise<void> {
     this.fitAddon.fit();
 
     const outputChannel = new Channel<number[]>();
@@ -149,6 +149,7 @@ export class TerminalPane {
     };
     if (cwd) params.cwd = cwd;
     if (appCommand) params.appCommand = appCommand;
+    if (profilePath) params.profilePath = profilePath;
 
     try {
       this.ptyId = await invoke<number>('create_pty', params);

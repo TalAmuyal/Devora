@@ -20,12 +20,14 @@ pub fn create_pty(
     shell: Option<String>,
     env: Option<HashMap<String, String>>,
     app_command: Option<String>,
+    profile_path: Option<String>,
     cols: u16,
     rows: u16,
     on_output: Channel<Vec<u8>>,
     on_exit: Channel<u32>,
 ) -> Result<u32, String> {
     let ipc_port = ipc_state.port;
+    let git_shortcuts_enabled = workspace::get_git_shortcuts_enabled(profile_path.as_deref());
     let mut manager = state
         .lock()
         .map_err(|e| format!("failed to lock pty manager: {e}"))?;
@@ -35,6 +37,7 @@ pub fn create_pty(
         shell.as_deref(),
         env.as_ref(),
         app_command.as_deref(),
+        git_shortcuts_enabled,
         ipc_port,
         cols,
         rows,

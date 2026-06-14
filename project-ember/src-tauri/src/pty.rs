@@ -30,6 +30,7 @@ impl PtyManager {
         shell: Option<&str>,
         env: Option<&HashMap<String, String>>,
         app_command: Option<&str>,
+        git_shortcuts_enabled: bool,
         ipc_port: u16,
         cols: u16,
         rows: u16,
@@ -75,6 +76,16 @@ impl PtyManager {
         if let Ok(exe_path) = std::env::current_exe() {
             if let Some(contents_dir) = exe_path.parent().and_then(|p| p.parent()) {
                 let resources_dir = contents_dir.join("Resources");
+
+                // Debi git-shortcut shims (gcl -> `debi gcl`, …).
+                // Prepended first so the bare shortcut resolves to the shim in any shell that doesn't already alias/function the name.
+                // Gated by the `terminal.git-shortcuts` config (resolved by the caller).
+                if git_shortcuts_enabled {
+                    let git_shortcuts = resources_dir.join("git-shortcuts");
+                    if git_shortcuts.is_dir() {
+                        extra_paths.push(git_shortcuts.to_string_lossy().into_owned());
+                    }
+                }
 
                 let bundled_apps = resources_dir.join("bundled-apps");
                 if bundled_apps.exists() {
@@ -239,7 +250,7 @@ mod tests {
         let (channel, _collected) = collecting_channel();
 
         let id = manager
-            .create_session(Some("/tmp"), None, None, None, 0, 80, 24, channel, noop_exit_channel())
+            .create_session(Some("/tmp"), None, None, None, false, 0, 80, 24, channel, noop_exit_channel())
             .expect("should create session");
 
         assert_eq!(id, 1);
@@ -259,6 +270,7 @@ mod tests {
                 None,
                 None,
                 Some("echo EMBER_TEST_OUTPUT"),
+                false,
                 0,
                 80,
                 24,
@@ -285,7 +297,7 @@ mod tests {
         let (channel, _collected) = collecting_channel();
 
         let id = manager
-            .create_session(Some("/tmp"), None, None, None, 0, 80, 24, channel, noop_exit_channel())
+            .create_session(Some("/tmp"), None, None, None, false, 0, 80, 24, channel, noop_exit_channel())
             .expect("should create session");
 
         manager
@@ -301,7 +313,7 @@ mod tests {
         let (channel, _collected) = collecting_channel();
 
         let id = manager
-            .create_session(Some("/tmp"), None, None, None, 0, 80, 24, channel, noop_exit_channel())
+            .create_session(Some("/tmp"), None, None, None, false, 0, 80, 24, channel, noop_exit_channel())
             .expect("should create session");
 
         manager.close(id).expect("should close session");
@@ -334,10 +346,10 @@ mod tests {
         let (channel2, _) = collecting_channel();
 
         let id1 = manager
-            .create_session(Some("/tmp"), None, None, Some("true"), 0, 80, 24, channel1, noop_exit_channel())
+            .create_session(Some("/tmp"), None, None, Some("true"), false, 0, 80, 24, channel1, noop_exit_channel())
             .expect("should create session 1");
         let id2 = manager
-            .create_session(Some("/tmp"), None, None, Some("true"), 0, 80, 24, channel2, noop_exit_channel())
+            .create_session(Some("/tmp"), None, None, Some("true"), false, 0, 80, 24, channel2, noop_exit_channel())
             .expect("should create session 2");
 
         assert_eq!(id1, 1);
