@@ -24,3 +24,10 @@ Feature: Session management
     When a new session is created
     And "echo EMBER_BDD_TEST" is typed in the terminal
     Then the terminal should contain "EMBER_BDD_TEST"
+
+  Scenario: A backgrounded session is not squashed when the font size changes
+    Given a session exists
+    And the active session's terminal width is recorded
+    When a new session is created
+    And the terminal font size is decreased
+    Then the recorded session's terminal width should be unchanged
