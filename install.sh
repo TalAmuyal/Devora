@@ -1,15 +1,24 @@
 #!/bin/bash
 
 # One-line installer for Devora.
-# Downloads the latest release DMG from GitHub, mounts it, copies Devora.app
-# to /Applications, clears the quarantine attribute (since the bundle is
-# unsigned), and installs the zsh completion for `debi`.
+# Downloads the latest release DMG from GitHub, mounts it, copies the .app to /Applications, clears the quarantine attribute (since the bundle is unsigned), and installs the zsh completion for `debi`.
+#
+# Two variants ship as separate DMGs and install side by side: the default Kitty-based Devora, and Devora-Ember (--ember), the next-gen Tauri build.
 
 set -euo pipefail
 
 REPO="TalAmuyal/Devora"
-APP_PATH="/Applications/Devora.app"
 APPLICATIONS_DIR="/Applications"
+
+# Which variant the bare installer targets.
+# Devora-Ember is slated to become the default; when that happens, flipping this to "ember" (and the README one-liner) is the only change needed here.
+DEFAULT_VARIANT="og"
+
+# Resolved by resolve_variant() once the variant is known.
+APP_NAME=""
+APP_PATH=""
+DMG_NAME=""
+DISPLAY_NAME=""
 
 # Populated by main / mount_dmg
 TEMP_DIR=""
@@ -17,12 +26,38 @@ DMG_MOUNT_POINT=""
 
 usage() {
 	cat <<EOF
-Usage: install.sh [--nightly]
+Usage: install.sh [--ember] [--nightly]
 
+  --ember     Install Devora-Ember (the next-gen Tauri build) instead of the
+              default Kitty-based Devora. Installs as Devora-Ember.app, side by
+              side with an existing Devora.app.
   --nightly   Install the latest nightly build (rolling alias 'nightly-latest').
               Without this flag, the latest stable release is installed.
   --help, -h  Show this help message and exit.
 EOF
+}
+
+# Resolve per-variant app/DMG names.
+# Devora and Devora-Ember ship as separate DMGs and install side by side under /Applications.
+resolve_variant() {
+	local variant="$1"
+	case "$variant" in
+		og)
+			APP_NAME="Devora.app"
+			DMG_NAME="Devora.dmg"
+			DISPLAY_NAME="Devora"
+			;;
+		ember)
+			APP_NAME="Devora-Ember.app"
+			DMG_NAME="Devora-Ember.dmg"
+			DISPLAY_NAME="Devora-Ember"
+			;;
+		*)
+			err "Unknown variant: $variant"
+			exit 1
+			;;
+	esac
+	APP_PATH="$APPLICATIONS_DIR/$APP_NAME"
 }
 
 log() {
@@ -87,7 +122,7 @@ require_applications_writable() {
 require_devora_not_running() {
 	# pgrep returns 1 when nothing matches; only treat 0 as "running".
 	if pgrep -f "$APP_PATH" >/dev/null 2>&1; then
-		err "Devora appears to be running. Quit it and re-run the installer."
+		err "$DISPLAY_NAME appears to be running. Quit it and re-run the installer."
 		exit 1
 	fi
 }
@@ -98,12 +133,12 @@ download_dmg() {
 
 	local dmg_url
 	if [ "$channel" = "nightly" ]; then
-		dmg_url="https://github.com/$REPO/releases/download/nightly-latest/Devora.dmg"
+		dmg_url="https://github.com/$REPO/releases/download/nightly-latest/$DMG_NAME"
 	else
-		dmg_url="https://github.com/$REPO/releases/latest/download/Devora.dmg"
+		dmg_url="https://github.com/$REPO/releases/latest/download/$DMG_NAME"
 	fi
 
-	log "Downloading Devora.dmg ($channel)..."
+	log "Downloading $DMG_NAME ($channel)..."
 	if ! curl -fSL -o "$dest" "$dmg_url"; then
 		err "Failed to download DMG from $dmg_url"
 		exit 1
@@ -119,11 +154,10 @@ mount_dmg() {
 }
 
 install_app() {
-	# DMG layout (see bundler/macos/README.md): the volume root IS the
-	# `Devora/` directory, so Devora.app sits directly under the mount point.
-	local src="$DMG_MOUNT_POINT/Devora.app"
+	# Both DMGs place the .app at the volume root -- OG's `Devora/` volume (see bundler/macos/README.md) and Ember's create-dmg staging both put it there -- so it sits directly under the mount point.
+	local src="$DMG_MOUNT_POINT/$APP_NAME"
 	if [ ! -d "$src" ]; then
-		err "Expected Devora.app inside DMG at $src but it was not found"
+		err "Expected $APP_NAME inside DMG at $src but it was not found"
 		exit 1
 	fi
 
@@ -132,7 +166,7 @@ install_app() {
 		rm -rf "$APP_PATH"
 	fi
 
-	log "Copying Devora.app to $APPLICATIONS_DIR..."
+	log "Copying $APP_NAME to $APPLICATIONS_DIR..."
 	# cp -R (capital R) preserves symlinks; the DMG is read-only so mv won't work.
 	cp -R "$src" "$APPLICATIONS_DIR/"
 
@@ -152,7 +186,7 @@ install_completions() {
 		echo "Notice: Skipping zsh completion install because the installer is running under sudo."
 		echo "        Re-run as your own user to install completions, or run manually:"
 		echo "          mkdir -p ~/.zsh/completions"
-		echo "          /Applications/Devora.app/Contents/Resources/bundled-apps/debi completion zsh > ~/.zsh/completions/_debi"
+		echo "          $APP_PATH/Contents/Resources/bundled-apps/debi completion zsh > ~/.zsh/completions/_debi"
 		return 0
 	fi
 
@@ -213,15 +247,20 @@ print_success() {
 	fi
 
 	echo ""
-	log "Devora ($channel) installed: version $version"
+	log "$DISPLAY_NAME ($channel) installed: version $version"
 	echo "    Verify with: debi health"
-	echo "    Or open: open -a Devora"
+	echo "    Or open: open -a \"$DISPLAY_NAME\""
 }
 
 main() {
 	local channel="stable"
+	local variant="$DEFAULT_VARIANT"
 	while [ $# -gt 0 ]; do
 		case "$1" in
+			--ember)
+				variant="ember"
+				shift
+				;;
 			--nightly)
 				channel="nightly"
 				shift
@@ -239,13 +278,22 @@ main() {
 		esac
 	done
 
-	local flags_hint=""
+	resolve_variant "$variant"
+
+	# Rebuild the flags the user passed so the sudo re-run hint matches them (e.g. " -s -- --ember --nightly").
+	local passthrough=""
+	if [ "$variant" = "ember" ]; then
+		passthrough="$passthrough --ember"
+	fi
 	if [ "$channel" = "nightly" ]; then
-		flags_hint=" -s -- --nightly"
+		passthrough="$passthrough --nightly"
+	fi
+	local flags_hint=""
+	if [ -n "$passthrough" ]; then
+		flags_hint=" -s --$passthrough"
 	fi
 
-	# Trap before mktemp so a failing mktemp still triggers cleanup; the
-	# cleanup function guards against empty TEMP_DIR / DMG_MOUNT_POINT.
+	# Trap before mktemp so a failing mktemp still triggers cleanup; the cleanup function guards against empty TEMP_DIR / DMG_MOUNT_POINT.
 	trap cleanup EXIT
 
 	detect_platform
@@ -255,7 +303,7 @@ main() {
 
 	TEMP_DIR="$(mktemp -d)"
 
-	local dmg_path="$TEMP_DIR/Devora.dmg"
+	local dmg_path="$TEMP_DIR/$DMG_NAME"
 	download_dmg "$channel" "$dmg_path"
 	mount_dmg "$dmg_path"
 	install_app

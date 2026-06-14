@@ -19,6 +19,8 @@ Types of changes:
 - `--fable` flag for `ccc` that runs Claude Code on the Fable 5 model (`claude-fable-5`) for Opus and Sonnet
 - `n` keyboard shortcut to toggle the New Task form in Workspace Hub
 - Vision documents for the project at `docs/vision/`
+- `--ember` flag for the one-line installer (`install.sh`) that installs Devora-Ember as `Devora-Ember.app`, side by side with Devora (combine with `--nightly` for the latest Ember nightly)
+- Devora-Ember now ships with the Devora brand app icon
 
 ### Fixed
 
