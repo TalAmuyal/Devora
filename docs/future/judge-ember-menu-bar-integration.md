@@ -130,7 +130,8 @@ mise ember-test                    # Rust unit (judge_state) + TS unit
 mise local-ember-test-e2e          # rebuild + cucumber incl. judge-tray.feature
 ```
 
-Manual smoke (`mise ember-dev`): open a session, run `ccc`; trigger an auto-allowed command (✓ entry with the session's tab name), a denied one (✗), an Edit permission request (∅ abstain), an unknown one (menu bar shows `1⏸`); click the tray defer item from another app → Ember focuses + switches tab; answer the prompt → badge clears; Clear history empties the menu. Also run Claude Code in a plain terminal (no `DEVORA_*` env) and confirm unchanged behavior/latency (`duration_us` in the audit log).
+Manual smoke: open a session, run `ccc`; trigger an auto-allowed command (✓ entry with the session's tab name), a denied one (✗), an Edit permission request (∅ abstain), an unknown one (menu bar shows `1⏸`); click the tray defer item from another app → Ember focuses + switches tab; answer the prompt → badge clears; Clear history empties the menu.
+Also run Claude Code in a plain terminal (no `DEVORA_*` env) and confirm unchanged behavior/latency (`duration_us` in the audit log).
 
 **Honest test limits**: the native NSStatusItem itself (icon rendering, title text, menu opening, menu item clicks) cannot be driven by the eval-bridge harness — that slice is covered by Rust view-model unit tests + the manual smoke. Everything up to the native boundary (endpoint → state → title/counters → clear rule → focus event) is automated.
 

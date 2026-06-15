@@ -110,10 +110,8 @@ copy_required() {
 	sleep 0.07
 }
 
-# The copy_* helpers below double as the fingerprint-source manifest: in
-# --list-sources mode each prints the repo path(s) that determine its bundle
-# content instead of copying. Route every bundle item through them so the
-# fingerprint stays in sync with the bundle by construction.
+# The copy_* helpers below double as the fingerprint-source manifest: in --list-sources mode each prints the repo path(s) that determine its bundle content instead of copying.
+# Route every bundle item through them so the fingerprint stays in sync with the bundle by construction.
 
 # A repo file/dir copied into the bundle verbatim
 copy_repo() {
@@ -227,6 +225,11 @@ echo -n "$VERSION" > "$RESOURCES_DIR/VERSION"
 INFO_PLIST="$APP_DIR/Contents/Info.plist"
 plutil -replace CFBundleShortVersionString -string "$VERSION" "$INFO_PLIST"
 plutil -replace CFBundleVersion -string "$VERSION" "$INFO_PLIST"
+
+# The published product is "Devora": this build takes over the "Devora" display name and bundle id, while the internal Tauri productName/identifier stay "Devora-Ember".
+# macOS Launch Services and TCC key off these plist values, so a user upgrading from the previous /Applications/Devora.app gets an in-place replacement at the same id — TCC permissions carry over and the shared ~/.config/devora config (which is independent of the bundle id) is untouched.
+plutil -replace CFBundleName -string "Devora" "$INFO_PLIST"
+plutil -replace CFBundleIdentifier -string "com.devora-org.devora" "$INFO_PLIST"
 
 FINGERPRINT="$("$SCRIPT_DIR/bundle-fingerprint.sh")"
 echo -n "$FINGERPRINT" > "$RESOURCES_DIR/BUILD_FINGERPRINT"

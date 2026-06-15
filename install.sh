@@ -2,23 +2,17 @@
 
 # One-line installer for Devora.
 # Downloads the latest release DMG from GitHub, mounts it, copies the .app to /Applications, clears the quarantine attribute (since the bundle is unsigned), and installs the zsh completion for `debi`.
-#
-# Two variants ship as separate DMGs and install side by side: the default Kitty-based Devora, and Devora-Ember (--ember), the next-gen Tauri build.
 
 set -euo pipefail
 
 REPO="TalAmuyal/Devora"
 APPLICATIONS_DIR="/Applications"
 
-# Which variant the bare installer targets.
-# Devora-Ember is slated to become the default; when that happens, flipping this to "ember" (and the README one-liner) is the only change needed here.
-DEFAULT_VARIANT="og"
-
-# Resolved by resolve_variant() once the variant is known.
-APP_NAME=""
-APP_PATH=""
-DMG_NAME=""
-DISPLAY_NAME=""
+# Devora ships as a single DMG installed to /Applications/Devora.app.
+APP_NAME="Devora.app"
+DMG_NAME="Devora.dmg"
+DISPLAY_NAME="Devora"
+APP_PATH="$APPLICATIONS_DIR/$APP_NAME"
 
 # Populated by main / mount_dmg
 TEMP_DIR=""
@@ -26,38 +20,14 @@ DMG_MOUNT_POINT=""
 
 usage() {
 	cat <<EOF
-Usage: install.sh [--ember] [--nightly]
+Usage: install.sh [--nightly]
 
-  --ember     Install Devora-Ember (the next-gen Tauri build) instead of the
-              default Kitty-based Devora. Installs as Devora-Ember.app, side by
-              side with an existing Devora.app.
   --nightly   Install the latest nightly build (rolling alias 'nightly-latest').
               Without this flag, the latest stable release is installed.
+  --ember     Deprecated no-op, accepted for backward compatibility.
+              Devora is now the Ember build, so this flag has no effect.
   --help, -h  Show this help message and exit.
 EOF
-}
-
-# Resolve per-variant app/DMG names.
-# Devora and Devora-Ember ship as separate DMGs and install side by side under /Applications.
-resolve_variant() {
-	local variant="$1"
-	case "$variant" in
-		og)
-			APP_NAME="Devora.app"
-			DMG_NAME="Devora.dmg"
-			DISPLAY_NAME="Devora"
-			;;
-		ember)
-			APP_NAME="Devora-Ember.app"
-			DMG_NAME="Devora-Ember.dmg"
-			DISPLAY_NAME="Devora-Ember"
-			;;
-		*)
-			err "Unknown variant: $variant"
-			exit 1
-			;;
-	esac
-	APP_PATH="$APPLICATIONS_DIR/$APP_NAME"
 }
 
 log() {
@@ -154,7 +124,7 @@ mount_dmg() {
 }
 
 install_app() {
-	# Both DMGs place the .app at the volume root -- OG's `Devora/` volume (see bundler/macos/README.md) and Ember's create-dmg staging both put it there -- so it sits directly under the mount point.
+	# create-dmg stages Devora.app at the volume root, so it sits directly under the mount point.
 	local src="$DMG_MOUNT_POINT/$APP_NAME"
 	if [ ! -d "$src" ]; then
 		err "Expected $APP_NAME inside DMG at $src but it was not found"
@@ -254,11 +224,11 @@ print_success() {
 
 main() {
 	local channel="stable"
-	local variant="$DEFAULT_VARIANT"
 	while [ $# -gt 0 ]; do
 		case "$1" in
 			--ember)
-				variant="ember"
+				# Deprecated no-op: Devora is now the Ember build. Accepted so old install commands keep working.
+				log "Note: --ember is deprecated and has no effect; Devora is now the Ember build."
 				shift
 				;;
 			--nightly)
@@ -278,19 +248,10 @@ main() {
 		esac
 	done
 
-	resolve_variant "$variant"
-
-	# Rebuild the flags the user passed so the sudo re-run hint matches them (e.g. " -s -- --ember --nightly").
-	local passthrough=""
-	if [ "$variant" = "ember" ]; then
-		passthrough="$passthrough --ember"
-	fi
-	if [ "$channel" = "nightly" ]; then
-		passthrough="$passthrough --nightly"
-	fi
+	# Rebuild the flags the user passed so the sudo re-run hint matches them (e.g. " -s -- --nightly").
 	local flags_hint=""
-	if [ -n "$passthrough" ]; then
-		flags_hint=" -s --$passthrough"
+	if [ "$channel" = "nightly" ]; then
+		flags_hint=" -s -- --nightly"
 	fi
 
 	# Trap before mktemp so a failing mktemp still triggers cleanup; the cleanup function guards against empty TEMP_DIR / DMG_MOUNT_POINT.

@@ -28,23 +28,24 @@ if [ -z "$APP_DIR" ]; then
   echo "ERROR: No .app found in $BUNDLE_DIR. Build first with: mise run build-ember-app" >&2
   exit 1
 fi
-APP_NAME=$(basename "$APP_DIR" .app)
+# The "Devora" name appears only at the DMG/install boundary: the Tauri build still emits Devora-Ember.app, but the published DMG, its staged .app, and the mounted volume are all named "Devora".
 DMG_STAGING="$BUNDLE_DIR/dmg-staging"
 rm -rf "$DMG_STAGING"
 mkdir -p "$DMG_STAGING"
-cp -R "$APP_DIR" "$DMG_STAGING/"
-DMG_OUTPUT="$BUNDLE_DIR/${APP_NAME}.dmg"
+cp -R "$APP_DIR" "$DMG_STAGING/Devora.app"
+DMG_OUTPUT="$BUNDLE_DIR/Devora.dmg"
 rm -f "$DMG_OUTPUT"
 REPO_ROOT=$(git rev-parse --show-toplevel)
 "$REPO_ROOT/bundler/hdiutil-create-retry.sh" \
   -format UDZO \
   -imagekey zlib-level=9 \
+  -volname "Devora" \
   -srcfolder "$DMG_STAGING" \
   -o "$DMG_OUTPUT"
 rm -rf "$DMG_STAGING"
 echo "DMG created: $DMG_OUTPUT"
 """
-description = "Create a DMG from an existing .app bundle (run build-ember-app first)"
+description = "Create a Devora DMG from the built Ember .app bundle (run build-ember-app first)"
 
 [tasks.test-rust]
 dir = "src-tauri"
