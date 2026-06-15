@@ -159,16 +159,17 @@ ensure_dir() {
 	mkdir -p "$1"
 }
 
-# The .app bundle icon, generated post-build from the canonical brand asset shared with the Kitty variant rather than committed as a derived .icns.
+# The .app bundle icon, generated post-build from Ember's own brand asset (the mauve "D" on a crust squircle) rather than committed as a derived .icns.
+# Ember has a distinct icon from the Kitty variant, so it uses base-icon-ember.png instead of the shared base-icon.png.
 # (Tauri's separate compile-time window icon is the committed src-tauri/icons/icon.png.)
-# Routed through the manifest so base-icon.png counts as a fingerprint source.
+# Routed through the manifest so base-icon-ember.png counts as a fingerprint source.
 gen_app_icon() {
 	if [[ "$LIST_SOURCES" -eq 1 ]]; then
-		echo "base-icon.png"
+		echo "base-icon-ember.png"
 		return
 	fi
 	"$BUNDLER_DIR/macos/gen-icon.sh" \
-		--base-icon "$REPO_ROOT/base-icon.png" \
+		--base-icon "$REPO_ROOT/base-icon-ember.png" \
 		--output-dir "$RESOURCES_DIR"
 	# gen-icon.sh emits app.icns; drop any default icns Tauri injected and point the bundle at ours (CFBundleIconFile is extensionless, as in the Kitty variant).
 	find "$RESOURCES_DIR" -maxdepth 1 -name '*.icns' ! -name 'app.icns' -delete
