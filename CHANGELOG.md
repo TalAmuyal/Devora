@@ -14,6 +14,8 @@ Types of changes:
 
 ## Unreleased
 
+## 2026-06-16.0
+
 ### Highlights
 
 #### The Ember Project is GA
