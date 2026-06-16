@@ -2,10 +2,22 @@
 
 set -e
 
-DEBI_BINARY="/Applications/Devora.app/Contents/Resources/bundled-apps/debi"
+# Generate the debi zsh completion file from the debi binary bundled inside an installed Devora .app, and (one-time) hint the user how to wire up fpath.
+# The installed app path is passed in so completions resolve for any install destination (release Devora.app, an untagged Devora-<version>.app, or Devora-dev.app).
+# The generated _debi content is identical regardless of build.
+
+if [ $# -lt 1 ]; then
+	echo "Usage: $0 <installed-app-path>" >&2
+	exit 1
+fi
+
+APP_PATH="$1"
+DEBI_BINARY="$APP_PATH/Contents/Resources/bundled-apps/debi"
 COMPLETIONS_DIR="$HOME/.zsh/completions"
 COMPLETION_FILE="$COMPLETIONS_DIR/_debi"
 ZSHRC="$HOME/.zshrc"
+# Literal tilde is intentional: this is a grep pattern matched against the user's ~/.zshrc, where they typically write `fpath=(~/.zsh/completions ...)`.
+# shellcheck disable=SC2088
 FPATH_ENTRY="~/.zsh/completions"
 
 if [ ! -x "$DEBI_BINARY" ]; then

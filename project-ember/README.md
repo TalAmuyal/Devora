@@ -1,13 +1,13 @@
 # Devora-Ember
 
-Devora-Ember is an experimental variant of Devora that replaces Kitty (terminal emulator) and Glimpse-TTY (Electron-based web viewer) with Tauri (Rust desktop framework + native WebView) and xterm.js (JavaScript terminal library).
+Devora-Ember (internally "Ember") is the Devora app: a native desktop build using Tauri (Rust desktop framework + native WebView) and xterm.js (JavaScript terminal library).
 
-## Key Differences from Devora OG
+## Architecture highlights
 
-- **No Kitty**: The app window is a Tauri WebView, not a Kitty terminal
-- **No Glimpse-TTY**: Web content (Crit UI, User Guide, etc.) renders natively in the WebView via the overlay system
-- **Native workspace management UI**: The Workspace Hub is a web UI overlay instead of debi's Bubble Tea TUI
-- **Overlay system**: Tab-covering overlays (Workspace Hub, User Guide, cheatsheet) and panel overlays (Crit) replace Kitty tabs and Glimpse-TTY windows
+- **Tauri WebView app window**: the app is a native desktop window embedding a WebView
+- **Native web content**: Crit UI, User Guide, etc. render natively in the WebView via the overlay system
+- **Native workspace management UI**: the Workspace Hub is a web UI overlay
+- **Overlay system**: tab-covering overlays (Workspace Hub, User Guide, cheatsheet) and panel overlays (Crit)
 
 ## Supported Platform
 
@@ -24,7 +24,6 @@ macOS (Apple Silicon) only for now, but there are plans to add Linux support in 
 From the repo root:
 
 ```
-mise ember-dev                 # Build and run
 mise build-ember-app           # Build .app only
 mise ember-create-dmg          # Build .app + DMG installer
 mise ember-test                # Run Rust tests
@@ -198,7 +197,6 @@ project-ember/
 │   ├── steps/              # Step definitions
 │   └── support/            # Helpers: app-driver, ui-driver, fixture-helper, ws-hub-helper, fake API server
 ├── mockups/
-├── docs/PLAN.md
 ├── DEFERRED.md
 └── CLAUDE.md
 ```

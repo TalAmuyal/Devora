@@ -1,12 +1,13 @@
 @README.md
 
-When reading/updating docs, make sure to also check `./USER_GUIDE.md` as well.
+You can read `./USER_GUIDE.md` for high-level understanding of the project.
 
 ## Language
 
-**Devora**: The name of the application we develop
-**Devora OG**: The current version of Devora that is based on Kitty and Glimpse-TTY
-**Devora-Ember**: The next-gen version of Devora that is based on Tauri and xterm.js
+**Devora**: The name of the application we develop. The published product is the Ember build (see below)
+**Devora OG**: The legacy version of Devora based on Kitty and Glimpse-TTY; No longer published or installable; kept in-repo as a source-only reference for implementing Ember
+**Devora-Ember** / **Ember**: The Tauri + xterm.js build, which is published as "Devora"
+	- It keeps the "Ember" name internally (the `project-ember/` directory, the `devora-ember` binary, some `ember-*` mise tasks)
 
 Below are terms that have a specific meaning in the context of Devora:
 - **Workspace**: A directory that houses one or more git worktrees; it is the root directory from which work is being done in Devora (could be active or inactive) and is where Claude Code is invoked. Workspaces that failed initialization appear as Invalid in the Workspace Hub

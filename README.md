@@ -2,12 +2,9 @@ This repo contains the "Devora" project.
 Devora is a heavily opinionated IDE for the agentic world.
 Its goal is to leverage and compose existing tools to create a powerful and efficient agentic IDE.
 
-This is not a traditional IDE, like Eclipse, VSCode, or JetBrains IDEs.
-It is a terminal-based app that integrates existing tools as much as possible to provide a complete (and dedicated) experience.
-
 ## Supported platform
 
-macOS (Apple Silicon) only.
+Only macOS (Apple Silicon) is currently supported, but there are plans to add Linux support in the future.
 
 ## Prerequisites
 
@@ -23,8 +20,6 @@ macOS (Apple Silicon) only.
 ### Bundled
 
 - [Crit](https://github.com/tomasz-tomczyk/crit) -- AI code review tool with inline comments
-- [glimpse-tty](https://github.com/TalAmuyal/glimpse-tty) -- terminal web viewer based on awrit
-- [Kitty](https://sw.kovidgoyal.net/kitty/) -- terminal emulator used as the main UI container
 - [uv](https://docs.astral.sh/uv/) -- Python package manager
 
 ### Optional
@@ -37,6 +32,9 @@ Run `debi health` to verify that all required dependencies are installed.
 Use `--strict` to also check optional ones.
 
 ## Getting started
+
+1. Install (`curl -fsSL https://raw.githubusercontent.com/TalAmuyal/Devora/master/install.sh | bash` or see other options below)
+2. Read the [User Guide](USER_GUIDE.md) for day-to-day usage
 
 ### Install from a release
 
@@ -56,23 +54,9 @@ curl -fsSL https://raw.githubusercontent.com/TalAmuyal/Devora/master/install.sh 
 
 Both commands download the latest DMG, replace any existing `/Applications/Devora.app`, clear the macOS quarantine attribute (so Gatekeeper won't block first launch), and install the `debi` zsh completion.
 
-##### Devora-Ember (next-gen)
-
-To install Devora-Ember (the next-gen Tauri build) instead, add `--ember`. It installs as `/Applications/Devora-Ember.app`, side by side with the default Devora:
-
-```
-curl -fsSL https://raw.githubusercontent.com/TalAmuyal/Devora/master/install.sh | bash -s -- --ember
-```
-
-Combine with `--nightly` for the latest Ember nightly:
-
-```
-curl -fsSL https://raw.githubusercontent.com/TalAmuyal/Devora/master/install.sh | bash -s -- --ember --nightly
-```
-
 #### Manual install
 
-Download the latest `.dmg` from the [GitHub Releases](https://github.com/TalAmuyal/Devora/releases) page and drag Devora.app (or Devora-Ember.app) to `/Applications`.
+Download the latest `.dmg` from the [GitHub Releases](https://github.com/TalAmuyal/Devora/releases) page and drag Devora.app to `/Applications`.
 
 If Gatekeeper blocks the app on first launch, clear the quarantine attribute manually:
 
@@ -90,22 +74,14 @@ mise mac-install
 
 This builds Devora.app and installs it to `/Applications`.
 
-See the [User Guide](USER_GUIDE.md) for full documentation on profiles, workspaces, and day-to-day usage.
-
 ## Components
 
 Devora builds upon the following tools:
 - Claude Code, as the agentic coding tool
-- Kitty, as:
-	- The main UI container (which means this IDE is terminal-based)
-	- A multi-session manager (each Kitty tab holds an active session of the IDE)
-- Neovim, as the recommended multi-purpose tool for:
-	- Code exploration and editing
-	- Terminal multiplexer: It can multiplex files, scratch buffers, and terminals in the same session over different Neovim tabs and Neovim windows (splits)
-	- Configurable via `terminal.default-app`: by default each workspace session opens a bare login/interactive shell; set `terminal.default-app` to `nvim` (or any other command) to launch a wrapped app instead
+- Crit for reviewing plans and code changes
+- Ember (Tauri + xterm.js), as the UI framework
 - Debi (`./project-debi/`), Devora's CLI for workspace management and utilities
 - Judge (`./project-judge/`), a Claude Code plugin for auto-approving/rejecting permission requests aiming to reduce permission fatigue and speed up the development process
-- Crit for reviewing plans and code changes
 - CCC (`./ccc.sh`), a launcher script for Claude Code that customizes its behavior and integrates it with the rest of the IDE
 - CC Status Line (`./project-status-line/`), a simple status line script for Claude Code that shows the current context-window usage and session cost
 - Bundler (`./bundler/`), a tool for bundling the IDE into a self-contained app bundle for distribution
@@ -113,7 +89,7 @@ Devora builds upon the following tools:
 ## Project layout
 
 Some of the tools are sub-projects in the repo, while others are off-the-shelf tools.
-Sub-projects are located in directories at the root of the repo with a "project-" prefix (e.g., `project-debi/`), while off-the-shelf tools are either vendored with the IDE or are mentioned in the requirements section of the user guide.
+Sub-projects are located in directories at the root of the repo with a "project-" prefix (e.g., `project-debi/`), while off-the-shelf tools are either vendored with the IDE or are mentioned in a requirements/lock file.
 
 ## License
 
@@ -125,4 +101,4 @@ For third-party licenses, see [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md)
 
 Claude and Claude Code are trademarks of Anthropic, PBC.
 Devora is an independent project not affiliated with or endorsed by Anthropic.
-Using Devora expects a Claude Code subscription and might need acceptance of Anthropic's Terms of Service.
+Using Devora expects a Claude Code subscription/plan and might need acceptance of Anthropic's Terms of Service.

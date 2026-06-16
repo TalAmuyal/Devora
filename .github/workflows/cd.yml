@@ -140,9 +140,6 @@ jobs:
       - name: Download third-party dependencies
         run: ./bundler/download-deps.sh
 
-      - name: Build Kitty variant DMG
-        run: ./bundler/macos/bundle.sh --dmg
-
       - name: Build Ember variant
         run: mise run ember-bundle
 
@@ -151,26 +148,6 @@ jobs:
 
       - name: Smoke test
         run: |
-          # --- Kitty variant ---
-          DMG_FILE="bin/macOS/Devora.dmg"
-          echo "DMG: $DMG_FILE"
-
-          # Verify binaries are arm64
-          file bin/macOS/Devora/Devora.app/Contents/Resources/bundled-apps/debi | grep -q "arm64"
-          file bin/macOS/Devora/Devora.app/Contents/Resources/uv | grep -q "arm64"
-
-          # Validate Info.plist
-          plutil -lint bin/macOS/Devora/Devora.app/Contents/Info.plist
-
-          # Verify version was patched (should not contain "1.0")
-          VERSION_IN_PLIST=$(plutil -extract CFBundleShortVersionString raw bin/macOS/Devora/Devora.app/Contents/Info.plist)
-          echo "Version in plist: $VERSION_IN_PLIST"
-          if [ "$VERSION_IN_PLIST" = "1.0" ]; then
-            echo "Error: version was not patched in Info.plist"
-            exit 1
-          fi
-
-          # --- Ember variant ---
           EMBER_APP="project-ember/src-tauri/target/release/bundle/macos/Devora-Ember.app"
           echo "Ember app: $EMBER_APP"
 
@@ -192,15 +169,14 @@ jobs:
           # Verify the brand app icon was generated into the bundle
           test -f "$EMBER_APP/Contents/Resources/app.icns"
 
-          # Verify Ember DMG was created
-          test -f "project-ember/src-tauri/target/release/bundle/macos/Devora-Ember.dmg"
+          # Verify the Devora DMG was created
+          test -f "project-ember/src-tauri/target/release/bundle/macos/Devora.dmg"
 
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          DMG_FILE="bin/macOS/Devora.dmg"
-          EMBER_DMG_FILE="project-ember/src-tauri/target/release/bundle/macos/Devora-Ember.dmg"
+          EMBER_DMG_FILE="project-ember/src-tauri/target/release/bundle/macos/Devora.dmg"
 
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             # Stable release
@@ -215,7 +191,7 @@ jobs:
               NOTES="Release ${VERSION}"
             fi
 
-            gh release create "$TAG" "$DMG_FILE" "$EMBER_DMG_FILE" \
+            gh release create "$TAG" "$EMBER_DMG_FILE" \
               --title "Devora $VERSION" \
               --notes "$NOTES"
           else
@@ -238,7 +214,7 @@ jobs:
             # Delete if it already exists (e.g., re-run on same day)
             gh release delete "$NIGHTLY_TAG" --cleanup-tag --yes 2>/dev/null || true
 
-            gh release create "$NIGHTLY_TAG" "$DMG_FILE" "$EMBER_DMG_FILE" \
+            gh release create "$NIGHTLY_TAG" "$EMBER_DMG_FILE" \
               --prerelease \
               --title "Nightly Build ($DATE)" \
               --target "$GITHUB_SHA" \
@@ -258,7 +234,7 @@ jobs:
             # Update rolling nightly-latest alias
             gh release delete nightly-latest --cleanup-tag --yes 2>/dev/null || true
 
-            gh release create nightly-latest "$DMG_FILE" "$EMBER_DMG_FILE" \
+            gh release create nightly-latest "$EMBER_DMG_FILE" \
               --prerelease \
               --title "Nightly Build (Latest)" \
               --target "$GITHUB_SHA" \

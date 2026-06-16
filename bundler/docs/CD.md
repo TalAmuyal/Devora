@@ -29,12 +29,13 @@ The pipeline has two jobs:
 2. **Set up mise** for Go, Python, and other tool versions.
 3. **Restore cached dependencies** (see [Caching](#caching) below).
 4. **Download third-party dependencies** via `./bundler/download-deps.sh`. If the cache was hit, this is a no-op since the script skips already-present files.
-5. **Build DMG** via `./bundler/macos/bundle.sh --dmg`. This compiles Debi, Status-line, bundles all resources, and creates a compressed DMG.
+5. **Build the app bundle** via `mise run ember-bundle`, then **create the DMG** via `mise run ember-create-dmg`. This compiles Debi and Status-line, builds the Tauri (Ember) app into `Devora-Ember.app`, bundles all resources, and produces a compressed `Devora.dmg` (the "Devora" name is applied only at the DMG/install boundary).
 6. **Smoke test** -- verifies that:
-   - The DMG file was created
-   - Bundled binaries (`debi`, `uv`) are arm64
-   - `Info.plist` is valid XML
-   - The version in `Info.plist` was patched (not the placeholder `1.0`)
+   - The built `.app` exists and contains the `devora-ember` binary
+   - Bundled resources (`debi`) were copied in
+   - The version in `Info.plist` was patched (not the placeholder `0.1.0`)
+   - The app icon (`app.icns`) was generated
+   - `Devora.dmg` was created
 7. **Publish release** (see [Release types](#release-types)).
 
 ## Release types

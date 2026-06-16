@@ -14,45 +14,51 @@ Types of changes:
 
 ## Unreleased
 
+### Highlights
+
+#### The Ember Project is GA
+
+Ember is the codename for the UI rewrite of Devora using web technologies.
+
+Ember brings:
+
+- Native desktop app built with Tauri and xterm.js
+- Refreshed and modern web-based UI
+- Command Palette (Shift+Shift): a searchable list of actions with a filter box and `j`/`k` navigation
+- HTML-based User Guide (F1)
+
 ### Added
 
-- `--fable` flag for `ccc` that runs Claude Code on the Fable 5 model (`claude-fable-5`) for Opus and Sonnet
-- `n` keyboard shortcut to toggle the New Task form in Workspace Hub
-- Vision documents for the project at `docs/vision/`
-- `--ember` flag for the one-line installer (`install.sh`) that installs Devora-Ember as `Devora-Ember.app`, side by side with Devora (combine with `--nightly` for the latest Ember nightly)
-- Devora-Ember now ships with its own app icon — a mauve "D" (Catppuccin Macchiato) on a dark crust squircle — distinct from Devora's icon
+- `--fable` flag for `ccc` that runs Claude Code on the Fable 5 model (`claude-fable-5`) for Opus and Sonnet (Haiku still uses Sonnet)
 
 ### Fixed
 
 - `debi pr submit` now shows pre-commit hook output when a commit fails in non-verbose mode
-- Fixed CD pipeline: added `cargo:tauri-cli` to mise-managed tools so `cargo tauri build` works in the `build-and-release` job
-- Upgraded GitHub Actions (`checkout` v4 → v6, `cache` v4 → v5) to resolve Node.js 20 deprecation warnings ahead of the June 2nd forced migration
-- Added retry with exponential backoff for `hdiutil create` in DMG builds (works around transient "Resource busy" on macOS CI runners)
 
 ### Changed
 
 - `ccc` now defaults to the Opus 4.8 model (`claude-opus-4-8`) for Opus and Sonnet
-- Migrate `mise` from `prepare` to `deps`
 - Reduce Claude effort level from "max" to "xhigh" for better response times
 - Improved team-work skill: structured team roles, added planning interview phase, and delegation guidance
-- Standardized terminology across codebase and documentation: canonical glossary in CLAUDE.md now defines Workspace Hub, Profile, Worktree, etc.
-- Merged "Task" concept into "Workspace" as a state
-- User Guide tab (F1) and View Changelog now use `glimpse-tty` instead of `glow` for rendering
-- Always show the Kitty tab bar, even with a single tab
-- Judge now recognizes any env-var prefix (`NAME=VALUE`) generically instead of requiring hardcoded entries
-- Judge now declines `cargo` and `tsx` commands, directing to mise tasks
-- Judge now evaluates `find -exec` commands by inspecting the executed command rather than blanket-deferring all `-exec` usage
+- Judge
+	- Now recognizes any env-var prefix (`NAME=VALUE`) generically instead of requiring hardcoded entries
+	- Declines `cargo` and `tsx` commands, directing to `mise` tasks
+	- Evaluates `find -exec` commands by inspecting the executed command rather than blanket-deferring all `-exec` usage
 - Updated 3rd-party dependencies:
-    - UV v0.11.10 → v0.11.17
-    - Crit v0.10.5 → v0.15.4
+	- UV v0.11.10 → v0.11.17
+	- Crit v0.10.5 → v0.15.4
+
+### Deprecated
+
+- The `--ember` flag on the one-line installer (`install.sh`) is now a no-op (Devora is the Ember build). It is still accepted for backward compatibility.
 
 ### Removed
 
-- Removed `glow` as a bundled dependency (replaced by `glimpse-tty`)
+- Removed `glow` as a bundled dependency (replaced by `glimpse-tty`, which is now deprecated in favor of the built-in markdown renderer in the Ember UI)
 
 ### Fixed
 
-- Judge no longer crashes on commands where all tokens are env-var assignments, which previously bypassed permission checks
+- Judge no longer crashes on commands where all tokens are env-var assignments
 
 ## 2026-05-06.0
 

@@ -1,48 +1,34 @@
 # User Guide
 
-## Initial Setup
+Work in Devora is organized around **profiles** and **workspaces**.
 
-1. Install [Claude Code](https://code.claude.com/docs/en/quickstart#step-1-install-claude-code)
-2. Go over this user guide to understand the core concepts and workflow
-	- Setup anything in [Optional Additions](#optional-additions) that catches your eye
-3. Run `debi health` to verify that all required dependencies are installed (use `--strict` to also check optional ones)
-4. Start Devora and create your first profile
+When you start Devora for the first time, you'll be prompted to create a **profile**.
+A **profile** is a named configuration scope.
+Each profile has its own root directory and configurations (that can override global defaults).
+Profiles provide isolation between different contexts; for example, you might have one profile for company-internal projects and another for OSS projects.
 
-### MacOS
+To do work in Devora, you create a **task**.
+A **task** is a **workspace** with a title describing the work.
 
-If you installed via the curl-based installer (see README), the quarantine attribute is cleared automatically and you can skip these steps.
+A **workspace** is a directory that contains a set of git worktrees.
+The idea is that each task you do involves one or more repos, so when you start a task, you select the relevant repositories, and a workspace is created with a git worktree for each selected repo.
 
-Otherwise, for the first usage, you might need to work around macOS Gatekeeper (see also [Troubleshooting](#troubleshooting)):
-1. "Right-click > Open" the app
-2. Press "Done" on the warning dialog
-3. Open the "security & privacy" settings
-4. Allow the app to run (on the lower part of the page)
+When you create a task, a workspace is created (or reused from cache if it already exists for the same set of repos) and a **session** is launched.
 
-## Introduction
+A **session** is a task that is open in Devora in a dedicated tab.
+You can switch between sessions by clicking on the tabs, or cycle through them with `ctrl + left / right`.
+Within a session, you have a shell where you can run commands, and a special `ccc` command to launch Customized Claude Code in the workspace context.
+It is recommended to run Neovim (or Tmux) within the session to take advantage of pane splits and file navigation/editing features.
 
-Devora organizes your work around **profiles**, **repos**, and **workspaces**.
-
-A **profile** is a named, isolated configuration scope.
-Each profile has its own root directory, its own set of registered git repositories, and its own workspaces.
-Profiles provide complete isolation between different contexts; for example, you might have one profile for work projects and another for personal ones.
-
-A **repo** is a git repository registered under a profile, or located under `<profile-root>/repos/`.
-When you create a workspace, you select one or more repos from the active profile's repo list.
-
-A **workspace** is a set of git worktrees (one per selected repo) activated for a specific piece of work.
-Devora creates the worktrees, opens a terminal session, and you are ready to go.
-
-### First Launch
+## First Launch
 
 When you start Devora for the first time, it will prompt you to create your first profile.
 You choose a root directory (defaults to `~/devora`) and give the profile a name.
-Once the profile is created, you land on the Workspace Hub - Devora's home screen.
+Once the profile is created, you land on the Workspace Hub - Devora's home screen, where you can create and manage tasks and workspaces.
 
-In Devora-Ember, this prompt is a welcome card shown in place of the Workspace Hub whenever no profiles are configured.
-It contains the same profile-creation form (name + root path, with a "Browse…" button for the native folder picker) and cannot be dismissed until a profile exists.
 If the chosen directory already contains an initialized profile, Devora detects it and registers it as-is instead of creating a new one.
 
-### Profiles
+## Profiles
 
 Each profile is a self-contained directory with the following structure:
 
@@ -60,164 +46,86 @@ Each profile is a self-contained directory with the following structure:
 - `workspaces/` contains the worktrees Devora creates for your workspaces
 
 You can have multiple profiles.
-To cycle between them, press `p` from the Workspace Hub.
-To create additional profiles, go to Settings (press `s` from the Workspace Hub) and navigate to "Profiles".
-
-In Devora-Ember, profiles are managed from the **Profile Manager**, a full-window overlay opened with `P` from the Workspace Hub (or via the profile dropdown in the hub header, or the "Manage Profiles" command in the Command Palette).
-The Profile Manager lists every profile with its repo and workspace counts and a read-only repo inventory.
-From there you can switch the active profile (`Enter`), create or register a profile (`n`), and delete a profile (`d`).
-The active profile can also be switched directly from the hub-header dropdown or the "Switch Profile" Command Palette entries.
+To select a profile (or manage them) go to the **Profile Manager**.
+That can by done from the Workspace Hub by pressing `P` (uppercase) or the profile dropdown in the top-right corner.
+In addition, you can open it through the Command Palette (rapid shift-shift) by selecting the "Manage Profiles" command.
 
 **Note**: Deleting a profile (also via Settings) only removes it from Devora's registry. The profile directory and all its contents remain on disk.
-In Devora-Ember, deletion is also blocked while the profile still has open session tabs - close them first.
 
-### Managing Repos
+## Repos
 
 Each profile maintains its own repo directory and list of additional registered git repositories.
 There are two ways to add repos to a profile:
 
 1. **Auto-discovered repos**: Clone a git repository directly into `<profile-root>/repos/`
 	- Devora automatically picks it up - no extra registration needed
-2. **Explicitly registered repos**: Register repos at arbitrary paths via Settings (press `s`, then navigate to Repos and select "Register existing repo")
+2. **Explicitly registered repos**: Register repos at arbitrary paths - this is currently not implemented in the you and requires a manual editing of the profile's configuration.
+	- This can be used to include repos that are shared across profiles, or that you don't want to live inside the profile directory for any reason
 
-Removing a registered repo only removes Devora's reference to it.
-The actual directory on disk is not affected.
+## Workspaces
 
-**Note**: Only explicitly registered repos can be removed from the Settings page. To stop seeing an auto-discovered repo, move or delete it from `<profile-root>/repos/`.
-
-### Workspaces
-
-Workspaces can span multiple repositories simultaneously.
-Devora manages a separate git worktree for each selected repo, so you can work across repos within a single workspace without affecting other workspaces.
+Workspaces are built to span multiple repositories simultaneously.
+This is achieved by including a separate git worktree for each selected repo, so you can work across repos within a single workspace without affecting other workspaces - even for work that touches the same repo(s).
 
 From the Workspace Hub:
 
 1. Press `n` to start a new task
-2. Select one or more repos from the active profile's repo list
+2. Select one or more repos from the list
 3. Enter a short title (shorter is better, e.g: "login bug", "refactor auth", "<project name initials>")
 4. Devora creates a git worktree from each selected repo and opens a terminal session in the workspace directory
 	- If a "prepare command" is set in the profile's settings, it runs in each worktree as part of its setup (e.g., to install dependencies)
-	- An automated `CLAUDE.md` is generated in the workspace root, where you can supplement Claude with context about the work and why each repo was included in the workspace
-5. Run the "ccc" command to launch the Customized Claude Code in the workspace context
-	- Now, Claude Code is ready with all of the Devora features and has access to all of the repos in the workspace
+	- An automated `CLAUDE.md` is generated in the workspace root, where you can supplement Claude with context about the work and why each worktree was included in the workspace
+5. Run the `ccc` command to launch Claude Code in the workspace context
+	- Now, Claude Code is ready with all of the Devora features and has access to all of the worktrees in the workspace
 
-Once a workspace exists, you can manage it from the Workspace Hub:
+Once a workspace exists, you can manage it from the Workspace Hub (press `ctrl + s` of from the Command Palette)
 
-- `d` deactivates a workspace (cleans it up and keeps it on disk as cache for future use). Only available for active workspaces
-- `D` deletes a workspace permanently (removes its worktrees and root directory). Only available for inactive or invalid workspaces (you must deactivate first)
+## Git shortcuts
 
-Both actions are blocked if the workspace has an active terminal session, uncommitted changes, or worktrees that are still on a branch (not yet detached).
+Devora provides a collection of git shortcuts for your convenience:
 
-#### Multi-repo git shortcuts at the workspace root
+| Shortcut | Description |
+|----------|-------------|
+| `gst` | `git status` passthrough |
+| `gd` | `git diff` passthrough |
+| `gri N` | `git rebase -i HEAD~N` |
+| `gfo` | Fetches the latest changes from origin and prunes deleted branches |
+| `gcom` | Shortcut for "git checkout master*": checks out the default branch in detached mode |
+| `gcl` | Shortcut for "git checkout latest": equal to `gfo` then `gcom` |
+| `gaa` | Stages all changes (including untracked files) |
+| `gaaa` | Stages all changes (including untracked files) and amends to the previous commit |
+| `gaac` | Stages all changes (including untracked files) and commits with a message provided in the command arguments |
+| `grom` | Shortcut for "git rebase origin/master*": rebases the current branch onto the default branch |
+| `grl` | Shortcut for "git rebase latest": equal to `gfo` then `grom` |
+| `grlp` | Shortcut for "git rebase latest push": equal to `gfo` then `grl` then `git push --force` |
 
-Two of the `debi` git shortcuts are workspace-aware when run from the exact root of a workspace directory (`ws-N/`):
+* The name of the default branch is detected automatically, so it works even if it's not called "master"
 
-- `debi gst` prints an aligned per-repo summary across every repo in the workspace: branch (or `HEAD` if detached), staged/unstaged/untracked file counts, commits behind `origin/<default>`, and PR state. All repos are queried in parallel and a SUMMARY block reports the totals
-- `debi gcl` first verifies that every repo is clean and on detached HEAD; if any repo fails, the command aborts and no git operations run. Otherwise it fetches and checks out `origin/<default>` in every repo in parallel and reports per-repo success or failure
+### Workspace-level git shortcuts
 
-Inside any specific repo (including a repo that lives inside a workspace), both commands work exactly as before: `gst` is `git status` passthrough, `gcl` is `gfo` then `gcom`.
+Two of the git shortcuts are workspace-aware when run from the exact root of a workspace directory (`ws-N/`):
 
-### Settings
+- `gst` prints an aligned per-worktree summary across every worktree in the workspace: branch (or `HEAD` if detached), staged/unstaged/untracked file counts, commits behind `origin/<default>`, and PR state
+- `gcl` performs the "checkout latest" workflow across every worktree in the workspace in parallel, with a pre-check to ensure all worktrees are clean and on detached HEAD before doing any operations
+	- This makes it easy to sync up an entire workspace to the latest origin state with one command without worrying about accidentally losing uncommitted changes in any of the worktrees
 
-Press `s` from the Workspace Hub to open the settings page.
+## Debi
 
-Global settings include:
-
-- **Profiles**: Add new profiles or delete existing ones
-
-Profile-specific settings (for the current profile) include:
-
-- Setting a prepare command: a shell command that runs after every worktree creation (e.g., `npm install`, `mise install`, custom Bash script)
-- **Repos**: Register or unregister repos at arbitrary paths (in addition to auto-discovered repos under `<profile-root>/repos/`)
-
-Info section:
-
-- **View Changelog**: Opens the full changelog in a new kitty tab
-
-#### Config File Settings
-
-Some settings are configured directly in `config.json` (global or per-profile) rather than through the settings page.
-
-| Key | Values | Default | Scope |
-|-----|--------|---------|-------|
-| `review.open-mode` | `"tab"`, `"overlay"`, `"browser"` | `"tab"` | profile-overridable |
-| `terminal.git-shortcuts` | `true`, `false` | `true` | profile-overridable |
-
-**`review.open-mode`** controls how the crit review UI opens:
-
-- `"tab"` -- opens in a new Kitty tab titled "[Crit]"
-- `"overlay"` -- opens in a Kitty overlay covering the current window
-- `"browser"` -- opens in the system browser (original crit behavior)
-
-Example:
-
-```json
-{
-  "review": {
-    "open-mode": "overlay"
-  }
-}
-```
-
-**`terminal.git-shortcuts`** controls whether Devora-Ember session shells expose Debi's git shortcuts as bare commands (see [Git shortcuts in session shells](#git-shortcuts-in-session-shells)).
-Set it to `false` to disable.
-
-## The `ccc` Command
-
-`ccc` (Customized Claude Code) is a launcher that wraps Claude Code with Devora-specific configuration.
-Run it from within a workspace to start a Claude Code session with all Devora integrations active.
-
-What it does:
-
-- **Model upgrades**: Default models are upgraded -- Sonnet is replaced with Opus, and Haiku with Sonnet. This provides stronger reasoning out of the box but does affect billing accordingly. Pass `--fable` to run Opus and Sonnet on the Fable 5 model (`claude-fable-5`) instead
-- **Effort level**: Sets the effort level to "max" by default, so that Claude Code always tries to give the best answer it can (instead of trying to be fast or cost-efficient)
-- **Plan mode**: Claude Code starts in plan permission mode by default, which requires explicit approval before making changes
-- **Privacy**: Disables telemetry and nonessential network traffic
-- **Agent teams**: Enables experimental agent teams support
-- **Plugins**: Auto-loads Devora plugins (including Judge -- see below)
-
-### Judge
-
-Judge is a permission auto-manager plugin for Claude Code.
-It automatically handles Claude Code's permission requests to reduce permission fatigue during development.
-Known-safe commands (like `cat`, `ls`, `git diff`, etc.) are approved automatically, disallowed commands are declined with a reason, and anything unrecognized is deferred to the user for manual review.
-Judge runs automatically when using `ccc` -- no additional setup is needed.
-
-## The `debi` CLI
-
-`debi` is Devora's command-line tool for workspace management and utilities.
-Run `debi` with no arguments or `debi --help` to see all available commands.
+Devora includes a CLI tool called `debi` for CLI-based workflows.
+Debi implements the git shortcuts described above, as well as other utilities.
 
 Highlights:
 
-- **Git shortcuts**: A collection of short aliases for common git workflows (e.g., `debi gst` for `git status`, `debi gd` for `git diff`, `debi gaa` for staging all changes). Run `debi --help` for the full list
-- **PR status**: `debi pr check` (or `check-pr`) shows the CI/review status of the current branch's pull request
-- **Submit a PR**: `debi pr submit` (or `submit-pr`) from detached HEAD creates a commit, optionally a tracker task, a feature branch, and a GitHub PR in one step
-- **Close a PR**: `debi pr close` (or `close-pr`) completes the tracker task (if any), deletes the remote and local branches, and returns the working tree to detached HEAD on the default branch
+- **Workspace**
+	- `debi add` to add a new worktree to the workspace (not implemented in the UI yet)
+- **PR**:
+	- `debi pr check` to check the status of the current branch's PR
+	- `debi pr submit` to create a PR from detached HEAD
+	- `debi pr close` to close the current branch's PR and clean up branches
 - **Health check**: `debi health` verifies that all required dependencies are installed
 - **Read config**: `debi get-conf [--profile <name>] <key>` reads a resolved config value and prints it to stdout, intended for use in shell scripts
-- **Shell completions**: See [Recommended: Shell Completions](#recommended-shell-completions)
 
-### Git shortcuts in session shells
-
-In Devora-Ember, every session shell exposes Debi's git shortcuts as bare commands: typing `gcl` runs `debi gcl`, `gst` runs `debi gst`, and so on for every shortcut listed by `debi --help`.
-This works in any shell -- zsh, bash, fish, and nested sub-shells -- because the shortcuts are installed as small executables on the session's `PATH`.
-
-If you already define a command, alias, or function with the same name (for example, oh-my-zsh's `gcl`), your own definition takes precedence; the Debi shortcut only applies to names you haven't already bound.
-
-To turn this off, set `terminal.git-shortcuts` to `false` in `config.json` (globally or per-profile):
-
-```json
-{
-  "terminal": {
-    "git-shortcuts": false
-  }
-}
-```
-
-## Recommended: Shell Completions
-
-Shell completion makes `debi` much faster to use by expanding unique command prefixes (for example, typing `debi w` and pressing Tab runs `workspace-ui`).
+### Shell Completions
 
 `debi` supports tab-completion for bash, zsh, and fish.
 Run `debi completion <shell>` to generate the completion script, and `debi completion <shell> -h` for shell-specific installation instructions.
@@ -236,7 +144,74 @@ mkdir -p ~/.zsh/completions
 debi completion zsh > ~/.zsh/completions/_debi
 ```
 
-On macOS, `mise mac-install` automatically generates the zsh completion file for you; you still need to add the `fpath` line above to your `~/.zshrc`.
+## Config File Settings
+
+For now, some settings are configured directly in `config.json` (global or per-profile) rather than through the UI or `debi`.
+
+| Key | Values | Default | Scope |
+|-----|--------|---------|-------|
+| `terminal.default-app` | any shell command (e.g. `fish`, `nvim`, `tmux`) | empty (bare login shell) | profile-overridable |
+| `terminal.git-shortcuts` | `true`, `false` | `true` | profile-overridable |
+
+### `terminal.git-shortcuts`
+
+By default, each session has a shell.
+Set `terminal.default-app` to `nvim` (or any other command) to launch instead of a plain shell.
+
+Example:
+
+```json
+{
+	"terminal": {
+		"default-app": "nvim"
+	}
+}
+```
+
+### `terminal.git-shortcuts`
+
+Controls whether Devora session shells expose Debi's git shortcuts as bare commands (see [Git shortcuts](#git-shortcuts)).
+
+To turn this off, set `terminal.git-shortcuts` to `false` in `config.json` (globally or per-profile):
+
+```json
+{
+	"terminal": {
+		"git-shortcuts": false
+	}
+}
+```
+
+## The `ccc` Command
+
+`ccc` (Customized Claude Code) is a launcher that wraps Claude Code with Devora-specific configuration.
+Run it from within a workspace to start a Claude Code session with all Devora integrations active.
+
+What it does:
+
+- **Model upgrades**: Default models are upgraded -- Sonnet is replaced with Opus, and Haiku with Sonnet
+	- This provides stronger reasoning out of the box
+	- The cost-per-token is higher, but that should be balanced by lower token usage due to better performance
+	- Pass `--fable` to run Opus and Sonnet on the Fable 5 model (`claude-fable-5`) instead
+- **Effort level**: Sets the effort level to `xhigh` (extra-high), so that Claude Code always tries to give a better result
+- **Plan mode**: Claude Code starts in plan permission mode by default, which requires explicit approval before making changes and takes advantage of the Crit integration
+- **Plugins**: Auto-loads Devora plugins (including Judge -- see below)
+
+## Crit Integration
+
+[Crit](https://github.com/tomasz-tomczyk/crit) is a tool for reviewing and commenting on plans, code diffs, and frontend elements to  send feedback directly to your agent.
+Crit is integrated into Devora and works out-of-the-box.
+When Claude Code has a plan ready, it opens up Crit's UI in a tab (session) covering overlay, where you can review the plan, comment on specific lines, and approve or request changes.
+Once Claude receives your feedback, it adjusts the plan and re-presents for a follow-up review until it's approved.
+
+## Judge
+
+Judge is a permission auto-manager plugin for Claude Code.
+It automatically handles Claude Code's permission requests to reduce permission fatigue during development.
+Known-safe commands (like `cat`, `ls`, `git diff`, etc.) are approved automatically, disallowed commands are declined with a reason, and anything unrecognized is deferred to the user for manual review.
+Judge runs automatically when using `ccc` -- no additional setup is needed.
+
+Jedge persists unsupported cases to `~/.claude/cc-judge-unsupported-cases.json`, which can be submitted to the project to help expand Judge's automatic coverage.
 
 ## Optional Additions
 
@@ -271,45 +246,31 @@ It can also automate:
 ## Versioning
 
 Devora follows a date-based version format: `YYYY-MM-DD.PATCH` (e.g., `2026-03-28.0`).
-
 Development builds between releases show as `YYYY-MM-DD.PATCH-dev.N` where N is the number of commits since the last release.
 
-The current version is displayed in the bottom-right corner of the Workspace Hub.
-
-To view the full changelog, go to Settings and select "View Changelog".
+The current version is displayed in the window title.
 
 ## Cheatsheet
 
 ### Devora-wide
 
-Note: the split-pane shortcuts below operate on Kitty panes (each pane is its own shell). Neovim's own `:sp` / `:vsp` still work independently inside any pane.
-
-- `ctrl + s`: Open Workspace Hub in a new tab
+- Rapid `shift + shift`: Open the Command Palette for quick access to all commands and settings
+- `ctrl + s`: Open the Workspace Hub (covers the whole window)
 - `ctrl + shift + s`: Open shell in a new tab
-- `ctrl + left / right`: Navigate between tabs (workspaces)
+- `ctrl + left / right`: Navigate between tabs (sessions)
 - `ctrl + shift + left / right`: Reorder tabs
-- `ctrl + 1 / 2 / 3`: Set font size to small (12pt) / medium (15pt) / large (26pt)
-- `ctrl + equal / minus`: Increase / decrease font size
-- `ctrl + shift + v` or `cmd + v`: Paste from clipboard
-- `ctrl + shift + r`: Reload configuration
-- `cmd + shift + \`: Split the current Kitty pane vertically (new shell to the right) — vim `:vsp` analog
-- `cmd + shift + -`: Split the current Kitty pane horizontally (new shell below) — vim `:sp` analog
-- `cmd + shift + h / j / k / l`: Move focus between split panes (left / down / up / right)
-- `cmd + shift + w`: Close the current split pane
-- `F1`: Open this User Guide
+- `ctrl + 1 / 2 / 3`: Set font size to small / medium / large
+- `ctrl + shift + minus / plus`: Decrease / increase font size
+- `F1`: Open this User Guide (this)
 
 ### Workspace Hub
 
-- `<enter>`: Open selected workspace (closes the current UI and opens a terminal session)
-- `n`: New task (reuses or creates a workspace and opens it in a dedicated tab)
-- `d`: Deactivate workspace (active only)
-- `D`: Delete workspace (inactive/invalid only)
-- `r`: Refresh Workspace Hub
-- `1 / 2 / 3`: Filter workspaces by "Active" (default) / "Inactive" / "All"
+- `<enter>`: Open selected task in a new session tab
+- `n`: New task (reuses or creates a workspace and opens it in a new tab)
+- `R`: Refresh Workspace Hub
+- `1 / 2 / 3`: Filter workspaces by "Active" (has a task, default) / "Inactive" / "All"
 - `j / k`: Navigate list
-- `s`: Open settings (includes "View Changelog" option)
-- `p`: Cycle active profile
-- `P` (Devora-Ember): Open the Profile Manager (list, switch, create, and delete profiles)
+- `P`: Open the Profile Manager (list, switch, create, and delete profiles)
 - `q`: Quit (or back in other pages)
 - `esc`: Same as `q`, and also "unfocuses" on text inputs
 
@@ -325,9 +286,3 @@ The crash output also prints the exact file path to stderr.
 
 Run `debi health --verbose` to see the status and location of each dependency.
 Use `--strict` to also check optional dependencies.
-
-### macOS Gatekeeper
-
-On first launch, macOS may block Devora because it is not signed by an identified developer.
-If you used the curl-based installer (see README), the quarantine attribute is cleared automatically and this step is not needed.
-To work around this manually: right-click the app and select "Open", press "Done" on the warning dialog, then open "Security & Privacy" in System Settings and allow the app to run.
