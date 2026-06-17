@@ -22,7 +22,7 @@ Only macOS (Apple Silicon) is currently supported, but there are plans to add Li
 - [Crit](https://github.com/tomasz-tomczyk/crit) -- AI code review tool with inline comments
 - [uv](https://docs.astral.sh/uv/) -- Python package manager
 
-### Optional
+### Optional (recommended)
 
 - [Neovim](https://neovim.io/) (`nvim`) -- recommended editor/terminal multiplexer; configurable via `terminal.default-app` (defaults to a bare login shell)
 - [mise](https://mise.jdx.dev/) -- dev tool and task manager
@@ -34,7 +34,7 @@ Use `--strict` to also check optional ones.
 ## Getting started
 
 1. Install (`curl -fsSL https://raw.githubusercontent.com/TalAmuyal/Devora/master/install.sh | bash` or see other options below)
-2. Read the [User Guide](USER_GUIDE.md) for day-to-day usage
+2. Read the [User Guide](USER_GUIDE.md) for day-to-day usage (available from the app via F1)
 
 ### Install from a release
 
