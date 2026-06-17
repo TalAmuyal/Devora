@@ -14,6 +14,10 @@ Types of changes:
 
 ## Unreleased
 
+### Changed
+
+- Updated the README to point to the user-guide in the app
+
 ## 2026-06-16.0
 
 ### Highlights
