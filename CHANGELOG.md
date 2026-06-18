@@ -14,6 +14,10 @@ Types of changes:
 
 ## Unreleased
 
+### Added
+
+- Added a "Close Current Session" command to the Command Palette
+
 ### Changed
 
 - Updated the README to point to the user-guide in the app
