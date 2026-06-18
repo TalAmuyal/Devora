@@ -23,11 +23,14 @@ export interface CommandPaletteOptions {
   commands: Command[];
   /** Re-resolved on every load(); the result is appended after the static commands. */
   dynamicCommands?: () => Promise<Command[]>;
+  /** Invoked when the palette asks to be dismissed (Escape in the focused search field). */
+  onRequestClose?: () => void;
 }
 
 export class CommandPalette {
   private staticCommands: Command[];
   private dynamicCommands?: () => Promise<Command[]>;
+  private onRequestClose?: () => void;
   private commands: Command[];
   private containerEl: HTMLElement;
   private searchFilter = '';
@@ -41,6 +44,7 @@ export class CommandPalette {
   constructor(options: CommandPaletteOptions) {
     this.staticCommands = options.commands;
     this.dynamicCommands = options.dynamicCommands;
+    this.onRequestClose = options.onRequestClose;
     this.commands = options.commands;
     this.containerEl = document.createElement('div');
     this.containerEl.className = 'command-palette';
@@ -48,6 +52,11 @@ export class CommandPalette {
 
   getElement(): HTMLElement {
     return this.containerEl;
+  }
+
+  /** Move keyboard focus into the search field so the user can type a filter immediately. */
+  focusSearch(): void {
+    this.searchHandle?.focus();
   }
 
   load(): void {
@@ -176,7 +185,7 @@ export class CommandPalette {
         this.selectedIndex = 0;
         this.renderList();
       },
-      onEscape: () => {},
+      onEscape: () => this.onRequestClose?.(),
       onArrowDown: () => this.moveSelection(1),
       onArrowUp: () => this.moveSelection(-1),
       onEnter: () => this.execute(),
@@ -195,10 +204,9 @@ export class CommandPalette {
     footer.appendChild(
       createKeyboardHintBar({
         hints: [
-          { keys: 'j/k', description: 'navigate' },
+          { keys: '↑/↓', description: 'navigate' },
           { keys: 'Enter', description: 'run' },
-          { keys: 'f', description: 'filter' },
-          { keys: 'q/Esc', description: 'close' },
+          { keys: 'Esc', description: 'close' },
         ],
       }),
     );

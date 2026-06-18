@@ -191,6 +191,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   };
 
   const commandPalette = new CommandPalette({
+    // Type-first palette: the search field is focused on open, so Escape closes the overlay directly (single press).
+    onRequestClose: () => overlayManager.dismissTabCoveringOverlay(),
     commands: [
       {
         id: 'workspace-hub',
@@ -278,6 +280,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       sessionManager.getActiveSession()?.terminalPane,
       'overlay-passthrough',
     );
+    // Focus the search field after the overlay is attached (this overrides the wrapper focus showTabCoveringOverlay just set).
+    commandPalette.focusSearch();
     commandPaletteOpen = true;
   };
 

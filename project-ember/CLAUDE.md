@@ -61,6 +61,7 @@ Cassettes are stored as gzip-compressed JSON at `tests/support/fixtures/cassette
 
 - `q` should always close/dismiss overlays, pages, and panels — same as `Escape`. This is a vim-style convention that applies globally across the Ember UI.
 - When an input field is focused, `q` is just `q`, and `Escape` should unfocus the input rather than closing the page.
+- Exception: the Command Palette is type-first — its search field is focused on open, so `Esc` closes it directly (single press) and `q` is a literal search character (it does not close the palette).
 - Overlays and panels should document their keyboard shortcuts in a legend at the bottom of the page.
 
 ### Overlay system

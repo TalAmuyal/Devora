@@ -21,6 +21,7 @@ Types of changes:
 ### Changed
 
 - Updated the README to point to the user-guide in the app
+- The Command Palette now focuses its search field on open so you can type a filter immediately; `Esc` closes it and `↑/↓`/`Enter` navigate and run
 
 ### Removed
 
