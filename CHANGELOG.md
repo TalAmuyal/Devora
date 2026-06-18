@@ -18,6 +18,10 @@ Types of changes:
 
 - Updated the README to point to the user-guide in the app
 
+### Removed
+
+- Removed the unused `review.open-mode` config key and the legacy OG Kitty/glimpse-tty path from the Crit wrapper; the published Ember build always opens Crit in its built-in overlay
+
 ## 2026-06-16.0
 
 ### Highlights
