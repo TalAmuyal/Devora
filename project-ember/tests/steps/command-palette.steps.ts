@@ -8,6 +8,8 @@ import {
   openCommandPalette,
   getCommandItemCount,
   getSelectedCommandTitle,
+  isSearchFieldFocused,
+  pressEscapeInSearchField,
 } from '../support/command-palette-helper';
 
 Given('no overlay is open', async function (this: EmberWorld) {
@@ -39,6 +41,11 @@ When(
   },
 );
 
+When('the user presses Escape in the search field', async function (this: EmberWorld) {
+  await pressEscapeInSearchField(this.driver);
+  await new Promise((r) => setTimeout(r, 150));
+});
+
 When('the user presses Ctrl+S', async function (this: EmberWorld) {
   const ui = new UIDriver(this.driver);
   await ui.pressKey('s', { ctrlKey: true, code: 'KeyS' });
@@ -46,8 +53,8 @@ When('the user presses Ctrl+S', async function (this: EmberWorld) {
 });
 
 When('the user filters commands by {string}', async function (this: EmberWorld, text: string) {
+  // The search field is focused on open, so the user just types — no need to focus it first.
   const ui = new UIDriver(this.driver);
-  await ui.pressKey('f');
   await ui.typeIntoInput('.search-input-field', text);
   await new Promise((r) => setTimeout(r, 200));
 });
@@ -66,6 +73,17 @@ Then('the Command Palette should not be visible', async function (this: EmberWor
     false,
     3_000,
   );
+});
+
+Then('the search field should be focused', async function (this: EmberWorld) {
+  // Poll to tolerate WKWebView landing input focus a tick after open.
+  await this.driver.pollFor(
+    `return document.activeElement?.classList.contains('search-input-field') ?? false`,
+    true,
+    3_000,
+  );
+  const focused = await isSearchFieldFocused(this.driver);
+  assert.strictEqual(focused, true, 'the search field should be focused');
 });
 
 Then(

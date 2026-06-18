@@ -12,6 +12,11 @@ Feature: Command Palette
     Then the Command Palette should be visible
     And the Command Palette should show at least 2 commands
 
+  Scenario: Opening the Command Palette focuses the search field
+    Given a session exists
+    And the Command Palette is open
+    Then the search field should be focused
+
   Scenario: Reopen with shift+shift after dismissing it
     Given no overlay is open
     When the user opens the Command Palette via shift+shift
@@ -58,9 +63,7 @@ Feature: Command Palette
     Then the Command Palette should not be visible
     And the Workspace Hub overlay should be present
 
-  # Uses a raw keypress (no test-only blur) so it genuinely proves the hub —
-  # opened from the palette while a terminal session held focus — has keyboard
-  # focus, rather than relying on a click or the harness blurring the terminal.
+  # Uses a raw keypress (no test-only blur) so it genuinely proves the hub — opened from the palette while a terminal session held focus — has keyboard focus, rather than relying on a click or the harness blurring the terminal.
   Scenario: The Workspace Hub opened from the palette has keyboard focus
     Given a profile "Work" with 1 active workspaces
     And a session exists
@@ -70,15 +73,17 @@ Feature: Command Palette
     When the user presses "q" without first taking focus
     Then the Workspace Hub overlay should not be present
 
-  Scenario: Close the Command Palette with Escape
+  Scenario: Escape in the focused search field closes the Command Palette
     Given the Command Palette is open
-    When the user presses "Escape"
+    When the user presses Escape in the search field
     Then the Command Palette should not be visible
 
-  Scenario: Close the Command Palette with q
+  # The palette is type-first: with the search field focused, q is a search character, not a close shortcut (a real user can no longer close with q).
+  Scenario: Pressing q does not close the Command Palette
     Given the Command Palette is open
-    When the user presses "q"
-    Then the Command Palette should not be visible
+    And the search field should be focused
+    When the user presses "q" without first taking focus
+    Then the Command Palette should be visible
 
   Scenario: Filter commands
     Given the Command Palette is open

@@ -222,6 +222,12 @@ describe('CommandPalette', () => {
     expect(document.activeElement).toBe(input);
   });
 
+  it('focusSearch focuses the search field', () => {
+    s.palette.focusSearch();
+    const input = document.querySelector('.search-input-field');
+    expect(document.activeElement).toBe(input);
+  });
+
   it('does not navigate via j/k while the filter is focused', () => {
     const input = document.querySelector('.search-input-field') as HTMLInputElement;
     input.focus();
@@ -237,6 +243,23 @@ describe('CommandPalette', () => {
     expect(selectedTitle()).toBe('New Shell');
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     expect(s.runShell).toHaveBeenCalledOnce();
+  });
+
+  it('Escape in the search field requests close', () => {
+    const onRequestClose = vi.fn();
+    const palette = new CommandPalette({
+      commands: [makeCommand('static', 'Static Command')],
+      onRequestClose,
+    });
+    document.body.appendChild(palette.getElement());
+    palette.load();
+
+    // Scope to this palette's own input: the shared setup() already mounted another palette.
+    const input = palette.getElement().querySelector('.search-input-field') as HTMLInputElement;
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    expect(onRequestClose).toHaveBeenCalledOnce();
+
+    palette.unload();
   });
 
   it('unload removes the window listener', () => {
