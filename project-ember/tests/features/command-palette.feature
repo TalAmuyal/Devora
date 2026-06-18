@@ -34,6 +34,23 @@ Feature: Command Palette
     When the user presses "j"
     Then the selected command should be "New Shell"
 
+  Scenario: Close the current session from the palette
+    Given a session exists
+    And the Command Palette is open
+    When the user filters commands by "close"
+    Then the Command Palette should show 1 command
+    When the user presses "Enter"
+    Then the Command Palette should not be visible
+    And there should be 0 sessions
+
+  Scenario: Closing with no session is a clean no-op
+    Given the Command Palette is open
+    When the user filters commands by "close"
+    Then the Command Palette should show 1 command
+    When the user presses "Enter"
+    Then the Command Palette should not be visible
+    And there should be 0 sessions
+
   Scenario: Run the Workspace Hub command
     Given a profile "Work" with 1 active workspaces
     And the Command Palette is open

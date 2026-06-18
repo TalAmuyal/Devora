@@ -217,6 +217,17 @@ document.addEventListener('DOMContentLoaded', async () => {
         run: closePaletteThen(() => void repurposeCurrentSession()),
       },
       {
+        id: 'close-session',
+        title: 'Close Current Session',
+        description: 'Close the active session tab',
+        icon: '×',
+        shortcut: [],
+        run: closePaletteThen(() => {
+          const id = sessionManager.getActiveSessionId();
+          if (id !== null) sessionManager.closeSession(id);
+        }),
+      },
+      {
         id: 'new-profile',
         title: 'New Profile',
         description: 'Create or register a profile root directory',
