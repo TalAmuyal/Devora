@@ -191,6 +191,40 @@ pub fn cancel_workspace_creation(
     Ok(())
 }
 
+/// Add a single repo as a git worktree to an existing (active) workspace.
+/// Returns a creation id immediately; progress (steps + streamed subprocess output) and the outcome arrive on `on_event`.
+/// Cancellable via `cancel_workspace_creation` (shared creation manager).
+#[tauri::command]
+pub fn add_repo_to_workspace(
+    app: tauri::AppHandle,
+    state: State<'_, Mutex<WorkspaceCreationManager>>,
+    workspace_path: String,
+    source_repo_path: String,
+    worktree_dir_name: String,
+    on_event: Channel<workspace_creation::CreationEvent>,
+) -> Result<u32, String> {
+    let (id, handle) = {
+        let mut manager = state
+            .lock()
+            .map_err(|e| format!("failed to lock creation manager: {e}"))?;
+        manager.register()
+    };
+
+    std::thread::spawn(move || {
+        workspace_creation::run_add_repo(
+            app,
+            id,
+            handle,
+            workspace_path,
+            source_repo_path,
+            worktree_dir_name,
+            on_event,
+        );
+    });
+
+    Ok(id)
+}
+
 #[tauri::command]
 pub fn remove_task(workspace_path: String) -> Result<(), String> {
     workspace::remove_task(&workspace_path)

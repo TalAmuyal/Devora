@@ -8,6 +8,7 @@ import { createKeyboardHintBar } from '../ui/components/KeyboardHintBar';
 import { showConfirmationDialog } from '../ui/components/ConfirmationDialog';
 import { createToast, ToastHandle } from '../ui/components/Toast';
 import { createDropdownMenu, DropdownItem } from '../ui/components/DropdownMenu';
+import { createRepoList, RepoListHandle } from '../ui/components/RepoList';
 import { createTableShell } from '../ui/components/TableShell';
 import { isEditableElementFocused } from '../ui/focus';
 import { pluralize } from '../ui/format';
@@ -1354,33 +1355,16 @@ export class WorkspaceHub {
     nameInput.placeholder = 'e.g. Fix login bug';
     form.appendChild(nameInput);
 
-    // Repo checkboxes
+    // Repo selection
+    let repoListHandle: RepoListHandle | null = null;
     if (this.availableRepos.length > 0) {
       const repoLabel = document.createElement('label');
       repoLabel.className = 'ws-new-form-label';
       repoLabel.textContent = 'Repositories';
       form.appendChild(repoLabel);
 
-      const repoList = document.createElement('div');
-      repoList.className = 'ws-new-form-repos';
-
-      for (const repo of this.availableRepos) {
-        const item = document.createElement('label');
-        item.className = 'ws-new-form-repo-item';
-
-        const checkbox = document.createElement('input');
-        checkbox.type = 'checkbox';
-        checkbox.value = repo.path;
-
-        const name = document.createElement('span');
-        name.textContent = repo.name;
-
-        item.appendChild(checkbox);
-        item.appendChild(name);
-        repoList.appendChild(item);
-      }
-
-      form.appendChild(repoList);
+      repoListHandle = createRepoList({ repos: this.availableRepos, mode: 'multi' });
+      form.appendChild(repoListHandle.element);
     }
 
     // Action buttons
@@ -1394,10 +1378,7 @@ export class WorkspaceHub {
       const taskName = nameInput.value.trim();
       if (!taskName || !this.activeProfilePath) return;
 
-      const checkboxes = form.querySelectorAll<HTMLInputElement>(
-        '.ws-new-form-repos input[type="checkbox"]:checked',
-      );
-      const repoPaths = Array.from(checkboxes).map((cb) => cb.value);
+      const repoPaths = repoListHandle?.getSelectedPaths() ?? [];
 
       // Hand off immediately: the controller closes the Hub, opens a tab, and streams progress.
       // Creation no longer blocks here, so the window never freezes.

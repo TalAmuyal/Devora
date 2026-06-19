@@ -284,18 +284,6 @@ Writes the static CLAUDE.md template to the workspace root.
 - Uses `os.WriteFile` with mode `0666`.
 - Overwrites any existing file.
 
-### EnsureWorkspaceCLAUDEMD
-
-```go
-func EnsureWorkspaceCLAUDEMD(workspacePath string) error
-```
-
-Writes CLAUDE.md only if it does not already exist AND the workspace has more than one repo.
-
-- Checks if `filepath.Join(workspacePath, ClaudeMDFileName)` exists. If it does, returns `nil` (no-op).
-- Calls `GetWorkspaceRepos(workspacePath)`. If the count is <= 1, returns `nil`.
-- Otherwise, calls `WriteWorkspaceCLAUDEMD(workspacePath)`.
-
 ---
 
 ## Git Operations
@@ -429,7 +417,7 @@ Steps:
 func ResolveWorkspaceFromCWD(cwd string) (*config.Profile, string, error)
 ```
 
-Determines whether the given working directory is inside a known workspace. Used by the `add` command to detect the current workspace context.
+Determines whether the given working directory is inside a known workspace. Used to detect the current workspace context from the CWD (e.g. by the `rename` command, profile resolution, and the git shortcuts).
 
 Steps:
 
@@ -526,9 +514,6 @@ Use `t.TempDir()` to create isolated workspace structures. No git repos needed.
 
 **CLAUDE.md tests:**
 - `WriteWorkspaceCLAUDEMD` creates file with expected content
-- `EnsureWorkspaceCLAUDEMD` creates file when >1 repo and file absent
-- `EnsureWorkspaceCLAUDEMD` does not create file when <=1 repo
-- `EnsureWorkspaceCLAUDEMD` does not overwrite existing file
 
 **Locking tests:**
 - `LockWorkspace` acquires lock; `IsWorkspaceLocked` returns `true` from another check

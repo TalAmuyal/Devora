@@ -7,7 +7,7 @@
 use std::collections::HashMap;
 use std::fs;
 use std::io::{BufRead, BufReader, Read};
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -112,6 +112,7 @@ enum Mode {
     Reuse,
 }
 
+#[derive(Debug)]
 enum Outcome {
     Done(CreatedWorkspace),
     Cancelled,
@@ -201,7 +202,7 @@ fn run_inner(
         }
         Ok(()) => {
             if matches!(mode, Mode::Fresh) {
-                finalize_fresh(&ws_path, &repos, task_name)?;
+                finalize_fresh(&ws_path, task_name)?;
             }
             Ok(Outcome::Done(CreatedWorkspace {
                 path: ws_path.to_string_lossy().into_owned(),
@@ -217,6 +218,120 @@ fn run_inner(
             }
         }
     }
+}
+
+/// Worker-thread entry point for adding a single repo as a worktree to an existing workspace.
+/// Spawned by the `add_repo_to_workspace` command.
+/// Mirrors [`run`]: do the work, deregister, report warnings, then emit the terminal event.
+/// On cancel (or a failure observed after cancellation) the partially-added worktree is rolled back so the workspace returns to its prior state.
+pub fn run_add_repo(
+    app: tauri::AppHandle,
+    id: u32,
+    handle: CreationHandle,
+    workspace_path: String,
+    source_repo_path: String,
+    worktree_dir_name: String,
+    on_event: Channel<CreationEvent>,
+) {
+    let mut warnings = Vec::new();
+    let result = run_add_repo_inner(
+        &handle,
+        &workspace_path,
+        &source_repo_path,
+        &worktree_dir_name,
+        &on_event,
+        &mut warnings,
+    );
+
+    if let Some(state) = app.try_state::<Mutex<WorkspaceCreationManager>>() {
+        if let Ok(mut manager) = state.lock() {
+            manager.remove(id);
+        }
+    }
+
+    for warning in &warnings {
+        crate::logging::report_error(&app, warning);
+    }
+
+    let target = Path::new(&workspace_path).join(&worktree_dir_name);
+    match result {
+        Ok(Outcome::Done(workspace)) => {
+            let _ = on_event.send(CreationEvent::Done { workspace });
+        }
+        Ok(Outcome::Cancelled) => {
+            cleanup_added_worktree(&target);
+            let _ = on_event.send(CreationEvent::Cancelled);
+        }
+        Err(message) => {
+            if handle.is_cancelled() {
+                cleanup_added_worktree(&target);
+                let _ = on_event.send(CreationEvent::Cancelled);
+            } else {
+                crate::logging::report_error(&app, &message);
+                let _ = on_event.send(CreationEvent::Failed { message });
+            }
+        }
+    }
+}
+
+fn run_add_repo_inner(
+    handle: &CreationHandle,
+    workspace_path: &str,
+    source_repo_path: &str,
+    worktree_dir_name: &str,
+    on_event: &Channel<CreationEvent>,
+    warnings: &mut Vec<String>,
+) -> Result<Outcome, String> {
+    // Guard against a name that would escape the workspace (e.g. a postfix of "../x").
+    let mut components = Path::new(worktree_dir_name).components();
+    let single_normal = matches!(components.next(), Some(Component::Normal(_)))
+        && components.next().is_none();
+    if worktree_dir_name.is_empty() || !single_normal {
+        return Err(format!("invalid worktree name: {worktree_dir_name}"));
+    }
+
+    let ws_path = Path::new(workspace_path);
+    let target = ws_path.join(worktree_dir_name);
+    if target.exists() {
+        return Err(format!(
+            "Directory '{worktree_dir_name}' already exists. Use a different postfix."
+        ));
+    }
+
+    let source = workspace::expand_tilde(source_repo_path)?;
+
+    if !create_worktree_for_repo(
+        Path::new(&source),
+        worktree_dir_name,
+        &target,
+        on_event,
+        handle,
+        warnings,
+    )? {
+        return Ok(Outcome::Cancelled);
+    }
+
+    run_prepare(
+        handle,
+        &[(source, worktree_dir_name.to_string())],
+        ws_path,
+        on_event,
+        warnings,
+    )?;
+    if handle.is_cancelled() {
+        return Ok(Outcome::Cancelled);
+    }
+
+    ensure_workspace_claude_md(ws_path)?;
+
+    let name = ws_path
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    Ok(Outcome::Done(CreatedWorkspace {
+        path: workspace_path.to_string(),
+        name,
+    }))
 }
 
 /// Critical section (under the workspaces creation lock): pick a reusable inactive workspace and claim it by writing `task.json`, or allocate a fresh `ws-N` directory.
@@ -315,60 +430,16 @@ fn run_body(
                 if handle.is_cancelled() {
                     return Ok(());
                 }
-                let source_repo = Path::new(source);
                 let worktree_path = ws_path.join(name);
-                let default_branch = determine_default_branch(source_repo);
-                let fetch_branch = default_branch
-                    .strip_prefix("origin/")
-                    .unwrap_or(&default_branch)
-                    .to_string();
-
-                let _ = on_event.send(CreationEvent::Step {
-                    label: format!("Fetching {name}"),
-                });
-                let ok = run_streamed(
-                    "git",
-                    &["fetch", "origin", &fetch_branch],
-                    source_repo,
+                if !create_worktree_for_repo(
+                    Path::new(source),
+                    name,
+                    &worktree_path,
                     on_event,
                     handle,
-                )?;
-                if !ok {
-                    if handle.is_cancelled() {
-                        return Ok(());
-                    }
-                    return Err(format!("git fetch failed for {name} (see log)"));
-                }
-
-                let _ = on_event.send(CreationEvent::Step {
-                    label: format!("Creating worktree {name}"),
-                });
-                let worktree_str = worktree_path.to_string_lossy().to_string();
-                let ok = run_streamed(
-                    "git",
-                    &["worktree", "add", "--detach", &worktree_str, &default_branch],
-                    source_repo,
-                    on_event,
-                    handle,
-                )?;
-                if !ok {
-                    if handle.is_cancelled() {
-                        return Ok(());
-                    }
-                    return Err(format!("git worktree add failed for {name} (see log)"));
-                }
-
-                if workspace::mise_available() {
-                    let _ = on_event.send(CreationEvent::Step {
-                        label: format!("Trusting mise for {name}"),
-                    });
-                    let ok = run_streamed("mise", &["trust"], &worktree_path, on_event, handle)?;
-                    if !ok && !handle.is_cancelled() {
-                        warnings.push(format!("{name}: mise trust failed (see log)"));
-                    }
-                    if handle.is_cancelled() {
-                        return Ok(());
-                    }
+                    warnings,
+                )? {
+                    return Ok(());
                 }
             }
         }
@@ -391,6 +462,74 @@ fn run_body(
     }
 
     run_prepare(handle, repos, ws_path, on_event, warnings)
+}
+
+/// Create one worktree from `source_repo`: fetch its default branch, add a detached worktree at `worktree_path`, then trust mise.
+/// `label` drives the streamed step labels.
+/// Returns `Ok(true)` on completion, `Ok(false)` if cancelled mid-flight, `Err` on hard failure.
+fn create_worktree_for_repo(
+    source_repo: &Path,
+    label: &str,
+    worktree_path: &Path,
+    on_event: &Channel<CreationEvent>,
+    handle: &CreationHandle,
+    warnings: &mut Vec<String>,
+) -> Result<bool, String> {
+    let default_branch = determine_default_branch(source_repo);
+    let fetch_branch = default_branch
+        .strip_prefix("origin/")
+        .unwrap_or(&default_branch)
+        .to_string();
+
+    let _ = on_event.send(CreationEvent::Step {
+        label: format!("Fetching {label}"),
+    });
+    let ok = run_streamed(
+        "git",
+        &["fetch", "origin", &fetch_branch],
+        source_repo,
+        on_event,
+        handle,
+    )?;
+    if !ok {
+        if handle.is_cancelled() {
+            return Ok(false);
+        }
+        return Err(format!("git fetch failed for {label} (see log)"));
+    }
+
+    let _ = on_event.send(CreationEvent::Step {
+        label: format!("Creating worktree {label}"),
+    });
+    let worktree_str = worktree_path.to_string_lossy().to_string();
+    let ok = run_streamed(
+        "git",
+        &["worktree", "add", "--detach", &worktree_str, &default_branch],
+        source_repo,
+        on_event,
+        handle,
+    )?;
+    if !ok {
+        if handle.is_cancelled() {
+            return Ok(false);
+        }
+        return Err(format!("git worktree add failed for {label} (see log)"));
+    }
+
+    if workspace::mise_available() {
+        let _ = on_event.send(CreationEvent::Step {
+            label: format!("Trusting mise for {label}"),
+        });
+        let ok = run_streamed("mise", &["trust"], worktree_path, on_event, handle)?;
+        if !ok && !handle.is_cancelled() {
+            warnings.push(format!("{label}: mise trust failed (see log)"));
+        }
+        if handle.is_cancelled() {
+            return Ok(false);
+        }
+    }
+
+    Ok(true)
 }
 
 /// Re-run the configured prepare-command in every worktree (both fresh and reused).
@@ -482,24 +621,33 @@ fn get_prepare_command() -> Option<String> {
         .map(|s| s.to_string())
 }
 
-fn finalize_fresh(ws_path: &Path, repos: &[(String, String)], task_name: &str) -> Result<(), String> {
+fn finalize_fresh(ws_path: &Path, task_name: &str) -> Result<(), String> {
     fs::write(ws_path.join("initialized"), "")
         .map_err(|e| format!("failed to write initialized marker: {e}"))?;
     workspace::write_task_json(ws_path, task_name)?;
+    ensure_workspace_claude_md(ws_path)
+}
 
-    if repos.len() > 1 {
-        let repos_list = repos
-            .iter()
-            .map(|(_, name)| format!("- `{name}/`"))
-            .collect::<Vec<_>>()
-            .join("\n");
-        let claude_md = format!(
-            "## The Workspace\n\nThis workspace contains the following repositories:\n\n{repos_list}\n"
-        );
-        fs::write(ws_path.join("CLAUDE.md"), claude_md)
-            .map_err(|e| format!("failed to write CLAUDE.md: {e}"))?;
+/// Write a workspace-level `CLAUDE.md` listing the workspace's repos, but only when the workspace has more than one repo and no `CLAUDE.md` already exists — so a hand-edited file is never clobbered.
+/// Idempotent: safe to call after every worktree add as well as at fresh creation.
+fn ensure_workspace_claude_md(ws_path: &Path) -> Result<(), String> {
+    let claude_path = ws_path.join("CLAUDE.md");
+    if claude_path.exists() {
+        return Ok(());
     }
-    Ok(())
+    let repos = workspace::list_repo_subdirs(ws_path);
+    if repos.len() <= 1 {
+        return Ok(());
+    }
+    let repos_list = repos
+        .iter()
+        .map(|name| format!("- `{name}/`"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let claude_md = format!(
+        "## The Workspace\n\nThis workspace contains the following repositories:\n\n{repos_list}\n"
+    );
+    fs::write(&claude_path, claude_md).map_err(|e| format!("failed to write CLAUDE.md: {e}"))
 }
 
 /// Undo a creation that was cancelled or failed.
@@ -522,6 +670,18 @@ fn cleanup_aborted(ws_path: &Path, repo_names: &[String], mode: &Mode) {
             let _ = fs::remove_file(ws_path.join("task.json"));
         }
     }
+}
+
+/// Roll back a single added worktree (used when an add-repo is cancelled): deregister it from its source repo, then remove the directory.
+/// The surrounding workspace pre-exists and is left intact.
+fn cleanup_added_worktree(target: &Path) {
+    if target.join(".git").exists() {
+        let _ = Command::new("git")
+            .args(["worktree", "remove", "--force", "."])
+            .current_dir(target)
+            .output();
+    }
+    let _ = fs::remove_dir_all(target);
 }
 
 /// Run a subprocess, streaming each stdout/stderr line as a `Log` event, while keeping the child killable for cancellation.
@@ -820,5 +980,192 @@ mod tests {
             elapsed < Duration::from_secs(3),
             "cancellation should be prompt, took {elapsed:?}"
         );
+    }
+
+    /// Build a bare `origin.git` plus a `source` clone with one pushed commit on `main`.
+    /// Returns the `source` repo path (its `origin/main` points at the pushed commit).
+    fn make_origin_and_source(root: &Path) -> PathBuf {
+        let bare = root.join("origin.git");
+        fs::create_dir_all(&bare).unwrap();
+        git(&bare, &["init", "--bare", "-b", "main"]);
+
+        let source = root.join("source");
+        git(root, &["clone", bare.to_str().unwrap(), source.to_str().unwrap()]);
+        git(&source, &["config", "user.email", "t@t"]);
+        git(&source, &["config", "user.name", "t"]);
+        fs::write(source.join("file.txt"), "v1\n").unwrap();
+        git(&source, &["add", "."]);
+        git(&source, &["commit", "-m", "c1"]);
+        git(&source, &["push", "origin", "main"]);
+        source
+    }
+
+    #[test]
+    fn create_worktree_for_repo_creates_detached_worktree_at_origin_default() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let source = make_origin_and_source(root);
+        let origin_head =
+            String::from_utf8_lossy(&git(&source, &["rev-parse", "origin/main"]).stdout)
+                .trim()
+                .to_string();
+
+        let ws = root.join("ws-1");
+        fs::create_dir_all(&ws).unwrap();
+        let target = ws.join("source");
+
+        let completed = create_worktree_for_repo(
+            &source,
+            "source",
+            &target,
+            &noop_channel(),
+            &CreationHandle::new(),
+            &mut Vec::new(),
+        )
+        .unwrap();
+
+        assert!(completed);
+        assert!(target.join(".git").exists(), "worktree should be created");
+        let head = String::from_utf8_lossy(&git(&target, &["rev-parse", "HEAD"]).stdout)
+            .trim()
+            .to_string();
+        assert_eq!(head, origin_head, "worktree should be at origin's default branch head");
+        let symbolic = Command::new("git")
+            .args(["symbolic-ref", "-q", "HEAD"])
+            .current_dir(&target)
+            .output()
+            .unwrap();
+        assert!(!symbolic.status.success(), "worktree should be in detached HEAD");
+    }
+
+    #[test]
+    fn cleanup_added_worktree_removes_and_deregisters() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let source = make_origin_and_source(root);
+
+        let ws = root.join("ws-1");
+        fs::create_dir_all(&ws).unwrap();
+        let target = ws.join("source");
+        create_worktree_for_repo(
+            &source,
+            "source",
+            &target,
+            &noop_channel(),
+            &CreationHandle::new(),
+            &mut Vec::new(),
+        )
+        .unwrap();
+        assert!(target.exists());
+
+        cleanup_added_worktree(&target);
+
+        assert!(!target.exists(), "added worktree dir should be removed");
+        let list = String::from_utf8_lossy(&git(&source, &["worktree", "list"]).stdout).to_string();
+        assert!(
+            !list.contains(target.to_str().unwrap()),
+            "worktree should be deregistered from the source repo: {list}"
+        );
+    }
+
+    #[test]
+    fn ensure_workspace_claude_md_writes_for_multi_repo_when_absent() {
+        let tmp = tempfile::tempdir().unwrap();
+        let ws = tmp.path();
+        fs::create_dir_all(ws.join("repo-a")).unwrap();
+        fs::create_dir_all(ws.join("repo-b")).unwrap();
+
+        ensure_workspace_claude_md(ws).unwrap();
+
+        let content = fs::read_to_string(ws.join("CLAUDE.md")).unwrap();
+        assert!(content.contains("- `repo-a/`"), "got: {content}");
+        assert!(content.contains("- `repo-b/`"), "got: {content}");
+    }
+
+    #[test]
+    fn ensure_workspace_claude_md_does_not_overwrite_existing() {
+        let tmp = tempfile::tempdir().unwrap();
+        let ws = tmp.path();
+        fs::create_dir_all(ws.join("repo-a")).unwrap();
+        fs::create_dir_all(ws.join("repo-b")).unwrap();
+        fs::write(ws.join("CLAUDE.md"), "hand-edited\n").unwrap();
+
+        ensure_workspace_claude_md(ws).unwrap();
+
+        assert_eq!(fs::read_to_string(ws.join("CLAUDE.md")).unwrap(), "hand-edited\n");
+    }
+
+    #[test]
+    fn ensure_workspace_claude_md_skips_single_repo() {
+        let tmp = tempfile::tempdir().unwrap();
+        let ws = tmp.path();
+        fs::create_dir_all(ws.join("repo-a")).unwrap();
+
+        ensure_workspace_claude_md(ws).unwrap();
+
+        assert!(!ws.join("CLAUDE.md").exists());
+    }
+
+    #[test]
+    fn add_repo_inner_rejects_existing_directory() {
+        let tmp = tempfile::tempdir().unwrap();
+        let ws = tmp.path();
+        fs::create_dir_all(ws.join("repo")).unwrap();
+
+        let err = run_add_repo_inner(
+            &CreationHandle::new(),
+            ws.to_str().unwrap(),
+            "/does/not/matter",
+            "repo",
+            &noop_channel(),
+            &mut Vec::new(),
+        )
+        .unwrap_err();
+        assert_eq!(err, "Directory 'repo' already exists. Use a different postfix.");
+    }
+
+    #[test]
+    fn add_repo_inner_rejects_escaping_name() {
+        let tmp = tempfile::tempdir().unwrap();
+        let ws = tmp.path();
+
+        for bad in ["../escape", "a/b", "", ".", ".."] {
+            let err = run_add_repo_inner(
+                &CreationHandle::new(),
+                ws.to_str().unwrap(),
+                "/x",
+                bad,
+                &noop_channel(),
+                &mut Vec::new(),
+            )
+            .unwrap_err();
+            assert!(err.contains("invalid worktree name"), "for {bad:?} got: {err}");
+        }
+    }
+
+    #[test]
+    fn add_repo_inner_adds_worktree_and_writes_claude_md_for_second_repo() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let source = make_origin_and_source(root);
+
+        let ws = root.join("ws-1");
+        fs::create_dir_all(ws.join("existing")).unwrap(); // a pre-existing repo dir
+
+        let outcome = run_add_repo_inner(
+            &CreationHandle::new(),
+            ws.to_str().unwrap(),
+            source.to_str().unwrap(),
+            "source",
+            &noop_channel(),
+            &mut Vec::new(),
+        )
+        .unwrap();
+
+        assert!(matches!(outcome, Outcome::Done(_)));
+        assert!(ws.join("source").join(".git").exists(), "worktree should be created");
+        let content = fs::read_to_string(ws.join("CLAUDE.md")).unwrap();
+        assert!(content.contains("- `source/`"), "got: {content}");
+        assert!(content.contains("- `existing/`"), "got: {content}");
     }
 }

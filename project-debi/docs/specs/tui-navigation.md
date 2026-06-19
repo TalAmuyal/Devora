@@ -19,7 +19,7 @@ Pages operate in one of two modes: **navigation mode** (page-level key handling)
 | `q` | **Back (navigation only).** Same as the "back" action of `esc`, but only fires in navigation mode. In insert mode, `q` is a literal character typed into the input. |
 | `ctrl+d` | **Not used.** No-op on every page, every mode. |
 
-"Back" means: return to the previous page. At root (WorkspaceList) or in standalone flows (AddRepo, first-run ProfileRegistration with `hasBack=false`), "back" means quit the app.
+"Back" means: return to the previous page. At root (WorkspaceList) or in standalone flows (first-run ProfileRegistration with `hasBack=false`), "back" means quit the app.
 
 ## Navigation Mode vs Insert Mode
 
@@ -160,34 +160,6 @@ PathPicker has two internal modes: **type mode** (insert mode) and **browse mode
 
 When `hasBack=false` (first-run): BACK becomes QUIT.
 
-### AddRepo (standalone)
-
-Single text input for postfix. "Back" always means quit (standalone flow, no previous page).
-
-**Form state:**
-
-| Key | Text focused (insert) | Non-text focused (nav) |
-|---|---|---|
-| `ctrl+c` | QUIT | QUIT |
-| `esc` | UNFOCUS | QUIT |
-| `q` | INPUT | QUIT |
-
-**In-progress** (all input blocked except panic button):
-
-| Key | Behavior |
-|---|---|
-| `ctrl+c` | QUIT |
-| `esc` | NO-OP |
-| `q` | NO-OP |
-
-**Error state:**
-
-| Key | Behavior |
-|---|---|
-| `ctrl+c` | QUIT |
-| `esc` | QUIT |
-| `q` | QUIT |
-
 ## Footer Hints
 
 Footer hints reflect the current mode. When mode changes, hints update.
@@ -205,9 +177,6 @@ Footer hints reflect the current mode. When mode changes, hints update.
 | Settings (confirm-delete) | `y confirm`, `n/esc cancel` | N/A |
 | ProfileRegistration | `esc/q back` | `esc unfocus` |
 | ProfileRegistration (first-run) | `esc/q quit` | `esc unfocus` |
-| AddRepo (form) | `esc/q quit` | `esc unfocus` |
-| AddRepo (in-progress) | _(no hints)_ | N/A |
-| AddRepo (error) | `esc/q quit` | N/A |
 
 `ctrl+c` is intentionally not shown in footers. It always works; power users know it.
 
@@ -217,14 +186,14 @@ Page-specific action hints (e.g., `enter select`, `space toggle`, `tab next fiel
 
 Key events are processed in this order:
 
-1. **`ctrl+c`**: Handled at `AppModel.Update()` (or `AddRepoModel.Update()` for standalone). Returns `tea.Quit` immediately. No child component sees this key.
-2. **In-progress guard**: If the current page is in an in-progress state (Creation, AddRepo submission), swallow all keys. Return early.
+1. **`ctrl+c`**: Handled at `AppModel.Update()`. Returns `tea.Quit` immediately. No child component sees this key.
+2. **In-progress guard**: If the current page is in an in-progress state (Creation), swallow all keys. Return early.
 3. **`esc` in insert mode**: If the active page has a focused text input, call the page-level handler to unfocus it. Do not propagate to the text input component.
 4. **Navigation mode dispatch**: Page handles `esc` (back), `q` (back), and all other navigation keys directly.
 
 ### Component Responsibilities
 
-- **AppModel** / **AddRepoModel**: Handle `ctrl+c`. Route all other keys to the active page.
+- **AppModel**: Handle `ctrl+c`. Route all other keys to the active page.
 - **Page models**: Own focus state. Determine insert vs navigation mode. Handle `esc` (unfocus or back) and `q` (back in navigation mode). Emit navigation messages (`showWorkspaceListMsg`, `tea.Quit`) to the parent.
 - **Text input components** (TextInputModel, PathPickerModel in type mode): Receive keys only when focused. Never see `esc` (page intercepts it). Never see `ctrl+c` (root model intercepts it).
 - **PathPickerModel**: Exposes `Mode()` so the parent page can distinguish type mode (insert) from browse mode (navigation).

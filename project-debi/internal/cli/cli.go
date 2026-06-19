@@ -116,37 +116,6 @@ func runWorkspaceUI() error {
 	return nil
 }
 
-func runAddRepo() error {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return fmt.Errorf("get working directory: %w", err)
-	}
-
-	profile, wsPath, err := workspace.ResolveWorkspaceFromCWD(cwd)
-	if err != nil {
-		return fmt.Errorf("resolve workspace: %w", err)
-	}
-	if profile == nil {
-		return &UsageError{Message: "not inside a known workspace. Run this command from within a workspace directory"}
-	}
-
-	config.SetActiveProfile(profile)
-
-	repoNames, err := config.GetRegisteredRepoNames()
-	if err != nil {
-		return fmt.Errorf("get repo names: %w", err)
-	}
-	if len(repoNames) == 0 {
-		return &UsageError{Message: "no repos registered in the active profile"}
-	}
-
-	return tui.RunAddRepo(
-		style.DefaultKittyThemePath(),
-		wsPath,
-		repoNames,
-	)
-}
-
 const healthUsage = `usage: debi health [--strict] [-v|--verbose] [-p|--profile <name>]
 
 Check Devora dependencies and report their status. Also reports whether zsh

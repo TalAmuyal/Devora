@@ -481,69 +481,6 @@ func TestWriteWorkspaceCLAUDEMD_CreatesFileWithExpectedContent(t *testing.T) {
 	}
 }
 
-func TestEnsureWorkspaceCLAUDEMD_CreatesWhenMultipleReposAndAbsent(t *testing.T) {
-	wsPath := t.TempDir()
-	// Create two repo directories
-	for _, repo := range []string{"repo-a", "repo-b"} {
-		if err := os.MkdirAll(filepath.Join(wsPath, repo), 0o755); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	if err := EnsureWorkspaceCLAUDEMD(wsPath); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	content, err := os.ReadFile(filepath.Join(wsPath, ClaudeMDFileName))
-	if err != nil {
-		t.Fatalf("expected CLAUDE.md to be created: %v", err)
-	}
-	if string(content) != WorkspaceCLAUDEMDContent {
-		t.Fatalf("unexpected content: %q", string(content))
-	}
-}
-
-func TestEnsureWorkspaceCLAUDEMD_DoesNotCreateWhenSingleRepo(t *testing.T) {
-	wsPath := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(wsPath, "repo-a"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := EnsureWorkspaceCLAUDEMD(wsPath); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if _, err := os.Stat(filepath.Join(wsPath, ClaudeMDFileName)); err == nil {
-		t.Fatal("expected CLAUDE.md to not be created for single repo")
-	}
-}
-
-func TestEnsureWorkspaceCLAUDEMD_DoesNotOverwriteExisting(t *testing.T) {
-	wsPath := t.TempDir()
-	for _, repo := range []string{"repo-a", "repo-b"} {
-		if err := os.MkdirAll(filepath.Join(wsPath, repo), 0o755); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	customContent := "custom content"
-	if err := os.WriteFile(filepath.Join(wsPath, ClaudeMDFileName), []byte(customContent), 0o666); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := EnsureWorkspaceCLAUDEMD(wsPath); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	content, err := os.ReadFile(filepath.Join(wsPath, ClaudeMDFileName))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(content) != customContent {
-		t.Fatalf("expected existing content to be preserved, got %q", string(content))
-	}
-}
-
 // --- Locking tests ---
 
 func TestLockWorkspace_AcquiresLock(t *testing.T) {

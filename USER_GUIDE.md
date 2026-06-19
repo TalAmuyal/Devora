@@ -116,8 +116,6 @@ Debi implements the git shortcuts described above, as well as other utilities.
 
 Highlights:
 
-- **Workspace**
-	- `debi add` to add a new worktree to the workspace (not implemented in the UI yet)
 - **PR**:
 	- `debi pr check` to check the status of the current branch's PR
 	- `debi pr submit` to create a PR from detached HEAD

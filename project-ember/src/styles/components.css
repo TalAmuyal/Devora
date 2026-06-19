@@ -662,3 +662,117 @@
 .task-creation-action:hover {
   opacity: 0.85;
 }
+
+/* RepoList */
+
+.repo-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.repo-list-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  color: var(--color-fg);
+  cursor: pointer;
+}
+
+/* AddRepoDialog */
+
+.add-repo-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(24, 25, 38, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.add-repo-dialog {
+  background: var(--color-bg-overlay);
+  border: 1px solid var(--color-border);
+  border-radius: var(--tab-border-radius);
+  width: 420px;
+  max-width: 90vw;
+  padding: var(--space-xl);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.add-repo-dialog-title {
+  font-family: var(--font-ui);
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  color: var(--color-fg);
+}
+
+.add-repo-dialog-label {
+  font-family: var(--font-ui);
+  font-size: var(--font-size-sm);
+  color: var(--color-fg-secondary);
+}
+
+.add-repo-dialog-input {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--color-bg);
+  color: var(--color-fg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--tab-border-radius);
+  padding: var(--space-sm) var(--space-md);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-md);
+}
+
+.add-repo-dialog-input:focus {
+  outline: 0.133rem solid var(--color-focus-ring);
+  outline-offset: -0.133rem;
+  border-color: var(--color-border-active);
+}
+
+.add-repo-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+  margin-top: var(--space-sm);
+}
+
+.add-repo-dialog-cancel {
+  background: transparent;
+  color: var(--color-fg-secondary);
+  border: none;
+  border-radius: var(--tab-border-radius);
+  padding: var(--space-sm) var(--space-md);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-md);
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+.add-repo-dialog-cancel:hover {
+  color: var(--color-fg);
+}
+
+.add-repo-dialog-add {
+  background: var(--color-accent);
+  color: var(--color-crust);
+  border: none;
+  border-radius: var(--tab-border-radius);
+  padding: var(--space-sm) var(--space-md);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-md);
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.add-repo-dialog-add:hover {
+  opacity: 0.85;
+}

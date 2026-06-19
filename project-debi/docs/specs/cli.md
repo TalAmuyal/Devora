@@ -15,7 +15,6 @@ The CLI has 3 workspace commands, a health command, PR commands (`pr check`, `pr
 | Command | Args | Description |
 |---------|------|-------------|
 | `workspace-ui` | none | Open the Workspace Hub |
-| `add` | none | Open the add-repo TUI (must be inside a workspace) |
 | `rename` | `<new-name>` (positional, required) | Rename the current terminal session |
 
 ### Health
@@ -187,7 +186,6 @@ usage: debi <command> [args]
 
 Workspace Commands:
   workspace-ui          Open the Workspace Hub
-  add                   Add a repo to the current workspace
   rename <new-name>     Rename the current terminal session
 
 Health:
@@ -279,18 +277,6 @@ func runWorkspaceUI() error
    - If `result.SelectedWorkspace` is set, derive `sessionName` from `ws.TaskTitle` (falling back to `ws.Name` if empty), then delegate to `tui.CreateAndAttachSession(ws.Path, sessionName)` to create and attach a terminal session.
    - If `result.NewWorkspace` is set, delegate to `tui.CreateAndAttachSession(ws.WorkspacePath, ws.SessionName)`.
    - If the user quit without selection (`result == nil`), return nil.
-
-### add
-
-```go
-func runAddRepo() error
-```
-
-1. Detect the current workspace from CWD (using `workspace.ResolveWorkspaceFromCWD`).
-2. If not inside a workspace, return an error: `"not inside a known workspace. Run this command from within a workspace directory"`.
-3. Set the detected profile as active.
-4. Get registered repo names. If none, return a `UsageError`: `"no repos registered in the active profile"`.
-5. Launch the add-repo TUI via `tui.RunAddRepo(themePath, wsPath, repoNames)`.
 
 ### rename
 

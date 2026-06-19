@@ -164,26 +164,6 @@ User runs: debi workspace-ui
    └──────────────────────────────┘
 ```
 
-## Add Repo Flow
-
-Runs as a standalone TUI, separate from the main app.
-
-```
-User runs: debi add  (from inside a workspace)
-         │
-         ▼
-   ┌─────────────┐
-   │  cli.Run()  │  Detect workspace from CWD, load profile
-   └──────┬──────┘
-          ▼
-   ┌───────────────────┐
-   │  tui.RunAddRepo   │  Standalone Bubble Tea program
-   │                   │  User selects repo, optional postfix
-   │                   │  Creates worktree, updates CLAUDE.md
-   │                   │  Exits on completion
-   └───────────────────┘
-```
-
 ## Workspace States
 
 For the state decision tree and conditions, see [workspace.md](specs/workspace.md#workspace-states). The TUI's workspace list assigns categories based on these states and matches sessions by comparing workspace paths against Kitty tab CWDs.

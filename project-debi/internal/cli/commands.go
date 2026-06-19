@@ -64,12 +64,6 @@ var commands = []Command{
 		Run:         func(args []string) error { return runWorkspaceUI() },
 	},
 	{
-		Name:        "add",
-		Description: "Add a repo to the current workspace",
-		Group:       "Workspace Commands",
-		Run:         func(args []string) error { return runAddRepo() },
-	},
-	{
 		Name:        "rename",
 		Description: "Rename the current terminal session",
 		ArgsHint:    "<new-name>",

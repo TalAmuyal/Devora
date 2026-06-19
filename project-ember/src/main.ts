@@ -1,14 +1,16 @@
 import '@xterm/xterm/css/xterm.css';
 import { listen } from '@tauri-apps/api/event';
-import { invoke, invokeLogOnly } from './invoke';
+import { invoke, invokeLogOnly, Channel } from './invoke';
 import { SessionManager } from './session/SessionManager';
 import { TabBar } from './ui/TabBar';
 import { OverlayManager } from './ui/OverlayManager';
 import { KeyboardShortcuts } from './ui/KeyboardShortcuts';
 import { CommandPalette } from './ui/CommandPalette';
 import { showTextInputDialog } from './ui/components/TextInputDialog';
+import { showAddRepoDialog } from './ui/components/AddRepoDialog';
 import { WorkspaceHub } from './workspace/WorkspaceHub';
 import { TaskCreationController } from './workspace/TaskCreationController';
+import { CreationEvent, RepoInfo } from './workspace/types';
 import { ProfileManager, ProfileManagerView } from './workspace/ProfileManager';
 import { WebContentOverlay } from './webview/WebContentOverlay';
 import {
@@ -130,6 +132,87 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   };
 
+  // Add a repo (git worktree) to the active session's workspace: pick a registered repo (+ optional postfix), then stream the worktree creation inside the dialog, with cancel support.
+  const addRepoToWorkspace = async () => {
+    // Capture the workspace up front so a mid-dialog tab switch cannot retarget the add.
+    const session = sessionManager.getActiveSession();
+    if (!session?.workspacePath || !session.profilePath) {
+      showError('Cannot add a repo: the current session has no associated workspace');
+      return;
+    }
+    const workspacePath = session.workspacePath;
+
+    let repos: RepoInfo[];
+    try {
+      repos = await invoke<RepoInfo[]>('get_registered_repos', {
+        profilePath: session.profilePath,
+      });
+    } catch (_) {
+      return; // invoke already surfaced the error
+    }
+    if (repos.length === 0) {
+      showError('No repos are registered in this profile');
+      return;
+    }
+
+    const dialog = showAddRepoDialog({ repos });
+    dialog.onSubmit(({ sourceRepoPath, worktreeDirName }) => {
+      const progress = dialog.showProgress(`Adding: ${worktreeDirName}`);
+      let creationId: number | null = null;
+      let cancelRequested = false;
+      let failed = false;
+
+      const requestCancel = () => {
+        if (failed) {
+          dialog.close();
+          return;
+        }
+        if (creationId === null) {
+          cancelRequested = true; // cancel once the backend id arrives
+          return;
+        }
+        invokeLogOnly('cancel_workspace_creation', { id: creationId }).catch(() => {});
+      };
+      progress.onCancel(requestCancel);
+      progress.onClose(() => dialog.close());
+
+      const onEvent = new Channel<CreationEvent>();
+      onEvent.onmessage = (event) => {
+        switch (event.type) {
+          case 'step':
+            progress.setStep(event.label);
+            break;
+          case 'log':
+            progress.appendLog(event.line);
+            break;
+          case 'done':
+          case 'cancelled':
+            dialog.close();
+            break;
+          case 'failed':
+            failed = true;
+            progress.showError(event.message);
+            break;
+        }
+      };
+
+      invoke<number>('add_repo_to_workspace', {
+        workspacePath,
+        sourceRepoPath,
+        worktreeDirName,
+        onEvent,
+      })
+        .then((id) => {
+          creationId = id;
+          if (cancelRequested) requestCancel();
+        })
+        .catch(() => {
+          // invoke already surfaced the error; the backend never started, so close the dialog.
+          dialog.close();
+        });
+    });
+  };
+
   const wsHub = new WorkspaceHub(
     (path, title, repos) => openWorkspace(path, title, repos, wsHub.getActiveProfilePath()),
     startTaskCreation,
@@ -217,6 +300,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         icon: '↻',
         shortcut: [],
         run: closePaletteThen(() => void repurposeCurrentSession()),
+      },
+      {
+        id: 'add-repo',
+        title: 'Add Repo to Workspace',
+        description: 'Add a repo (git worktree) to the current workspace',
+        icon: '⊕',
+        shortcut: [],
+        run: closePaletteThen(() => void addRepoToWorkspace()),
       },
       {
         id: 'close-session',
