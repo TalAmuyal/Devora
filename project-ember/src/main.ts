@@ -99,11 +99,15 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   // Hand a new task off to the controller: close the Hub, then open a tab + progress overlay and run creation asynchronously so the window never freezes.
-  const startTaskCreation = (taskName: string, repoPaths: string[]) => {
+  const startTaskCreation = (
+    taskName: string,
+    repoPaths: string[],
+    sourceWorkspacePath: string | null,
+  ) => {
     const profilePath = wsHub.getActiveProfilePath();
     if (!profilePath) return;
     dismissWsHub();
-    void taskCreationController.start(taskName, repoPaths, profilePath);
+    void taskCreationController.start(taskName, repoPaths, profilePath, sourceWorkspacePath);
   };
 
   // Swap the active session's task for a new one in the same workspace: validate the worktrees are idle, prompt for the new task name (pre-filled with the current one), write the new task identity, and rename the tab.
@@ -267,6 +271,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     );
   };
 
+  // Duplicate the active session into a new workspace: open the Hub's New Task form pre-filled with this session's repos (pinned to their current commits) and its title.
+  const duplicateCurrentSession = () => {
+    const session = sessionManager.getActiveSession();
+    if (!session?.workspacePath || !session.profilePath) {
+      showError('Cannot duplicate: the current session has no associated workspace');
+      return;
+    }
+    wsHub.setActiveProfilePath(session.profilePath);
+    wsHub.queueDuplication(session.workspacePath);
+    openWsHub();
+  };
+
   // Every palette command closes the palette (the active tab-covering overlay) before acting
   const closePaletteThen = (action: () => void) => () => {
     overlayManager.dismissTabCoveringOverlay();
@@ -308,6 +324,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         icon: '⊕',
         shortcut: [],
         run: closePaletteThen(() => void addRepoToWorkspace()),
+      },
+      {
+        id: 'duplicate-session',
+        title: 'Duplicate Current Session',
+        description: 'Open the New Task form pre-filled to copy the current workspace',
+        icon: '⧉',
+        shortcut: [],
+        run: closePaletteThen(() => duplicateCurrentSession()),
       },
       {
         id: 'close-session',

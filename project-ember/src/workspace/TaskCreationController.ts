@@ -41,8 +41,16 @@ export class TaskCreationController {
 
   constructor(private deps: TaskCreationControllerDeps) {}
 
-  /** Begin creating a task: open the pending tab + progress overlay and drive the backend channel. */
-  async start(taskName: string, repoPaths: string[], profilePath: string): Promise<void> {
+  /**
+   * Begin creating a task: open the pending tab + progress overlay and drive the backend channel.
+   * `sourceWorkspacePath` is set when duplicating a session, so the backend pins each shared repo to the source worktree's commit and copies its CLAUDE.md; pass `null` for a plain new task.
+   */
+  async start(
+    taskName: string,
+    repoPaths: string[],
+    profilePath: string,
+    sourceWorkspacePath: string | null,
+  ): Promise<void> {
     const repoNames = repoPaths.map((p) => p.split('/').pop() ?? p);
     const session = this.deps.sessionManager.createPendingSession(taskName, profilePath);
     const progress = createTaskCreationProgress(`Creating: ${taskName}`);
@@ -77,6 +85,7 @@ export class TaskCreationController {
         profilePath,
         repoPaths,
         taskName,
+        sourceWorkspacePath,
         onEvent,
       });
       const current = this.creations.get(session.id);

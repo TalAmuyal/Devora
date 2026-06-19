@@ -13,8 +13,8 @@ const manyRepos: RepoInfo[] = [
   { name: 'gamma', path: '/src/gamma', source: 'registered' },
 ];
 
-function mount(mode: RepoListMode, list = repos): RepoListHandle {
-  const handle = createRepoList({ repos: list, mode });
+function mount(mode: RepoListMode, list = repos, preselectedPaths: string[] = []): RepoListHandle {
+  const handle = createRepoList({ repos: list, mode, preselectedPaths });
   document.body.appendChild(handle.element);
   return handle;
 }
@@ -78,6 +78,11 @@ describe('createRepoList', () => {
   it('multi mode selects nothing by default', () => {
     const handle = mount('multi');
     expect(handle.getSelectedPaths()).toEqual([]);
+  });
+
+  it('multi mode pre-checks the preselected paths', () => {
+    const handle = mount('multi', repos, ['/src/repo-b']);
+    expect(handle.getSelectedPaths()).toEqual(['/src/repo-b']);
   });
 
   it('single mode uses radios sharing one group and returns the selected path', () => {

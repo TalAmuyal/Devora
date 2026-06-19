@@ -1,4 +1,5 @@
 import { invoke } from '../invoke';
+import { showError } from '../errors';
 import { createEmptyState } from '../ui/components/EmptyState';
 import { createStatusDot } from '../ui/components/StatusDot';
 import { createBadge } from '../ui/components/Badge';
@@ -108,7 +109,12 @@ export class WorkspaceHub {
   private containerEl: HTMLElement;
   private onOpenWorkspace: (path: string, title: string, repos: string[]) => void;
   // Hand off a new task: the controller opens a tab + progress overlay and runs creation asynchronously.
-  private onStartTaskCreation: (taskName: string, repoPaths: string[]) => void;
+  // `sourceWorkspacePath` is set when duplicating a session, else null.
+  private onStartTaskCreation: (
+    taskName: string,
+    repoPaths: string[],
+    sourceWorkspacePath: string | null,
+  ) => void;
   private onClose: () => void;
   private onOpenProfileManager: (view: 'list' | 'new') => void;
 
@@ -125,6 +131,14 @@ export class WorkspaceHub {
   private statusErrors: Map<string, string> = new Map();
 
   private showNewForm = false;
+  // Set while the New Task form is in "duplicate" mode: the source workspace whose commits and CLAUDE.md the new workspace should mirror (null for a plain new task).
+  private duplicationSource: string | null = null;
+  // Source task title pre-filled into the duplicate form's Title field.
+  private duplicationTitle = '';
+  // Registered-repo paths pre-checked in the duplicate form (the source workspace's repos).
+  private preselectedRepoPaths: string[] = [];
+  // A duplication requested from outside (command palette) before the hub finished loading; the source repos/title are resolved from the loaded workspace list at the end of load().
+  private pendingDuplication: string | null = null;
   private refreshToast: ToastHandle | null = null;
   private refreshSeq = 0;
   private availableRepos: RepoInfo[] = [];
@@ -145,7 +159,11 @@ export class WorkspaceHub {
 
   constructor(
     onOpenWorkspace: (path: string, title: string, repos: string[]) => void,
-    onStartTaskCreation: (taskName: string, repoPaths: string[]) => void,
+    onStartTaskCreation: (
+      taskName: string,
+      repoPaths: string[],
+      sourceWorkspacePath: string | null,
+    ) => void,
     onClose: () => void,
     onOpenProfileManager: (view: 'list' | 'new') => void,
   ) {
@@ -294,6 +312,8 @@ export class WorkspaceHub {
 
     this.render();
     this.preloadAllStatuses();
+
+    await this.resolvePendingDuplication();
   }
 
   async refresh(): Promise<void> {
@@ -491,6 +511,8 @@ export class WorkspaceHub {
     this.categoryFilter = 'active';
     this.focusedCardIndex = -1;
     this.showNewForm = false;
+    this.resetDuplicationState();
+    this.pendingDuplication = null;
     this.refreshSeq++;
     this.removeAllToasts();
     this.showCheatsheet = false;
@@ -1122,6 +1144,14 @@ export class WorkspaceHub {
     actionRow.appendChild(openBtn);
 
     if (ws.active) {
+      const duplicateBtn = document.createElement('button');
+      duplicateBtn.className = 'ws-duplicate-btn';
+      duplicateBtn.textContent = 'Duplicate';
+      duplicateBtn.addEventListener('click', () =>
+        void this.startDuplication(ws.path, ws.repos, ws.taskTitle),
+      );
+      actionRow.appendChild(duplicateBtn);
+
       const removeTaskBtn = document.createElement('button');
       removeTaskBtn.className = 'ws-remove-task-btn';
       removeTaskBtn.textContent = 'Remove Task';
@@ -1316,8 +1346,54 @@ export class WorkspaceHub {
     this.preloadAllStatuses();
   }
 
+  /** Queue a duplication to run once the hub has loaded — used by the command palette, which opens the hub fresh. */
+  queueDuplication(sourceWorkspacePath: string): void {
+    this.pendingDuplication = sourceWorkspacePath;
+  }
+
+  /** Resolve a queued duplication now that the workspace list is loaded: find the source workspace and open the pre-filled form. */
+  private async resolvePendingDuplication(): Promise<void> {
+    if (!this.pendingDuplication) return;
+    const sourcePath = this.pendingDuplication;
+    this.pendingDuplication = null;
+    const ws = this.workspaces.find((w) => w.path === sourcePath && w.active);
+    if (!ws) {
+      showError('Cannot duplicate: the source workspace was not found');
+      return;
+    }
+    await this.startDuplication(ws.path, ws.repos, ws.taskTitle);
+  }
+
+  /**
+   * Open the New Task form pre-filled to copy a source workspace: its repos pre-checked and its title pre-filled, remembering the source so submission pins each shared repo to the source's commit and copies its CLAUDE.md.
+   */
+  private async startDuplication(
+    sourceWorkspacePath: string,
+    sourceRepoNames: string[],
+    title: string,
+  ): Promise<void> {
+    if (!this.activeProfilePath) return;
+    try {
+      this.availableRepos = await invoke<RepoInfo[]>('get_registered_repos', {
+        profilePath: this.activeProfilePath,
+      });
+    } catch (_) {
+      // invoke already surfaced the error
+      this.availableRepos = [];
+    }
+    this.duplicationSource = sourceWorkspacePath;
+    this.duplicationTitle = title;
+    this.preselectedRepoPaths = this.availableRepos
+      .filter((r) => sourceRepoNames.includes(r.name))
+      .map((r) => r.path);
+    this.showNewForm = true;
+    this.render();
+  }
+
   private async toggleNewForm(): Promise<void> {
     this.showNewForm = !this.showNewForm;
+    // A plain new task carries no duplication source/preselection.
+    this.resetDuplicationState();
     if (this.showNewForm && this.activeProfilePath) {
       try {
         this.availableRepos = await invoke<RepoInfo[]>('get_registered_repos', {
@@ -1329,6 +1405,12 @@ export class WorkspaceHub {
       }
     }
     this.render();
+  }
+
+  private resetDuplicationState(): void {
+    this.duplicationSource = null;
+    this.duplicationTitle = '';
+    this.preselectedRepoPaths = [];
   }
 
   private renderNewButton(): HTMLElement {
@@ -1353,7 +1435,10 @@ export class WorkspaceHub {
     nameInput.type = 'text';
     nameInput.className = 'ws-new-form-input';
     nameInput.placeholder = 'e.g. Fix login bug';
+    nameInput.value = this.duplicationTitle;
     form.appendChild(nameInput);
+
+    const isDuplicating = this.duplicationSource !== null;
 
     // Repo selection
     let repoListHandle: RepoListHandle | null = null;
@@ -1363,7 +1448,19 @@ export class WorkspaceHub {
       repoLabel.textContent = 'Repositories';
       form.appendChild(repoLabel);
 
-      repoListHandle = createRepoList({ repos: this.availableRepos, mode: 'multi' });
+      if (isDuplicating) {
+        const hint = document.createElement('p');
+        hint.className = 'ws-new-form-hint';
+        hint.textContent =
+          'Pre-selected repos are duplicated at their current commit; added repos use the latest commit.';
+        form.appendChild(hint);
+      }
+
+      repoListHandle = createRepoList({
+        repos: this.availableRepos,
+        mode: 'multi',
+        preselectedPaths: this.preselectedRepoPaths,
+      });
       form.appendChild(repoListHandle.element);
     }
 
@@ -1379,11 +1476,13 @@ export class WorkspaceHub {
       if (!taskName || !this.activeProfilePath) return;
 
       const repoPaths = repoListHandle?.getSelectedPaths() ?? [];
+      const sourceWorkspacePath = this.duplicationSource;
 
       // Hand off immediately: the controller closes the Hub, opens a tab, and streams progress.
       // Creation no longer blocks here, so the window never freezes.
       this.showNewForm = false;
-      this.onStartTaskCreation(taskName, repoPaths);
+      this.resetDuplicationState();
+      this.onStartTaskCreation(taskName, repoPaths, sourceWorkspacePath);
     });
 
     const cancelBtn = document.createElement('button');
@@ -1391,6 +1490,7 @@ export class WorkspaceHub {
     cancelBtn.textContent = 'Cancel';
     cancelBtn.addEventListener('click', () => {
       this.showNewForm = false;
+      this.resetDuplicationState();
       this.render();
     });
 

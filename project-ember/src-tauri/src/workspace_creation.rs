@@ -118,6 +118,19 @@ enum Outcome {
     Cancelled,
 }
 
+/// One repo to materialise as a worktree, with its checkout target resolved up front so the worktree is created/checked-out exactly once (and the prepare-command runs on the intended commit).
+struct RepoSpec {
+    /// The registered repo the worktree is created from.
+    source: String,
+    /// The worktree directory name (the repo basename).
+    name: String,
+    /// The ref to check out: a pinned commit SHA (duplication) or `origin/<default>` (latest).
+    target_ref: String,
+    /// Whether to `git fetch origin` before checking out. True only for the latest case — a
+    /// pinned SHA is already present in the shared object store.
+    fetch_first: bool,
+}
+
 /// Worker-thread entry point: run the creation, deregister, report warnings, and emit the terminal event.
 /// Spawned by the `create_workspace` command.
 pub fn run(
@@ -127,6 +140,7 @@ pub fn run(
     profile_path: String,
     repo_paths: Vec<String>,
     task_name: String,
+    source_workspace_path: Option<String>,
     on_event: Channel<CreationEvent>,
 ) {
     let mut warnings = Vec::new();
@@ -135,6 +149,7 @@ pub fn run(
         &profile_path,
         &repo_paths,
         &task_name,
+        source_workspace_path.as_deref(),
         &on_event,
         &mut warnings,
     );
@@ -168,6 +183,7 @@ fn run_inner(
     profile_path: &str,
     repo_paths: &[String],
     task_name: &str,
+    source_workspace_path: Option<&str>,
     on_event: &Channel<CreationEvent>,
     warnings: &mut Vec<String>,
 ) -> Result<Outcome, String> {
@@ -175,17 +191,28 @@ fn run_inner(
     fs::create_dir_all(&workspaces_dir)
         .map_err(|e| format!("failed to create workspaces dir: {e}"))?;
 
-    // Resolve each repo to (source path, worktree name).
-    let mut repos: Vec<(String, String)> = Vec::new();
+    // Resolve each repo to a worktree spec with its checkout target decided up front: the source workspace's current commit when duplicating a repo it already has, otherwise the latest default branch.
+    let mut repos: Vec<RepoSpec> = Vec::new();
     for repo_path in repo_paths {
         let expanded = workspace::expand_tilde(repo_path)?;
         let name = Path::new(&expanded)
             .file_name()
             .map(|n| n.to_string_lossy().into_owned())
             .ok_or_else(|| format!("invalid repo path: {expanded}"))?;
-        repos.push((expanded, name));
+        let pinned = source_workspace_path
+            .and_then(|src| resolve_pinned_commit(Path::new(src), &name, Path::new(&expanded)));
+        let (target_ref, fetch_first) = match pinned {
+            Some(sha) => (sha, false),
+            None => (determine_default_branch(Path::new(&expanded)), true),
+        };
+        repos.push(RepoSpec {
+            source: expanded,
+            name,
+            target_ref,
+            fetch_first,
+        });
     }
-    let repo_names: Vec<String> = repos.iter().map(|(_, name)| name.clone()).collect();
+    let repo_names: Vec<String> = repos.iter().map(|r| r.name.clone()).collect();
 
     let _ = on_event.send(CreationEvent::Step {
         label: "Resolving workspace".to_string(),
@@ -203,6 +230,10 @@ fn run_inner(
         Ok(()) => {
             if matches!(mode, Mode::Fresh) {
                 finalize_fresh(&ws_path, task_name)?;
+            }
+            // Duplication overwrites the new workspace's CLAUDE.md with the source's (for both fresh and reused workspaces), so it carries the source's workspace-level guidance.
+            if let Some(src) = source_workspace_path {
+                copy_source_claude_md(Path::new(src), &ws_path)?;
             }
             Ok(Outcome::Done(CreatedWorkspace {
                 path: ws_path.to_string_lossy().into_owned(),
@@ -299,11 +330,14 @@ fn run_add_repo_inner(
     }
 
     let source = workspace::expand_tilde(source_repo_path)?;
+    let default_branch = determine_default_branch(Path::new(&source));
 
     if !create_worktree_for_repo(
         Path::new(&source),
         worktree_dir_name,
         &target,
+        &default_branch,
+        true,
         on_event,
         handle,
         warnings,
@@ -313,7 +347,12 @@ fn run_add_repo_inner(
 
     run_prepare(
         handle,
-        &[(source, worktree_dir_name.to_string())],
+        &[RepoSpec {
+            source,
+            name: worktree_dir_name.to_string(),
+            target_ref: default_branch,
+            fetch_first: true,
+        }],
         ws_path,
         on_event,
         warnings,
@@ -418,7 +457,7 @@ fn workspace_id_number(ws_path: &Path) -> Option<usize> {
 
 fn run_body(
     handle: &CreationHandle,
-    repos: &[(String, String)],
+    repos: &[RepoSpec],
     ws_path: &Path,
     mode: &Mode,
     on_event: &Channel<CreationEvent>,
@@ -426,15 +465,17 @@ fn run_body(
 ) -> Result<(), String> {
     match mode {
         Mode::Fresh => {
-            for (source, name) in repos {
+            for spec in repos {
                 if handle.is_cancelled() {
                     return Ok(());
                 }
-                let worktree_path = ws_path.join(name);
+                let worktree_path = ws_path.join(&spec.name);
                 if !create_worktree_for_repo(
-                    Path::new(source),
-                    name,
+                    Path::new(&spec.source),
+                    &spec.name,
                     &worktree_path,
+                    &spec.target_ref,
+                    spec.fetch_first,
                     on_event,
                     handle,
                     warnings,
@@ -444,16 +485,16 @@ fn run_body(
             }
         }
         Mode::Reuse => {
-            for (_source, name) in repos {
+            for spec in repos {
                 if handle.is_cancelled() {
                     return Ok(());
                 }
-                let worktree_path = ws_path.join(name);
+                let worktree_path = ws_path.join(&spec.name);
                 let _ = on_event.send(CreationEvent::Step {
-                    label: format!("Refreshing {name}"),
+                    label: format!("Refreshing {}", spec.name),
                 });
-                refresh_worktree(&worktree_path, on_event, handle)
-                    .map_err(|e| format!("{name}: {e}"))?;
+                refresh_worktree(&worktree_path, &spec.target_ref, spec.fetch_first, on_event, handle)
+                    .map_err(|e| format!("{}: {e}", spec.name))?;
                 if handle.is_cancelled() {
                     return Ok(());
                 }
@@ -464,38 +505,42 @@ fn run_body(
     run_prepare(handle, repos, ws_path, on_event, warnings)
 }
 
-/// Create one worktree from `source_repo`: fetch its default branch, add a detached worktree at `worktree_path`, then trust mise.
+/// Create one worktree from `source_repo`, detached at `target_ref`, then trust mise.
+/// `fetch_first` controls whether `origin` is fetched before the single checkout — needed only for the latest case (a pinned commit is already in the shared object store).
 /// `label` drives the streamed step labels.
 /// Returns `Ok(true)` on completion, `Ok(false)` if cancelled mid-flight, `Err` on hard failure.
 fn create_worktree_for_repo(
     source_repo: &Path,
     label: &str,
     worktree_path: &Path,
+    target_ref: &str,
+    fetch_first: bool,
     on_event: &Channel<CreationEvent>,
     handle: &CreationHandle,
     warnings: &mut Vec<String>,
 ) -> Result<bool, String> {
-    let default_branch = determine_default_branch(source_repo);
-    let fetch_branch = default_branch
-        .strip_prefix("origin/")
-        .unwrap_or(&default_branch)
-        .to_string();
+    if fetch_first {
+        let fetch_branch = target_ref
+            .strip_prefix("origin/")
+            .unwrap_or(target_ref)
+            .to_string();
 
-    let _ = on_event.send(CreationEvent::Step {
-        label: format!("Fetching {label}"),
-    });
-    let ok = run_streamed(
-        "git",
-        &["fetch", "origin", &fetch_branch],
-        source_repo,
-        on_event,
-        handle,
-    )?;
-    if !ok {
-        if handle.is_cancelled() {
-            return Ok(false);
+        let _ = on_event.send(CreationEvent::Step {
+            label: format!("Fetching {label}"),
+        });
+        let ok = run_streamed(
+            "git",
+            &["fetch", "origin", &fetch_branch],
+            source_repo,
+            on_event,
+            handle,
+        )?;
+        if !ok {
+            if handle.is_cancelled() {
+                return Ok(false);
+            }
+            return Err(format!("git fetch failed for {label} (see log)"));
         }
-        return Err(format!("git fetch failed for {label} (see log)"));
     }
 
     let _ = on_event.send(CreationEvent::Step {
@@ -504,7 +549,7 @@ fn create_worktree_for_repo(
     let worktree_str = worktree_path.to_string_lossy().to_string();
     let ok = run_streamed(
         "git",
-        &["worktree", "add", "--detach", &worktree_str, &default_branch],
+        &["worktree", "add", "--detach", &worktree_str, target_ref],
         source_repo,
         on_event,
         handle,
@@ -536,7 +581,7 @@ fn create_worktree_for_repo(
 /// Failures are non-fatal (reported as warnings) — matching the original behaviour — but the dependency cache is still in place, so a warm install is fast.
 fn run_prepare(
     handle: &CreationHandle,
-    repos: &[(String, String)],
+    repos: &[RepoSpec],
     ws_path: &Path,
     on_event: &Channel<CreationEvent>,
     warnings: &mut Vec<String>,
@@ -545,10 +590,11 @@ fn run_prepare(
         return Ok(());
     };
 
-    for (_source, name) in repos {
+    for spec in repos {
         if handle.is_cancelled() {
             return Ok(());
         }
+        let name = &spec.name;
         let worktree_path = ws_path.join(name);
         if !worktree_path.exists() {
             continue;
@@ -564,28 +610,31 @@ fn run_prepare(
     Ok(())
 }
 
-/// Refresh a reused worktree to the latest default branch.
-/// An inactive workspace's worktrees are already clean and detached, so a plain `fetch` + detached `checkout origin/<default>` suffices — no `reset`/`clean`, which keeps the untracked dependency cache (`node_modules`, `.venv`, …).
+/// Move a reused worktree to `target_ref` (detached), fetching `origin` first only for the latest case (`fetch_first`).
+/// An inactive workspace's worktrees are already clean and detached, so a plain (optional) `fetch` + detached `checkout` suffices — no `reset`/`clean`, which keeps the untracked dependency cache (`node_modules`, `.venv`, …).
 pub(crate) fn refresh_worktree(
     worktree: &Path,
+    target_ref: &str,
+    fetch_first: bool,
     on_event: &Channel<CreationEvent>,
     handle: &CreationHandle,
 ) -> Result<(), String> {
-    let default_branch = determine_default_branch(worktree);
-    let fetch_branch = default_branch
-        .strip_prefix("origin/")
-        .unwrap_or(&default_branch)
-        .to_string();
+    if fetch_first {
+        let fetch_branch = target_ref
+            .strip_prefix("origin/")
+            .unwrap_or(target_ref)
+            .to_string();
 
-    let ok = run_streamed("git", &["fetch", "origin", &fetch_branch], worktree, on_event, handle)?;
-    if !ok {
-        if handle.is_cancelled() {
-            return Ok(());
+        let ok = run_streamed("git", &["fetch", "origin", &fetch_branch], worktree, on_event, handle)?;
+        if !ok {
+            if handle.is_cancelled() {
+                return Ok(());
+            }
+            return Err("git fetch failed (see log)".to_string());
         }
-        return Err("git fetch failed (see log)".to_string());
     }
 
-    let ok = run_streamed("git", &["checkout", &default_branch], worktree, on_event, handle)?;
+    let ok = run_streamed("git", &["checkout", target_ref], worktree, on_event, handle)?;
     if !ok {
         if handle.is_cancelled() {
             return Ok(());
@@ -607,6 +656,42 @@ fn determine_default_branch(repo_dir: &Path) -> String {
         }
         _ => "origin/main".to_string(),
     }
+}
+
+/// Resolve the commit a duplicated worktree should be pinned to: the HEAD of the source workspace's worktree named `name`, but only when that commit is reachable in `selected_repo` (the registered repo the new worktree is created from).
+///
+/// Returns `None` — so the caller falls back to the latest default branch — when the source has no such worktree, its HEAD can't be read, or the commit isn't present in `selected_repo` (e.g. a basename collision between two registered repos, or a postfix-renamed worktree).
+/// The reachability check also guarantees the later `git worktree add` won't hard-fail.
+fn resolve_pinned_commit(source_ws: &Path, name: &str, selected_repo: &Path) -> Option<String> {
+    let worktree = source_ws.join(name);
+    if !worktree.exists() {
+        return None;
+    }
+
+    let head = Command::new("git")
+        .args(["rev-parse", "HEAD"])
+        .current_dir(&worktree)
+        .output()
+        .ok()?;
+    if !head.status.success() {
+        return None;
+    }
+    let sha = String::from_utf8_lossy(&head.stdout).trim().to_string();
+    if sha.is_empty() {
+        return None;
+    }
+
+    let reachable = Command::new("git")
+        .args([
+            "rev-parse",
+            "--verify",
+            "--quiet",
+            &format!("{sha}^{{commit}}"),
+        ])
+        .current_dir(selected_repo)
+        .output()
+        .ok()?;
+    reachable.status.success().then_some(sha)
 }
 
 fn get_prepare_command() -> Option<String> {
@@ -648,6 +733,18 @@ fn ensure_workspace_claude_md(ws_path: &Path) -> Result<(), String> {
         "## The Workspace\n\nThis workspace contains the following repositories:\n\n{repos_list}\n"
     );
     fs::write(&claude_path, claude_md).map_err(|e| format!("failed to write CLAUDE.md: {e}"))
+}
+
+/// Copy the source workspace's `CLAUDE.md` over the destination workspace's, overwriting it.
+/// A no-op when the source workspace has no `CLAUDE.md` (the destination keeps whatever `ensure_workspace_claude_md` produced).
+fn copy_source_claude_md(src_ws: &Path, dst_ws: &Path) -> Result<(), String> {
+    let src = src_ws.join("CLAUDE.md");
+    if !src.exists() {
+        return Ok(());
+    }
+    fs::copy(&src, dst_ws.join("CLAUDE.md"))
+        .map(|_| ())
+        .map_err(|e| format!("failed to copy CLAUDE.md: {e}"))
 }
 
 /// Undo a creation that was cancelled or failed.
@@ -914,7 +1011,7 @@ mod tests {
             .trim()
             .to_string();
 
-        refresh_worktree(&wt, &noop_channel(), &CreationHandle::new()).unwrap();
+        refresh_worktree(&wt, "origin/main", true, &noop_channel(), &CreationHandle::new()).unwrap();
 
         let head_after = String::from_utf8_lossy(&git(&wt, &["rev-parse", "HEAD"]).stdout)
             .trim()
@@ -1018,6 +1115,8 @@ mod tests {
             &source,
             "source",
             &target,
+            "origin/main",
+            true,
             &noop_channel(),
             &CreationHandle::new(),
             &mut Vec::new(),
@@ -1051,6 +1150,8 @@ mod tests {
             &source,
             "source",
             &target,
+            "origin/main",
+            true,
             &noop_channel(),
             &CreationHandle::new(),
             &mut Vec::new(),
@@ -1167,5 +1268,220 @@ mod tests {
         let content = fs::read_to_string(ws.join("CLAUDE.md")).unwrap();
         assert!(content.contains("- `source/`"), "got: {content}");
         assert!(content.contains("- `existing/`"), "got: {content}");
+    }
+
+    /// Build a bare origin + a `source` clone named `name` with two pushed commits on `main`.
+    /// Returns `(source_path, first_commit, second_commit)`; `origin/main` ends at the second.
+    /// The file content is namespaced by `name` so two repos never share a commit SHA — git hashes are otherwise identical when same-content commits land in the same second.
+    fn make_repo_with_two_commits(root: &Path, name: &str) -> (PathBuf, String, String) {
+        let bare = root.join(format!("{name}.git"));
+        fs::create_dir_all(&bare).unwrap();
+        git(&bare, &["init", "--bare", "-b", "main"]);
+
+        let source = root.join(name);
+        git(root, &["clone", bare.to_str().unwrap(), source.to_str().unwrap()]);
+        git(&source, &["config", "user.email", "t@t"]);
+        git(&source, &["config", "user.name", "t"]);
+
+        fs::write(source.join("file.txt"), format!("{name} v1\n")).unwrap();
+        git(&source, &["add", "."]);
+        git(&source, &["commit", "-m", "c1"]);
+        git(&source, &["push", "origin", "main"]);
+        let c1 = head_of(&source);
+
+        fs::write(source.join("file.txt"), format!("{name} v2\n")).unwrap();
+        git(&source, &["add", "."]);
+        git(&source, &["commit", "-m", "c2"]);
+        git(&source, &["push", "origin", "main"]);
+        let c2 = head_of(&source);
+
+        (source, c1, c2)
+    }
+
+    /// Add a detached worktree of `repo` at `commit` under `<ws>/<name>` — mirrors a source session's worktree on disk.
+    fn add_source_worktree(repo: &Path, ws: &Path, name: &str, commit: &str) {
+        fs::create_dir_all(ws).unwrap();
+        git(
+            repo,
+            &["worktree", "add", "--detach", ws.join(name).to_str().unwrap(), commit],
+        );
+    }
+
+    fn head_of(dir: &Path) -> String {
+        String::from_utf8_lossy(&git(dir, &["rev-parse", "HEAD"]).stdout)
+            .trim()
+            .to_string()
+    }
+
+    fn is_detached(dir: &Path) -> bool {
+        !Command::new("git")
+            .args(["symbolic-ref", "-q", "HEAD"])
+            .current_dir(dir)
+            .output()
+            .unwrap()
+            .status
+            .success()
+    }
+
+    #[test]
+    fn resolve_pinned_commit_returns_source_head_when_reachable() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let (repo, c1, _c2) = make_repo_with_two_commits(root, "repo");
+        let ws = root.join("source-ws");
+        add_source_worktree(&repo, &ws, "repo", &c1);
+
+        assert_eq!(resolve_pinned_commit(&ws, "repo", &repo), Some(c1));
+    }
+
+    #[test]
+    fn resolve_pinned_commit_none_when_commit_not_in_selected_repo() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let (repo_a, a1, _a2) = make_repo_with_two_commits(root, "a");
+        let (repo_b, _b1, _b2) = make_repo_with_two_commits(root, "b");
+        let ws = root.join("source-ws");
+        // The source worktree is named "b" but holds repo_a's commit; resolving it against repo_b (the basename match) must reject it — the commit isn't reachable there.
+        add_source_worktree(&repo_a, &ws, "b", &a1);
+
+        assert_eq!(resolve_pinned_commit(&ws, "b", &repo_b), None);
+    }
+
+    #[test]
+    fn resolve_pinned_commit_none_when_subdir_absent() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let (repo, _c1, _c2) = make_repo_with_two_commits(root, "repo");
+        let ws = root.join("source-ws");
+        fs::create_dir_all(&ws).unwrap();
+
+        assert_eq!(resolve_pinned_commit(&ws, "repo", &repo), None);
+    }
+
+    #[test]
+    fn create_worktree_for_repo_pins_to_given_commit_without_fetch() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let (source, c1, c2) = make_repo_with_two_commits(root, "repo");
+        assert_ne!(c1, c2);
+
+        let target = root.join("ws-1").join("repo");
+        let completed = create_worktree_for_repo(
+            &source,
+            "repo",
+            &target,
+            &c1,
+            false,
+            &noop_channel(),
+            &CreationHandle::new(),
+            &mut Vec::new(),
+        )
+        .unwrap();
+
+        assert!(completed);
+        assert_eq!(head_of(&target), c1, "worktree should be pinned to the requested commit");
+        assert!(is_detached(&target), "worktree should be detached");
+    }
+
+    #[test]
+    fn refresh_worktree_pins_reused_worktree_to_given_commit() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let (source, c1, c2) = make_repo_with_two_commits(root, "repo");
+
+        // A reused worktree starts at the latest tip (c2); pinning moves it back to c1.
+        let wt = root.join("wt");
+        git(&source, &["worktree", "add", "--detach", wt.to_str().unwrap(), &c2]);
+        assert_eq!(head_of(&wt), c2);
+
+        refresh_worktree(&wt, &c1, false, &noop_channel(), &CreationHandle::new()).unwrap();
+
+        assert_eq!(head_of(&wt), c1, "reused worktree should be pinned to the requested commit");
+        assert!(is_detached(&wt));
+    }
+
+    #[test]
+    fn copy_source_claude_md_overwrites_destination() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let src = root.join("src");
+        let dst = root.join("dst");
+        fs::create_dir_all(&src).unwrap();
+        fs::create_dir_all(&dst).unwrap();
+        fs::write(src.join("CLAUDE.md"), "SOURCE\n").unwrap();
+        fs::write(dst.join("CLAUDE.md"), "DEST\n").unwrap();
+
+        copy_source_claude_md(&src, &dst).unwrap();
+
+        assert_eq!(fs::read_to_string(dst.join("CLAUDE.md")).unwrap(), "SOURCE\n");
+    }
+
+    #[test]
+    fn copy_source_claude_md_noop_when_source_absent() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let src = root.join("src");
+        let dst = root.join("dst");
+        fs::create_dir_all(&src).unwrap();
+        fs::create_dir_all(&dst).unwrap();
+        fs::write(dst.join("CLAUDE.md"), "DEST\n").unwrap();
+
+        copy_source_claude_md(&src, &dst).unwrap();
+
+        assert_eq!(fs::read_to_string(dst.join("CLAUDE.md")).unwrap(), "DEST\n");
+    }
+
+    #[test]
+    fn run_inner_duplicate_pins_source_repo_and_copies_claude_md() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+
+        // Pinned repo: origin/main is at c2, but the source workspace's worktree sits on c1.
+        let (repo_pinned, c1, c2) = make_repo_with_two_commits(root, "pinned");
+        assert_ne!(c1, c2);
+        // Added repo (not in the source workspace): should land at the latest tip.
+        let (repo_added, _a1, a_latest) = make_repo_with_two_commits(root, "added");
+
+        let source_ws = root.join("source-ws");
+        add_source_worktree(&repo_pinned, &source_ws, "pinned", &c1);
+        fs::write(source_ws.join("CLAUDE.md"), "SOURCE CLAUDE\n").unwrap();
+
+        let profile = root.join("profile");
+        fs::create_dir_all(&profile).unwrap();
+
+        let repo_paths = vec![
+            repo_pinned.to_string_lossy().into_owned(),
+            repo_added.to_string_lossy().into_owned(),
+        ];
+
+        let outcome = run_inner(
+            &CreationHandle::new(),
+            profile.to_str().unwrap(),
+            &repo_paths,
+            "Dup task",
+            Some(source_ws.to_str().unwrap()),
+            &noop_channel(),
+            &mut Vec::new(),
+        )
+        .unwrap();
+
+        let ws_path = match outcome {
+            Outcome::Done(ws) => PathBuf::from(ws.path),
+            other => panic!("expected Done, got {other:?}"),
+        };
+
+        let pinned_wt = ws_path.join("pinned");
+        assert_eq!(head_of(&pinned_wt), c1, "source repo should be pinned to the source commit");
+        assert!(is_detached(&pinned_wt));
+
+        let added_wt = ws_path.join("added");
+        assert_eq!(head_of(&added_wt), a_latest, "added repo should be at the latest tip");
+        assert!(is_detached(&added_wt));
+
+        assert_eq!(
+            fs::read_to_string(ws_path.join("CLAUDE.md")).unwrap(),
+            "SOURCE CLAUDE\n",
+            "the source workspace CLAUDE.md should overwrite the generated one"
+        );
     }
 }

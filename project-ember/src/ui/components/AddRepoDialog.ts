@@ -55,7 +55,7 @@ export function showAddRepoDialog(options: { repos: RepoInfo[] }): AddRepoDialog
   dialog.appendChild(repoLabel);
 
   // Single-select RepoList defaults to selecting the first repo, so "Add Repo" is always actionable.
-  const repoList = createRepoList({ repos: options.repos, mode: 'single' });
+  const repoList = createRepoList({ repos: options.repos, mode: 'single', preselectedPaths: [] });
   dialog.appendChild(repoList.element);
 
   const postfixLabel = document.createElement('label');

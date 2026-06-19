@@ -19,6 +19,8 @@ export type RepoListMode = 'single' | 'multi';
 export interface RepoListOptions {
   repos: RepoInfo[];
   mode: RepoListMode;
+  /** Repo paths to pre-check on mount (used by duplication to carry the source's repos). Pass `[]` for none. */
+  preselectedPaths: string[];
 }
 
 export interface RepoListHandle {
@@ -56,6 +58,7 @@ export function createRepoList(options: RepoListOptions): RepoListHandle {
     input.type = inputType;
     input.value = repo.path;
     if (groupName) input.name = groupName;
+    if (options.preselectedPaths.includes(repo.path)) input.checked = true;
 
     const name = document.createElement('span');
     name.className = 'repo-list-item-name';
