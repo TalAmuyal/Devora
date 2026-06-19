@@ -22,6 +22,7 @@ Types of changes:
 
 ### Changed
 
+- `ccc` now treats its `ANTHROPIC_*` and `CLAUDE_CODE_*` env-vars as defaults, respecting any pre-existing definitions in the environment instead of overriding them (the `--fable` flag still overrides the Opus/Sonnet models)
 - Updated the README to point to the user-guide in the app
 - The Command Palette now focuses its search field on open so you can type a filter immediately; `Esc` closes it and `↑/↓`/`Enter` navigate and run
 
