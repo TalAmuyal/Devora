@@ -7,6 +7,7 @@
 import { createSearchInput, SearchInputHandle } from './components/SearchInput';
 import { createKeyboardHintBar } from './components/KeyboardHintBar';
 import { createEmptyState } from './components/EmptyState';
+import { createListCursor, ListCursorHandle } from './components/listCursor';
 import { isEditableElementFocused } from './focus';
 
 export interface Command {
@@ -34,7 +35,7 @@ export class CommandPalette {
   private commands: Command[];
   private containerEl: HTMLElement;
   private searchFilter = '';
-  private selectedIndex = 0;
+  private cursor: ListCursorHandle;
   private searchHandle: SearchInputHandle | null = null;
   private listEl: HTMLElement | null = null;
   private loadToken = 0;
@@ -48,6 +49,11 @@ export class CommandPalette {
     this.commands = options.commands;
     this.containerEl = document.createElement('div');
     this.containerEl.className = 'command-palette';
+    this.cursor = createListCursor({
+      items: () =>
+        Array.from(this.listEl?.querySelectorAll<HTMLElement>('.command-palette-item') ?? []),
+      activeClass: 'selected',
+    });
   }
 
   getElement(): HTMLElement {
@@ -61,10 +67,10 @@ export class CommandPalette {
 
   load(): void {
     this.searchFilter = '';
-    this.selectedIndex = 0;
     this.commands = this.staticCommands;
     window.addEventListener('keydown', this.keyHandler, true);
     this.render();
+    this.cursor.set(0);
 
     if (this.dynamicCommands) {
       // Static commands render immediately; dynamic ones are appended when resolved.
@@ -86,10 +92,10 @@ export class CommandPalette {
     window.removeEventListener('keydown', this.keyHandler, true);
     this.loadToken++;
     this.searchFilter = '';
-    this.selectedIndex = 0;
     this.searchHandle = null;
     this.listEl = null;
     this.containerEl.innerHTML = '';
+    this.cursor.set(0);
   }
 
   private filteredCommands(): Command[] {
@@ -118,13 +124,13 @@ export class CommandPalette {
       case 'ArrowDown':
         e.preventDefault();
         e.stopPropagation();
-        this.moveSelection(1);
+        this.cursor.move(1);
         return;
       case 'k':
       case 'ArrowUp':
         e.preventDefault();
         e.stopPropagation();
-        this.moveSelection(-1);
+        this.cursor.move(-1);
         return;
       case 'Enter':
         e.preventDefault();
@@ -134,25 +140,8 @@ export class CommandPalette {
     }
   }
 
-  private moveSelection(delta: number): void {
-    const count = this.filteredCommands().length;
-    if (count === 0) return;
-    this.selectedIndex = Math.max(0, Math.min(this.selectedIndex + delta, count - 1));
-    this.updateSelection();
-  }
-
-  private updateSelection(): void {
-    if (!this.listEl) return;
-    const items = this.listEl.querySelectorAll('.command-palette-item');
-    items.forEach((item, i) => {
-      item.classList.toggle('selected', i === this.selectedIndex);
-    });
-    items[this.selectedIndex]?.scrollIntoView?.({ block: 'nearest' });
-  }
-
   private execute(): void {
-    const cmd = this.filteredCommands()[this.selectedIndex];
-    cmd?.run();
+    this.filteredCommands()[this.cursor.index()]?.run();
   }
 
   private render(): void {
@@ -182,12 +171,12 @@ export class CommandPalette {
       icon: '⌕',
       onInput: (value) => {
         this.searchFilter = value;
-        this.selectedIndex = 0;
         this.renderList();
+        this.cursor.set(0);
       },
       onEscape: () => this.onRequestClose?.(),
-      onArrowDown: () => this.moveSelection(1),
-      onArrowUp: () => this.moveSelection(-1),
+      onArrowDown: () => this.cursor.move(1),
+      onArrowUp: () => this.cursor.move(-1),
       onEnter: () => this.execute(),
     });
     head.appendChild(this.searchHandle.element);
@@ -220,26 +209,21 @@ export class CommandPalette {
     this.listEl.innerHTML = '';
 
     const filtered = this.filteredCommands();
-    if (this.selectedIndex >= filtered.length) {
-      this.selectedIndex = filtered.length > 0 ? filtered.length - 1 : 0;
-    }
-
     if (filtered.length === 0) {
       this.listEl.appendChild(createEmptyState('No matching commands'));
+      this.cursor.sync();
       return;
     }
 
     for (let i = 0; i < filtered.length; i++) {
       this.listEl.appendChild(this.renderItem(filtered[i], i));
     }
+    this.cursor.sync();
   }
 
   private renderItem(command: Command, index: number): HTMLElement {
     const item = document.createElement('div');
     item.className = 'command-palette-item';
-    if (index === this.selectedIndex) {
-      item.classList.add('selected');
-    }
 
     const icon = document.createElement('span');
     icon.className = 'command-palette-item-icon';
@@ -271,11 +255,10 @@ export class CommandPalette {
     item.appendChild(badge);
 
     item.addEventListener('click', () => {
-      this.selectedIndex = index;
-      this.updateSelection();
+      this.cursor.set(index);
     });
     item.addEventListener('dblclick', () => {
-      this.selectedIndex = index;
+      this.cursor.set(index);
       command.run();
     });
 

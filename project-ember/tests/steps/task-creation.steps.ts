@@ -40,25 +40,35 @@ function sleep(ms: number): Promise<void> {
 
 // --- Fixtures -------------------------------------------------------------
 
+// A bare "origin" with one commit on main, cloned into <profile>/repos/<repo> so the source repo has the origin remote that fresh creation (fetch + worktree add origin/<default>) needs.
+// Repos under <profile>/repos/ are auto-discovered, so no config change is needed to register an extra one.
+function createOriginBackedRepo(world: EmberWorld, repoName: string): void {
+  const bare = path.join(world.fixtureRoot!, `${repoName}.git`);
+  fs.mkdirSync(bare, { recursive: true });
+  git('init --bare -b main', bare);
+
+  const source = sourceRepo(world, repoName);
+  git(`clone ${JSON.stringify(bare)} ${JSON.stringify(source)}`, world.fixtureRoot!);
+  fs.writeFileSync(path.join(source, 'file.txt'), 'v1\n');
+  git('add .', source);
+  git('commit -m c1', source);
+  git('push origin main', source);
+}
+
 Given(
   'an origin-backed profile {string} with repo {string}',
   function (this: EmberWorld, profileName: string, repoName: string) {
     this.fixtureRoot = createTestFixtureRoot();
     const profilePath = createTestProfile(this.fixtureRoot, profileName);
-
-    // A bare "origin" with one commit on main, cloned into <profile>/repos/<repo> so the source repo has the origin remote that fresh creation (fetch + worktree add origin/<default>) needs.
-    const bare = path.join(this.fixtureRoot, `${repoName}.git`);
-    fs.mkdirSync(bare, { recursive: true });
-    git('init --bare -b main', bare);
-
-    const source = path.join(profilePath, 'repos', repoName);
-    git(`clone ${JSON.stringify(bare)} ${JSON.stringify(source)}`, this.fixtureRoot);
-    fs.writeFileSync(path.join(source, 'file.txt'), 'v1\n');
-    git('add .', source);
-    git('commit -m c1', source);
-    git('push origin main', source);
-
+    createOriginBackedRepo(this, repoName);
     writeTestConfig(this.testConfigPath!, [profilePath]);
+  },
+);
+
+Given(
+  'an additional origin-backed repo {string}',
+  function (this: EmberWorld, repoName: string) {
+    createOriginBackedRepo(this, repoName);
   },
 );
 

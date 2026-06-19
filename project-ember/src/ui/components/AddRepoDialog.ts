@@ -54,11 +54,9 @@ export function showAddRepoDialog(options: { repos: RepoInfo[] }): AddRepoDialog
   repoLabel.textContent = 'Repository';
   dialog.appendChild(repoLabel);
 
+  // Single-select RepoList defaults to selecting the first repo, so "Add Repo" is always actionable.
   const repoList = createRepoList({ repos: options.repos, mode: 'single' });
   dialog.appendChild(repoList.element);
-  // Default to the first repo so "Add Repo" is always actionable.
-  const firstInput = repoList.element.querySelector<HTMLInputElement>('input');
-  if (firstInput) firstInput.checked = true;
 
   const postfixLabel = document.createElement('label');
   postfixLabel.className = 'add-repo-dialog-label';
@@ -131,7 +129,7 @@ export function showAddRepoDialog(options: { repos: RepoInfo[] }): AddRepoDialog
   document.addEventListener('keydown', onKeydown, true);
 
   document.body.appendChild(backdrop);
-  (firstInput ?? postfixInput).focus();
+  repoList.focus();
 
   return {
     onSubmit: (cb) => {
