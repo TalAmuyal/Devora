@@ -22,3 +22,14 @@ export interface WorkspaceInfo {
   repos: string[];
   active: boolean;
 }
+
+/**
+ * Progress event streamed over the `create_workspace` / `add_repo_to_workspace` channels.
+ * Matches the Rust `CreationEvent` enum (`#[serde(tag = "type", rename_all = "camelCase")]`).
+ */
+export type CreationEvent =
+  | { type: 'step'; label: string }
+  | { type: 'log'; line: string }
+  | { type: 'done'; workspace: { path: string; name: string } }
+  | { type: 'failed'; message: string }
+  | { type: 'cancelled' };

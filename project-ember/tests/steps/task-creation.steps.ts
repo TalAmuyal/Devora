@@ -114,12 +114,12 @@ When(
     await ui.typeIntoInput('.ws-new-form-input', title);
 
     await this.driver.pollFor(
-      `return Array.from(document.querySelectorAll('.ws-new-form-repo-item')).some((i) => (i.textContent || '').trim() === ${JSON.stringify(repoName)})`,
+      `return Array.from(document.querySelectorAll('.repo-list-item')).some((i) => (i.textContent || '').trim() === ${JSON.stringify(repoName)})`,
       true,
       5_000,
     );
     await this.driver.eval(`
-      const item = Array.from(document.querySelectorAll('.ws-new-form-repo-item'))
+      const item = Array.from(document.querySelectorAll('.repo-list-item'))
         .find((i) => (i.textContent || '').trim() === ${JSON.stringify(repoName)});
       if (!item) throw new Error('repo checkbox not found: ' + ${JSON.stringify(repoName)});
       const checkbox = item.querySelector('input[type=checkbox]');

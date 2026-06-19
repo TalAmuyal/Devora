@@ -297,46 +297,6 @@ The workspace list emits `requestDeleteMsg{info}`, which transitions to the `Pag
 
 ---
 
-## Add Repo Flow
-
-The add-repo feature runs as a **standalone** `tea.Program`, separate from the main `AppModel`. It is invoked from the CLI `add` command, not from within the main TUI.
-
-### Entry Point
-
-```go
-func RunAddRepo(themePath string, workspacePath string, repoNames []string) error
-```
-
-Creates an `AddRepoModel` and runs it in its own Bubble Tea program.
-
-### Form Fields
-
-The form has three focus stops, cycled with `tab`/`shift+tab`:
-
-1. **Repo list** (`fieldAddRepoList`): A `ListModel` displaying registered repo names. The user selects one repo.
-2. **Postfix input** (`fieldAddRepoPostfix`): An optional text input. If provided, the worktree directory will be named `<repoName>-<postfix>` instead of just `<repoName>`.
-3. **Submit button** (`fieldAddRepoSubmit`).
-
-### Collision Checking
-
-Before creating the worktree, the submit handler checks if the target directory already exists:
-
-```go
-targetPath := filepath.Join(workspacePath, worktreeDirName)
-```
-
-If the path exists on disk, an error is shown: `"Directory '<name>' already exists. Use a different postfix."` The user must provide a different postfix.
-
-### Worktree Creation
-
-On submit (when validation passes):
-
-1. Call `workspace.MakeAndPrepareWorktree(workspacePath, repoName, worktreeDirName)`. On error, emit `addRepoErrorMsg`.
-2. Call `workspace.EnsureWorkspaceCLAUDEMD(workspacePath)` -- writes `CLAUDE.md` if the workspace now has more than one repo and does not already have one. On error, emit `addRepoErrorMsg` (the error message notes that the worktree was created successfully).
-3. On success, emit `addRepoDoneMsg` which triggers `tea.Quit`.
-
----
-
 ## Profile Cycling
 
 `cycleProfileCmd()` returns a Bubble Tea command that switches to the next profile in the list.

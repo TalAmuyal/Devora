@@ -131,6 +131,7 @@ pub fn run() {
             commands::get_default_app,
             commands::create_workspace,
             commands::cancel_workspace_creation,
+            commands::add_repo_to_workspace,
             commands::remove_task,
             commands::prepare_repurpose_task,
             commands::repurpose_task,

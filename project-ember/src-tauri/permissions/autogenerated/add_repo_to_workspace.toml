@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-add-repo-to-workspace"
+description = "Enables the add_repo_to_workspace command without any pre-configured scope."
+commands.allow = ["add_repo_to_workspace"]
+
+[[permission]]
+identifier = "deny-add-repo-to-workspace"
+description = "Denies the add_repo_to_workspace command without any pre-configured scope."
+commands.deny = ["add_repo_to_workspace"]

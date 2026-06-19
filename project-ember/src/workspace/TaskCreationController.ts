@@ -12,13 +12,7 @@ import {
   createTaskCreationProgress,
   TaskCreationProgressHandle,
 } from '../ui/components/TaskCreationProgress';
-
-type CreationEvent =
-  | { type: 'step'; label: string }
-  | { type: 'log'; line: string }
-  | { type: 'done'; workspace: { path: string; name: string } }
-  | { type: 'failed'; message: string }
-  | { type: 'cancelled' };
+import { CreationEvent } from './types';
 
 interface InFlightCreation {
   progress: TaskCreationProgressHandle;
@@ -51,7 +45,7 @@ export class TaskCreationController {
   async start(taskName: string, repoPaths: string[], profilePath: string): Promise<void> {
     const repoNames = repoPaths.map((p) => p.split('/').pop() ?? p);
     const session = this.deps.sessionManager.createPendingSession(taskName, profilePath);
-    const progress = createTaskCreationProgress(taskName);
+    const progress = createTaskCreationProgress(`Creating: ${taskName}`);
 
     const creation: InFlightCreation = {
       progress,

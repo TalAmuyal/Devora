@@ -100,25 +100,6 @@ func TestRun_WorkspaceUI_Recognized(t *testing.T) {
 	}
 }
 
-func TestRun_Add_Recognized(t *testing.T) {
-	// Chdir to a temp directory so we are not inside a known workspace
-	origDir, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { os.Chdir(origDir) })
-	os.Chdir(t.TempDir())
-
-	err = Run([]string{"add"})
-	if err != nil && strings.Contains(err.Error(), "unknown command") {
-		t.Fatalf("add should be recognized, got: %s", err.Error())
-	}
-	// Expected: "not inside a known workspace" since tests don't run from a workspace
-	if err != nil && !strings.Contains(err.Error(), "workspace") {
-		t.Fatalf("expected workspace-related error, got: %s", err.Error())
-	}
-}
-
 func TestRun_Health_Recognized(t *testing.T) {
 	stubResolveActiveProfile(t, func(string) (string, error) { return "", nil })
 	stubHealthRun(t, func(io.Writer, bool, bool) error { return nil })

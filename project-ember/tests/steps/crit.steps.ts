@@ -143,7 +143,7 @@ Given(
     // Check the checkbox for each requested repo
     for (const repoName of repoNames) {
       await this.driver.eval(`
-        const items = document.querySelectorAll('.ws-new-form-repo-item');
+        const items = document.querySelectorAll('.repo-list-item');
         let found = false;
         for (const item of items) {
           const span = item.querySelector('span');

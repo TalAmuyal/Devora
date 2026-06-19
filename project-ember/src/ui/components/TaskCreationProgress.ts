@@ -1,5 +1,6 @@
 /**
- * Progress UI for an in-flight task creation, shown as a panel overlay on the new session tab.
+ * Progress UI for an in-flight worktree operation (task creation or add-repo), shown as a panel overlay on a session tab or hosted inside a modal.
+ * The caller passes the full `title` text.
  * Renders the high-level steps (with per-step state) plus an expandable live log of subprocess output, and a footer action that cancels while running or closes after a failure.
  *
  * DOM: `div.task-creation`.
@@ -28,14 +29,14 @@ type StepState = 'active' | 'done' | 'failed';
 /** Cap retained log lines so a chatty prepare-command can't grow the DOM unbounded. */
 const MAX_LOG_LINES = 500;
 
-export function createTaskCreationProgress(taskName: string): TaskCreationProgressHandle {
+export function createTaskCreationProgress(title: string): TaskCreationProgressHandle {
   const element = document.createElement('div');
   element.className = 'task-creation';
 
-  const title = document.createElement('h2');
-  title.className = 'task-creation-title';
-  title.textContent = `Creating: ${taskName}`;
-  element.appendChild(title);
+  const titleEl = document.createElement('h2');
+  titleEl.className = 'task-creation-title';
+  titleEl.textContent = title;
+  element.appendChild(titleEl);
 
   const stepsList = document.createElement('ol');
   stepsList.className = 'task-creation-steps';

@@ -260,21 +260,6 @@ func WriteWorkspaceCLAUDEMD(workspacePath string) error {
 	return os.WriteFile(filepath.Join(workspacePath, ClaudeMDFileName), []byte(WorkspaceCLAUDEMDContent), 0666)
 }
 
-func EnsureWorkspaceCLAUDEMD(workspacePath string) error {
-	claudePath := filepath.Join(workspacePath, ClaudeMDFileName)
-	if _, err := os.Stat(claudePath); err == nil {
-		return nil
-	}
-	repos, err := GetWorkspaceRepos(workspacePath)
-	if err != nil {
-		return err
-	}
-	if len(repos) <= 1 {
-		return nil
-	}
-	return WriteWorkspaceCLAUDEMD(workspacePath)
-}
-
 // --- Workspace Deactivation ---
 
 func DeactivateWorkspace(workspacePath string) error {

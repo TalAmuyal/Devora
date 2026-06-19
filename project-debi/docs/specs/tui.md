@@ -10,7 +10,7 @@ The visual design uses a panel-based dashboard with cards, diamond selection ind
 
 For theme loading, palette structure, and the shared CLI styles, see [style.md](style.md).
 
-For workspace data gathering, creation flow, deletion rules, and add-repo logic, see [tui-operations.md](tui-operations.md).
+For workspace data gathering, creation flow, and deletion rules, see [tui-operations.md](tui-operations.md).
 
 ## Entry Points
 
@@ -44,22 +44,6 @@ func (m AppModel) Result() *AppResult
 ```
 
 Returns the app result after the TUI exits. Used by `RunWorkspaceUI` to extract the result from the final `tea.Model`.
-
-### RunAddRepo
-
-```go
-func RunAddRepo(themePath string, workspacePath string, repoNames []string) error
-```
-
-Standalone `tea.Program` for adding a repo to an existing workspace. Separate from the main app. For details on the add-repo flow, see [tui-operations.md#add-repo](tui-operations.md#add-repo).
-
-### NewAddRepoModel
-
-```go
-func NewAddRepoModel(palette style.ThemePalette, workspacePath string, repoNames []string) AddRepoModel
-```
-
-Constructs the standalone add-repo model. Called by `RunAddRepo`.
 
 ### CreateAndAttachSession
 
@@ -226,7 +210,7 @@ Page models are NOT `tea.Model` -- they don't implement `Init()`. They are embed
 
 ### Inline Error Clearing
 
-All form pages that display inline validation errors (`errMsg`) clear the error when the user types into any field. The error persists across tab/shift+tab navigation and is only re-set on the next failed submit. This applies to: `NewTaskModel`, `RegisterRepoModel`, `ProfileRegModel`, and `AddRepoModel`.
+All form pages that display inline validation errors (`errMsg`) clear the error when the user types into any field. The error persists across tab/shift+tab navigation and is only re-set on the next failed submit. This applies to: `NewTaskModel`, `RegisterRepoModel`, and `ProfileRegModel`.
 
 ### WorkspaceListModel
 
@@ -403,17 +387,6 @@ Full-screen error page shown when PATH is misconfigured (bundled tools directory
 **Messages handled:** `tea.KeyPressMsg` only.
 
 **Transitions:** Emits `tea.Quit` on quit keys.
-
-## Standalone Models
-
-### AddRepoModel
-
-`AddRepoModel` is a standalone `tea.Model` (implements `Init`, `Update`, `View`) run via `RunAddRepo` in its own `tea.Program`. It is NOT embedded in `AppModel`. For its form fields, collision checking, and worktree creation flow, see [tui-operations.md#add-repo](tui-operations.md#add-repo).
-
-**Key bindings:**
-- `tab`/`shift+tab` -- cycle fields (repo list, postfix input, submit button)
-- `enter` -- select repo (from list) or submit (from postfix/submit)
-- Navigation keys: see [tui-navigation.md](tui-navigation.md)
 
 ## Components (`internal/tui/components`)
 

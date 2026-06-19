@@ -2,8 +2,8 @@ import { describe, it, expect, vi } from 'vitest';
 import { createTaskCreationProgress } from '../TaskCreationProgress';
 
 describe('createTaskCreationProgress', () => {
-  it('renders a title with the task name', () => {
-    const { element } = createTaskCreationProgress('Fix login bug');
+  it('renders the given title verbatim', () => {
+    const { element } = createTaskCreationProgress('Creating: Fix login bug');
     const title = element.querySelector('.task-creation-title');
     expect(title?.textContent).toBe('Creating: Fix login bug');
   });

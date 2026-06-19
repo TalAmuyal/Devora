@@ -17,6 +17,7 @@ Types of changes:
 ### Added
 
 - Added a "Close Current Session" command to the Command Palette
+- Added an "Add Repo to Workspace" command to the Command Palette that adds a repo (git worktree) to the active session's workspace, with streaming progress and cancel
 
 ### Changed
 
@@ -26,6 +27,7 @@ Types of changes:
 ### Removed
 
 - Removed the unused `review.open-mode` config key and the legacy OG Kitty/glimpse-tty path from the Crit wrapper; the published Ember build always opens Crit in its built-in overlay
+- Removed the `debi add` command (and its OG add-repo TUI) as part of the Devora OG → Ember migration; use the "Add Repo to Workspace" Command Palette command instead
 
 ## 2026-06-16.0
 

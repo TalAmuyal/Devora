@@ -62,7 +62,7 @@ pub struct RepoInfo {
     pub source: String, // "registered" | "auto-discovered"
 }
 
-#[derive(Serialize, Clone)]
+#[derive(Debug, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct CreatedWorkspace {
     pub path: String,
