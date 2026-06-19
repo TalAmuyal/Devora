@@ -668,17 +668,31 @@
 .repo-list {
   display: flex;
   flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.repo-list-items {
+  display: flex;
+  flex-direction: column;
   gap: var(--space-xs);
+  max-height: 12rem;
+  overflow-y: auto;
 }
 
 .repo-list-item {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--tab-border-radius);
   font-family: var(--font-mono);
   font-size: var(--font-size-sm);
   color: var(--color-fg);
   cursor: pointer;
+}
+
+.repo-list-item.active {
+  background: var(--color-surface1);
 }
 
 /* AddRepoDialog */

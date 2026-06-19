@@ -45,6 +45,40 @@ When(
   },
 );
 
+When(
+  'the user filters the add-repo list by {string}',
+  async function (this: EmberWorld, text: string) {
+    const ui = new UIDriver(this.driver);
+    await ui.waitForElement('.add-repo-dialog', 5_000);
+    await ui.typeIntoInput('.add-repo-dialog .search-input-field', text);
+  },
+);
+
+Then(
+  'the add-repo list should show {int} repo(s)',
+  async function (this: EmberWorld, count: number) {
+    const ui = new UIDriver(this.driver);
+    await ui.waitForElementCount('.add-repo-dialog .repo-list-item:not([hidden])', count, 5_000);
+  },
+);
+
+When(
+  'the user submits the add-repo dialog with postfix {string}',
+  async function (this: EmberWorld, postfix: string) {
+    const ui = new UIDriver(this.driver);
+    if (postfix) {
+      await ui.typeIntoInput('.add-repo-dialog-input', postfix);
+    }
+    // The single visible repo is auto-selected, so submit adds it without an explicit pick.
+    await ui.click('.add-repo-dialog-add');
+    await this.driver.pollFor(
+      `return document.querySelector('.add-repo-dialog') === null`,
+      true,
+      30_000,
+    );
+  },
+);
+
 Then(
   'the worktree {string} should exist in workspace {string}',
   function (this: EmberWorld, worktreeName: string, wsId: string) {
