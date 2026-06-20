@@ -16,6 +16,7 @@ Types of changes:
 
 ### Added
 
+- Added the ability to duplicate an tasks workspace using "Duplicate Current Session" (Command Palette) or pressing the Workspace Hub's "Duplicate" button (next to "Open")
 - Added a "Close Current Session" command to the Command Palette
 - Added an "Add Repo to Workspace" command to the Command Palette that adds a repo (git worktree) to the active session's workspace, with streaming progress and cancel
 - Added a filter to the repo list (in the New Task form and the Add Repo dialog): type to narrow by name, with `↑/↓` to move and `Enter` to select/toggle

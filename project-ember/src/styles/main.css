@@ -291,6 +291,12 @@ body {
   border-color: var(--color-border-active);
 }
 
+.ws-new-form-hint {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-fg-secondary);
+}
+
 .ws-new-form-actions {
   display: flex;
   gap: var(--space-sm);
@@ -628,6 +634,32 @@ body {
 
 .ws-remove-task-btn:focus-visible,
 .ws-delete-btn:focus-visible {
+  outline: 0.133rem solid var(--color-focus-ring);
+  outline-offset: 0.133rem;
+}
+
+/* Secondary action: neutral, sitting between the accent Open and the destructive Remove Task. */
+.ws-duplicate-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: var(--color-fg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--tab-border-radius);
+  padding: var(--space-sm) var(--space-xl);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-md);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.ws-duplicate-btn:hover {
+  background: var(--color-surface);
+}
+
+.ws-duplicate-btn:focus-visible {
   outline: 0.133rem solid var(--color-focus-ring);
   outline-offset: 0.133rem;
 }
