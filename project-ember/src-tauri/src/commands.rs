@@ -28,6 +28,14 @@ pub fn create_pty(
 ) -> Result<u32, String> {
     let ipc_port = ipc_state.port;
     let git_shortcuts_enabled = workspace::get_git_shortcuts_enabled(profile_path.as_deref());
+
+    // Inject the resolved Claude model/effort env vars (profile → user → Devora default).
+    // An explicit frontend-supplied `env` still wins on key collision.
+    let mut session_env = workspace::claude_launch_env(profile_path.as_deref());
+    if let Some(extra) = env {
+        session_env.extend(extra);
+    }
+
     let mut manager = state
         .lock()
         .map_err(|e| format!("failed to lock pty manager: {e}"))?;
@@ -35,7 +43,7 @@ pub fn create_pty(
     manager.create_session(
         cwd.as_deref(),
         shell.as_deref(),
-        env.as_ref(),
+        Some(&session_env),
         app_command.as_deref(),
         git_shortcuts_enabled,
         ipc_port,
@@ -151,6 +159,26 @@ pub fn get_registered_repos(
 #[tauri::command]
 pub fn get_default_app(profile_path: String) -> Result<Option<String>, String> {
     workspace::get_default_app(&profile_path)
+}
+
+/// Reads the Claude model/effort settings for one scope (a profile path, or `None` for the user-level/global scope): the raw stored values plus the effective resolved values.
+#[tauri::command]
+pub fn get_claude_settings(
+    profile_path: Option<String>,
+) -> Result<workspace::ClaudeSettingsResponse, String> {
+    workspace::read_claude_settings(profile_path.as_deref())
+}
+
+/// Writes one Claude model/effort setting at the given scope.
+/// `state`: "value" (store `value`), "none" (store JSON null), "default" (remove the key).
+#[tauri::command]
+pub fn set_claude_setting(
+    profile_path: Option<String>,
+    key: String,
+    state: String,
+    value: Option<String>,
+) -> Result<(), String> {
+    workspace::write_claude_setting(profile_path.as_deref(), &key, &state, value.as_deref())
 }
 
 /// Start a non-blocking task creation.

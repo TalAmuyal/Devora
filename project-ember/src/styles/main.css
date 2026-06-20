@@ -885,6 +885,23 @@ kbd {
   flex-shrink: 0;
 }
 
+.pm-user-defaults-row {
+  border-bottom: 1px solid rgba(73, 77, 100, 0.35);
+  margin-bottom: 6px;
+  padding-bottom: 12px;
+  border-radius: 0;
+}
+
+.pm-user-defaults-glyph {
+  color: var(--color-accent);
+  flex-shrink: 0;
+}
+
+/* The Claude config card sits below the repos section in the detail panel. */
+.pm-detail .claude-config-card {
+  margin-top: var(--space-lg);
+}
+
 .pm-detail-panel {
   background: var(--color-base);
   border-radius: 12px;

@@ -9,14 +9,14 @@ export async function waitForProfileManager(driver: AppDriver): Promise<void> {
   );
 }
 
-/** Wait until the master list shows the expected number of profile rows (excluding the pinned "New Profile…" row). */
+/** Wait until the master list shows the expected number of profile rows (excluding the pinned "User Defaults" and "New Profile…" rows). */
 export async function waitForProfileItems(
   driver: AppDriver,
   expectedCount: number,
   timeoutMs = 5_000,
 ): Promise<void> {
   await driver.pollFor(
-    `return document.querySelectorAll('.pm-master-item:not(.pm-new-row)').length`,
+    `return document.querySelectorAll('.pm-master-item:not(.pm-new-row):not(.pm-user-defaults-row)').length`,
     expectedCount,
     timeoutMs,
   );
