@@ -790,3 +790,118 @@
 .add-repo-dialog-add:hover {
   opacity: 0.85;
 }
+
+/* Claude Models & Effort config card (ClaudeConfigCard) */
+.claude-config-card {
+  border: 1px solid var(--color-surface0);
+  border-radius: var(--tab-border-radius);
+  overflow: hidden;
+}
+
+.claude-config-card-header {
+  padding: var(--space-sm) var(--space-md);
+  background: var(--color-bg-secondary);
+  border-bottom: 1px solid var(--color-surface0);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-subtext1);
+}
+
+.claude-config-row {
+  display: grid;
+  /* Fixed first column wide enough for the longest env-var hint, so every row's label column is aligned and never truncates the model env-var names. */
+  grid-template-columns: 14rem 1fr;
+  gap: var(--space-md);
+  align-items: center;
+  padding: var(--space-md);
+}
+
+.claude-config-row + .claude-config-row {
+  border-top: 1px solid rgba(54, 58, 79, 0.5);
+}
+
+.claude-config-row-name {
+  font-weight: 600;
+  font-size: var(--font-size-sm);
+}
+
+.claude-config-row-env {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--color-overlay1);
+  white-space: nowrap;
+}
+
+.claude-config-row-control {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+}
+
+/* Give the shared segmented control room to breathe inside the card (its default buttons have no horizontal padding and stretch equally), so the three states read as distinct labeled segments. */
+.claude-config-card .segmented-control {
+  flex-shrink: 0;
+}
+
+.claude-config-card .segmented-control-btn {
+  flex: 0 0 auto;
+  padding: 5px 14px;
+}
+
+.claude-config-row-value {
+  flex: 1;
+  min-width: 220px;
+}
+
+.claude-config-combo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.claude-config-input {
+  width: 100%;
+  /* A model id is short — cap the field so it doesn't span the whole panel. */
+  max-width: 20rem;
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-surface1);
+  color: var(--color-text);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+}
+
+.claude-config-input:focus {
+  outline: none;
+  border-color: var(--color-border-active);
+}
+
+.claude-config-chips {
+  display: flex;
+  gap: var(--space-xs);
+  flex-wrap: wrap;
+}
+
+.claude-config-chip {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--color-subtext0);
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-surface0);
+  border-radius: 999px;
+  padding: 2px 9px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.claude-config-chip:hover {
+  border-color: var(--color-border-active);
+  color: var(--color-text);
+}
+
+.claude-config-hint {
+  font-size: var(--font-size-sm);
+  color: var(--color-overlay1);
+}

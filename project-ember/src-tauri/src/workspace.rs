@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -612,6 +613,238 @@ pub fn get_git_shortcuts_enabled(profile_path: Option<&str>) -> bool {
     }
 }
 
+// ── Claude Code launch configuration (model tiers + effort) ──
+//
+// `ccc` launches Claude Code with a per-tier model mapping and an effort level.
+// Each is resolved per key with the precedence profile → user → Devora default, where a level may hold an explicit string (a value), JSON `null` (= "None": impose nothing, so Claude Code falls back to its own default), or omit the key (fall through to the next level).
+// The resolved values are injected as environment variables by the PTY layer (see commands.rs).
+
+/// One configurable Claude launch setting: its kebab-case config key (under the top-level
+/// `claude` object), the environment variable the PTY exports, and the Devora default value.
+struct ClaudeSettingSpec {
+    key: &'static str,
+    env_var: &'static str,
+    default: &'static str,
+}
+
+const CLAUDE_SETTINGS: [ClaudeSettingSpec; 4] = [
+    ClaudeSettingSpec {
+        key: "opus-model",
+        env_var: "ANTHROPIC_DEFAULT_OPUS_MODEL",
+        default: "claude-opus-4-8",
+    },
+    ClaudeSettingSpec {
+        key: "sonnet-model",
+        env_var: "ANTHROPIC_DEFAULT_SONNET_MODEL",
+        default: "claude-opus-4-8",
+    },
+    ClaudeSettingSpec {
+        key: "haiku-model",
+        env_var: "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+        default: "claude-sonnet-4-6",
+    },
+    ClaudeSettingSpec {
+        key: "effort",
+        env_var: "DEVORA_CCC_EFFORT",
+        default: "xhigh",
+    },
+];
+
+/// Valid Claude Code effort levels (low → max).
+/// Mirrored in the Ember UI dropdown (`src/ui/components/ClaudeConfigCard.ts`) — keep the two lists in sync.
+pub const CLAUDE_EFFORT_LEVELS: [&str; 5] = ["low", "medium", "high", "xhigh", "max"];
+
+/// One resolved setting: either a concrete value to apply, or None (impose nothing).
+enum ResolvedSetting {
+    Value(String),
+    None,
+}
+
+/// Result of `read_claude_settings`: the raw values stored at one scope plus the effective values after full precedence resolution.
+/// Both maps are keyed by the kebab config key.
+#[derive(Serialize)]
+pub struct ClaudeSettingsResponse {
+    /// Per key: the raw stored value at this scope — a string, JSON `null`, or the key is
+    /// omitted entirely (meaning "Default" / not set at this scope).
+    stored: serde_json::Map<String, Value>,
+    /// Per key (all four always present): the effective resolved value — a string, or JSON
+    /// `null` meaning None (no override; Claude Code uses its own default).
+    resolved: serde_json::Map<String, Value>,
+}
+
+/// Reads a config file, returning `Ok(None)` when it does not exist.
+fn read_config_opt(path: &Path) -> Result<Option<Value>, String> {
+    if path.exists() {
+        Ok(Some(read_json_file(path)?))
+    } else {
+        Ok(None)
+    }
+}
+
+/// Best-effort read used on the PTY hot path: a missing or unreadable config degrades to `None` (treated as absent) rather than failing session creation.
+fn read_config_lenient(path: &Path) -> Option<Value> {
+    if path.exists() {
+        read_json_file(path).ok()
+    } else {
+        None
+    }
+}
+
+fn profile_config_path(profile_path: &str) -> PathBuf {
+    Path::new(profile_path).join("config.json")
+}
+
+/// Resolves one setting across profile → user → Devora default.
+/// A present non-empty string wins as a value; a present JSON `null` wins as None and stops the chain; an absent key, an empty/whitespace string, or any other malformed type falls through to the next level.
+fn resolve_one(
+    profile_cfg: Option<&Value>,
+    user_cfg: Option<&Value>,
+    spec: &ClaudeSettingSpec,
+) -> ResolvedSetting {
+    let dot_path = format!("claude.{}", spec.key);
+    for cfg in [profile_cfg, user_cfg].into_iter().flatten() {
+        match get_value_by_dot_path(cfg, &dot_path) {
+            Some(Value::String(s)) if !s.trim().is_empty() => {
+                return ResolvedSetting::Value(s.clone());
+            }
+            Some(Value::Null) => return ResolvedSetting::None,
+            _ => {} // absent / empty / malformed → fall through
+        }
+    }
+    ResolvedSetting::Value(spec.default.to_string())
+}
+
+/// Resolves the Claude launch settings for a session and returns the environment variables the PTY should export.
+/// Keys resolved to None are omitted (Claude Code uses its default).
+pub fn claude_launch_env(profile_path: Option<&str>) -> HashMap<String, String> {
+    let user_cfg = global_config_path()
+        .ok()
+        .and_then(|p| read_config_lenient(&p));
+    let profile_cfg = profile_path.and_then(|p| read_config_lenient(&profile_config_path(p)));
+
+    let mut env = HashMap::new();
+    for spec in &CLAUDE_SETTINGS {
+        if let ResolvedSetting::Value(v) = resolve_one(profile_cfg.as_ref(), user_cfg.as_ref(), spec)
+        {
+            env.insert(spec.env_var.to_string(), v);
+        }
+    }
+    env
+}
+
+/// Reads the Claude settings for the Profile Manager UI at the given scope (a profile path, or `None` for the user-level/global scope): the raw stored values at that scope plus the effective values after full resolution.
+/// A corrupt config surfaces as an error.
+pub fn read_claude_settings(profile_path: Option<&str>) -> Result<ClaudeSettingsResponse, String> {
+    let user_cfg = read_config_opt(&global_config_path()?)?;
+    let profile_cfg = match profile_path {
+        Some(p) => read_config_opt(&profile_config_path(p))?,
+        None => None,
+    };
+
+    // The scope's own config holds the raw "stored" values.
+    let own_cfg = if profile_path.is_some() {
+        profile_cfg.as_ref()
+    } else {
+        user_cfg.as_ref()
+    };
+
+    let mut stored = serde_json::Map::new();
+    if let Some(claude) = own_cfg.and_then(|c| c.get("claude")).and_then(|v| v.as_object()) {
+        for spec in &CLAUDE_SETTINGS {
+            // Preserve string and null verbatim; ignore malformed types.
+            if let Some(val) = claude.get(spec.key).filter(|v| v.is_string() || v.is_null()) {
+                stored.insert(spec.key.to_string(), val.clone());
+            }
+        }
+    }
+
+    let mut resolved = serde_json::Map::new();
+    for spec in &CLAUDE_SETTINGS {
+        let value = match resolve_one(profile_cfg.as_ref(), user_cfg.as_ref(), spec) {
+            ResolvedSetting::Value(s) => Value::String(s),
+            ResolvedSetting::None => Value::Null,
+        };
+        resolved.insert(spec.key.to_string(), value);
+    }
+
+    Ok(ClaudeSettingsResponse { stored, resolved })
+}
+
+/// Writes one Claude setting at the given scope, preserving sibling keys.
+/// `state`: `"value"` (store `value` as a string), `"none"` (store JSON null), `"default"` (remove the key so it falls through).
+/// Empty/whitespace values are rejected; effort values are validated against `CLAUDE_EFFORT_LEVELS`.
+pub fn write_claude_setting(
+    profile_path: Option<&str>,
+    key: &str,
+    state: &str,
+    value: Option<&str>,
+) -> Result<(), String> {
+    let spec = CLAUDE_SETTINGS
+        .iter()
+        .find(|s| s.key == key)
+        .ok_or_else(|| format!("unknown claude setting key: {key}"))?;
+
+    let config_path = match profile_path {
+        Some(p) => profile_config_path(p),
+        None => global_config_path()?,
+    };
+
+    let mut config = read_config_opt(&config_path)?
+        .unwrap_or_else(|| Value::Object(serde_json::Map::new()));
+    let obj = config
+        .as_object_mut()
+        .ok_or("config is not a JSON object")?;
+
+    let claude_empty = {
+        let claude = obj
+            .entry("claude")
+            .or_insert_with(|| Value::Object(serde_json::Map::new()));
+        let claude_obj = claude
+            .as_object_mut()
+            .ok_or("\"claude\" is not an object in config")?;
+
+        match state {
+            "value" => {
+                let v = value
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .ok_or_else(|| format!("a non-empty value is required to set {key}"))?;
+                if spec.key == "effort" && !CLAUDE_EFFORT_LEVELS.contains(&v) {
+                    return Err(format!(
+                        "invalid effort level: {v} (expected one of {})",
+                        CLAUDE_EFFORT_LEVELS.join(", ")
+                    ));
+                }
+                claude_obj.insert(key.to_string(), Value::String(v.to_string()));
+            }
+            "none" => {
+                claude_obj.insert(key.to_string(), Value::Null);
+            }
+            "default" => {
+                claude_obj.remove(key);
+            }
+            other => {
+                return Err(format!(
+                    "unknown state: {other} (expected value, none, or default)"
+                ))
+            }
+        }
+
+        claude_obj.is_empty()
+    };
+
+    // Keep configs tidy: drop the `claude` object once it holds no overrides.
+    if claude_empty {
+        obj.remove("claude");
+    }
+
+    if let Some(parent) = config_path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("failed to create {}: {e}", parent.display()))?;
+    }
+    write_pretty_json(&config_path, &config)
+}
+
 pub(crate) fn find_next_workspace_id(workspaces_dir: &Path) -> Result<String, String> {
     if !workspaces_dir.exists() {
         return Ok("ws-1".to_string());
@@ -901,6 +1134,10 @@ mod tests {
     use super::*;
     use std::fs;
 
+    // Serializes tests that mutate process-global env vars (HOME / DEVORA_CONFIG_PATH) read by `global_config_path`; concurrent mutation would make config reads non-deterministic.
+    // `into_inner` recovers from a poisoned lock so one failing test doesn't cascade.
+    static ENV_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     #[test]
     fn test_expand_tilde_with_home() {
         let result = expand_tilde("~/some/path").unwrap();
@@ -985,6 +1222,7 @@ mod tests {
 
     #[test]
     fn test_list_profiles_no_config() {
+        let _guard = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
         // When HOME points to a temp dir with no config, should return empty
         let tmp = tempfile::tempdir().unwrap();
         std::env::set_var("HOME", tmp.path());
@@ -1094,6 +1332,7 @@ mod tests {
 
     #[test]
     fn test_get_git_shortcuts_enabled() {
+        let _guard = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
         let original = std::env::var("DEVORA_CONFIG_PATH").ok();
 
         // Point the global config at a guaranteed-absent file so global resolution is deterministic (returns None -> default true).
@@ -1122,6 +1361,119 @@ mod tests {
         // Profile with the key absent falls through to global (false here).
         fs::write(profile_dir.join("config.json"), r#"{"name":"p"}"#).unwrap();
         assert!(!get_git_shortcuts_enabled(Some(&profile_path)));
+
+        match original {
+            Some(v) => std::env::set_var("DEVORA_CONFIG_PATH", v),
+            None => std::env::remove_var("DEVORA_CONFIG_PATH"),
+        }
+    }
+
+    #[test]
+    fn test_claude_effort_levels_are_canonical() {
+        assert_eq!(CLAUDE_EFFORT_LEVELS, ["low", "medium", "high", "xhigh", "max"]);
+    }
+
+    #[test]
+    fn test_claude_settings_resolution_and_write() {
+        let _guard = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        let original = std::env::var("DEVORA_CONFIG_PATH").ok();
+        let tmp = tempfile::tempdir().unwrap();
+        let global_config = tmp.path().join("global-config.json");
+        std::env::set_var("DEVORA_CONFIG_PATH", &global_config);
+
+        let opus = "ANTHROPIC_DEFAULT_OPUS_MODEL";
+        let sonnet = "ANTHROPIC_DEFAULT_SONNET_MODEL";
+        let haiku = "ANTHROPIC_DEFAULT_HAIKU_MODEL";
+        let effort = "DEVORA_CCC_EFFORT";
+        let get = |env: &HashMap<String, String>, k: &str| env.get(k).cloned();
+
+        // 1. No config anywhere -> all Devora defaults are set.
+        let env = claude_launch_env(None);
+        assert_eq!(get(&env, opus).as_deref(), Some("claude-opus-4-8"));
+        assert_eq!(get(&env, sonnet).as_deref(), Some("claude-opus-4-8"));
+        assert_eq!(get(&env, haiku).as_deref(), Some("claude-sonnet-4-6"));
+        assert_eq!(get(&env, effort).as_deref(), Some("xhigh"));
+
+        // 2. User-level: a value wins; null = None (env var omitted); absent = default.
+        fs::write(
+            &global_config,
+            r#"{"claude":{"opus-model":"claude-fable-5","haiku-model":null}}"#,
+        )
+        .unwrap();
+        let env = claude_launch_env(None);
+        assert_eq!(get(&env, opus).as_deref(), Some("claude-fable-5"));
+        assert_eq!(get(&env, sonnet).as_deref(), Some("claude-opus-4-8"));
+        assert!(!env.contains_key(haiku)); // null -> None -> omitted
+        assert_eq!(get(&env, effort).as_deref(), Some("xhigh"));
+
+        // 3. Profile overrides user per key; profile-absent keys fall through to user.
+        let profile_dir = tmp.path().join("profile");
+        fs::create_dir_all(&profile_dir).unwrap();
+        let profile_path = profile_dir.to_string_lossy().to_string();
+        fs::write(
+            profile_dir.join("config.json"),
+            r#"{"name":"p","claude":{"opus-model":null,"effort":"max"}}"#,
+        )
+        .unwrap();
+        let env = claude_launch_env(Some(&profile_path));
+        assert!(!env.contains_key(opus)); // profile null wins -> None
+        assert_eq!(get(&env, effort).as_deref(), Some("max"));
+        assert!(!env.contains_key(haiku)); // profile absent -> user null -> None
+        assert_eq!(get(&env, sonnet).as_deref(), Some("claude-opus-4-8")); // both absent -> default
+
+        // 4. Malformed values (wrong type, blank string) fall through to the default.
+        fs::write(
+            &global_config,
+            r#"{"claude":{"opus-model":42,"effort":"   "}}"#,
+        )
+        .unwrap();
+        let env = claude_launch_env(None);
+        assert_eq!(get(&env, opus).as_deref(), Some("claude-opus-4-8"));
+        assert_eq!(get(&env, effort).as_deref(), Some("xhigh"));
+
+        // 5. read_claude_settings: `stored` distinguishes value / null / absent; `resolved` gives the effective value (string or null=None).
+        fs::write(
+            &global_config,
+            r#"{"profiles":[],"claude":{"opus-model":"claude-fable-5","haiku-model":null}}"#,
+        )
+        .unwrap();
+        let settings = read_claude_settings(None).unwrap();
+        assert_eq!(
+            settings.stored.get("opus-model"),
+            Some(&Value::String("claude-fable-5".into()))
+        );
+        assert_eq!(settings.stored.get("haiku-model"), Some(&Value::Null));
+        assert!(!settings.stored.contains_key("sonnet-model")); // absent
+        assert_eq!(
+            settings.resolved.get("opus-model"),
+            Some(&Value::String("claude-fable-5".into()))
+        );
+        assert_eq!(
+            settings.resolved.get("sonnet-model"),
+            Some(&Value::String("claude-opus-4-8".into())) // default
+        );
+        assert_eq!(settings.resolved.get("haiku-model"), Some(&Value::Null)); // None
+
+        // 6. write_claude_setting round-trips value/none/default and preserves siblings.
+        write_claude_setting(None, "sonnet-model", "value", Some("claude-opus-4-7")).unwrap();
+        let cfg = read_json_file(&global_config).unwrap();
+        assert_eq!(cfg["claude"]["sonnet-model"], Value::String("claude-opus-4-7".into()));
+        assert_eq!(cfg["claude"]["opus-model"], Value::String("claude-fable-5".into())); // sibling kept
+        assert_eq!(cfg["profiles"], serde_json::json!([])); // unrelated key kept
+
+        write_claude_setting(None, "opus-model", "none", None).unwrap();
+        assert_eq!(read_json_file(&global_config).unwrap()["claude"]["opus-model"], Value::Null);
+
+        write_claude_setting(None, "sonnet-model", "default", None).unwrap();
+        assert!(read_json_file(&global_config).unwrap()["claude"]
+            .get("sonnet-model")
+            .is_none());
+
+        // 7. Validation: blank value, bad effort, and unknown key are rejected.
+        assert!(write_claude_setting(None, "opus-model", "value", Some("   ")).is_err());
+        assert!(write_claude_setting(None, "effort", "value", Some("turbo")).is_err());
+        assert!(write_claude_setting(None, "effort", "value", Some("max")).is_ok());
+        assert!(write_claude_setting(None, "unknown-key", "value", Some("x")).is_err());
 
         match original {
             Some(v) => std::env::set_var("DEVORA_CONFIG_PATH", v),

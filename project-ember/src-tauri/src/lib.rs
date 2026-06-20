@@ -129,6 +129,8 @@ pub fn run() {
             commands::get_all_workspace_statuses,
             commands::get_registered_repos,
             commands::get_default_app,
+            commands::get_claude_settings,
+            commands::set_claude_setting,
             commands::create_workspace,
             commands::cancel_workspace_creation,
             commands::add_repo_to_workspace,

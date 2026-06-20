@@ -190,8 +190,8 @@ What it does:
 - **Model upgrades**: Default models are upgraded -- Sonnet is replaced with Opus, and Haiku with Sonnet
 	- This provides stronger reasoning out of the box
 	- The cost-per-token is higher, but that should be balanced by lower token usage due to better performance
-	- Pass `--fable` to run Opus and Sonnet on the Fable 5 model (`claude-fable-5`) instead
-- **Effort level**: Sets the effort level to `xhigh` (extra-high), so that Claude Code always tries to give a better result
+	- These defaults, and the effort level below, are configurable (globally and per profile)
+- **Effort level**: Sets the effort level to `xhigh` (extra-high) by default, so that Claude Code always tries to give a better result
 - **Plan mode**: Claude Code starts in plan permission mode by default, which requires explicit approval before making changes and takes advantage of the Crit integration
 - **Plugins**: Auto-loads Devora plugins (including Judge -- see below)
 

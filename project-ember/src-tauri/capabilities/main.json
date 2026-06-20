@@ -19,6 +19,8 @@
     "allow-get-all-workspace-statuses",
     "allow-get-registered-repos",
     "allow-get-default-app",
+    "allow-get-claude-settings",
+    "allow-set-claude-setting",
     "allow-create-workspace",
     "allow-cancel-workspace-creation",
     "allow-add-repo-to-workspace",

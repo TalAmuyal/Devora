@@ -42,6 +42,18 @@ function mockBackend(overrides?: {
         profiles = profiles.filter((p) => p.path !== path);
         return null;
       }
+      case 'get_claude_settings':
+        return {
+          stored: {},
+          resolved: {
+            'opus-model': 'claude-opus-4-8',
+            'sonnet-model': 'claude-opus-4-8',
+            'haiku-model': 'claude-sonnet-4-6',
+            effort: 'xhigh',
+          },
+        };
+      case 'set_claude_setting':
+        return null;
       default:
         throw new Error(`unexpected command ${cmd}`);
     }
@@ -98,17 +110,19 @@ describe('ProfileManager', () => {
     vi.clearAllMocks();
   });
 
-  it('lists all profiles plus the pinned New Profile row', async () => {
+  it('lists the User Defaults row, the profiles, and the pinned New Profile row', async () => {
     mockBackend();
     const { manager } = await setup();
 
     const rows = masterItems();
-    expect(rows).toHaveLength(3);
-    expect(rows[0].textContent).toContain('Work');
-    expect(rows[0].textContent).toContain('2 repos');
-    expect(rows[1].textContent).toContain('Personal');
-    expect(rows[2].classList.contains('pm-new-row')).toBe(true);
-    expect(rows[2].textContent).toContain('New Profile…');
+    expect(rows).toHaveLength(4);
+    expect(rows[0].classList.contains('pm-user-defaults-row')).toBe(true);
+    expect(rows[0].textContent).toContain('User Defaults');
+    expect(rows[1].textContent).toContain('Work');
+    expect(rows[1].textContent).toContain('2 repos');
+    expect(rows[2].textContent).toContain('Personal');
+    expect(rows[3].classList.contains('pm-new-row')).toBe(true);
+    expect(rows[3].textContent).toContain('New Profile…');
     manager.unload();
   });
 
@@ -207,7 +221,7 @@ describe('ProfileManager', () => {
     await flushDialog();
 
     expect(invokeMock).not.toHaveBeenCalledWith('unregister_profile', expect.anything());
-    expect(masterItems()).toHaveLength(3);
+    expect(masterItems()).toHaveLength(4); // User Defaults + 2 profiles + pinned row
     manager.unload();
   });
 
@@ -229,7 +243,7 @@ describe('ProfileManager', () => {
     await flushDialog();
 
     expect(unregistered).toEqual(['/profiles/personal']);
-    expect(masterItems()).toHaveLength(2); // Work + pinned row
+    expect(masterItems()).toHaveLength(3); // User Defaults + Work + pinned row
     expect(callbacks.setActiveProfilePath).not.toHaveBeenCalled();
     expect(callbacks.onClose).not.toHaveBeenCalled();
     manager.unload();

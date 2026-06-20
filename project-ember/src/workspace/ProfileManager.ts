@@ -14,7 +14,14 @@ import { createTableShell } from '../ui/components/TableShell';
 import { isEditableElementFocused } from '../ui/focus';
 import { pluralize } from '../ui/format';
 import { createProfileForm } from './ProfileForm';
+import { createClaudeConfigCard } from '../ui/components/ClaudeConfigCard';
 import { ProfileInfo, RepoInfo, WorkspaceInfo } from './types';
+
+/** A row in the master list: the global User Defaults, a profile, or the New Profile form. */
+type MasterRow =
+  | { kind: 'user-defaults' }
+  | { kind: 'profile'; profile: ProfileInfo }
+  | { kind: 'new' };
 
 interface ProfileDetail {
   repos: RepoInfo[];
@@ -39,7 +46,7 @@ export class ProfileManager {
 
   private profiles: ProfileInfo[] = [];
   private loaded = false;
-  /** Index into profiles; `profiles.length` is the pinned "New Profile…" row. */
+  /** Index into `rows()`: 0 = User Defaults, then the profiles, then the New Profile row. */
   private focusedIndex = 0;
   private detailCache: Map<string, ProfileDetail> = new Map();
   private detailSeq = 0;
@@ -54,6 +61,15 @@ export class ProfileManager {
 
   getElement(): HTMLElement {
     return this.containerEl;
+  }
+
+  /** The ordered master rows: User Defaults (pinned top), the profiles, then New Profile (pinned bottom). */
+  private rows(): MasterRow[] {
+    return [
+      { kind: 'user-defaults' },
+      ...this.profiles.map((profile): MasterRow => ({ kind: 'profile', profile })),
+      { kind: 'new' },
+    ];
   }
 
   async load(view: ProfileManagerView = 'list'): Promise<void> {
@@ -72,11 +88,12 @@ export class ProfileManager {
     this.loaded = true;
 
     if (view === 'new') {
-      this.focusedIndex = this.profiles.length;
+      this.focusedIndex = this.rows().length - 1; // pinned New Profile row
     } else {
       const active = this.callbacks.getActiveProfilePath();
       const activeIndex = this.profiles.findIndex((p) => p.path === active);
-      this.focusedIndex = activeIndex >= 0 ? activeIndex : 0;
+      // +1 to skip the leading User Defaults row; fall back to User Defaults (0) when none.
+      this.focusedIndex = activeIndex >= 0 ? activeIndex + 1 : 0;
     }
 
     this.render();
@@ -96,14 +113,20 @@ export class ProfileManager {
   // --- Keyboard ---
 
   private handleKeyDown(e: KeyboardEvent): void {
-    if (isEditableElementFocused()) {
+    // Let the config card own its own keys (its segmented buttons / chips / dropdown are focusable but not "editable", so they'd otherwise trigger j/k/d/n); this window listener is capture-phase, so the card can't pre-empt it — gate it here.
+    const target = e.target;
+    if (
+      isEditableElementFocused() ||
+      (target instanceof Element && target.closest('.claude-config-card'))
+    ) {
       return;
     }
     if (!this.loaded) {
       return;
     }
 
-    const lastIndex = this.profiles.length; // pinned New Profile… row
+    const rows = this.rows();
+    const lastIndex = rows.length - 1; // pinned New Profile… row
 
     switch (e.key) {
       case 'j':
@@ -121,12 +144,11 @@ export class ProfileManager {
       case 'Enter': {
         e.preventDefault();
         e.stopPropagation();
-        const profile = this.profiles[this.focusedIndex];
-        if (profile) {
-          this.setActiveAndClose(profile);
-        }
-        // On the pinned row the form is already in the detail panel; focus it.
-        if (this.focusedIndex === lastIndex) {
+        const row = rows[this.focusedIndex];
+        if (row?.kind === 'profile') {
+          this.setActiveAndClose(row.profile);
+        } else if (row?.kind === 'new') {
+          // The form is already in the detail panel; focus it.
           this.focusForm();
         }
         return;
@@ -140,9 +162,9 @@ export class ProfileManager {
       case 'd': {
         e.preventDefault();
         e.stopPropagation();
-        const profile = this.profiles[this.focusedIndex];
-        if (profile) {
-          void this.handleDelete(profile);
+        const row = rows[this.focusedIndex];
+        if (row?.kind === 'profile') {
+          void this.handleDelete(row.profile);
         }
         return;
       }
@@ -231,14 +253,16 @@ export class ProfileManager {
       this.callbacks.onClose();
       return;
     }
-    this.focusedIndex = Math.min(this.focusedIndex, this.profiles.length - 1);
+    this.focusedIndex = Math.min(this.focusedIndex, this.rows().length - 1);
     this.render();
     void this.loadFocusedDetail();
   }
 
   private async loadFocusedDetail(): Promise<void> {
-    const profile = this.profiles[this.focusedIndex];
-    if (!profile || this.detailCache.has(profile.path)) return;
+    const row = this.rows()[this.focusedIndex];
+    if (row?.kind !== 'profile') return;
+    const profile = row.profile;
+    if (this.detailCache.has(profile.path)) return;
 
     const seq = ++this.detailSeq;
     try {
@@ -252,7 +276,8 @@ export class ProfileManager {
         workspaceCount: workspaces.length,
         activeTaskCount: workspaces.filter((w) => w.active).length,
       });
-      if (this.profiles[this.focusedIndex]?.path === profile.path) {
+      const current = this.rows()[this.focusedIndex];
+      if (current?.kind === 'profile' && current.profile.path === profile.path) {
         this.updateDetailPanel();
       }
     } catch (_) {
@@ -312,10 +337,17 @@ export class ProfileManager {
       masterList.appendChild(placeholder);
     } else {
       const activePath = this.callbacks.getActiveProfilePath();
-      this.profiles.forEach((profile, i) => {
-        masterList.appendChild(this.renderMasterItem(profile, i, profile.path === activePath));
+      this.rows().forEach((row, i) => {
+        if (row.kind === 'user-defaults') {
+          masterList.appendChild(this.renderUserDefaultsRow(i));
+        } else if (row.kind === 'profile') {
+          masterList.appendChild(
+            this.renderMasterItem(row.profile, i, row.profile.path === activePath),
+          );
+        } else {
+          masterList.appendChild(this.renderNewProfileRow(i));
+        }
       });
-      masterList.appendChild(this.renderNewProfileRow());
     }
 
     masterPanel.appendChild(masterList);
@@ -361,36 +393,73 @@ export class ProfileManager {
     return item;
   }
 
-  private renderNewProfileRow(): HTMLElement {
+  private renderUserDefaultsRow(index: number): HTMLElement {
+    return this.renderFixedRow(index, 'pm-user-defaults-row', 'pm-user-defaults-glyph', '⚙', 'User Defaults');
+  }
+
+  private renderNewProfileRow(index: number): HTMLElement {
+    return this.renderFixedRow(index, 'pm-new-row', 'pm-new-row-plus', '＋', 'New Profile…');
+  }
+
+  /** A pinned master row (User Defaults / New Profile): a leading glyph plus a label. */
+  private renderFixedRow(
+    index: number,
+    rowClass: string,
+    glyphClass: string,
+    glyphText: string,
+    label: string,
+  ): HTMLElement {
     const item = document.createElement('div');
-    item.className = 'pm-master-item pm-new-row';
-    if (this.focusedIndex === this.profiles.length) {
+    item.className = `pm-master-item ${rowClass}`;
+    if (index === this.focusedIndex) {
       item.classList.add('pm-master-focused');
     }
 
-    const plus = document.createElement('span');
-    plus.className = 'pm-new-row-plus';
-    plus.textContent = '＋';
-    item.appendChild(plus);
+    const glyph = document.createElement('span');
+    glyph.className = glyphClass;
+    glyph.textContent = glyphText;
+    item.appendChild(glyph);
 
-    const label = document.createElement('div');
-    label.className = 'pm-name';
-    label.textContent = 'New Profile…';
-    item.appendChild(label);
+    const labelEl = document.createElement('div');
+    labelEl.className = 'pm-name';
+    labelEl.textContent = label;
+    item.appendChild(labelEl);
 
-    item.addEventListener('click', () => this.setFocus(this.profiles.length));
+    item.addEventListener('click', () => this.setFocus(index));
     return item;
   }
 
   private renderDetail(): HTMLElement {
-    if (this.focusedIndex === this.profiles.length) {
-      return this.renderNewProfileForm();
-    }
-    const profile = this.profiles[this.focusedIndex];
-    if (!profile) {
+    const row = this.rows()[this.focusedIndex];
+    if (!row) {
       return document.createElement('div');
     }
-    return this.renderProfileDetail(profile);
+    switch (row.kind) {
+      case 'user-defaults':
+        return this.renderUserDefaults();
+      case 'new':
+        return this.renderNewProfileForm();
+      case 'profile':
+        return this.renderProfileDetail(row.profile);
+    }
+  }
+
+  private renderUserDefaults(): HTMLElement {
+    const wrap = document.createElement('div');
+    wrap.className = 'pm-detail';
+
+    const title = document.createElement('h2');
+    title.className = 'pm-detail-title';
+    title.textContent = 'User Defaults';
+    wrap.appendChild(title);
+
+    const desc = document.createElement('div');
+    desc.className = 'pm-detail-path';
+    desc.textContent = 'Applied to every profile unless a profile overrides a setting.';
+    wrap.appendChild(desc);
+
+    wrap.appendChild(createClaudeConfigCard({ profilePath: null }));
+    return wrap;
   }
 
   private updateDetailPanel(): void {
@@ -490,6 +559,8 @@ export class ProfileManager {
     } else {
       detail.appendChild(this.renderRepoTable(cached.repos));
     }
+
+    detail.appendChild(createClaudeConfigCard({ profilePath: profile.path }));
 
     return detail;
   }

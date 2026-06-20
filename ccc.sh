@@ -20,10 +20,6 @@ while [[ $# -gt 0 ]]; do
 			exit 0
 		;;
 
-		--fable)
-			USE_FABLE=1
-			;;
-
 		*)
 			ARGS+=("$1")
 			;;
@@ -39,26 +35,17 @@ if [ -d "$PLUGINS_DIR" ]; then
 	done
 fi
 
-# Known model names
-CC_HAIKU_4_5="claude-haiku-4-5-20251001"
-CC_SONNET_4_6="claude-sonnet-4-6"
-CC_OPUS_4_6="claude-opus-4-6"
-CC_OPUS_4_7="claude-opus-4-7"
-CC_OPUS_4_8="claude-opus-4-8"
-CC_FABLE_5="claude-fable-5"
-
-if [[ -n "$USE_FABLE" ]]; then
-	export ANTHROPIC_DEFAULT_OPUS_MODEL="$CC_FABLE_5"
-	export ANTHROPIC_DEFAULT_SONNET_MODEL="$CC_FABLE_5"
-else
-	export ANTHROPIC_DEFAULT_OPUS_MODEL="${ANTHROPIC_DEFAULT_OPUS_MODEL:-$CC_OPUS_4_8}"
-	export ANTHROPIC_DEFAULT_SONNET_MODEL="${ANTHROPIC_DEFAULT_SONNET_MODEL:-$CC_OPUS_4_8}"
-fi
-
-export ANTHROPIC_DEFAULT_HAIKU_MODEL="${ANTHROPIC_DEFAULT_HAIKU_MODEL:-$CC_SONNET_4_6}"
+# Model tiers (ANTHROPIC_DEFAULT_*_MODEL) and the effort level (DEVORA_CCC_EFFORT) are resolved from user/profile config and injected by Devora's PTY layer; ccc no longer hardcodes them.
+# Run outside Devora (no PTY) they're simply unset and Claude Code uses its own defaults.
 
 export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC="${CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC:-1}"
 export CLAUDE_CODE_ENABLE_TELEMETRY="${CLAUDE_CODE_ENABLE_TELEMETRY:-0}"
 export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS="${CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS:-1}"
 
-claude --effort xhigh --permission-mode plan "${ARGS[@]}"
+# Pass the configured effort level through to Claude Code, if one is set.
+EFFORT_ARGS=()
+if [[ -n "${DEVORA_CCC_EFFORT:-}" ]]; then
+	EFFORT_ARGS=(--effort "$DEVORA_CCC_EFFORT")
+fi
+
+claude "${EFFORT_ARGS[@]}" --permission-mode plan "${ARGS[@]}"
