@@ -2,6 +2,7 @@ package health
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"os"
 	"strings"
@@ -51,7 +52,7 @@ func TestCleanVersion(t *testing.T) {
 		input string
 		want  string
 	}{
-		{"kitty 0.44.0 created by Kovid Goyal", "0.44.0"},
+		{"gh version 2.62.0 (2024-11-14)", "2.62.0"},
 		{"2.1.89 (Claude Code)", "2.1.89"},
 		{"git version 2.50.1 (Apple Git-155)", "2.50.1"},
 		{"uv 0.11.2 (Homebrew 2026-03-26 aarch64-apple-darwin)", "0.11.2"},
@@ -81,7 +82,7 @@ func TestShortenPath(t *testing.T) {
 		input string
 		want  string
 	}{
-		{"/home/testuser/bin/kitty", "~/bin/kitty"},
+		{"/home/testuser/bin/claude", "~/bin/claude"},
 		{"/home/testuser", "~"},
 		{"/usr/local/bin/git", "/usr/local/bin/git"},
 		{"", ""},
@@ -100,16 +101,16 @@ func TestCheck_FoundDependency(t *testing.T) {
 	stubHealthDeps(t)
 
 	lookPath = func(file string) (string, error) {
-		return "/usr/local/bin/kitty", nil
+		return "/usr/local/bin/claude", nil
 	}
 	getVersion = func(command []string) (string, error) {
-		return "kitty 0.44.0 created by Kovid Goyal", nil
+		return "2.1.89 (Claude Code)", nil
 	}
 
 	dep := Dependency{
-		Name:           "kitty",
+		Name:           "claude",
 		Required:       true,
-		VersionCommand: []string{"kitty", "--version"},
+		VersionCommand: []string{"claude", "--version"},
 	}
 
 	result := Check(dep)
@@ -117,11 +118,11 @@ func TestCheck_FoundDependency(t *testing.T) {
 	if !result.Found {
 		t.Fatal("expected Found to be true")
 	}
-	if result.Path != "/usr/local/bin/kitty" {
-		t.Fatalf("expected Path to be /usr/local/bin/kitty, got: %s", result.Path)
+	if result.Path != "/usr/local/bin/claude" {
+		t.Fatalf("expected Path to be /usr/local/bin/claude, got: %s", result.Path)
 	}
-	if result.Version != "0.44.0" {
-		t.Fatalf("expected Version to be '0.44.0', got: %s", result.Version)
+	if result.Version != "2.1.89" {
+		t.Fatalf("expected Version to be '2.1.89', got: %s", result.Version)
 	}
 }
 
@@ -366,7 +367,7 @@ func TestRun_AllFound(t *testing.T) {
 	if !strings.Contains(output, "Optional:") {
 		t.Fatal("expected output to contain 'Optional:' header")
 	}
-	if !strings.Contains(output, "Required met:") || !strings.Contains(output, "(5/5)") {
+	if !strings.Contains(output, "Required met:") || !strings.Contains(output, "(4/4)") {
 		t.Fatalf("expected required summary line with count, got:\n%s", output)
 	}
 	if !strings.Contains(output, "Optional met:") || !strings.Contains(output, "(3/3)") {
@@ -425,7 +426,7 @@ func TestRun_VerboseShowsPath(t *testing.T) {
 		t.Fatalf("expected no error, got: %s", err.Error())
 	}
 	output := buf.String()
-	if !strings.Contains(output, "/usr/local/bin/kitty") {
+	if !strings.Contains(output, "/usr/local/bin/claude") {
 		t.Fatalf("expected paths to be shown in verbose mode, got:\n%s", output)
 	}
 }
@@ -434,7 +435,7 @@ func TestRun_RequiredMissing(t *testing.T) {
 	stubHealthDeps(t)
 
 	lookPath = func(file string) (string, error) {
-		if file == "kitty" {
+		if file == "claude" {
 			return "", errors.New("not found")
 		}
 		return "/usr/local/bin/" + file, nil
@@ -1111,6 +1112,137 @@ func TestRun_TrackerConfigured_TokenMissing_CredentialsRow(t *testing.T) {
 	}
 	if !strings.Contains(output, "(1/2)") {
 		t.Fatalf("expected credentials summary (1/2), got:\n%s", output)
+	}
+}
+
+func TestDependencies_DoesNotIncludeKitty(t *testing.T) {
+	// Ember does not use Kitty; the OG required-dependency entry was removed.
+	for _, dep := range dependencies {
+		if dep.Name == "kitty" {
+			t.Fatal("dependencies must not include 'kitty' (Ember does not use Kitty)")
+		}
+	}
+}
+
+func TestGather_StructuredReport(t *testing.T) {
+	stubHealthDeps(t)
+	origHome := homeDir
+	t.Cleanup(func() { homeDir = origHome })
+	homeDir = "/home/testuser"
+
+	lookPath = func(file string) (string, error) {
+		if file == "gh" {
+			return "", errors.New("not found")
+		}
+		return "/usr/local/bin/" + file, nil
+	}
+	getVersion = func(command []string) (string, error) { return "1.2.3", nil }
+	getConfigPath = func() string { return "/home/testuser/.config/devora/config.json" }
+	statFile = func(name string) (os.FileInfo, error) {
+		// config exists, completion does not.
+		if strings.HasSuffix(name, "config.json") {
+			return nil, nil
+		}
+		return nil, os.ErrNotExist
+	}
+
+	report := Gather()
+
+	if report.Version != "test-version" {
+		t.Fatalf("expected version 'test-version', got %q", report.Version)
+	}
+	// Required: claude/git/uv/zsh all found.
+	if len(report.Required) != 4 {
+		t.Fatalf("expected 4 required deps, got %d", len(report.Required))
+	}
+	if report.Summary.RequiredMet != 4 || report.Summary.RequiredTotal != 4 {
+		t.Fatalf("expected required 4/4, got %d/%d", report.Summary.RequiredMet, report.Summary.RequiredTotal)
+	}
+	// Optional: nvim/mise found, gh missing.
+	if report.Summary.OptionalMet != 2 || report.Summary.OptionalTotal != 3 {
+		t.Fatalf("expected optional 2/3, got %d/%d", report.Summary.OptionalMet, report.Summary.OptionalTotal)
+	}
+	// First required dep should carry name/version/path.
+	first := report.Required[0]
+	if first.Name != "claude" || !first.Found || first.Version != "1.2.3" || first.Path != "/usr/local/bin/claude" {
+		t.Fatalf("unexpected first required row: %+v", first)
+	}
+	// gh row reports not-found with an empty path/version.
+	var gh *DependencyStatus
+	for i := range report.Optional {
+		if report.Optional[i].Name == "gh" {
+			gh = &report.Optional[i]
+		}
+	}
+	if gh == nil || gh.Found || gh.Path != "" {
+		t.Fatalf("expected gh optional row not found with empty path, got %+v", gh)
+	}
+	// Config found, completion missing with a fix hint.
+	if !report.Config.Found {
+		t.Fatal("expected config to be found")
+	}
+	if report.Completion.Found {
+		t.Fatal("expected completion to be missing")
+	}
+	if report.Completion.FixHint != "debi completion zsh > ~/.zsh/completions/_debi" {
+		t.Fatalf("expected completion fix hint, got %q", report.Completion.FixHint)
+	}
+	// Credentials: GitHub unchecked (gh missing) + tracker info row.
+	if len(report.Credentials) != 2 {
+		t.Fatalf("expected 2 credential rows, got %d", len(report.Credentials))
+	}
+	if report.Credentials[0].Name != "GitHub" || report.Credentials[0].Status != "unchecked" {
+		t.Fatalf("expected GitHub unchecked row, got %+v", report.Credentials[0])
+	}
+	if report.Credentials[1].Status != "info" {
+		t.Fatalf("expected tracker info row, got %+v", report.Credentials[1])
+	}
+	if report.Summary.CredentialsMet != 0 || report.Summary.CredentialsTotal != 1 {
+		t.Fatalf("expected credentials 0/1 (info row excluded), got %d/%d", report.Summary.CredentialsMet, report.Summary.CredentialsTotal)
+	}
+}
+
+func TestGather_GitHubNoToken_CarriesFixHint(t *testing.T) {
+	stubHealthDeps(t)
+	lookPath = func(file string) (string, error) { return "/usr/local/bin/" + file, nil }
+	getVersion = func(command []string) (string, error) { return "1.0.0", nil }
+	checkGitHubToken = func() bool { return false }
+
+	report := Gather()
+
+	gh := report.Credentials[0]
+	if gh.Status != "failed" {
+		t.Fatalf("expected GitHub failed status, got %q", gh.Status)
+	}
+	if gh.FixHint != "gh auth login" {
+		t.Fatalf("expected fix hint 'gh auth login', got %q", gh.FixHint)
+	}
+}
+
+func TestRunJSON_OutputsParseableReport(t *testing.T) {
+	stubHealthDeps(t)
+	lookPath = func(file string) (string, error) { return "/usr/local/bin/" + file, nil }
+	getVersion = func(command []string) (string, error) { return "9.9.9", nil }
+	checkGitHub = func() (string, error) { return "Test User", nil }
+	statFile = func(name string) (os.FileInfo, error) { return nil, nil }
+
+	var buf bytes.Buffer
+	if err := RunJSON(&buf); err != nil {
+		t.Fatalf("expected no error, got: %s", err.Error())
+	}
+
+	var report Report
+	if err := json.Unmarshal(buf.Bytes(), &report); err != nil {
+		t.Fatalf("expected valid JSON, got error %v\noutput:\n%s", err, buf.String())
+	}
+	if report.Version != "test-version" {
+		t.Fatalf("expected version 'test-version', got %q", report.Version)
+	}
+	if report.Summary.RequiredTotal != 4 {
+		t.Fatalf("expected 4 required deps in JSON, got %d", report.Summary.RequiredTotal)
+	}
+	if report.Required[0].Version != "9.9.9" {
+		t.Fatalf("expected version field populated, got %q", report.Required[0].Version)
 	}
 }
 

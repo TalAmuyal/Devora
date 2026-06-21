@@ -116,7 +116,7 @@ func runWorkspaceUI() error {
 	return nil
 }
 
-const healthUsage = `usage: debi health [--strict] [-v|--verbose] [-p|--profile <name>]
+const healthUsage = `usage: debi health [--strict] [-v|--verbose] [--json] [-p|--profile <name>] [--profile-path <path>]
 
 Check Devora dependencies and report their status. Also reports whether zsh
 completion is installed at ~/.zsh/completions/_debi.
@@ -124,12 +124,16 @@ completion is installed at ~/.zsh/completions/_debi.
 Flags:
   --strict               Exit with code 1 if any dependency (including optional) is missing
   -v, --verbose          Show dependency locations
-  -p, --profile <name>   Check a specific profile (defaults to CWD-based resolution)`
+      --json             Output the report as JSON (ignores --strict/--verbose)
+  -p, --profile <name>   Check a specific profile by name (defaults to CWD-based resolution)
+      --profile-path <path>  Check a specific profile by its root path (overrides --profile)`
 
 func runHealth(args []string) error {
 	strict := false
 	verbose := false
+	jsonOutput := false
 	profile := ""
+	profilePath := ""
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		switch {
@@ -140,6 +144,8 @@ func runHealth(args []string) error {
 			strict = true
 		case arg == "-v" || arg == "--verbose":
 			verbose = true
+		case arg == "--json":
+			jsonOutput = true
 		case arg == "-p" || arg == "--profile" || strings.HasPrefix(arg, "--profile="):
 			val, nextI, err := parseValue(args, i, arg, "--profile")
 			if err != nil {
@@ -147,12 +153,29 @@ func runHealth(args []string) error {
 			}
 			profile = val
 			i = nextI
+		case arg == "--profile-path" || strings.HasPrefix(arg, "--profile-path="):
+			val, nextI, err := parseValue(args, i, arg, "--profile-path")
+			if err != nil {
+				return err
+			}
+			profilePath = val
+			i = nextI
 		default:
 			return &UsageError{Message: fmt.Sprintf("unknown flag: %s\n%s", arg, healthUsage)}
 		}
 	}
-	if _, err := resolveActiveProfile(profile); err != nil {
+
+	// An explicit --profile-path wins over --profile (path is unambiguous).
+	if profilePath != "" {
+		if _, err := resolveActiveProfileByPath(profilePath); err != nil {
+			return err
+		}
+	} else if _, err := resolveActiveProfile(profile); err != nil {
 		return err
+	}
+
+	if jsonOutput {
+		return healthRunJSON(os.Stdout)
 	}
 	return healthRun(os.Stdout, strict, verbose)
 }
@@ -209,9 +232,14 @@ var closeRun = closecmd.Run
 // healthRun is the health entry point; stubbable for tests.
 var healthRun = health.Run
 
-// resolveActiveProfile is the profile resolver entry point; stubbable for
-// tests so the three handlers (health/submit/close) can verify they invoke it.
+// healthRunJSON is the JSON health entry point; stubbable for tests.
+var healthRunJSON = health.RunJSON
+
+// resolveActiveProfile is the profile resolver entry point; stubbable for tests so the three handlers (health/submit/close) can verify they invoke it.
 var resolveActiveProfile = ResolveActiveProfile
+
+// resolveActiveProfileByPath resolves the active profile by root path (used by `debi health --profile-path`); stubbable for tests.
+var resolveActiveProfileByPath = ResolveActiveProfileByPath
 
 // Stubbable seams for the workspace-aware gst/gcl dispatchers.
 var (

@@ -22,10 +22,13 @@ Types of changes:
 - Added an "Add Repo to Workspace" command to the Command Palette that adds a repo (git worktree) to the active session's workspace, with streaming progress and cancel
 - Added a filter to the repo list (in the New Task form and the Add Repo dialog): type to narrow by name, with `↑/↓` to move and `Enter` to select/toggle
 - Added configurable Claude model tiers (Opus/Sonnet/Haiku) and effort level, editable per user and per profile in the Profile Manager (a "User Defaults" entry plus a per-profile "Claude Models & Effort" card). Each setting can be a value, None (let Claude Code use its own default), or unset (fall through profile → user → Devora default); models are free text, so a newly released model can be used without updating Devora
+- Added an in-app **Health Hub** that checks Devora's dependencies, credentials, configs, etc. — reachable from the Command Palette and the Workspace Hub.
 
 ### Changed
 
 - `ccc` now treats its `CLAUDE_CODE_*` env-vars as defaults, respecting any pre-existing definitions in the environment instead of overriding them
+- `debi health` gained a `--json` output mode
+- `debi health` now supports profile-by-path selection (a `--profile-path` flag and a `DEBI_PROFILE_PATH` env-var), and now honors `DEVORA_CONFIG_PATH`
 - The Claude model tiers and effort level are now resolved from config and injected into session shells by Devora, instead of being hardcoded in `ccc`
 - Updated the README to point to the user-guide in the app
 - The Command Palette now focuses its search field on open so you can type a filter immediately; `Esc` closes it and `↑/↓`/`Enter` navigate and run
@@ -35,6 +38,7 @@ Types of changes:
 - Removed the `ccc --fable` flag; set the Opus/Sonnet model to `claude-fable-5` in the Claude config instead
 - Removed the unused `review.open-mode` config key and the legacy OG Kitty/glimpse-tty path from the Crit wrapper; the published Ember build always opens Crit in its built-in overlay
 - Removed the `debi add` command (and its OG add-repo TUI) as part of the Devora OG → Ember migration; use the "Add Repo to Workspace" Command Palette command instead
+- Removed Kitty from `debi health` checks
 
 ## 2026-06-16.0
 

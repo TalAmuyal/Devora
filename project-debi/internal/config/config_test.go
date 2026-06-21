@@ -2008,6 +2008,30 @@ func TestConfigPath_ReturnsConfigPathValue(t *testing.T) {
 	}
 }
 
+func TestDefaultConfigPath_HonorsDevoraConfigPathEnv(t *testing.T) {
+	t.Setenv("DEVORA_CONFIG_PATH", "/custom/devora/config.json")
+
+	got := defaultConfigPath()
+	if got != "/custom/devora/config.json" {
+		t.Fatalf("expected DEVORA_CONFIG_PATH to win, got %q", got)
+	}
+}
+
+func TestDefaultConfigPath_FallsBackToHomeWhenEnvUnset(t *testing.T) {
+	t.Setenv("DEVORA_CONFIG_PATH", "")
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatalf("could not get home dir: %v", err)
+	}
+	want := filepath.Join(home, ".config", "devora", "config.json")
+
+	got := defaultConfigPath()
+	if got != want {
+		t.Fatalf("expected fallback %q, got %q", want, got)
+	}
+}
+
 func TestExpandTilde_BareTilde(t *testing.T) {
 	home, err := os.UserHomeDir()
 	if err != nil {

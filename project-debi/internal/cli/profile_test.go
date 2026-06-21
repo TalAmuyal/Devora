@@ -20,15 +20,20 @@ func stubResolveActiveProfileDeps(
 	origCWD := getCWD
 	origProfiles := getProfiles
 	origResolve := resolveFromCWD
+	origEnv := getProfilePathEnv
 	t.Cleanup(func() {
 		getCWD = origCWD
 		getProfiles = origProfiles
 		resolveFromCWD = origResolve
+		getProfilePathEnv = origEnv
 		config.ResetForTesting()
 	})
 	getCWD = cwdFn
 	getProfiles = profilesFn
 	resolveFromCWD = resolveFn
+	// Default: no DEBI_PROFILE_PATH.
+	// Tests that exercise the env default override this var explicitly.
+	getProfilePathEnv = func() string { return "" }
 }
 
 func TestResolveActiveProfile_ExplicitName_Found_SetsActiveAndReturnsName(t *testing.T) {
@@ -184,9 +189,140 @@ func TestResolveActiveProfile_CWDErrorTreatedAsNoMatch(t *testing.T) {
 	}
 }
 
+func TestResolveActiveProfileByPath_Found_SetsActiveAndReturnsName(t *testing.T) {
+	target := config.Profile{Name: "work", RootPath: "/tmp/work"}
+	stubResolveActiveProfileDeps(
+		t,
+		func() (string, error) { t.Fatal("getCWD should not be called when explicit path matches"); return "", nil },
+		func() []config.Profile { return []config.Profile{{Name: "play", RootPath: "/tmp/play"}, target} },
+		func(cwd string) (*config.Profile, string, error) {
+			t.Fatal("resolveFromCWD should not be called when explicit path is given")
+			return nil, "", nil
+		},
+	)
+
+	name, err := ResolveActiveProfileByPath("/tmp/work")
+	if err != nil {
+		t.Fatalf("expected no error, got: %s", err.Error())
+	}
+	if name != "work" {
+		t.Fatalf("expected resolved name 'work', got %q", name)
+	}
+	active := config.GetActiveProfile()
+	if active == nil || active.Name != "work" {
+		t.Fatalf("expected active profile 'work', got %+v", active)
+	}
+}
+
+func TestResolveActiveProfileByPath_NormalizesTrailingSlash(t *testing.T) {
+	// A path with a trailing slash (or other un-cleaned form) still matches.
+	target := config.Profile{Name: "work", RootPath: "/tmp/work"}
+	stubResolveActiveProfileDeps(
+		t,
+		func() (string, error) { return "/tmp/x", nil },
+		func() []config.Profile { return []config.Profile{target} },
+		func(cwd string) (*config.Profile, string, error) { return nil, "", nil },
+	)
+
+	name, err := ResolveActiveProfileByPath("/tmp/work/")
+	if err != nil {
+		t.Fatalf("expected no error, got: %s", err.Error())
+	}
+	if name != "work" {
+		t.Fatalf("expected resolved name 'work', got %q", name)
+	}
+}
+
+func TestResolveActiveProfileByPath_NotFound_ReturnsError(t *testing.T) {
+	stubResolveActiveProfileDeps(
+		t,
+		func() (string, error) { return "/tmp/x", nil },
+		func() []config.Profile { return []config.Profile{{Name: "play", RootPath: "/tmp/play"}} },
+		func(cwd string) (*config.Profile, string, error) { return nil, "", nil },
+	)
+
+	name, err := ResolveActiveProfileByPath("/tmp/work")
+	if err == nil {
+		t.Fatal("expected error for unknown profile path")
+	}
+	var usageErr *UsageError
+	if !errors.As(err, &usageErr) {
+		t.Fatalf("expected UsageError, got %T: %s", err, err.Error())
+	}
+	if name != "" {
+		t.Fatalf("expected empty name on error, got %q", name)
+	}
+	if config.GetActiveProfile() != nil {
+		t.Fatal("expected active profile to remain nil on error")
+	}
+}
+
+func TestResolveActiveProfile_EnvPath_Default_SetsActive(t *testing.T) {
+	// DEBI_PROFILE_PATH acts as a default when no explicit flag is given.
+	target := config.Profile{Name: "work", RootPath: "/tmp/work"}
+	stubResolveActiveProfileDeps(
+		t,
+		func() (string, error) { t.Fatal("getCWD should not be called when env path matches"); return "", nil },
+		func() []config.Profile { return []config.Profile{{Name: "play", RootPath: "/tmp/play"}, target} },
+		func(cwd string) (*config.Profile, string, error) {
+			t.Fatal("resolveFromCWD should not be called when env path matches")
+			return nil, "", nil
+		},
+	)
+	getProfilePathEnv = func() string { return "/tmp/work" }
+
+	name, err := ResolveActiveProfile("")
+	if err != nil {
+		t.Fatalf("expected no error, got: %s", err.Error())
+	}
+	if name != "work" {
+		t.Fatalf("expected resolved name 'work', got %q", name)
+	}
+}
+
+func TestResolveActiveProfile_ExplicitNameOverridesEnvPath(t *testing.T) {
+	// An explicit flag wins over the env default (env-vars are defaults).
+	work := config.Profile{Name: "work", RootPath: "/tmp/work"}
+	play := config.Profile{Name: "play", RootPath: "/tmp/play"}
+	stubResolveActiveProfileDeps(
+		t,
+		func() (string, error) { return "/tmp/x", nil },
+		func() []config.Profile { return []config.Profile{work, play} },
+		func(cwd string) (*config.Profile, string, error) { return nil, "", nil },
+	)
+	getProfilePathEnv = func() string { return "/tmp/play" }
+
+	name, err := ResolveActiveProfile("work")
+	if err != nil {
+		t.Fatalf("expected no error, got: %s", err.Error())
+	}
+	if name != "work" {
+		t.Fatalf("expected explicit name 'work' to win over env path, got %q", name)
+	}
+}
+
+func TestResolveActiveProfile_EnvPath_NoMatch_FallsThroughToCWD(t *testing.T) {
+	// A stale env path (matching no profile) must NOT error — it falls through to CWD resolution so the command still works.
+	target := config.Profile{Name: "work", RootPath: "/tmp/work"}
+	stubResolveActiveProfileDeps(
+		t,
+		func() (string, error) { return "/tmp/work/workspaces/ws-1", nil },
+		func() []config.Profile { return []config.Profile{target} },
+		func(cwd string) (*config.Profile, string, error) { return &target, cwd, nil },
+	)
+	getProfilePathEnv = func() string { return "/tmp/deleted-profile" }
+
+	name, err := ResolveActiveProfile("")
+	if err != nil {
+		t.Fatalf("expected no error when env path is stale, got: %s", err.Error())
+	}
+	if name != "work" {
+		t.Fatalf("expected fall-through to CWD match 'work', got %q", name)
+	}
+}
+
 func TestResolveActiveProfile_ResolverError_BubblesUp(t *testing.T) {
-	// If resolveFromCWD itself returns a real error (not just "no match"),
-	// that error is propagated so the caller can surface it.
+	// If resolveFromCWD itself returns a real error (not just "no match"), that error is propagated so the caller can surface it.
 	stubResolveActiveProfileDeps(
 		t,
 		func() (string, error) { return "/tmp/random", nil },

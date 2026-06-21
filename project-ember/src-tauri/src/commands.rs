@@ -4,6 +4,7 @@ use std::sync::Mutex;
 use tauri::ipc::Channel;
 use tauri::State;
 
+use crate::health;
 use crate::ipc_server::IpcState;
 use crate::logging::LogState;
 use crate::profile;
@@ -32,6 +33,10 @@ pub fn create_pty(
     // Inject the resolved Claude model/effort env vars (profile → user → Devora default).
     // An explicit frontend-supplied `env` still wins on key collision.
     let mut session_env = workspace::claude_launch_env(profile_path.as_deref());
+    // Expose the session's profile to debi so a command typed in the terminal (e.g. `debi health`) resolves the same profile as the in-app UI.
+    if let Some(path) = profile_path.as_deref() {
+        session_env.insert("DEBI_PROFILE_PATH".to_string(), path.to_string());
+    }
     if let Some(extra) = env {
         session_env.extend(extra);
     }
@@ -287,6 +292,16 @@ pub fn clone_repo_into_profile(
     });
 
     Ok(id)
+}
+
+/// Run the bundled `debi health --json` (through a login shell so the user's real PATH is used) and return its JSON for the Health Hub to render.
+/// `profile_path` selects the profile whose credentials are checked.
+#[tauri::command]
+pub fn run_health_check(
+    app: tauri::AppHandle,
+    profile_path: Option<String>,
+) -> Result<String, String> {
+    health::run(&app, profile_path)
 }
 
 #[tauri::command]

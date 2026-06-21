@@ -21,6 +21,7 @@ fn main() {
                 "cancel_workspace_creation",
                 "add_repo_to_workspace",
                 "clone_repo_into_profile",
+                "run_health_check",
                 "remove_task",
                 "prepare_repurpose_task",
                 "repurpose_task",

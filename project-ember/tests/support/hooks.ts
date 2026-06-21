@@ -259,6 +259,14 @@ After(async function (this: EmberWorld) {
     // app may not have fully loaded
   }
 
+  // The app instance is shared across scenarios, and the Workspace Hub keeps the active profile path in memory across loads.
+  // Reset it so a later scenario that reads it without reloading the hub (e.g. opening the Health Hub from the Command Palette) cannot inherit a now-deleted fixture's path.
+  try {
+    await this.driver.eval('window.__test.wsHub.setActiveProfilePath(null)');
+  } catch {
+    // app may not have fully loaded
+  }
+
   try {
     await this.driver.eval(`
       const sessions = window.__test.sessionManager.getSessions();
