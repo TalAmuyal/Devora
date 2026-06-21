@@ -16,6 +16,7 @@ Types of changes:
 
 ### Added
 
+- Added the ability to clone a git repo into a profile's `repos/` directory from a pasted URL (GitHub HTTPS/SSH or repo-page URL) — reachable from the Command Palette command, the Workspace Hub's New Task form, and the Profile Manager
 - Added the ability to duplicate an tasks workspace using "Duplicate Current Session" (Command Palette) or pressing the Workspace Hub's "Duplicate" button (next to "Open")
 - Added a "Close Current Session" command to the Command Palette
 - Added an "Add Repo to Workspace" command to the Command Palette that adds a repo (git worktree) to the active session's workspace, with streaming progress and cancel

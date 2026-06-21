@@ -264,6 +264,31 @@ pub fn add_repo_to_workspace(
     Ok(id)
 }
 
+/// Clone a git repo (from a pasted GitHub/SSH/HTTPS URL) into the given profile's `repos/` directory, checked out detached.
+/// Returns a creation id immediately; progress (steps + streamed subprocess output) and the outcome arrive on `on_event`.
+/// Cancellable via `cancel_workspace_creation` (shared creation manager).
+#[tauri::command]
+pub fn clone_repo_into_profile(
+    app: tauri::AppHandle,
+    state: State<'_, Mutex<WorkspaceCreationManager>>,
+    profile_path: String,
+    url: String,
+    on_event: Channel<workspace_creation::CreationEvent>,
+) -> Result<u32, String> {
+    let (id, handle) = {
+        let mut manager = state
+            .lock()
+            .map_err(|e| format!("failed to lock creation manager: {e}"))?;
+        manager.register()
+    };
+
+    std::thread::spawn(move || {
+        workspace_creation::run_clone_repo(app, id, handle, profile_path, url, on_event);
+    });
+
+    Ok(id)
+}
+
 #[tauri::command]
 pub fn remove_task(workspace_path: String) -> Result<(), String> {
     workspace::remove_task(&workspace_path)

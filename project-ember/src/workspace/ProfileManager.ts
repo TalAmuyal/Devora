@@ -38,6 +38,8 @@ export interface ProfileManagerCallbacks {
   getOpenSessionsForProfile: (profilePath: string) => ReadonlyArray<{ title: string }>;
   /** Leave the Profile Manager (main.ts reopens the Workspace Hub). */
   onClose: () => void;
+  /** Clone a repo into the given profile; `onDone` is called once it lands so the detail can refresh. */
+  onCloneRepo: (profilePath: string, onDone: () => void) => void;
 }
 
 export class ProfileManager {
@@ -254,6 +256,18 @@ export class ProfileManager {
       return;
     }
     this.focusedIndex = Math.min(this.focusedIndex, this.rows().length - 1);
+    this.render();
+    void this.loadFocusedDetail();
+  }
+
+  /** After a repo is cloned into `profilePath`, re-fetch profiles (so the repo-count badge updates) and the detail (repo table). */
+  private async refreshAfterClone(profilePath: string): Promise<void> {
+    this.detailCache.delete(profilePath);
+    try {
+      this.profiles = await invoke<ProfileInfo[]>('list_profiles');
+    } catch (_) {
+      // invoke already surfaced the error
+    }
     this.render();
     void this.loadFocusedDetail();
   }
@@ -534,6 +548,13 @@ export class ProfileManager {
     setActiveBtn.disabled = isActive;
     setActiveBtn.addEventListener('click', () => this.setActiveAndClose(profile));
     actionRow.appendChild(setActiveBtn);
+    const cloneBtn = document.createElement('button');
+    cloneBtn.className = 'pm-clone-btn';
+    cloneBtn.textContent = 'Clone Repo';
+    cloneBtn.addEventListener('click', () =>
+      this.callbacks.onCloneRepo(profile.path, () => void this.refreshAfterClone(profile.path)),
+    );
+    actionRow.appendChild(cloneBtn);
     const deleteBtn = document.createElement('button');
     deleteBtn.className = 'pm-delete-btn';
     deleteBtn.textContent = 'Delete';

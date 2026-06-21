@@ -24,6 +24,7 @@
     "allow-create-workspace",
     "allow-cancel-workspace-creation",
     "allow-add-repo-to-workspace",
+    "allow-clone-repo-into-profile",
     "allow-save-profiling-report",
     "allow-log-error",
     "allow-read-text-file",
