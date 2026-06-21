@@ -8,6 +8,8 @@ import { KeyboardShortcuts } from './ui/KeyboardShortcuts';
 import { CommandPalette } from './ui/CommandPalette';
 import { showTextInputDialog } from './ui/components/TextInputDialog';
 import { showAddRepoDialog } from './ui/components/AddRepoDialog';
+import { showCloneRepoDialog } from './ui/components/CloneRepoDialog';
+import { TaskCreationProgressHandle } from './ui/components/TaskCreationProgress';
 import { WorkspaceHub } from './workspace/WorkspaceHub';
 import { TaskCreationController } from './workspace/TaskCreationController';
 import { CreationEvent, RepoInfo } from './workspace/types';
@@ -136,6 +138,68 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   };
 
+  // Drive a two-phase creation dialog (add-repo, clone): swap in the progress view, run the backend `start` command, and translate its CreationEvent stream into progress updates.
+  // Handles the cancel-before-the-backend-id race (cancel once the id arrives) and the failed-state footer (Esc/q closes instead of cancelling).
+  // `onDone` (optional) receives the resulting workspace once it lands.
+  const driveCreationDialog = (
+    dialog: { showProgress(title: string): TaskCreationProgressHandle; close(): void },
+    progressTitle: string,
+    start: (onEvent: Channel<CreationEvent>) => Promise<number>,
+    onDone?: (workspace: { path: string; name: string }) => void,
+  ): void => {
+    const progress = dialog.showProgress(progressTitle);
+    let creationId: number | null = null;
+    let cancelRequested = false;
+    let failed = false;
+
+    const requestCancel = () => {
+      if (failed) {
+        dialog.close();
+        return;
+      }
+      if (creationId === null) {
+        cancelRequested = true; // cancel once the backend id arrives
+        return;
+      }
+      invokeLogOnly('cancel_workspace_creation', { id: creationId }).catch(() => {});
+    };
+    progress.onCancel(requestCancel);
+    progress.onClose(() => dialog.close());
+
+    const onEvent = new Channel<CreationEvent>();
+    onEvent.onmessage = (event) => {
+      switch (event.type) {
+        case 'step':
+          progress.setStep(event.label);
+          break;
+        case 'log':
+          progress.appendLog(event.line);
+          break;
+        case 'done':
+          dialog.close();
+          onDone?.(event.workspace);
+          break;
+        case 'cancelled':
+          dialog.close();
+          break;
+        case 'failed':
+          failed = true;
+          progress.showError(event.message);
+          break;
+      }
+    };
+
+    start(onEvent)
+      .then((id) => {
+        creationId = id;
+        if (cancelRequested) requestCancel();
+      })
+      .catch(() => {
+        // invoke already surfaced the error; the backend never started, so close the dialog.
+        dialog.close();
+      });
+  };
+
   // Add a repo (git worktree) to the active session's workspace: pick a registered repo (+ optional postfix), then stream the worktree creation inside the dialog, with cancel support.
   const addRepoToWorkspace = async () => {
     // Capture the workspace up front so a mid-dialog tab switch cannot retarget the add.
@@ -161,59 +225,31 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const dialog = showAddRepoDialog({ repos });
     dialog.onSubmit(({ sourceRepoPath, worktreeDirName }) => {
-      const progress = dialog.showProgress(`Adding: ${worktreeDirName}`);
-      let creationId: number | null = null;
-      let cancelRequested = false;
-      let failed = false;
+      driveCreationDialog(dialog, `Adding: ${worktreeDirName}`, (onEvent) =>
+        invoke<number>('add_repo_to_workspace', {
+          workspacePath,
+          sourceRepoPath,
+          worktreeDirName,
+          onEvent,
+        }),
+      );
+    });
+  };
 
-      const requestCancel = () => {
-        if (failed) {
-          dialog.close();
-          return;
-        }
-        if (creationId === null) {
-          cancelRequested = true; // cancel once the backend id arrives
-          return;
-        }
-        invokeLogOnly('cancel_workspace_creation', { id: creationId }).catch(() => {});
-      };
-      progress.onCancel(requestCancel);
-      progress.onClose(() => dialog.close());
-
-      const onEvent = new Channel<CreationEvent>();
-      onEvent.onmessage = (event) => {
-        switch (event.type) {
-          case 'step':
-            progress.setStep(event.label);
-            break;
-          case 'log':
-            progress.appendLog(event.line);
-            break;
-          case 'done':
-          case 'cancelled':
-            dialog.close();
-            break;
-          case 'failed':
-            failed = true;
-            progress.showError(event.message);
-            break;
-        }
-      };
-
-      invoke<number>('add_repo_to_workspace', {
-        workspacePath,
-        sourceRepoPath,
-        worktreeDirName,
-        onEvent,
-      })
-        .then((id) => {
-          creationId = id;
-          if (cancelRequested) requestCancel();
-        })
-        .catch(() => {
-          // invoke already surfaced the error; the backend never started, so close the dialog.
-          dialog.close();
-        });
+  // Clone a git repo into a profile's repos/ dir from a pasted URL: prompt for the URL, then stream the clone inside the dialog, with cancel support.
+  // `onDone` (optional) receives the cloned repo so callers can refresh their repo lists once it lands.
+  const cloneRepoIntoProfile = (
+    profilePath: string,
+    onDone?: (repo: { path: string; name: string }) => void,
+  ): void => {
+    const dialog = showCloneRepoDialog({ profilePath });
+    dialog.onSubmit(({ url }) => {
+      driveCreationDialog(
+        dialog,
+        'Cloning repo',
+        (onEvent) => invoke<number>('clone_repo_into_profile', { profilePath, url, onEvent }),
+        onDone,
+      );
     });
   };
 
@@ -222,6 +258,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     startTaskCreation,
     dismissWsHub,
     (view) => openProfileManager(view),
+    cloneRepoIntoProfile,
   );
 
   const teardownWsHub = () => {
@@ -256,6 +293,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     getOpenSessionsForProfile: (profilePath) =>
       sessionManager.getSessions().filter((s) => s.profilePath === profilePath),
     onClose: () => openWsHub(),
+    onCloneRepo: (profilePath, onDone) => cloneRepoIntoProfile(profilePath, onDone),
   });
 
   const openProfileManager = (view: ProfileManagerView = 'list') => {
@@ -324,6 +362,21 @@ document.addEventListener('DOMContentLoaded', async () => {
         icon: '⊕',
         shortcut: [],
         run: closePaletteThen(() => void addRepoToWorkspace()),
+      },
+      {
+        id: 'clone-repo',
+        title: 'Clone Repo into Profile',
+        description: "Clone a git repo into the active profile's repos/ directory",
+        icon: '⤓',
+        shortcut: [],
+        run: closePaletteThen(() => {
+          const profilePath = wsHub.getActiveProfilePath();
+          if (!profilePath) {
+            showError('No active profile — open the Workspace Hub and set one first');
+            return;
+          }
+          cloneRepoIntoProfile(profilePath);
+        }),
       },
       {
         id: 'duplicate-session',

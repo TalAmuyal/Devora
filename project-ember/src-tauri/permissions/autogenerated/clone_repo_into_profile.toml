@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-clone-repo-into-profile"
+description = "Enables the clone_repo_into_profile command without any pre-configured scope."
+commands.allow = ["clone_repo_into_profile"]
+
+[[permission]]
+identifier = "deny-clone-repo-into-profile"
+description = "Denies the clone_repo_into_profile command without any pre-configured scope."
+commands.deny = ["clone_repo_into_profile"]

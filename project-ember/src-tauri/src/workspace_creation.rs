@@ -373,6 +373,132 @@ fn run_add_repo_inner(
     }))
 }
 
+/// Spawned by the `clone_repo_into_profile` command.
+/// Clones a git repo into `<profile>/repos/<name>`, detached, streaming progress; deregisters, then emits the terminal event.
+pub fn run_clone_repo(
+    app: tauri::AppHandle,
+    id: u32,
+    handle: CreationHandle,
+    profile_path: String,
+    url: String,
+    on_event: Channel<CreationEvent>,
+) {
+    let result = run_clone_repo_inner(&handle, &profile_path, &url, &on_event);
+
+    if let Some(state) = app.try_state::<Mutex<WorkspaceCreationManager>>() {
+        if let Ok(mut manager) = state.lock() {
+            manager.remove(id);
+        }
+    }
+
+    match result {
+        Ok(Outcome::Done(workspace)) => {
+            let _ = on_event.send(CreationEvent::Done { workspace });
+        }
+        Ok(Outcome::Cancelled) => {
+            let _ = on_event.send(CreationEvent::Cancelled);
+        }
+        Err(message) => {
+            // A failure observed after cancellation reads as a cancellation; the partial clone is already cleaned up below.
+            if handle.is_cancelled() {
+                let _ = on_event.send(CreationEvent::Cancelled);
+            } else {
+                crate::logging::report_error(&app, &message);
+                let _ = on_event.send(CreationEvent::Failed { message });
+            }
+        }
+    }
+}
+
+fn run_clone_repo_inner(
+    handle: &CreationHandle,
+    profile_path: &str,
+    url: &str,
+    on_event: &Channel<CreationEvent>,
+) -> Result<Outcome, String> {
+    let target = crate::repo_clone::parse_clone_target(url)?;
+
+    let profile = workspace::expand_tilde(profile_path)?;
+    let repos_dir = Path::new(&profile).join("repos");
+    fs::create_dir_all(&repos_dir).map_err(|e| format!("failed to create repos directory: {e}"))?;
+
+    let dest = repos_dir.join(&target.dir_name);
+    // Bail before creating anything so a pre-existing directory is never deleted by the cleanup below.
+    if dest.exists() {
+        return Err(format!(
+            "'{}' already exists at {}",
+            target.dir_name,
+            dest.display()
+        ));
+    }
+
+    // Cleanup lives here (not in the wrapper): past this point `dest` is our own creation, so removing it on cancel or a post-clone failure can never touch a pre-existing directory.
+    match clone_and_detach(
+        &target.clone_url,
+        &dest,
+        &repos_dir,
+        &target.dir_name,
+        on_event,
+        handle,
+    ) {
+        Ok(true) => Ok(Outcome::Done(CreatedWorkspace {
+            path: dest.to_string_lossy().to_string(),
+            name: target.dir_name,
+        })),
+        Ok(false) => {
+            let _ = fs::remove_dir_all(&dest);
+            Ok(Outcome::Cancelled)
+        }
+        Err(message) => {
+            let _ = fs::remove_dir_all(&dest);
+            Err(message)
+        }
+    }
+}
+
+/// Clone `clone_url` into `dest` (created under `repos_dir`), then detach HEAD at the cloned default-branch tip.
+/// Returns `Ok(true)` on success, `Ok(false)` if cancelled mid-flight, `Err` on hard failure.
+fn clone_and_detach(
+    clone_url: &str,
+    dest: &Path,
+    repos_dir: &Path,
+    dir_name: &str,
+    on_event: &Channel<CreationEvent>,
+    handle: &CreationHandle,
+) -> Result<bool, String> {
+    let _ = on_event.send(CreationEvent::Step {
+        label: format!("Cloning {dir_name}"),
+    });
+    let dest_str = dest.to_string_lossy().to_string();
+    let ok = run_streamed(
+        "git",
+        &["clone", clone_url, &dest_str],
+        repos_dir,
+        on_event,
+        handle,
+    )?;
+    if !ok {
+        if handle.is_cancelled() {
+            return Ok(false);
+        }
+        return Err(format!("git clone failed for {clone_url} (see log)"));
+    }
+
+    // `git clone` checks out the default branch attached; detach at that same tip.
+    let _ = on_event.send(CreationEvent::Step {
+        label: "Checking out detached".to_string(),
+    });
+    let ok = run_streamed("git", &["checkout", "--detach"], dest, on_event, handle)?;
+    if !ok {
+        if handle.is_cancelled() {
+            return Ok(false);
+        }
+        return Err(format!("git checkout --detach failed for {dir_name} (see log)"));
+    }
+
+    Ok(true)
+}
+
 /// Critical section (under the workspaces creation lock): pick a reusable inactive workspace and claim it by writing `task.json`, or allocate a fresh `ws-N` directory.
 /// The lock is held only here (~ms) so concurrent creations cannot select the same workspace, then released for the slow git/prepare work.
 fn select_workspace(
@@ -1023,6 +1149,109 @@ mod tests {
             "untracked cache must survive the refresh"
         );
         assert_eq!(fs::read_to_string(wt.join("file.txt")).unwrap(), "v2\n");
+    }
+
+    /// Build a local bare repo (the stand-in for a remote) with a single commit on `main`.
+    fn make_bare_with_commit(root: &Path) -> PathBuf {
+        let bare = root.join("repo.git");
+        fs::create_dir_all(&bare).unwrap();
+        git(&bare, &["init", "--bare", "-b", "main"]);
+
+        let seed = root.join("seed");
+        git(root, &["clone", bare.to_str().unwrap(), seed.to_str().unwrap()]);
+        git(&seed, &["config", "user.email", "t@t"]);
+        git(&seed, &["config", "user.name", "t"]);
+        fs::write(seed.join("file.txt"), "v1\n").unwrap();
+        git(&seed, &["add", "."]);
+        git(&seed, &["commit", "-m", "c1"]);
+        git(&seed, &["push", "origin", "main"]);
+        bare
+    }
+
+    #[test]
+    fn clone_and_detach_clones_with_detached_head() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let bare = make_bare_with_commit(root);
+
+        let repos_dir = root.join("profile").join("repos");
+        fs::create_dir_all(&repos_dir).unwrap();
+        let dest = repos_dir.join("repo");
+        let url = format!("file://{}", bare.to_str().unwrap());
+
+        let ok = clone_and_detach(
+            &url,
+            &dest,
+            &repos_dir,
+            "repo",
+            &noop_channel(),
+            &CreationHandle::new(),
+        )
+        .unwrap();
+
+        assert!(ok);
+        assert!(dest.join(".git").exists(), "clone should produce a .git dir");
+        assert_eq!(fs::read_to_string(dest.join("file.txt")).unwrap(), "v1\n");
+        // `git symbolic-ref -q HEAD` exits non-zero exactly when HEAD is detached.
+        let head = Command::new("git")
+            .args(["symbolic-ref", "-q", "HEAD"])
+            .current_dir(&dest)
+            .output()
+            .unwrap();
+        assert!(
+            !head.status.success(),
+            "HEAD should be detached, but is on branch {}",
+            String::from_utf8_lossy(&head.stdout).trim()
+        );
+    }
+
+    #[test]
+    fn run_clone_repo_inner_clones_into_profile_repos_dir() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let bare = make_bare_with_commit(root);
+
+        let profile = root.join("profile");
+        fs::create_dir_all(&profile).unwrap();
+        let url = format!("file://{}", bare.to_str().unwrap());
+
+        let outcome = run_clone_repo_inner(
+            &CreationHandle::new(),
+            profile.to_str().unwrap(),
+            &url,
+            &noop_channel(),
+        )
+        .unwrap();
+
+        match outcome {
+            Outcome::Done(ws) => assert_eq!(ws.name, "repo"),
+            other => panic!("expected Done, got {other:?}"),
+        }
+        assert!(profile.join("repos").join("repo").join(".git").exists());
+    }
+
+    #[test]
+    fn run_clone_repo_inner_errors_when_dest_exists_and_leaves_it_untouched() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let profile = root.join("profile");
+        let dest = profile.join("repos").join("repo");
+        fs::create_dir_all(&dest).unwrap();
+        fs::write(dest.join("keep.txt"), "x").unwrap();
+
+        let err = run_clone_repo_inner(
+            &CreationHandle::new(),
+            profile.to_str().unwrap(),
+            "https://github.com/org/repo.git",
+            &noop_channel(),
+        )
+        .unwrap_err();
+
+        assert!(err.contains("already exists"), "got: {err}");
+        assert!(
+            dest.join("keep.txt").exists(),
+            "a pre-existing destination must not be deleted"
+        );
     }
 
     #[test]

@@ -297,6 +297,29 @@ body {
   color: var(--color-fg-secondary);
 }
 
+.ws-new-form-repo-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+
+.ws-new-form-clone {
+  background: var(--color-surface0);
+  color: var(--color-fg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--tab-border-radius);
+  padding: var(--space-xs) var(--space-md);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+
+.ws-new-form-clone:focus-visible {
+  outline: 0.133rem solid var(--color-focus-ring);
+  outline-offset: -0.133rem;
+}
+
 .ws-new-form-actions {
   display: flex;
   gap: var(--space-sm);
@@ -967,6 +990,26 @@ kbd {
 }
 
 .pm-set-active-btn:focus-visible {
+  outline: 0.133rem solid var(--color-focus-ring);
+  outline-offset: 0.133rem;
+}
+
+.pm-clone-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-surface0);
+  color: var(--color-fg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--tab-border-radius);
+  padding: var(--space-sm) var(--space-xl);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-md);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.pm-clone-btn:focus-visible {
   outline: 0.133rem solid var(--color-focus-ring);
   outline-offset: 0.133rem;
 }

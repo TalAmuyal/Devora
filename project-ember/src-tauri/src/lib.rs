@@ -4,6 +4,7 @@ mod ipc_server;
 mod logging;
 mod profile;
 mod pty;
+mod repo_clone;
 mod test_harness;
 mod theme;
 mod workspace;
@@ -134,6 +135,7 @@ pub fn run() {
             commands::create_workspace,
             commands::cancel_workspace_creation,
             commands::add_repo_to_workspace,
+            commands::clone_repo_into_profile,
             commands::remove_task,
             commands::prepare_repurpose_task,
             commands::repurpose_task,

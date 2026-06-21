@@ -117,6 +117,11 @@ export class WorkspaceHub {
   ) => void;
   private onClose: () => void;
   private onOpenProfileManager: (view: 'list' | 'new') => void;
+  // Clone a repo into the given profile; `onDone` receives the cloned repo so the New Task form can refresh and pre-select it.
+  private onCloneRepo: (
+    profilePath: string,
+    onDone: (repo: { path: string; name: string }) => void,
+  ) => void;
 
   private profiles: ProfileInfo[] = [];
   private activeProfilePath: string | null = null;
@@ -133,8 +138,8 @@ export class WorkspaceHub {
   private showNewForm = false;
   // Set while the New Task form is in "duplicate" mode: the source workspace whose commits and CLAUDE.md the new workspace should mirror (null for a plain new task).
   private duplicationSource: string | null = null;
-  // Source task title pre-filled into the duplicate form's Title field.
-  private duplicationTitle = '';
+  // Title pre-filled into the New Task form's Title field: the source task title when duplicating, or the typed title preserved across a clone-triggered re-render.
+  private newFormTitle = '';
   // Registered-repo paths pre-checked in the duplicate form (the source workspace's repos).
   private preselectedRepoPaths: string[] = [];
   // A duplication requested from outside (command palette) before the hub finished loading; the source repos/title are resolved from the loaded workspace list at the end of load().
@@ -166,11 +171,16 @@ export class WorkspaceHub {
     ) => void,
     onClose: () => void,
     onOpenProfileManager: (view: 'list' | 'new') => void,
+    onCloneRepo: (
+      profilePath: string,
+      onDone: (repo: { path: string; name: string }) => void,
+    ) => void,
   ) {
     this.onOpenWorkspace = onOpenWorkspace;
     this.onStartTaskCreation = onStartTaskCreation;
     this.onClose = onClose;
     this.onOpenProfileManager = onOpenProfileManager;
+    this.onCloneRepo = onCloneRepo;
     this.containerEl = document.createElement('div');
     this.containerEl.className = 'ws-hub';
   }
@@ -1382,7 +1392,7 @@ export class WorkspaceHub {
       this.availableRepos = [];
     }
     this.duplicationSource = sourceWorkspacePath;
-    this.duplicationTitle = title;
+    this.newFormTitle = title;
     this.preselectedRepoPaths = this.availableRepos
       .filter((r) => sourceRepoNames.includes(r.name))
       .map((r) => r.path);
@@ -1409,7 +1419,7 @@ export class WorkspaceHub {
 
   private resetDuplicationState(): void {
     this.duplicationSource = null;
-    this.duplicationTitle = '';
+    this.newFormTitle = '';
     this.preselectedRepoPaths = [];
   }
 
@@ -1435,33 +1445,54 @@ export class WorkspaceHub {
     nameInput.type = 'text';
     nameInput.className = 'ws-new-form-input';
     nameInput.placeholder = 'e.g. Fix login bug';
-    nameInput.value = this.duplicationTitle;
+    nameInput.value = this.newFormTitle;
     form.appendChild(nameInput);
 
     const isDuplicating = this.duplicationSource !== null;
-
-    // Repo selection
     let repoListHandle: RepoListHandle | null = null;
+
+    // Repo selection — the header (label + Clone Repo) is always shown so a repo can be added even when the profile has none yet.
+    const repoHeader = document.createElement('div');
+    repoHeader.className = 'ws-new-form-repo-header';
+    const repoLabel = document.createElement('label');
+    repoLabel.className = 'ws-new-form-label';
+    repoLabel.textContent = 'Repositories';
+    repoHeader.appendChild(repoLabel);
+    const cloneBtn = document.createElement('button');
+    cloneBtn.className = 'ws-new-form-clone';
+    cloneBtn.textContent = '+ Clone Repo';
+    cloneBtn.addEventListener('click', () => {
+      if (!this.activeProfilePath) return;
+      // Capture the in-progress title/selection so the clone-triggered re-render restores them.
+      const typedTitle = nameInput.value;
+      const selected = repoListHandle?.getSelectedPaths() ?? [];
+      this.onCloneRepo(this.activeProfilePath, (repo) => {
+        void this.refreshNewFormAfterClone(typedTitle, selected, repo.path);
+      });
+    });
+    repoHeader.appendChild(cloneBtn);
+    form.appendChild(repoHeader);
+
+    if (isDuplicating) {
+      const hint = document.createElement('p');
+      hint.className = 'ws-new-form-hint';
+      hint.textContent =
+        'Pre-selected repos are duplicated at their current commit; added repos use the latest commit.';
+      form.appendChild(hint);
+    }
+
     if (this.availableRepos.length > 0) {
-      const repoLabel = document.createElement('label');
-      repoLabel.className = 'ws-new-form-label';
-      repoLabel.textContent = 'Repositories';
-      form.appendChild(repoLabel);
-
-      if (isDuplicating) {
-        const hint = document.createElement('p');
-        hint.className = 'ws-new-form-hint';
-        hint.textContent =
-          'Pre-selected repos are duplicated at their current commit; added repos use the latest commit.';
-        form.appendChild(hint);
-      }
-
       repoListHandle = createRepoList({
         repos: this.availableRepos,
         mode: 'multi',
         preselectedPaths: this.preselectedRepoPaths,
       });
       form.appendChild(repoListHandle.element);
+    } else {
+      const empty = document.createElement('p');
+      empty.className = 'ws-new-form-hint';
+      empty.textContent = 'No repos in this profile yet — clone one to add it.';
+      form.appendChild(empty);
     }
 
     // Action buttons
@@ -1499,6 +1530,26 @@ export class WorkspaceHub {
     form.appendChild(actions);
 
     return form;
+  }
+
+  /** After a repo is cloned from the New Task form, re-fetch the repo list, pre-select the new repo, and re-render preserving the typed title and prior selections. */
+  private async refreshNewFormAfterClone(
+    title: string,
+    selectedPaths: string[],
+    newRepoPath: string,
+  ): Promise<void> {
+    if (!this.activeProfilePath) return;
+    try {
+      this.availableRepos = await invoke<RepoInfo[]>('get_registered_repos', {
+        profilePath: this.activeProfilePath,
+      });
+    } catch (_) {
+      // invoke already surfaced the error
+      this.availableRepos = [];
+    }
+    this.newFormTitle = title;
+    this.preselectedRepoPaths = [...new Set([...selectedPaths, newRepoPath])];
+    this.render();
   }
 
   private renderProfilingButton(): HTMLElement | undefined {
