@@ -33,7 +33,7 @@ from datetime import datetime, timezone
 UNSUPPORTED_CASES_FILE = pathlib.Path.home() / ".claude" / "cc-judge-unsupported-cases.json"
 UNHANDLED_REQUESTS_FILE = pathlib.Path.home() / ".claude" / "cc-judge-unhandled-requests.json"
 AUDIT_LOG_FILE = pathlib.Path.home() / ".claude" / "cc-judge-audit.jsonl"
-ABSTAIN_TOOL_NAMES: set[str] = {"AskUserQuestion", "Edit"}
+ABSTAIN_TOOL_NAMES: set[str] = {"AskUserQuestion", "Edit", "Write"}
 
 
 Command = list[str]
@@ -126,7 +126,9 @@ ALLOWED_COMMANDS = {
     "sort",
     "uniq",
     "grep",
+    "sed",
     "hash",
+    "open",
     "gaac",
     "python",
     "python3",
