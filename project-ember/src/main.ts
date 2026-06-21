@@ -6,6 +6,7 @@ import { TabBar } from './ui/TabBar';
 import { OverlayManager } from './ui/OverlayManager';
 import { KeyboardShortcuts } from './ui/KeyboardShortcuts';
 import { CommandPalette } from './ui/CommandPalette';
+import { HealthHub } from './ui/HealthHub';
 import { showTextInputDialog } from './ui/components/TextInputDialog';
 import { showAddRepoDialog } from './ui/components/AddRepoDialog';
 import { showCloneRepoDialog } from './ui/components/CloneRepoDialog';
@@ -259,6 +260,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     dismissWsHub,
     (view) => openProfileManager(view),
     cloneRepoIntoProfile,
+    () => openHealthHub(),
   );
 
   const teardownWsHub = () => {
@@ -398,6 +400,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         }),
       },
       {
+        id: 'health-hub',
+        title: 'Health Hub',
+        description: 'Check Devora dependencies, credentials, and setup',
+        icon: '✚',
+        shortcut: [],
+        run: closePaletteThen(() => openHealthHub()),
+      },
+      {
         id: 'new-profile',
         title: 'New Profile',
         description: 'Create or register a profile root directory',
@@ -476,6 +486,28 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   };
 
+  const healthHub = new HealthHub({
+    getProfilePath: () => wsHub.getActiveProfilePath() ?? null,
+  });
+
+  const openHealthHub = () => {
+    healthHub.load();
+    overlayManager.showTabCoveringOverlay(
+      healthHub.getElement(),
+      () => healthHub.unload(),
+      sessionManager.getActiveSession()?.terminalPane,
+      undefined,
+      // Opened over the zero-profile welcome there is nothing behind it — return to the hub instead of an empty terminal area.
+      () => {
+        if (wsHub.isZeroProfileLocked()) {
+          openWsHub();
+        } else {
+          overlayManager.dismissTabCoveringOverlay();
+        }
+      },
+    );
+  };
+
   new KeyboardShortcuts(
     sessionManager,
     overlayManager,
@@ -551,6 +583,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     commandPalette,
     openCommandPalette,
     toggleWsHub,
+    healthHub,
+    openHealthHub,
     showError,
     clearErrorBanners,
   };

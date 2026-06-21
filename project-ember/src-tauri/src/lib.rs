@@ -1,4 +1,5 @@
 mod commands;
+mod health;
 mod http_util;
 mod ipc_server;
 mod logging;
@@ -136,6 +137,7 @@ pub fn run() {
             commands::cancel_workspace_creation,
             commands::add_repo_to_workspace,
             commands::clone_repo_into_profile,
+            commands::run_health_check,
             commands::remove_task,
             commands::prepare_repurpose_task,
             commands::repurpose_task,

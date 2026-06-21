@@ -3,6 +3,7 @@ package health
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -48,10 +49,68 @@ const (
 	CredentialInfo
 )
 
+// JSON status strings for CredentialReport.Status, consumed by the Ember UI.
+const (
+	credStatusOK        = "ok"
+	credStatusFailed    = "failed"
+	credStatusUnchecked = "unchecked"
+	credStatusInfo      = "info"
+)
+
 type CredentialResult struct {
 	Name    string
 	Status  CredentialStatus
 	Message string
+	// FixHint is a bare, copy-pasteable command that resolves the issue, when one exists (e.g. "gh auth login").
+	// Empty when there is no single command.
+	FixHint string
+}
+
+// --- Structured report (the JSON shape Ember's Health Hub renders) ---
+
+// DependencyStatus is one dependency row.
+type DependencyStatus struct {
+	Name    string `json:"name"`
+	Found   bool   `json:"found"`
+	Version string `json:"version"`
+	Path    string `json:"path"`
+}
+
+// CredentialReport is one credential row. Status is one of credStatus*.
+type CredentialReport struct {
+	Name    string `json:"name"`
+	Status  string `json:"status"`
+	Message string `json:"message"`
+	FixHint string `json:"fixHint,omitempty"`
+}
+
+// FileCheck is a presence check for a known file (config, zsh completion).
+type FileCheck struct {
+	Path    string `json:"path"`
+	Found   bool   `json:"found"`
+	FixHint string `json:"fixHint,omitempty"`
+}
+
+// Summary holds the met/total counts rendered as percentages.
+type Summary struct {
+	RequiredMet      int `json:"requiredMet"`
+	RequiredTotal    int `json:"requiredTotal"`
+	OptionalMet      int `json:"optionalMet"`
+	OptionalTotal    int `json:"optionalTotal"`
+	CredentialsMet   int `json:"credentialsMet"`
+	CredentialsTotal int `json:"credentialsTotal"`
+}
+
+// Report is the full structured health result.
+// Paths are absolute; the text renderer shortens them for display.
+type Report struct {
+	Version     string             `json:"version"`
+	Config      FileCheck          `json:"config"`
+	Completion  FileCheck          `json:"completion"`
+	Required    []DependencyStatus `json:"required"`
+	Optional    []DependencyStatus `json:"optional"`
+	Credentials []CredentialReport `json:"credentials"`
+	Summary     Summary            `json:"summary"`
 }
 
 var getAppVersion = version.Get
@@ -63,6 +122,8 @@ var statFile = os.Stat
 func zshCompletionPath() string {
 	return homeDir + "/.zsh/completions/_debi"
 }
+
+const completionFixHint = "debi completion zsh > ~/.zsh/completions/_debi"
 
 var lookPath = exec.LookPath
 
@@ -122,6 +183,7 @@ func checkCredentials(ghFound bool) []CredentialResult {
 		if !hasToken {
 			result.Status = CredentialFailed
 			result.Message = "no token stored (run: gh auth login)"
+			result.FixHint = "gh auth login"
 		} else {
 			displayName, err := checkGitHub()
 			if err != nil {
@@ -186,7 +248,6 @@ func checkTrackerCredential() *CredentialResult {
 const ghDepName = "gh"
 
 var dependencies = []Dependency{
-	{Name: "kitty", Required: true, VersionCommand: []string{"kitty", "--version"}},
 	{Name: "claude", Required: true, VersionCommand: []string{"claude", "--version"}},
 	{Name: "git", Required: true, VersionCommand: []string{"git", "--version"}},
 	{Name: "uv", Required: true, VersionCommand: []string{"uv", "--version"}},
@@ -234,54 +295,8 @@ func Check(dep Dependency) CheckResult {
 	return result
 }
 
-func renderSection(w io.Writer, results []CheckResult, nameWidth, versionWidth int, verbose bool) int {
-	found := 0
-	for _, r := range results {
-		if r.Found {
-			found++
-			prefix := style.Success.Render(fmt.Sprintf("  \u2713 %-*s", nameWidth, r.Name))
-			if verbose {
-				fmt.Fprintf(w, "%s  %-*s  %s\n", prefix, versionWidth, r.Version, shortenPath(r.Path))
-			} else {
-				fmt.Fprintf(w, "%s  %s\n", prefix, r.Version)
-			}
-		} else {
-			prefix := style.Error.Render(fmt.Sprintf("  \u2717 %-*s", nameWidth, r.Name))
-			if verbose {
-				fmt.Fprintf(w, "%s  %-*s  not found\n", prefix, versionWidth, "")
-			} else {
-				fmt.Fprintf(w, "%s  not found\n", prefix)
-			}
-		}
-	}
-	return found
-}
-
-func renderCredentials(w io.Writer, results []CredentialResult, nameWidth int) int {
-	ok := 0
-	for _, r := range results {
-		switch r.Status {
-		case CredentialOK:
-			ok++
-			prefix := style.Success.Render(fmt.Sprintf("  ✓ %-*s", nameWidth, r.Name))
-			fmt.Fprintf(w, "%s  %s\n", prefix, r.Message)
-		case CredentialFailed:
-			prefix := style.Error.Render(fmt.Sprintf("  ✗ %-*s", nameWidth, r.Name))
-			fmt.Fprintf(w, "%s  %s\n", prefix, r.Message)
-		case CredentialUnchecked:
-			prefix := style.Warning.Render(fmt.Sprintf("  ? %-*s", nameWidth, r.Name))
-			fmt.Fprintf(w, "%s  %s\n", prefix, r.Message)
-		case CredentialInfo:
-			prefix := style.Muted.Render(fmt.Sprintf("  ○ %-*s", nameWidth, r.Name))
-			fmt.Fprintf(w, "%s  %s\n", prefix, r.Message)
-		}
-	}
-	return ok
-}
-
-// countedCredentials returns the number of credential rows that count toward
-// the "Credentials met: X/Y" denominator. Info rows (e.g., unconfigured
-// optional tracker) are excluded because they can't be "met" or "not met".
+// countedCredentials returns the number of credential rows that count toward the "Credentials met: X/Y" denominator.
+// Info rows (e.g., unconfigured optional tracker) are excluded because they can't be "met" or "not met".
 func countedCredentials(results []CredentialResult) int {
 	n := 0
 	for _, r := range results {
@@ -290,6 +305,147 @@ func countedCredentials(results []CredentialResult) int {
 		}
 	}
 	return n
+}
+
+func credStatusString(s CredentialStatus) string {
+	switch s {
+	case CredentialOK:
+		return credStatusOK
+	case CredentialFailed:
+		return credStatusFailed
+	case CredentialUnchecked:
+		return credStatusUnchecked
+	case CredentialInfo:
+		return credStatusInfo
+	default:
+		return ""
+	}
+}
+
+// Gather runs every health check and returns the structured result.
+// It is the single source of truth for both the text renderer (Run) and the JSON output (RunJSON / the Ember Health Hub).
+func Gather() Report {
+	var required, optional []DependencyStatus
+	requiredMet := 0
+	optionalMet := 0
+	ghFound := false
+
+	for _, dep := range dependencies {
+		result := Check(dep)
+		row := DependencyStatus{
+			Name:    dep.Name,
+			Found:   result.Found,
+			Version: result.Version,
+			Path:    result.Path,
+		}
+		if dep.Required {
+			required = append(required, row)
+			if result.Found {
+				requiredMet++
+			}
+		} else {
+			optional = append(optional, row)
+			if result.Found {
+				optionalMet++
+			}
+			if dep.Name == ghDepName {
+				ghFound = result.Found
+			}
+		}
+	}
+
+	credResults := checkCredentials(ghFound)
+	creds := make([]CredentialReport, 0, len(credResults))
+	credMet := 0
+	for _, r := range credResults {
+		creds = append(creds, CredentialReport{
+			Name:    r.Name,
+			Status:  credStatusString(r.Status),
+			Message: r.Message,
+			FixHint: r.FixHint,
+		})
+		if r.Status == CredentialOK {
+			credMet++
+		}
+	}
+	credTotal := countedCredentials(credResults)
+
+	configPath := getConfigPath()
+	_, configErr := statFile(configPath)
+
+	completionPath := zshCompletionPath()
+	_, completionErr := statFile(completionPath)
+	completion := FileCheck{Path: completionPath, Found: completionErr == nil}
+	if !completion.Found {
+		completion.FixHint = completionFixHint
+	}
+
+	return Report{
+		Version:     getAppVersion(),
+		Config:      FileCheck{Path: configPath, Found: configErr == nil},
+		Completion:  completion,
+		Required:    required,
+		Optional:    optional,
+		Credentials: creds,
+		Summary: Summary{
+			RequiredMet:      requiredMet,
+			RequiredTotal:    len(required),
+			OptionalMet:      optionalMet,
+			OptionalTotal:    len(optional),
+			CredentialsMet:   credMet,
+			CredentialsTotal: credTotal,
+		},
+	}
+}
+
+// RunJSON writes the structured report as indented JSON.
+// Output is pure JSON (no styling), so `debi health --json | jq` works.
+func RunJSON(w io.Writer) error {
+	data, err := json.MarshalIndent(Gather(), "", "  ")
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprintln(w, string(data))
+	return err
+}
+
+func renderDepSection(w io.Writer, deps []DependencyStatus, nameWidth, versionWidth int, verbose bool) {
+	for _, r := range deps {
+		if r.Found {
+			prefix := style.Success.Render(fmt.Sprintf("  ✓ %-*s", nameWidth, r.Name))
+			if verbose {
+				fmt.Fprintf(w, "%s  %-*s  %s\n", prefix, versionWidth, r.Version, shortenPath(r.Path))
+			} else {
+				fmt.Fprintf(w, "%s  %s\n", prefix, r.Version)
+			}
+		} else {
+			prefix := style.Error.Render(fmt.Sprintf("  ✗ %-*s", nameWidth, r.Name))
+			if verbose {
+				fmt.Fprintf(w, "%s  %-*s  not found\n", prefix, versionWidth, "")
+			} else {
+				fmt.Fprintf(w, "%s  not found\n", prefix)
+			}
+		}
+	}
+}
+
+func renderCredentialRows(w io.Writer, results []CredentialReport, nameWidth int) {
+	for _, r := range results {
+		switch r.Status {
+		case credStatusOK:
+			prefix := style.Success.Render(fmt.Sprintf("  ✓ %-*s", nameWidth, r.Name))
+			fmt.Fprintf(w, "%s  %s\n", prefix, r.Message)
+		case credStatusFailed:
+			prefix := style.Error.Render(fmt.Sprintf("  ✗ %-*s", nameWidth, r.Name))
+			fmt.Fprintf(w, "%s  %s\n", prefix, r.Message)
+		case credStatusUnchecked:
+			prefix := style.Warning.Render(fmt.Sprintf("  ? %-*s", nameWidth, r.Name))
+			fmt.Fprintf(w, "%s  %s\n", prefix, r.Message)
+		case credStatusInfo:
+			prefix := style.Muted.Render(fmt.Sprintf("  ○ %-*s", nameWidth, r.Name))
+			fmt.Fprintf(w, "%s  %s\n", prefix, r.Message)
+		}
+	}
 }
 
 func renderSummaryLine(w io.Writer, labelWidth int, label string, found, total int, pctStyle lipgloss.Style) {
@@ -304,21 +460,11 @@ func renderSummaryLine(w io.Writer, labelWidth int, label string, found, total i
 }
 
 func Run(w io.Writer, strict bool, verbose bool) error {
-	var required []CheckResult
-	var optional []CheckResult
-
-	for _, dep := range dependencies {
-		result := Check(dep)
-		if dep.Required {
-			required = append(required, result)
-		} else {
-			optional = append(optional, result)
-		}
-	}
+	report := Gather()
 
 	nameWidth := 0
 	versionWidth := 0
-	for _, r := range required {
+	for _, r := range report.Required {
 		if len(r.Name) > nameWidth {
 			nameWidth = len(r.Name)
 		}
@@ -326,7 +472,7 @@ func Run(w io.Writer, strict bool, verbose bool) error {
 			versionWidth = len(r.Version)
 		}
 	}
-	for _, r := range optional {
+	for _, r := range report.Optional {
 		if len(r.Name) > nameWidth {
 			nameWidth = len(r.Name)
 		}
@@ -335,39 +481,26 @@ func Run(w io.Writer, strict bool, verbose bool) error {
 		}
 	}
 
-	fmt.Fprintf(w, "Devora Health Check (version: %s)\n", getAppVersion())
+	fmt.Fprintf(w, "Devora Health Check (version: %s)\n", report.Version)
 	fmt.Fprintln(w)
 
-	configPath := getConfigPath()
-	_, configErr := statFile(configPath)
-	if configErr == nil {
-		fmt.Fprintf(w, "Config: %s %s\n", shortenPath(configPath), style.Success.Render("✓"))
+	if report.Config.Found {
+		fmt.Fprintf(w, "Config: %s %s\n", shortenPath(report.Config.Path), style.Success.Render("✓"))
 	} else {
-		fmt.Fprintf(w, "Config: %s %s\n", shortenPath(configPath), style.Warning.Render("(not found)"))
+		fmt.Fprintf(w, "Config: %s %s\n", shortenPath(report.Config.Path), style.Warning.Render("(not found)"))
 	}
 	fmt.Fprintln(w)
 
 	fmt.Fprintln(w, "Required:")
-	requiredFound := renderSection(w, required, nameWidth, versionWidth, verbose)
+	renderDepSection(w, report.Required, nameWidth, versionWidth, verbose)
 
 	fmt.Fprintln(w)
 
 	fmt.Fprintln(w, "Optional:")
-	optionalFound := renderSection(w, optional, nameWidth, versionWidth, verbose)
-
-	// Credential checks
-	ghFound := false
-	for _, r := range optional {
-		if r.Name == ghDepName {
-			ghFound = r.Found
-			break
-		}
-	}
-
-	credResults := checkCredentials(ghFound)
+	renderDepSection(w, report.Optional, nameWidth, versionWidth, verbose)
 
 	credNameWidth := 0
-	for _, r := range credResults {
+	for _, r := range report.Credentials {
 		if len(r.Name) > credNameWidth {
 			credNameWidth = len(r.Name)
 		}
@@ -375,24 +508,20 @@ func Run(w io.Writer, strict bool, verbose bool) error {
 
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Credentials:")
-	credFound := renderCredentials(w, credResults, credNameWidth)
-	credTotal := countedCredentials(credResults)
+	renderCredentialRows(w, report.Credentials, credNameWidth)
 
-	completionPath := zshCompletionPath()
-	_, completionErr := statFile(completionPath)
-	completionFound := completionErr == nil
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Completion:")
-	if completionFound {
+	if report.Completion.Found {
 		prefix := style.Success.Render("  ✓ zsh completion")
 		if verbose {
-			fmt.Fprintf(w, "%s  %s\n", prefix, shortenPath(completionPath))
+			fmt.Fprintf(w, "%s  %s\n", prefix, shortenPath(report.Completion.Path))
 		} else {
 			fmt.Fprintln(w, prefix)
 		}
 	} else {
 		prefix := style.Error.Render("  ✗ zsh completion")
-		fmt.Fprintf(w, "%s  run: debi completion zsh > ~/.zsh/completions/_debi\n", prefix)
+		fmt.Fprintf(w, "%s  run: %s\n", prefix, completionFixHint)
 	}
 
 	// Summary - align all labels to the longest one
@@ -407,22 +536,22 @@ func Run(w io.Writer, strict bool, verbose bool) error {
 	fmt.Fprintln(w)
 
 	requiredPctStyle := style.Success
-	if requiredFound < len(required) {
+	if report.Summary.RequiredMet < report.Summary.RequiredTotal {
 		requiredPctStyle = style.Error
 	}
 	optionalPctStyle := style.Success
-	if optionalFound < len(optional) {
+	if report.Summary.OptionalMet < report.Summary.OptionalTotal {
 		optionalPctStyle = style.Warning
 	}
 
-	renderSummaryLine(w, summaryLabelWidth, requiredLabel, requiredFound, len(required), requiredPctStyle)
-	renderSummaryLine(w, summaryLabelWidth, optionalLabel, optionalFound, len(optional), optionalPctStyle)
+	renderSummaryLine(w, summaryLabelWidth, requiredLabel, report.Summary.RequiredMet, report.Summary.RequiredTotal, requiredPctStyle)
+	renderSummaryLine(w, summaryLabelWidth, optionalLabel, report.Summary.OptionalMet, report.Summary.OptionalTotal, optionalPctStyle)
 
 	credPctStyle := style.Success
-	if credFound < credTotal {
+	if report.Summary.CredentialsMet < report.Summary.CredentialsTotal {
 		hasFailed := false
-		for _, r := range credResults {
-			if r.Status == CredentialFailed {
+		for _, r := range report.Credentials {
+			if r.Status == credStatusFailed {
 				hasFailed = true
 				break
 			}
@@ -434,16 +563,16 @@ func Run(w io.Writer, strict bool, verbose bool) error {
 		}
 	}
 
-	renderSummaryLine(w, summaryLabelWidth, credentialsLabel, credFound, credTotal, credPctStyle)
+	renderSummaryLine(w, summaryLabelWidth, credentialsLabel, report.Summary.CredentialsMet, report.Summary.CredentialsTotal, credPctStyle)
 
-	requiredMissing := len(required) - requiredFound
-	optionalMissing := len(optional) - optionalFound
-	credentialsMissing := credTotal - credFound
+	requiredMissing := report.Summary.RequiredTotal - report.Summary.RequiredMet
+	optionalMissing := report.Summary.OptionalTotal - report.Summary.OptionalMet
+	credentialsMissing := report.Summary.CredentialsTotal - report.Summary.CredentialsMet
 
 	if requiredMissing > 0 {
 		return &process.PassthroughError{Code: 1}
 	}
-	if strict && (optionalMissing > 0 || credentialsMissing > 0 || !completionFound) {
+	if strict && (optionalMissing > 0 || credentialsMissing > 0 || !report.Completion.Found) {
 		return &process.PassthroughError{Code: 1}
 	}
 

@@ -21,7 +21,7 @@ The CLI has 3 workspace commands, a health command, PR commands (`pr check`, `pr
 
 | Command | Args | Description |
 |---------|------|-------------|
-| `health` | `[--strict] [-v\|--verbose] [-p\|--profile <name>]` | Check Devora dependencies and report their status |
+| `health` | `[--strict] [-v\|--verbose] [--json] [-p\|--profile <name>] [--profile-path <path>]` | Check Devora dependencies and report their status |
 
 #### health flags
 
@@ -29,9 +29,11 @@ The CLI has 3 workspace commands, a health command, PR commands (`pr check`, `pr
 |------|-------------|
 | `--strict` | Exit with code 1 if any dependency (including optional) is missing |
 | `-v, --verbose` | Show dependency locations |
-| `-p, --profile <name>` | Check a specific profile's config (defaults to CWD-based resolution) |
+| `--json` | Output the report as JSON (ignores `--strict`/`--verbose`); used by Devora's in-app Health Hub |
+| `-p, --profile <name>` | Check a specific profile's config by name (defaults to CWD-based resolution) |
+| `--profile-path <path>` | Check a specific profile by its root path; wins over `--profile` |
 
-Flag syntax accepts both `--profile=foo` and `--profile foo`.
+Flag syntax accepts both `--profile=foo`/`--profile foo` and `--profile-path=/p`/`--profile-path /p`.
 
 ### PR
 
@@ -228,37 +230,41 @@ Utility:
 
 ## Profile Resolution
 
-### ResolveActiveProfile
+### ResolveActiveProfile / ResolveActiveProfileByPath
 
 ```go
 func ResolveActiveProfile(explicitProfile string) (string, error)
+func ResolveActiveProfileByPath(explicitPath string) (string, error)
 ```
 
-Shared helper used by `runHealth`, `runSubmit`, and `runClose` to resolve and register an active profile before the domain layer reads config. Implemented in `internal/cli/profile.go`.
+Shared helpers used by `runHealth`, `runSubmit`, and `runClose` to resolve and register an active profile before the domain layer reads config. Implemented in `internal/cli/profile.go` over a common `resolveActiveProfileCore(explicitPath, explicitName string)`.
 
 Resolution order, stopping at the first hit:
 
-1. `explicitProfile != ""` — look up by name in `config.GetProfiles()`. An unknown name returns a `*UsageError` (`"profile not found: <name>"`) without modifying active-profile state.
-2. CWD-based — `workspace.ResolveWorkspaceFromCWD(cwd)`. When the CWD falls inside a profile's workspaces root, that profile becomes active.
-3. No match — leave `config.activeProfile` nil so reads fall back to global config.
+1. `explicitPath != ""` — match `config.GetProfiles()[].RootPath` (compared after `filepath.Clean`). An unknown path returns a `*UsageError` (`"profile not found at path: <path>"`). Used by `ResolveActiveProfileByPath` (Devora's `--profile-path`).
+2. `explicitName != ""` — look up by name. An unknown name returns a `*UsageError` (`"profile not found: <name>"`). Used by `ResolveActiveProfile` (the `--profile` flag).
+3. `DEBI_PROFILE_PATH` env-var — match by path as a *default* (Devora sets it on session PTYs). A path that matches no profile falls through (no error), so a stale env var never breaks a command.
+4. CWD-based — `workspace.ResolveWorkspaceFromCWD(cwd)`. When the CWD falls inside a profile's workspaces root, that profile becomes active.
+5. No match — leave `config.activeProfile` nil so reads fall back to global config.
 
-A failure from `os.Getwd` is treated as "no CWD match" (case 3 fallback), because an unreadable CWD is not a fatal error for a command that can still run against global config.
+A failure from `os.Getwd` is treated as "no CWD match" (case 5 fallback), because an unreadable CWD is not a fatal error for a command that can still run against global config.
 
-On success (cases 1 and 2), `config.SetActiveProfile` is called. The returned string is the resolved profile name (empty when case 3).
+On a match, `config.SetActiveProfile` is called. The returned string is the resolved profile name (empty when nothing matches).
 
-Three package-level stubbable vars support test injection:
+Four package-level stubbable vars support test injection:
 
 ```go
 var (
-    resolveFromCWD = workspace.ResolveWorkspaceFromCWD
-    getProfiles    = config.GetProfiles
-    getCWD         = os.Getwd
+    resolveFromCWD    = workspace.ResolveWorkspaceFromCWD
+    getProfiles       = config.GetProfiles
+    getCWD            = os.Getwd
+    getProfilePathEnv = func() string { return os.Getenv("DEBI_PROFILE_PATH") }
 )
 ```
 
-The handlers reach the resolver through `resolveActiveProfile`, a stubbable var pointing at `ResolveActiveProfile`, so tests can assert each handler invokes it.
+The handlers reach the resolvers through `resolveActiveProfile` and `resolveActiveProfileByPath`, stubbable vars pointing at the exported functions, so tests can assert each handler invokes them.
 
-Only `runHealth` and `runGetConf` accept an explicit `--profile <name>`; `runSubmit` and `runClose` always call `ResolveActiveProfile("")`.
+`runHealth` accepts both `--profile <name>` and `--profile-path <path>` (path wins); `runGetConf` accepts `--profile <name>`; `runSubmit` and `runClose` call `ResolveActiveProfile("")`. All of them honor `DEBI_PROFILE_PATH` via the shared core.
 
 ## Command Handlers
 
@@ -368,12 +374,14 @@ Parses the provided args for flags:
 - `-h` or `--help`: prints usage information and returns nil.
 - `--strict`: enables strict mode.
 - `-v` or `--verbose`: enables verbose mode (shows dependency locations).
-- `-p` or `--profile <name>` (also `--profile=<name>`): selects a specific profile. Parsed via the shared `parseValue` helper.
+- `--json`: enables JSON output mode (ignores `--strict`/`--verbose`).
+- `-p` or `--profile <name>` (also `--profile=<name>`): selects a profile by name. Parsed via the shared `parseValue` helper.
+- `--profile-path <path>` (also `--profile-path=<path>`): selects a profile by root path; wins over `--profile`.
 - Any other argument: returns a `UsageError` with the unknown flag and usage hint.
 
-Before delegating to the domain layer, calls `ResolveActiveProfile(profile)` (see below). A `*UsageError` from an unknown profile name short-circuits before `health.Run` runs.
+Before delegating to the domain layer, resolves the active profile: `resolveActiveProfileByPath(profilePath)` when `--profile-path` is given, otherwise `resolveActiveProfile(profile)` (see below). A `*UsageError` from an unknown profile short-circuits before the domain layer runs.
 
-Delegates to `health.Run(os.Stdout, strict, verbose)`.
+Delegates to `health.RunJSON(os.Stdout)` when `--json` is set, otherwise `health.Run(os.Stdout, strict, verbose)`.
 
 In addition to required and optional dependencies, the health check also reports whether the zsh completion file exists at `~/.zsh/completions/_debi`. The check is optional: missing completion prints a ✗ and an install hint (`run: debi completion zsh > ~/.zsh/completions/_debi`) but does not affect the exit code in default mode. Under `--strict`, a missing completion file causes exit code 1 (same as any other optional dependency).
 
@@ -653,6 +661,9 @@ func main() {
 - Test that all 23 git commands are recognized (do not return "unknown command").
 - Test that `health` is recognized as a command.
 - Test that `health` with an unknown flag returns a `UsageError`.
+- Test that `health --json` dispatches to the JSON runner (not the text runner).
+- Test that `health --profile-path <path>` (space and `=` syntax) passes the path to `resolveActiveProfileByPath`, and that a missing value returns a `UsageError`.
+- Test that `--profile-path` wins over `--profile` (path resolver invoked, name resolver not).
 - Test that `completion` is recognized as a command.
 - Test that `completion` without arguments returns a `UsageError`.
 - Test that `completion` with an unsupported shell returns a `UsageError`.
@@ -693,3 +704,7 @@ func main() {
 - Test that `get-conf -p <name>` passes the profile name to `resolveActiveProfile`.
 - Test that `get-conf --help` prints usage information.
 - Command handler integration tests are better handled at a higher level (testing the actual TUI behavior or workspace operations).
+
+**Profile resolution (`profile.go`):**
+- Test `ResolveActiveProfileByPath` resolves by `RootPath` (including a trailing-slash form) and returns a `*UsageError` for an unknown path.
+- Test `DEBI_PROFILE_PATH` acts as a default (sets the active profile when no explicit flag is given), that an explicit flag overrides it, and that a stale env path (matching no profile) falls through to CWD resolution without erroring.

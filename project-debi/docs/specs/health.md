@@ -4,7 +4,7 @@ Package: `internal/health`
 
 ## Purpose
 
-Check and report on Devora IDE dependency availability and credential status. Each dependency is looked up on `PATH` and, if found, its version is retrieved. Credentials are verified by attempting to access the corresponding service API. Results are printed in a human-readable report grouped by required dependencies, optional dependencies, and credentials.
+Check and report on Devora IDE dependency availability and credential status. Each dependency is looked up on `PATH` and, if found, its version is retrieved. Credentials are verified by attempting to access the corresponding service API. `Gather()` collects everything into a structured `Report`, which is rendered either as a human-readable report (`Run`, grouped by required dependencies, optional dependencies, and credentials) or as JSON (`RunJSON`, for `debi health --json` — consumed by Devora's in-app Health Hub).
 
 ## Dependencies
 
@@ -19,13 +19,15 @@ Check and report on Devora IDE dependency availability and credential status. Ea
 
 `debi health` resolves an active profile before reading config so that profile-scoped keys (most notably `task-tracker.provider`) are visible. Resolution happens in the CLI layer via `cli.ResolveActiveProfile` (see [cli.md](./cli.md)); when it succeeds, `config.SetActiveProfile` is called and the profile-aware config reader picks up profile-level overrides.
 
-Resolution order, stopping at the first hit:
+Resolution order, stopping at the first hit (see `cli.ResolveActiveProfile` / `cli.ResolveActiveProfileByPath`):
 
-1. Explicit `-p, --profile <name>` flag — looked up by name in `config.GetProfiles()`. An unknown name returns a `*cli.UsageError` before `health.Run` is called.
-2. CWD-based — `workspace.ResolveWorkspaceFromCWD(cwd)`. When the CWD falls inside a profile's workspaces root, that profile becomes active. A failure from `os.Getwd` is treated as "no CWD match" and falls through to global.
-3. No active profile — all reads fall back to global config.
+1. Explicit `--profile-path <path>` flag — matched against `config.GetProfiles()[].RootPath` (compared after `filepath.Clean`). Selecting by path is unambiguous (profile names are not required to be unique). An unknown path returns a `*cli.UsageError` before `health.Run`/`health.RunJSON` is called. Devora's in-app Health Hub uses this flag.
+2. Explicit `-p, --profile <name>` flag — looked up by name. An unknown name returns a `*cli.UsageError`. When both are given, `--profile-path` wins.
+3. `DEBI_PROFILE_PATH` env-var — matched by path, as a *default* (Devora sets it on session PTYs so `debi health` typed in a terminal resolves the session's profile). A path that matches no profile falls through rather than erroring, so a stale env var never breaks the command.
+4. CWD-based — `workspace.ResolveWorkspaceFromCWD(cwd)`. When the CWD falls inside a profile's workspaces root, that profile becomes active. A failure from `os.Getwd` is treated as "no CWD match" and falls through to global.
+5. No active profile — all reads fall back to global config.
 
-The flag is exposed only on `health`; `pr submit` and `pr close` auto-resolve from CWD without a matching flag.
+The `DEBI_PROFILE_PATH` env default applies to every profile-aware command (the shared `cli.ResolveActiveProfile`), so `pr submit`/`pr close` also honor it. The `--profile-path`/`--profile` flags are exposed on `health`.
 
 ## Types
 
@@ -76,10 +78,58 @@ type CredentialResult struct {
     Name    string
     Status  CredentialStatus
     Message string
+    FixHint string
 }
 ```
 
-The result of checking a single credential. `Name` is the service name (e.g., "GitHub"). `Status` indicates whether the check succeeded, failed, or was skipped. `Message` provides human-readable detail (e.g., "Logged in as Jane Doe", "auth token expired", or "gh not detected").
+The result of checking a single credential. `Name` is the service name (e.g., "GitHub"). `Status` indicates whether the check succeeded, failed, or was skipped. `Message` provides human-readable detail (e.g., "Logged in as Jane Doe", "auth token expired", or "gh not detected"). `FixHint` is a bare, copy-pasteable command that resolves the issue when a single one exists (e.g. `gh auth login`); it is empty otherwise. The text renderer ignores `FixHint` (the command is already embedded in `Message`); it exists for JSON consumers (the Health Hub renders a copy button).
+
+### Structured Report (JSON)
+
+`Gather()` returns a `Report`, the JSON shape consumed by Devora's Health Hub (`debi health --json`). Paths are absolute; the text renderer shortens them for display.
+
+```go
+type DependencyStatus struct {
+    Name    string `json:"name"`
+    Found   bool   `json:"found"`
+    Version string `json:"version"`
+    Path    string `json:"path"`
+}
+
+type CredentialReport struct {
+    Name    string `json:"name"`
+    Status  string `json:"status"`  // "ok" | "failed" | "unchecked" | "info"
+    Message string `json:"message"`
+    FixHint string `json:"fixHint,omitempty"`
+}
+
+type FileCheck struct {
+    Path    string `json:"path"`
+    Found   bool   `json:"found"`
+    FixHint string `json:"fixHint,omitempty"`
+}
+
+type Summary struct {
+    RequiredMet      int `json:"requiredMet"`
+    RequiredTotal    int `json:"requiredTotal"`
+    OptionalMet      int `json:"optionalMet"`
+    OptionalTotal    int `json:"optionalTotal"`
+    CredentialsMet   int `json:"credentialsMet"`
+    CredentialsTotal int `json:"credentialsTotal"`
+}
+
+type Report struct {
+    Version     string             `json:"version"`
+    Config      FileCheck          `json:"config"`
+    Completion  FileCheck          `json:"completion"`
+    Required    []DependencyStatus `json:"required"`
+    Optional    []DependencyStatus `json:"optional"`
+    Credentials []CredentialReport `json:"credentials"`
+    Summary     Summary            `json:"summary"`
+}
+```
+
+The `Completion` `FileCheck` carries a `FixHint` of `debi completion zsh > ~/.zsh/completions/_debi` when the completion file is missing. `Config` never carries a `FixHint`. Credential `Status` strings map from `CredentialStatus`: `CredentialOK`→`ok`, `CredentialFailed`→`failed`, `CredentialUnchecked`→`unchecked`, `CredentialInfo`→`info`.
 
 ## Dependency List
 
@@ -87,7 +137,6 @@ Required and optional dependencies:
 
 | Name | Required | Version Command |
 |------|----------|-----------------|
-| `kitty` | yes | `kitty --version` |
 | `claude` | yes | `claude --version` |
 | `git` | yes | `git --version` |
 | `uv` | yes | `uv --version` |
@@ -95,6 +144,8 @@ Required and optional dependencies:
 | `nvim` | no | `nvim --version` |
 | `mise` | no | `mise --version` |
 | `gh` | no | `gh --version` |
+
+Kitty is **not** a dependency: the published Devora (Ember) build does not use Kitty. (The legacy OG TUI used Kitty at runtime but is source-only and unpublished.)
 
 ## Functions
 
@@ -114,17 +165,33 @@ Behavior:
 5. If the version command fails, return the result without a `Version` (the dependency is still considered found).
 6. Otherwise, take the first line of output, trim it, and pass it through `cleanVersion` to extract the version number.
 
+### Gather
+
+```go
+func Gather() Report
+```
+
+Runs every check (dependencies, credentials, config presence, completion presence, version) and returns the structured `Report`. It is the single source of truth for both renderers — `Run` (text) and `RunJSON` (JSON) call it.
+
+### RunJSON
+
+```go
+func RunJSON(w io.Writer) error
+```
+
+Writes `Gather()` as indented JSON (via `json.MarshalIndent`) followed by a newline. Output is pure JSON with no styling, so `debi health --json | jq` works. Dispatched from the CLI when `--json` is passed; it has no exit-code semantics (the consumer interprets the report).
+
 ### Run
 
 ```go
 func Run(w io.Writer, strict bool, verbose bool) error
 ```
 
-Runs the full health check and prints a report.
+Runs the full health check and prints a human-readable report. Calls `Gather()` once and renders its fields (the text output is unchanged from previous releases).
 
 Behavior:
-1. Iterate over all dependencies, calling `Check` for each. Separate results into required and optional lists.
-2. Calculate column widths for aligned output.
+1. Call `Gather()` to obtain the structured report.
+2. Calculate column widths for aligned output from the report's dependency rows.
 3. Print a version banner: `Devora Health Check (version: <version>)` using `getAppVersion()`.
 4. Print the config file path via `getConfigPath()`. If `statFile` reports the file exists, show a green checkmark after the path. If the file does not exist, show a yellow `(not found)` marker. This is informational only and never affects the exit code.
 5. Print the `Required:` section. Each dependency is shown with a colored status prefix (green checkmark or red cross + name) followed by version in default color. In verbose mode, the shortened path is also shown.
@@ -145,8 +212,8 @@ Devora Health Check (version: 1.2.0)
 Config: ~/.config/devora/config.json ✓
 
 Required:
-  ✓ kitty   0.44.0      /opt/homebrew/bin/kitty
-  ✗ claude               not found
+  ✓ claude  2.1.181     ~/.local/bin/claude
+  ✗ uv                   not found
 
 Optional:
   ✓ nvim    v0.12.0     /opt/homebrew/bin/nvim
@@ -157,7 +224,7 @@ Credentials:
   ✓ GitHub        Logged in as Jane Doe
   ○ task-tracker  not configured (optional)
 
-Required met:    100% (5/5)
+Required met:    100% (4/4)
 Optional met:    100% (3/3)
 Credentials met: 100% (1/1)
 ```
@@ -174,13 +241,13 @@ The summary percentages are colored: required is green (100%) or red; optional i
 
 | Raw Output | Cleaned |
 |---|---|
-| `kitty 0.44.0 created by Kovid Goyal` | `0.44.0` |
+| `gh version 2.62.0 (2024-11-14)` | `2.62.0` |
 | `git version 2.50.1 (Apple Git-155)` | `2.50.1` |
 | `NVIM v0.12.0` | `0.12.0` |
 
 ## Path Shortening
 
-`shortenPath` replaces the `$HOME` prefix in paths with `~` for readability (e.g., `/Users/alice/.local/bin/kitty` becomes `~/.local/bin/kitty`).
+`shortenPath` replaces the `$HOME` prefix in paths with `~` for readability (e.g., `/Users/alice/.local/bin/claude` becomes `~/.local/bin/claude`). Applied only by the text renderer; the JSON `Report` keeps absolute paths.
 
 ## Exit Code Behavior
 
@@ -214,7 +281,7 @@ Tests can replace `lookPath` and `getVersion` to simulate dependency presence/ab
 
 ## Testing
 
-- Test `cleanVersion` with various real-world version strings (kitty, claude, git, uv, zsh, nvim, mise) and edge cases (empty, no match).
+- Test `cleanVersion` with various real-world version strings (gh, claude, git, uv, zsh, nvim, mise) and edge cases (empty, no match).
 - Test `shortenPath` with paths under `$HOME`, paths outside `$HOME`, and empty string.
 - Test `Check` with a dependency that is found (mock `lookPath` to return a path and `getVersion` to return version output); verify version is cleaned.
 - Test `Check` with a dependency that is not found (mock `lookPath` to return an error).
@@ -272,3 +339,9 @@ var (
 - Test `Run` with `gh` found and auth failing; verify credentials section shows error message and summary "(0/1)".
 - Test that credential failure does not affect exit code in non-strict mode (return nil when all required/optional are found).
 - Test that credential failure causes exit code 1 in strict mode (return `*process.PassthroughError` with code 1 when all deps are found but credential check fails).
+
+**Structured report / JSON:**
+- Test that `dependencies` does not include `kitty`.
+- Test `Gather` returns the expected required/optional rows, summary counts, config/completion presence, and credential rows for a stubbed environment (e.g. `gh` missing → optional 2/3, GitHub `unchecked`, tracker `info`).
+- Test `Gather` sets `Completion.FixHint` when the completion file is missing, and the GitHub credential `FixHint` (`gh auth login`) when no token is stored.
+- Test `RunJSON` emits JSON that unmarshals back into a `Report` with the expected version and counts.

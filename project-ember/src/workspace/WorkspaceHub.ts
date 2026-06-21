@@ -122,6 +122,7 @@ export class WorkspaceHub {
     profilePath: string,
     onDone: (repo: { path: string; name: string }) => void,
   ) => void;
+  private onOpenHealth: () => void;
 
   private profiles: ProfileInfo[] = [];
   private activeProfilePath: string | null = null;
@@ -175,12 +176,14 @@ export class WorkspaceHub {
       profilePath: string,
       onDone: (repo: { path: string; name: string }) => void,
     ) => void,
+    onOpenHealth: () => void,
   ) {
     this.onOpenWorkspace = onOpenWorkspace;
     this.onStartTaskCreation = onStartTaskCreation;
     this.onClose = onClose;
     this.onOpenProfileManager = onOpenProfileManager;
     this.onCloneRepo = onCloneRepo;
+    this.onOpenHealth = onOpenHealth;
     this.containerEl = document.createElement('div');
     this.containerEl.className = 'ws-hub';
   }
@@ -645,6 +648,12 @@ export class WorkspaceHub {
         this.onOpenProfileManager('list');
         return;
       }
+      case 'H': {
+        e.preventDefault();
+        e.stopPropagation();
+        this.onOpenHealth();
+        return;
+      }
     }
   }
 
@@ -778,6 +787,7 @@ export class WorkspaceHub {
         { keys: '1/2/3', description: 'active/inactive/all' },
         { keys: 'n', description: 'new task' },
         { keys: 'P', description: 'profiles' },
+        { keys: 'H', description: 'health' },
         { keys: 'R', description: 'refresh' },
         { keys: 'q/Esc', description: 'close' },
         { keys: '?', description: 'all shortcuts' },
@@ -926,11 +936,11 @@ export class WorkspaceHub {
   }
 
   private updateHeader(): void {
-    const header = this.containerEl.querySelector('.page-header');
-    if (!header) return;
-    header.querySelector('.ws-profile-dropdown')?.remove();
+    const actions = this.containerEl.querySelector('.ws-header-actions');
+    if (!actions) return;
+    actions.querySelector('.ws-profile-dropdown')?.remove();
     if (this.profilesLoaded && this.profiles.length > 0) {
-      header.appendChild(this.buildProfileDropdown());
+      actions.appendChild(this.buildProfileDropdown());
     }
   }
 
@@ -1275,11 +1285,24 @@ export class WorkspaceHub {
     title.textContent = 'Devora';
     header.appendChild(title);
 
+    const actions = document.createElement('div');
+    actions.className = 'ws-header-actions';
+    actions.appendChild(this.renderHealthButton());
     if (this.profilesLoaded && this.profiles.length > 0) {
-      header.appendChild(this.buildProfileDropdown());
+      actions.appendChild(this.buildProfileDropdown());
     }
+    header.appendChild(actions);
 
     return header;
+  }
+
+  private renderHealthButton(): HTMLElement {
+    const btn = document.createElement('button');
+    btn.className = 'ws-health-btn';
+    btn.textContent = '✚ Health';
+    btn.title = 'Open the Health Hub (H)';
+    btn.addEventListener('click', () => this.onOpenHealth());
+    return btn;
   }
 
   private buildProfileDropdown(): HTMLElement {
@@ -1609,6 +1632,7 @@ export class WorkspaceHub {
           ['3', 'Show all workspaces'],
           ['n', 'New task'],
           ['P', 'Open Profile Manager'],
+          ['H', 'Open Health Hub'],
           ['R', 'Refresh hub'],
           ['q', 'Close hub'],
           ['?', 'Toggle this cheatsheet'],

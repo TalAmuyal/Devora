@@ -31,10 +31,12 @@ type ExplicitRepoEntry struct {
 
 | File | Description |
 |------|-------------|
-| `~/.config/devora/config.json` | Global config file |
+| `~/.config/devora/config.json` | Global config file (override with `DEVORA_CONFIG_PATH`) |
 | `<profile-root>/config.json` | Profile-specific config |
 | `<profile-root>/repos/` | Auto-discovered repos directory |
 | `<profile-root>/workspaces/` | Profile-scoped workspaces directory |
+
+The global config path is resolved by `defaultConfigPath()` at package init: if the `DEVORA_CONFIG_PATH` env-var is set it is used verbatim, otherwise it defaults to `~/.config/devora/config.json`. This lets a host process (Devora's Tauri backend, or the acceptance-test harness) point `debi` at the same config file it uses, matching the Ember backend's `workspace.rs:global_config_path` override.
 
 ## Global Config
 

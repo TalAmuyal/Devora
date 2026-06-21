@@ -259,6 +259,101 @@ func TestRun_Health_ResolverInvokedBeforeRun(t *testing.T) {
 	}
 }
 
+func TestRun_Health_JSON_CallsJSONRunner(t *testing.T) {
+	stubResolveActiveProfile(t, func(string) (string, error) { return "", nil })
+	jsonCalled := false
+	stubHealthRunJSON(t, func(io.Writer) error {
+		jsonCalled = true
+		return nil
+	})
+	stubHealthRun(t, func(io.Writer, bool, bool) error {
+		t.Fatal("text healthRun should not run when --json is given")
+		return nil
+	})
+
+	err := Run([]string{"health", "--json"})
+	if err != nil {
+		t.Fatalf("expected no error, got: %s", err.Error())
+	}
+	if !jsonCalled {
+		t.Fatal("expected healthRunJSON to be called for --json")
+	}
+}
+
+func TestRun_Health_ProfilePath_PassedToPathResolver(t *testing.T) {
+	captured := ""
+	stubResolveActiveProfileByPath(t, func(path string) (string, error) {
+		captured = path
+		return "work", nil
+	})
+	stubResolveActiveProfile(t, func(string) (string, error) {
+		t.Fatal("name resolver should not be called when --profile-path is given")
+		return "", nil
+	})
+	stubHealthRun(t, func(io.Writer, bool, bool) error { return nil })
+
+	err := Run([]string{"health", "--profile-path", "/tmp/work"})
+	if err != nil {
+		t.Fatalf("expected no error, got: %s", err.Error())
+	}
+	if captured != "/tmp/work" {
+		t.Fatalf("expected path resolver called with '/tmp/work', got %q", captured)
+	}
+}
+
+func TestRun_Health_ProfilePathEqualsSyntax_PassedToPathResolver(t *testing.T) {
+	captured := ""
+	stubResolveActiveProfileByPath(t, func(path string) (string, error) {
+		captured = path
+		return "work", nil
+	})
+	stubHealthRun(t, func(io.Writer, bool, bool) error { return nil })
+
+	err := Run([]string{"health", "--profile-path=/tmp/work"})
+	if err != nil {
+		t.Fatalf("expected no error, got: %s", err.Error())
+	}
+	if captured != "/tmp/work" {
+		t.Fatalf("expected path resolver called with '/tmp/work', got %q", captured)
+	}
+}
+
+func TestRun_Health_ProfilePathMissingValue_ReturnsUsageError(t *testing.T) {
+	err := Run([]string{"health", "--profile-path"})
+	if err == nil {
+		t.Fatal("expected error for --profile-path without value")
+	}
+	var usageErr *UsageError
+	if !errors.As(err, &usageErr) {
+		t.Fatalf("expected UsageError, got %T: %s", err, err.Error())
+	}
+	if !strings.Contains(err.Error(), "--profile-path") {
+		t.Fatalf("expected error to mention --profile-path, got: %s", err.Error())
+	}
+}
+
+func TestRun_Health_ProfilePathOverridesName(t *testing.T) {
+	// When both --profile-path and --profile are given, the path resolver wins.
+	pathCalled := false
+	stubResolveActiveProfileByPath(t, func(path string) (string, error) {
+		pathCalled = true
+		return "work", nil
+	})
+	stubResolveActiveProfile(t, func(string) (string, error) {
+		t.Fatal("name resolver should not be called when --profile-path is given")
+		return "", nil
+	})
+	stubHealthRun(t, func(io.Writer, bool, bool) error { return nil })
+
+	err := Run([]string{"health", "--profile", "play", "--profile-path", "/tmp/work"})
+	if err != nil {
+		t.Fatalf("expected no error, got: %s", err.Error())
+	}
+	if !pathCalled {
+		t.Fatal("expected path resolver to win over name resolver")
+	}
+}
+
 func TestRun_Submit_ResolverInvokedBeforeRun(t *testing.T) {
 	order := []string{}
 	stubResolveActiveProfile(t, func(explicit string) (string, error) {
@@ -1344,14 +1439,28 @@ func stubHealthRun(t *testing.T, fn func(w io.Writer, strict bool, verbose bool)
 	t.Cleanup(func() { healthRun = orig })
 }
 
-// stubResolveActiveProfile overrides resolveActiveProfile so handler tests
-// don't touch the real user's config while still letting us assert that the
-// resolver is invoked (and with what argument).
+// stubResolveActiveProfile overrides resolveActiveProfile so handler tests don't touch the real user's config while still letting us assert that the resolver is invoked (and with what argument).
 func stubResolveActiveProfile(t *testing.T, fn func(explicit string) (string, error)) {
 	t.Helper()
 	orig := resolveActiveProfile
 	resolveActiveProfile = fn
 	t.Cleanup(func() { resolveActiveProfile = orig })
+}
+
+// stubResolveActiveProfileByPath overrides resolveActiveProfileByPath so handler tests can assert the path resolver is invoked (and with what path).
+func stubResolveActiveProfileByPath(t *testing.T, fn func(path string) (string, error)) {
+	t.Helper()
+	orig := resolveActiveProfileByPath
+	resolveActiveProfileByPath = fn
+	t.Cleanup(func() { resolveActiveProfileByPath = orig })
+}
+
+// stubHealthRunJSON overrides healthRunJSON for the duration of the test.
+func stubHealthRunJSON(t *testing.T, fn func(w io.Writer) error) {
+	t.Helper()
+	orig := healthRunJSON
+	healthRunJSON = fn
+	t.Cleanup(func() { healthRunJSON = orig })
 }
 
 func TestRun_PRSubmit_Recognized(t *testing.T) {

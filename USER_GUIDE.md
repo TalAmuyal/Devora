@@ -282,5 +282,6 @@ The crash output also prints the exact file path to stderr.
 
 ### Dependency Issues
 
-Run `debi health --verbose` to see the status and location of each dependency.
-Use `--strict` to also check optional dependencies.
+Open the **Health Hub** (Command Palette or Workspace Hub), or use `debi health` to see the status of each dependency, credential, and config.
+
+From a terminal, `debi health --verbose` shows the status and location of each dependency (`--strict` also checks optional dependencies, `--json` prints the machine-readable report the Health Hub renders).
