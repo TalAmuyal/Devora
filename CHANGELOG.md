@@ -29,6 +29,8 @@ Types of changes:
 - `ccc` now treats its `CLAUDE_CODE_*` env-vars as defaults, respecting any pre-existing definitions in the environment instead of overriding them
 - `debi health` gained a `--json` output mode
 - `debi health` now supports profile-by-path selection (a `--profile-path` flag and a `DEBI_PROFILE_PATH` env-var), and now honors `DEVORA_CONFIG_PATH`
+- Judge now allows `open` and `sed`
+- Judge now abstains on `Write` calls
 - The Claude model tiers and effort level are now resolved from config and injected into session shells by Devora, instead of being hardcoded in `ccc`
 - Updated the README to point to the user-guide in the app
 - The Command Palette now focuses its search field on open so you can type a filter immediately; `Esc` closes it and `↑/↓`/`Enter` navigate and run
