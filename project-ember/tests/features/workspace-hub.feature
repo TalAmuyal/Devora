@@ -74,6 +74,11 @@ Feature: Workspace Hub
     And the hub legend should be visible
     And the hub search bar should be visible
 
+  Scenario: Header profile dropdown and burger menu are vertically aligned
+    Given a profile "Work" with 1 active workspaces
+    And the Workspace Hub is open
+    Then the profile dropdown and burger menu should be vertically aligned
+
   Scenario: Save loading latencies writes a diagnostics file
     Given a profile "Work" with 2 active workspaces
     And the Workspace Hub is open

@@ -14,7 +14,7 @@ import {
   reloadWsHub, getFocusedWorkspaceId,
   getFocusedWorkspaceTitle, getWorkspaceItemCount, getActiveCategoryFilter,
   waitForWorkspaceItems, filterWorkspaces, switchProfile, waitForDetailRepoTable,
-  startWsHubLoad, selectCategory,
+  startWsHubLoad, selectCategory, clickBurgerMenuItem,
 } from '../support/ws-hub-helper';
 
 const TEST_REPO_NAME = 'test-repo';
@@ -215,6 +215,35 @@ Then(
 );
 
 Then(
+  'the profile dropdown and burger menu should be vertically aligned',
+  async function (this: EmberWorld) {
+    const [profile, burger] = (await this.driver.eval(`
+      function box(sel) {
+        const el = document.querySelector(sel);
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        return { height: r.height, centerY: r.top + r.height / 2 };
+      }
+      return [
+        box('.ws-profile-dropdown .dropdown-trigger'),
+        box('.ws-burger-menu .dropdown-trigger'),
+      ];
+    `)) as [{ height: number; centerY: number } | null, { height: number; centerY: number } | null];
+    assert.ok(profile, 'profile dropdown trigger should exist');
+    assert.ok(burger, 'burger menu trigger should exist');
+    // Equal box height AND a shared vertical center is what makes the two header controls line up.
+    assert.ok(
+      Math.abs(profile!.height - burger!.height) <= 1,
+      `header triggers should be the same height (profile=${profile!.height}px, burger=${burger!.height}px)`,
+    );
+    assert.ok(
+      Math.abs(profile!.centerY - burger!.centerY) <= 1,
+      `header triggers should share a vertical center (profile=${profile!.centerY}px, burger=${burger!.centerY}px)`,
+    );
+  },
+);
+
+Then(
   'the hub search bar should be visible',
   async function (this: EmberWorld) {
     const ui = new UIDriver(this.driver);
@@ -226,11 +255,12 @@ Then(
 When(
   'the user clicks the save loading latencies button',
   async function (this: EmberWorld) {
-    const ui = new UIDriver(this.driver);
-    await ui.waitForElement('.ws-profiling-btn');
-    await ui.click('.ws-profiling-btn');
+    await clickBurgerMenuItem(this.driver, 'Save loading latencies');
+    // The success toast appears only after the report is written to disk; wait for it so the next step's on-disk assertion runs against a completed save.
     await this.driver.pollFor(
-      `return document.querySelector('.ws-profiling-saved') !== null`,
+      `return Array.from(document.querySelectorAll('.toast')).some(
+         t => (t.textContent ?? '').includes('Loading latencies saved')
+       )`,
       true,
       5_000,
     );

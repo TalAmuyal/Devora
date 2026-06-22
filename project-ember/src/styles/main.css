@@ -228,7 +228,7 @@ body {
   flex-shrink: 0;
 }
 
-/* Right-side header actions (Health button + profile dropdown) */
+/* Right-side header actions (profile dropdown + burger menu) */
 
 .ws-header-actions {
   display: flex;
@@ -237,22 +237,36 @@ body {
   flex-shrink: 0;
 }
 
-.ws-health-btn {
+/* Burger (☰) menu placement (the dropdown itself is styled in components.css) */
+
+.ws-burger-menu {
   flex-shrink: 0;
+  /*
+   * Lay the trigger out as a centered flex item, overriding .dropdown-menu's inline-block.
+   * The trigger has no text, so as a baseline-aligned inline box it would drop to the line's baseline and sit lower than the (text-bearing) profile dropdown trigger. */
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  background: var(--color-bg-overlay);
-  color: var(--color-fg);
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  padding: 6px 12px;
-  font-family: var(--font-ui);
-  font-size: var(--font-size-md);
-  cursor: pointer;
-  transition: border-color 0.15s;
 }
-.ws-health-btn:hover { border-color: var(--color-border-active); }
+
+/* Three stacked lines forming the burger glyph in the menu's trigger */
+
+.ws-burger-glyph {
+  display: inline-flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  width: 14px;
+  /* Match one line of the trigger's text so the burger button is the same height as the (text-driven) profile dropdown trigger and the two line up vertically. */
+  height: 1lh;
+}
+
+.ws-burger-glyph span {
+  display: block;
+  height: 1.5px;
+  width: 100%;
+  background: currentColor;
+  border-radius: 1px;
+}
 
 /* New workspace button */
 
@@ -722,41 +736,6 @@ body {
   justify-content: center;
   color: var(--color-fg-secondary);
   font-size: var(--font-size-md);
-}
-
-/* Profiling button */
-
-.ws-profiling-btn {
-  margin-left: auto;
-  background: var(--color-surface0);
-  color: var(--color-fg-secondary);
-  border: 1px solid var(--color-border);
-  border-radius: var(--tab-border-radius);
-  padding: var(--space-xs) var(--space-md);
-  font-family: var(--font-mono);
-  font-size: var(--font-size-sm);
-  cursor: pointer;
-}
-
-.ws-profiling-btn:hover {
-  background: var(--color-bg-overlay);
-  color: var(--color-fg);
-}
-
-.ws-profiling-btn:focus-visible {
-  outline: 0.133rem solid var(--color-focus-ring);
-  outline-offset: -0.133rem;
-}
-
-.ws-profiling-btn.ws-profiling-saved {
-  color: var(--color-status-clean);
-  border-color: var(--color-status-clean);
-  cursor: default;
-}
-
-.ws-profiling-btn.ws-profiling-error {
-  color: var(--color-status-error);
-  border-color: var(--color-status-error);
 }
 
 kbd {

@@ -158,4 +158,40 @@ describe('createDropdownMenu', () => {
 
     expect(() => handle.close()).not.toThrow();
   });
+
+  it('renders custom trigger content instead of a label span', () => {
+    const glyph = document.createElement('span');
+    glyph.className = 'my-glyph';
+    const handle = createDropdownMenu({ triggerContent: glyph, items: makeItems() });
+    document.body.appendChild(handle.element);
+
+    expect(handle.element.querySelector('.dropdown-trigger-label')).toBeNull();
+    expect(handle.element.querySelector('.my-glyph')).not.toBeNull();
+  });
+
+  it('omits the chevron when hideChevron is set', () => {
+    const handle = createDropdownMenu({ triggerLabel: 'Work', hideChevron: true, items: makeItems() });
+    document.body.appendChild(handle.element);
+
+    expect(handle.element.querySelector('.dropdown-trigger-chevron')).toBeNull();
+  });
+
+  it('sets the trigger title and aria-label from triggerTitle', () => {
+    const glyph = document.createElement('span');
+    const handle = createDropdownMenu({ triggerContent: glyph, triggerTitle: 'Menu', items: makeItems() });
+    document.body.appendChild(handle.element);
+
+    const trigger = handle.element.querySelector('.dropdown-trigger')!;
+    expect(trigger.getAttribute('title')).toBe('Menu');
+    expect(trigger.getAttribute('aria-label')).toBe('Menu');
+  });
+
+  it('setTriggerLabel is a no-op when there is no label span', () => {
+    const glyph = document.createElement('span');
+    const handle = createDropdownMenu({ triggerContent: glyph, items: makeItems() });
+    document.body.appendChild(handle.element);
+
+    expect(() => handle.setTriggerLabel('Ignored')).not.toThrow();
+    expect(handle.element.querySelector('.dropdown-trigger-label')).toBeNull();
+  });
 });

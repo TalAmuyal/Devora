@@ -34,6 +34,7 @@ Types of changes:
 - The Claude model tiers and effort level are now resolved from config and injected into session shells by Devora, instead of being hardcoded in `ccc`
 - Updated the README to point to the user-guide in the app
 - The Command Palette now focuses its search field on open so you can type a filter immediately; `Esc` closes it and `↑/↓`/`Enter` navigate and run
+- Moved the Workspace Hub's "Health" and "Save loading latencies" actions into a new burger (☰) menu to the right of the profile dropdow
 
 ### Removed
 
