@@ -1007,3 +1007,42 @@
   font-size: var(--font-size-sm);
   color: var(--color-overlay1);
 }
+
+/* ── Preview pane (split beside the terminal) ── */
+
+.preview-pane {
+  flex: 0 0 36em;
+  min-width: 20em;
+  height: 100%;
+  overflow: hidden;
+  border-left: 1px solid var(--color-border);
+}
+
+.preview-pane-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The tab bar dims its close × until the tab is hovered; the preview header has no such parent, so give it a visible resting color of its own. */
+.preview-pane .tab-close {
+  color: var(--color-fg-secondary);
+}
+
+.preview-pane .tab-close:hover {
+  color: var(--color-fg);
+  background: var(--color-surface1);
+}
+
+/* Draggable divider between the terminal and a preview pane. */
+.preview-divider {
+  flex: 0 0 6px;
+  cursor: col-resize;
+  background: var(--color-bg-secondary);
+  border-left: 1px solid var(--color-border);
+  border-right: 1px solid var(--color-border);
+}
+
+.preview-divider:hover {
+  background: var(--color-border-active);
+}

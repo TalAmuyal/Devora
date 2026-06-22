@@ -17,6 +17,8 @@ export class EmberWorld extends World {
   expectedHead?: string;
   // Terminal column count of a session captured while active, to assert it survives backgrounding.
   recordedTerminalCols?: number;
+  // Temp files created for preview scenarios; the last one is reused by "same file" steps.
+  previewFiles?: string[];
 }
 
 setWorldConstructor(EmberWorld);

@@ -30,6 +30,21 @@ body {
   height: 100%;
 }
 
+/* Horizontal split holding the terminal and any preview panes side by side. */
+.session-split {
+  display: flex;
+  flex-direction: row;
+  width: 100%;
+  height: 100%;
+}
+
+/* The terminal is elastic; min-width:0 lets it yield space to preview panes (flex children default to min-width:auto, which refuses to shrink). */
+.terminal-pane-wrapper {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 100%;
+}
+
 /* Tab-covering overlay — covers entire window including tab bar */
 .overlay-tab-covering {
   position: fixed;

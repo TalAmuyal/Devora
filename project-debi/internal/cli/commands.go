@@ -292,6 +292,17 @@ var commands = []Command{
 		},
 	},
 	{
+		Name:        "preview",
+		Description: "Render a Markdown/HTML file in a preview pane",
+		ArgsHint:    "[--stack] <file>",
+		Group:       "Utility",
+		MinArgs:     1,
+		Run:         func(args []string) error { return runPreview(args) },
+		Flags: []cmdinfo.Flag{
+			{Name: "--stack", Description: "Open in a new pane instead of replacing the current preview"},
+		},
+	},
+	{
 		Name:        "util",
 		Description: "Developer utility commands",
 		ArgsHint:    "<subcommand>",
