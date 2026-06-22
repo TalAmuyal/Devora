@@ -4,17 +4,24 @@ Package: `internal/cli`
 
 ## Purpose
 
-Define and dispatch the CLI commands. This is the entry point that wires together all domain packages.
+Define and dispatch the CLI commands.
+This is the entry point that wires together all domain packages.
 
 ## Commands
 
-The CLI has 3 workspace commands, a health command, PR commands (`pr check`, `pr submit`, `pr close`, `pr auto-merge`), `get-conf`, a util command, 23 git shortcuts, and utility commands:
+The CLI has the following commands:
+- `health`
+- PR commands (`pr check`, `pr submit`, `pr close`, `pr auto-merge`),
+- `get-conf`,
+- `preview`,
+- Validation util commands (json-validate, yaml-validate, toml-validate)
+- Git shortcuts
 
 ### Workspace Commands
 
 | Command | Args | Description |
 |---------|------|-------------|
-| `workspace-ui` | none | Open the Workspace Hub |
+| `workspace-ui` | none | Open the Workspace Hub (deprecated) |
 | `rename` | `<new-name>` (positional, required) | Rename the current terminal session |
 
 ### Health
@@ -84,6 +91,7 @@ Flag syntax accepts both `--message=foo` and `--message foo`. `-v` and `-q` are 
 | Command | Args | Description |
 |---------|------|-------------|
 | `get-conf` | `[--profile <name>] <key>` | Print the resolved value of a config key (dot-path notation) |
+| `preview` | `[--stack] <file>` | Render a Markdown/HTML file in a preview pane beside the terminal (Ember only) |
 | `util <subcommand>` | subcommand (required) | Developer tool utilities. Dispatches to subcommands |
 
 #### Util Subcommands
@@ -602,6 +610,40 @@ Flag syntax accepts both `--profile=foo` and `--profile foo`. Any other flag ret
 var configGet = config.Get
 ```
 
+### preview
+
+```go
+func runPreview(args []string) error
+```
+
+Asks the running Devora-Ember app to render a Markdown or HTML file in a preview
+pane to the right of the terminal. Communicates over the same loopback IPC HTTP
+server used by the Crit integration (`POST /preview/open`), addressed by the
+`DEVORA_IPC_PORT`/`DEVORA_PTY_ID` env vars Ember injects into each PTY shell.
+
+Usage: `debi preview [--stack] <file>`
+
+#### Flags
+
+| Flag | Description |
+|------|-------------|
+| `--stack` | Open the file in a new pane instead of replacing the current preview |
+| `-h, --help` | Print usage and return nil |
+
+#### Behavior
+
+1. Parse args. Accept `--stack` and `-h`/`--help`. Reject unknown flags and a second positional argument with `*UsageError`.
+2. If no file argument is provided, return `*UsageError` with usage text.
+3. Precondition: read `DEVORA_IPC_PORT` and `DEVORA_PTY_ID`. If either is empty, return `*UsageError` ("only available inside a Devora terminal"). A non-numeric `DEVORA_PTY_ID` returns `*UsageError`.
+4. Resolve the file via `resolvePreviewFile`: `filepath.Abs`, then `os.Stat` (must exist, not be a directory, and be `<= previewMaxFileSize` = 5 MiB), then validate the extension is one of `.md`, `.markdown`, `.html`, `.htm`, then canonicalize with `filepath.EvalSymlinks`. Any failure returns `*UsageError`. An absolute path is required because the frontend reads it with a bare `read_text_file` and has no CWD context.
+5. `POST` JSON `{"ptyId": <int>, "path": "<abs>", "stack": <bool>}` to `http://127.0.0.1:<port>/preview/open`. The request is fire-and-forget (the pane is closed in-app via its × button); a non-200 response or transport error returns an error.
+
+#### Stubbable dependency
+
+```go
+var previewPost = postPreviewOpen
+```
+
 ## Exit Codes
 
 | Situation | Exit |
@@ -704,6 +746,14 @@ func main() {
 - Test that `get-conf -p <name>` passes the profile name to `resolveActiveProfile`.
 - Test that `get-conf --help` prints usage information.
 - Command handler integration tests are better handled at a higher level (testing the actual TUI behavior or workspace operations).
+
+**preview (`preview.go`):**
+- Test that `preview` without a file, with an unknown flag, or with a second positional argument returns a `*UsageError`.
+- Test that `preview --help` prints usage information.
+- Test that `preview` outside Ember (no `DEVORA_IPC_PORT`/`DEVORA_PTY_ID`) returns a `*UsageError`.
+- Test that a missing file, a directory, an unsupported extension, and an oversized file each return a `*UsageError` without calling `previewPost`.
+- Test that `preview --stack <file>` sends the canonical absolute path, the port, the pty id, and `stack=true`; and that a relative path is resolved against the CWD.
+- Test `postPreviewOpen` against an `httptest` server: it POSTs `{ptyId, path, stack}` to `/preview/open`, and a non-200 response returns an error.
 
 **Profile resolution (`profile.go`):**
 - Test `ResolveActiveProfileByPath` resolves by `RootPath` (including a trailing-slash form) and returns a `*UsageError` for an unknown path.

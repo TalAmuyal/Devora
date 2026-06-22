@@ -57,6 +57,27 @@ struct CritOpenOverlayPayload {
     url: String,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PreviewOpenRequest {
+    pty_id: u32,
+    path: String,
+    stack: bool,
+}
+
+#[derive(Serialize)]
+struct PreviewOpenResponse {
+    ok: bool,
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct PreviewOpenPayload {
+    pty_id: u32,
+    path: String,
+    stack: bool,
+}
+
 async fn handle_request(
     req: Request<Incoming>,
     pending: Arc<Mutex<HashMap<u32, oneshot::Sender<String>>>>,
@@ -132,6 +153,30 @@ async fn handle_request(
             }
 
             Ok(http_util::json_response(StatusCode::OK, &CritDoneResponse { ok: true }))
+        }
+
+        // Fire-and-forget: render a file in a preview pane beside the terminal.
+        // Unlike /crit/open this does not block — the pane is closed in-app via its × button.
+        (&Method::POST, "/preview/open") => {
+            let req_body: PreviewOpenRequest = match http_util::parse_json_body(body).await {
+                Ok(r) => r,
+                Err(resp) => return Ok(resp),
+            };
+
+            let payload = PreviewOpenPayload {
+                pty_id: req_body.pty_id,
+                path: req_body.path,
+                stack: req_body.stack,
+            };
+
+            if app_handle.emit("preview-open", payload).is_err() {
+                return Ok(http_util::error_response(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "failed to emit event",
+                ));
+            }
+
+            Ok(http_util::json_response(StatusCode::OK, &PreviewOpenResponse { ok: true }))
         }
 
         _ => {

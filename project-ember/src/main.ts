@@ -516,8 +516,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     openUserGuide,
   );
 
-  // Crit panel overlay integration: listen for backend events requesting
-  // a Crit review overlay, and wire overlay dismissal back to the backend.
+  // Crit panel overlay integration: listen for backend events requesting a Crit review overlay, and wire overlay dismissal back to the backend.
   await listen<{ ptyId: number; url: string }>('crit-open-overlay', (event) => {
     const { ptyId, url } = event.payload;
 
@@ -532,6 +531,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     tabBar.render();
   });
 
+  // Preview pane integration: an external tool (debi preview) asks Ember to render a file beside the terminal of a specific PTY session.
+  await listen<{ ptyId: number; path: string; stack: boolean }>('preview-open', (event) => {
+    const { ptyId, path, stack } = event.payload;
+    const session = sessionManager.getSessions().find(s => s.getPtyId() === ptyId);
+    if (!session) {
+      logToFile('WARN', `preview-open: no session found for ptyId ${ptyId}`);
+      return;
+    }
+    session.openPreview(path, stack);
+  });
+
   const origDismissPanelOverlay = overlayManager.dismissPanelOverlay.bind(overlayManager);
 
   await listen<{ ptyId: number }>('crit-close-overlay', (event) => {
@@ -543,8 +553,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  // Patch dismissPanelOverlay to notify the backend when a crit overlay is
-  // dismissed by the user (q/Esc/tab close).
+  // Patch dismissPanelOverlay to notify the backend when a crit overlay is dismissed by the user (q/Esc/tab close).
   overlayManager.dismissPanelOverlay = (sessionId: number) => {
     // A creation overlay owns its own dismissal: Esc/q cancels the in-flight creation (or closes it after a failure).
     // The controller removes the overlay itself once that resolves.
