@@ -23,7 +23,14 @@ export type DropdownItem =
     };
 
 export interface DropdownMenuOptions {
-  triggerLabel: string;
+  /** Text shown in the trigger. Omit when using `triggerContent` for an icon-only trigger. */
+  triggerLabel?: string;
+  /** Custom trigger content (e.g. a burger glyph) rendered in place of the text label. */
+  triggerContent?: HTMLElement;
+  /** Hide the ▾ chevron — e.g. for an icon-only trigger. */
+  hideChevron?: boolean;
+  /** Accessible name for an icon-only trigger; sets both `title` and `aria-label`. */
+  triggerTitle?: string;
   items: DropdownItem[];
 }
 
@@ -43,16 +50,27 @@ export function createDropdownMenu(options: DropdownMenuOptions): DropdownMenuHa
 
   const trigger = document.createElement('button');
   trigger.className = 'dropdown-trigger';
+  if (options.triggerTitle) {
+    trigger.title = options.triggerTitle;
+    trigger.setAttribute('aria-label', options.triggerTitle);
+  }
 
-  const triggerLabel = document.createElement('span');
-  triggerLabel.className = 'dropdown-trigger-label';
-  triggerLabel.textContent = options.triggerLabel;
-  trigger.appendChild(triggerLabel);
+  let triggerLabel: HTMLElement | null = null;
+  if (options.triggerContent) {
+    trigger.appendChild(options.triggerContent);
+  } else {
+    triggerLabel = document.createElement('span');
+    triggerLabel.className = 'dropdown-trigger-label';
+    triggerLabel.textContent = options.triggerLabel ?? '';
+    trigger.appendChild(triggerLabel);
+  }
 
-  const chevron = document.createElement('span');
-  chevron.className = 'dropdown-trigger-chevron';
-  chevron.textContent = '▾';
-  trigger.appendChild(chevron);
+  if (!options.hideChevron) {
+    const chevron = document.createElement('span');
+    chevron.className = 'dropdown-trigger-chevron';
+    chevron.textContent = '▾';
+    trigger.appendChild(chevron);
+  }
 
   container.appendChild(trigger);
 
@@ -153,7 +171,9 @@ export function createDropdownMenu(options: DropdownMenuOptions): DropdownMenuHa
       }
     },
     setTriggerLabel(label: string) {
-      triggerLabel.textContent = label;
+      if (triggerLabel) {
+        triggerLabel.textContent = label;
+      }
     },
   };
 }

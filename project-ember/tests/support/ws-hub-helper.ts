@@ -73,8 +73,7 @@ export async function reloadWsHub(driver: AppDriver): Promise<void> {
     true,
     5_000,
   );
-  // Blur any element that may have received focus during render (e.g. the
-  // search input in WebKit) so the panel starts in normal navigation mode.
+  // Blur any element that may have received focus during render (e.g. the search input in WebKit) so the panel starts in normal navigation mode.
   await driver.eval(`document.activeElement?.blur()`);
 }
 
@@ -178,6 +177,34 @@ export async function switchProfile(
     true,
     5_000,
   );
+}
+
+export async function clickBurgerMenuItem(
+  driver: AppDriver,
+  label: string,
+): Promise<void> {
+  // Open the burger (☰) menu and click the matching action item, as a user would.
+  // The selector is scoped to .ws-burger-menu because the header has a second .dropdown-trigger (the profile dropdown).
+  await driver.eval(`
+    const trigger = document.querySelector('.ws-burger-menu .dropdown-trigger');
+    if (!trigger) throw new Error('Burger menu not found');
+    trigger.click();
+  `);
+  await driver.pollFor(
+    `return document.querySelector('.ws-burger-menu .dropdown-popup') !== null`,
+    true,
+    3_000,
+  );
+  await driver.eval(`
+    const rows = Array.from(
+      document.querySelectorAll('.ws-burger-menu .dropdown-item-action'),
+    );
+    const row = rows.find(
+      r => r.querySelector('.dropdown-item-label')?.textContent === ${JSON.stringify(label)}
+    );
+    if (!row) throw new Error('Burger menu item not found: ' + ${JSON.stringify(label)});
+    row.click();
+  `);
 }
 
 export async function waitForDetailRepoTable(

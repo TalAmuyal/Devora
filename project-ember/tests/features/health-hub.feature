@@ -28,3 +28,11 @@ Feature: Health Hub
     And the Health Hub finishes loading
     Then the Health Hub should be visible
     And the Health Hub should show the "Required dependencies" section
+
+  Scenario: Open the Health Hub from the Workspace Hub menu
+    Given a profile "Work" with 1 active workspaces
+    And the Workspace Hub is open
+    When the user opens Health from the Workspace Hub menu
+    And the Health Hub finishes loading
+    Then the Health Hub should be visible
+    And the Health Hub should show the "Required dependencies" section

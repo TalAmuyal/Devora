@@ -1,6 +1,11 @@
 import assert from 'node:assert';
 import { When, Then } from '@cucumber/cucumber';
 import { EmberWorld } from '../support/world';
+import { clickBurgerMenuItem } from '../support/ws-hub-helper';
+
+When('the user opens Health from the Workspace Hub menu', async function (this: EmberWorld) {
+  await clickBurgerMenuItem(this.driver, 'Health');
+});
 
 When('the Health Hub finishes loading', async function (this: EmberWorld) {
   // The Health Hub shells out to `debi health --json` through a login shell, which can take a moment; wait until it renders sections (success) or an error state, then fail loudly on error so a broken integration is obvious.

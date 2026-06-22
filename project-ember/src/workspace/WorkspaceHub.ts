@@ -155,8 +155,6 @@ export class WorkspaceHub {
 
   private profilingData: HubProfilingReport | null = null;
   private profilingT0: number = 0;
-  private profilingSaved: boolean = false;
-  private profilingError: boolean = false;
 
   private searchHandle: SearchInputHandle | null = null;
   private masterListEl: HTMLElement | null = null;
@@ -226,8 +224,6 @@ export class WorkspaceHub {
 
   async load(): Promise<void> {
     this.profilingT0 = performance.now();
-    this.profilingSaved = false;
-    this.profilingError = false;
 
     window.addEventListener('keydown', this.keyHandler, true);
     this.profilesLoaded = false;
@@ -792,7 +788,6 @@ export class WorkspaceHub {
         { keys: 'q/Esc', description: 'close' },
         { keys: '?', description: 'all shortcuts' },
       ],
-      trailing: this.renderProfilingButton(),
     }));
   }
 
@@ -940,7 +935,8 @@ export class WorkspaceHub {
     if (!actions) return;
     actions.querySelector('.ws-profile-dropdown')?.remove();
     if (this.profilesLoaded && this.profiles.length > 0) {
-      actions.appendChild(this.buildProfileDropdown());
+      // Keep the profile dropdown ahead of the burger menu (insertBefore null appends).
+      actions.insertBefore(this.buildProfileDropdown(), actions.querySelector('.ws-burger-menu'));
     }
   }
 
@@ -1287,22 +1283,55 @@ export class WorkspaceHub {
 
     const actions = document.createElement('div');
     actions.className = 'ws-header-actions';
-    actions.appendChild(this.renderHealthButton());
     if (this.profilesLoaded && this.profiles.length > 0) {
       actions.appendChild(this.buildProfileDropdown());
     }
+    actions.appendChild(this.buildBurgerMenu());
     header.appendChild(actions);
 
     return header;
   }
 
-  private renderHealthButton(): HTMLElement {
-    const btn = document.createElement('button');
-    btn.className = 'ws-health-btn';
-    btn.textContent = '✚ Health';
-    btn.title = 'Open the Health Hub (H)';
-    btn.addEventListener('click', () => this.onOpenHealth());
-    return btn;
+  /** Burger (☰) menu of secondary header actions, placed to the right of the profile dropdown. */
+  private buildBurgerMenu(): HTMLElement {
+    const items: DropdownItem[] = [
+      {
+        kind: 'action',
+        label: 'Health',
+        icon: '✚',
+        onSelect: () => this.onOpenHealth(),
+      },
+    ];
+    // Saving the loading-latencies report needs both the profiling data the last load collected and a profile to write it under (absent on the first-run, zero-profile welcome screen).
+    if (this.profilingData && this.activeProfilePath) {
+      items.push(
+        { kind: 'separator' },
+        {
+          kind: 'action',
+          label: 'Save loading latencies',
+          icon: '⤓',
+          onSelect: () => void this.saveProfilingReport(),
+        },
+      );
+    }
+    const handle = createDropdownMenu({
+      triggerContent: this.renderBurgerGlyph(),
+      hideChevron: true,
+      triggerTitle: 'Menu',
+      items,
+    });
+    handle.element.classList.add('ws-burger-menu');
+    return handle.element;
+  }
+
+  /** Three stacked lines forming the burger (☰) glyph. */
+  private renderBurgerGlyph(): HTMLElement {
+    const glyph = document.createElement('span');
+    glyph.className = 'ws-burger-glyph';
+    for (let i = 0; i < 3; i++) {
+      glyph.appendChild(document.createElement('span'));
+    }
+    return glyph;
   }
 
   private buildProfileDropdown(): HTMLElement {
@@ -1345,8 +1374,6 @@ export class WorkspaceHub {
     this.statusCache.clear();
     this.statusErrors.clear();
     this.profilingT0 = performance.now();
-    this.profilingSaved = false;
-    this.profilingError = false;
 
     const listWorkspacesStart = performance.now();
     await this.loadWorkspaces();
@@ -1575,38 +1602,19 @@ export class WorkspaceHub {
     this.render();
   }
 
-  private renderProfilingButton(): HTMLElement | undefined {
-    if (!this.profilingData) return undefined;
-
-    const btn = document.createElement('button');
-    btn.className = 'ws-profiling-btn';
-    if (this.profilingSaved) {
-      btn.classList.add('ws-profiling-saved');
+  /** Write the last load's profiling report to disk and confirm with a toast (the burger-menu "Save loading latencies" action). */
+  private async saveProfilingReport(): Promise<void> {
+    if (!this.profilingData || !this.activeProfilePath) return;
+    try {
+      const savedPath = await invoke<string>('save_profiling_report', {
+        profilePath: this.activeProfilePath,
+        reportJson: JSON.stringify(this.profilingData, null, 2),
+      });
+      const toast = createToast(`Loading latencies saved: ${savedPath}`);
+      setTimeout(() => void toast.dismiss(), REFRESHED_TOAST_MS);
+    } catch (_) {
+      // invoke already surfaced the error
     }
-    btn.textContent = this.profilingSaved ? 'Saved!' : 'Save loading latencies';
-    btn.addEventListener('click', async () => {
-      if (this.profilingSaved || !this.profilingData || !this.activeProfilePath) return;
-      btn.textContent = 'Saving...';
-      btn.disabled = true;
-      btn.classList.remove('ws-profiling-error');
-      this.profilingError = false;
-      try {
-        const savedPath = await invoke<string>('save_profiling_report', {
-          profilePath: this.activeProfilePath,
-          reportJson: JSON.stringify(this.profilingData, null, 2),
-        });
-        this.profilingSaved = true;
-        btn.textContent = `Saved! ${savedPath}`;
-        btn.classList.add('ws-profiling-saved');
-      } catch (_) {
-        // invoke already surfaced the error
-        this.profilingError = true;
-        btn.textContent = 'Save failed';
-        btn.classList.add('ws-profiling-error');
-        btn.disabled = false;
-      }
-    });
-    return btn;
   }
 
   private renderCheatsheet(): HTMLElement {
