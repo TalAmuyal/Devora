@@ -116,7 +116,7 @@ export class WorkspaceHub {
     sourceWorkspacePath: string | null,
   ) => void;
   private onClose: () => void;
-  private onOpenProfileManager: (view: 'list' | 'new') => void;
+  private onOpenSettingsHub: (view: 'list' | 'new') => void;
   // Clone a repo into the given profile; `onDone` receives the cloned repo so the New Task form can refresh and pre-select it.
   private onCloneRepo: (
     profilePath: string,
@@ -169,7 +169,7 @@ export class WorkspaceHub {
       sourceWorkspacePath: string | null,
     ) => void,
     onClose: () => void,
-    onOpenProfileManager: (view: 'list' | 'new') => void,
+    onOpenSettingsHub: (view: 'list' | 'new') => void,
     onCloneRepo: (
       profilePath: string,
       onDone: (repo: { path: string; name: string }) => void,
@@ -179,7 +179,7 @@ export class WorkspaceHub {
     this.onOpenWorkspace = onOpenWorkspace;
     this.onStartTaskCreation = onStartTaskCreation;
     this.onClose = onClose;
-    this.onOpenProfileManager = onOpenProfileManager;
+    this.onOpenSettingsHub = onOpenSettingsHub;
     this.onCloneRepo = onCloneRepo;
     this.onOpenHealth = onOpenHealth;
     this.containerEl = document.createElement('div');
@@ -195,7 +195,7 @@ export class WorkspaceHub {
   }
 
   /**
-   * Switch the active profile from outside the hub (Profile Manager, command palette).
+   * Switch the active profile from outside the hub (Settings Hub, command palette).
    * No render — the next load() picks the new profile up.
    */
   setActiveProfilePath(path: string | null): void {
@@ -641,7 +641,7 @@ export class WorkspaceHub {
       case 'P': {
         e.preventDefault();
         e.stopPropagation();
-        this.onOpenProfileManager('list');
+        this.onOpenSettingsHub('list');
         return;
       }
       case 'H': {
@@ -1294,14 +1294,22 @@ export class WorkspaceHub {
 
   /** Burger (☰) menu of secondary header actions, placed to the right of the profile dropdown. */
   private buildBurgerMenu(): HTMLElement {
-    const items: DropdownItem[] = [
-      {
+    const items: DropdownItem[] = [];
+    // Settings opens the Settings Hub. Hidden on the zero-profile first-run welcome so it can't bypass the funnel that forces creating the first profile (mirrors the profile dropdown's visibility).
+    if (this.profilesLoaded && this.profiles.length > 0) {
+      items.push({
         kind: 'action',
-        label: 'Health',
-        icon: '✚',
-        onSelect: () => this.onOpenHealth(),
-      },
-    ];
+        label: 'Settings',
+        icon: '⚙',
+        onSelect: () => this.onOpenSettingsHub('list'),
+      });
+    }
+    items.push({
+      kind: 'action',
+      label: 'Health',
+      icon: '✚',
+      onSelect: () => this.onOpenHealth(),
+    });
     // Saving the loading-latencies report needs both the profiling data the last load collected and a profile to write it under (absent on the first-run, zero-profile welcome screen).
     if (this.profilingData && this.activeProfilePath) {
       items.push(
@@ -1351,13 +1359,13 @@ export class WorkspaceHub {
         kind: 'action',
         label: 'New Profile…',
         icon: '＋',
-        onSelect: () => this.onOpenProfileManager('new'),
+        onSelect: () => this.onOpenSettingsHub('new'),
       },
       {
         kind: 'action',
         label: 'Manage Profiles…',
         icon: '⚙',
-        onSelect: () => this.onOpenProfileManager('list'),
+        onSelect: () => this.onOpenSettingsHub('list'),
       },
     ];
     const handle = createDropdownMenu({
@@ -1639,7 +1647,7 @@ export class WorkspaceHub {
           ['2', 'Show inactive workspaces'],
           ['3', 'Show all workspaces'],
           ['n', 'New task'],
-          ['P', 'Open Profile Manager'],
+          ['P', 'Manage Profiles'],
           ['H', 'Open Health Hub'],
           ['R', 'Refresh hub'],
           ['q', 'Close hub'],

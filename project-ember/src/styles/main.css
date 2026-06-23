@@ -820,9 +820,9 @@ kbd {
   padding-top: var(--space-xl);
 }
 
-/* ── Profile Manager ── */
+/* ── Settings Hub ── */
 
-.profile-manager {
+.settings-hub {
   width: 100%;
   padding: 16px;
   display: flex;
@@ -940,8 +940,9 @@ kbd {
   flex-shrink: 0;
 }
 
-/* The Claude config card sits below the repos section in the detail panel. */
-.pm-detail .claude-config-card {
+/* The Repos and Claude config cards stack in the detail panel, each spaced from what's above it. */
+.pm-detail .claude-config-card,
+.pm-detail .settings-card {
   margin-top: var(--space-lg);
 }
 
@@ -1059,15 +1060,6 @@ kbd {
   outline-offset: 0.133rem;
 }
 
-.pm-section-label {
-  font-size: var(--font-size-sm);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--color-fg-secondary);
-  margin-bottom: var(--space-sm);
-}
-
 .pm-repo-table {
   width: 100%;
   border-collapse: collapse;
@@ -1102,7 +1094,7 @@ kbd {
   color: var(--color-fg-secondary);
 }
 
-/* ── Profile form (Profile Manager detail panel + first-run welcome) ── */
+/* ── Profile form (Settings Hub detail panel + first-run welcome) ── */
 
 .pm-form {
   display: flex;

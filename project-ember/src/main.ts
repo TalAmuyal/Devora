@@ -14,7 +14,7 @@ import { TaskCreationProgressHandle } from './ui/components/TaskCreationProgress
 import { WorkspaceHub } from './workspace/WorkspaceHub';
 import { TaskCreationController } from './workspace/TaskCreationController';
 import { CreationEvent, RepoInfo } from './workspace/types';
-import { ProfileManager, ProfileManagerView } from './workspace/ProfileManager';
+import { SettingsHub, SettingsHubView } from './workspace/SettingsHub';
 import { WebContentOverlay } from './webview/WebContentOverlay';
 import {
   clearErrorBanners,
@@ -258,7 +258,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     (path, title, repos) => openWorkspace(path, title, repos, wsHub.getActiveProfilePath()),
     startTaskCreation,
     dismissWsHub,
-    (view) => openProfileManager(view),
+    (view) => openSettingsHub(view),
     cloneRepoIntoProfile,
     () => openHealthHub(),
   );
@@ -282,14 +282,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   const toggleWsHub = () => {
     if (commandPaletteOpen) return;
     if (overlayManager.isTabCoveringOverlayActive()) {
-      // Respect the active overlay's user-dismiss override (zero-profile lock, Profile-Manager-back-to-hub) instead of force-dismissing.
+      // Respect the active overlay's user-dismiss override (zero-profile lock, Settings-Hub-back-to-hub) instead of force-dismissing.
       overlayManager.dismissActiveOverlay();
     } else {
       openWsHub();
     }
   };
 
-  const profileManager = new ProfileManager({
+  const settingsHub = new SettingsHub({
     getActiveProfilePath: () => wsHub.getActiveProfilePath(),
     setActiveProfilePath: (path) => wsHub.setActiveProfilePath(path),
     getOpenSessionsForProfile: (profilePath) =>
@@ -298,15 +298,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     onCloneRepo: (profilePath, onDone) => cloneRepoIntoProfile(profilePath, onDone),
   });
 
-  const openProfileManager = (view: ProfileManagerView = 'list') => {
+  const openSettingsHub = (view: SettingsHubView = 'list') => {
     if (commandPaletteOpen) return;
-    void profileManager.load(view);
+    void settingsHub.load(view);
     overlayManager.showTabCoveringOverlay(
-      profileManager.getElement(),
-      () => profileManager.unload(),
+      settingsHub.getElement(),
+      () => settingsHub.unload(),
       null,
       undefined,
-      // q/Esc/Ctrl+S on the Profile Manager returns to the Workspace Hub (showTabCoveringOverlay replaces this overlay and runs its cleanup).
+      // q/Esc/Ctrl+S on the Settings Hub returns to the Workspace Hub (showTabCoveringOverlay replaces this overlay and runs its cleanup).
       () => openWsHub(),
     );
   };
@@ -413,15 +413,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         description: 'Create or register a profile root directory',
         icon: '＋',
         shortcut: [],
-        run: closePaletteThen(() => openProfileManager('new')),
+        run: closePaletteThen(() => openSettingsHub('new')),
       },
       {
         id: 'manage-profiles',
         title: 'Manage Profiles',
-        description: 'List, switch, create, and delete profiles',
+        description: 'Open the Settings Hub — switch, create, and delete profiles; edit Claude models, effort, and repos',
         icon: '⚙',
         shortcut: [],
-        run: closePaletteThen(() => openProfileManager('list')),
+        run: closePaletteThen(() => openSettingsHub('list')),
       },
     ],
     // One "Switch Profile: X" entry per non-active profile, re-resolved on every palette open so it tracks registrations and the active profile.
@@ -587,8 +587,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     overlayManager,
     tabBar,
     wsHub,
-    profileManager,
-    openProfileManager,
+    settingsHub,
+    openSettingsHub,
     commandPalette,
     openCommandPalette,
     toggleWsHub,
