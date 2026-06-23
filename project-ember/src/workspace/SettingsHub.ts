@@ -1,6 +1,6 @@
 /**
- * Profile Manager: a tab-covering overlay page (master/detail split, mirroring the Workspace Hub) for listing profiles, switching the active one, creating/registering new profiles (inline form behind a pinned "New Profile…" master row), and deleting profiles from the registry.
- * DOM: `div.profile-manager`.
+ * Settings Hub: a tab-covering overlay page (master/detail split, mirroring the Workspace Hub) for listing profiles, switching the active one, creating/registering new profiles (inline form behind a pinned "New Profile…" master row), and deleting profiles from the registry.
+ * DOM: `div.settings-hub`.
  *
  * q/Esc never reach this page directly — KeyboardShortcuts routes user dismissal through the overlay's onUserDismiss override, which main.ts wires to "return to the Workspace Hub".
  */
@@ -15,6 +15,7 @@ import { isEditableElementFocused } from '../ui/focus';
 import { pluralize } from '../ui/format';
 import { createProfileForm } from './ProfileForm';
 import { createClaudeConfigCard } from '../ui/components/ClaudeConfigCard';
+import { createSettingsCard } from '../ui/components/SettingsCard';
 import { ProfileInfo, RepoInfo, WorkspaceInfo } from './types';
 
 /** A row in the master list: the global User Defaults, a profile, or the New Profile form. */
@@ -29,22 +30,22 @@ interface ProfileDetail {
   activeTaskCount: number;
 }
 
-export type ProfileManagerView = 'list' | 'new';
+export type SettingsHubView = 'list' | 'new';
 
-export interface ProfileManagerCallbacks {
+export interface SettingsHubCallbacks {
   getActiveProfilePath: () => string | undefined;
   setActiveProfilePath: (path: string | null) => void;
   /** Open session tabs bound to the given profile (blockers for deletion). */
   getOpenSessionsForProfile: (profilePath: string) => ReadonlyArray<{ title: string }>;
-  /** Leave the Profile Manager (main.ts reopens the Workspace Hub). */
+  /** Leave the Settings Hub (main.ts reopens the Workspace Hub). */
   onClose: () => void;
   /** Clone a repo into the given profile; `onDone` is called once it lands so the detail can refresh. */
   onCloneRepo: (profilePath: string, onDone: () => void) => void;
 }
 
-export class ProfileManager {
+export class SettingsHub {
   private containerEl: HTMLElement;
-  private callbacks: ProfileManagerCallbacks;
+  private callbacks: SettingsHubCallbacks;
 
   private profiles: ProfileInfo[] = [];
   private loaded = false;
@@ -55,10 +56,10 @@ export class ProfileManager {
 
   private keyHandler = (e: KeyboardEvent) => this.handleKeyDown(e);
 
-  constructor(callbacks: ProfileManagerCallbacks) {
+  constructor(callbacks: SettingsHubCallbacks) {
     this.callbacks = callbacks;
     this.containerEl = document.createElement('div');
-    this.containerEl.className = 'profile-manager';
+    this.containerEl.className = 'settings-hub';
   }
 
   getElement(): HTMLElement {
@@ -74,7 +75,7 @@ export class ProfileManager {
     ];
   }
 
-  async load(view: ProfileManagerView = 'list'): Promise<void> {
+  async load(view: SettingsHubView = 'list'): Promise<void> {
     window.addEventListener('keydown', this.keyHandler, true);
     this.loaded = false;
     this.profiles = [];
@@ -327,7 +328,7 @@ export class ProfileManager {
     title.textContent = 'Devora';
     const crumb = document.createElement('span');
     crumb.className = 'pm-header-crumb';
-    crumb.textContent = ' › Profiles';
+    crumb.textContent = ' › Settings';
     title.appendChild(crumb);
     header.appendChild(title);
 
@@ -562,24 +563,21 @@ export class ProfileManager {
     actionRow.appendChild(deleteBtn);
     detail.appendChild(actionRow);
 
-    const reposLabel = document.createElement('div');
-    reposLabel.className = 'pm-section-label';
-    reposLabel.textContent = 'Repos';
-    detail.appendChild(reposLabel);
-
+    const reposCard = createSettingsCard('Repos');
     if (!cached) {
       const loading = document.createElement('div');
       loading.className = 'panel-detail-loading';
       loading.textContent = 'Loading...';
-      detail.appendChild(loading);
+      reposCard.appendChild(loading);
     } else if (cached.repos.length === 0) {
       const none = document.createElement('div');
       none.className = 'panel-detail-loading';
       none.textContent = `No repos yet — clone one into ${profile.path}/repos/`;
-      detail.appendChild(none);
+      reposCard.appendChild(none);
     } else {
-      detail.appendChild(this.renderRepoTable(cached.repos));
+      reposCard.appendChild(this.renderRepoTable(cached.repos));
     }
+    detail.appendChild(reposCard);
 
     detail.appendChild(createClaudeConfigCard({ profilePath: profile.path }));
 

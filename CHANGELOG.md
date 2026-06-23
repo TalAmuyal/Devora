@@ -16,6 +16,8 @@ Types of changes:
 
 ### Changed
 
+- Renamed the Profile Manager to the **Settings Hub**, and added a **Settings** entry to the Workspace Hub's burger (☰) menu (the profile dropdown's "Manage Profiles…" item is unchanged)
+- Restyled the Settings Hub's Repos list as a card matching the Claude Models & Effort card
 - Updated README.md with clearer installation instructions
 - `debi preview <TAB>` now completes file paths; the `--stack`/`-h`/`--help` flags surface once the word begins with `-`
 

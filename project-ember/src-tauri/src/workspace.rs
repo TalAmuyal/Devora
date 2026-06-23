@@ -732,7 +732,7 @@ pub fn claude_launch_env(profile_path: Option<&str>) -> HashMap<String, String> 
     env
 }
 
-/// Reads the Claude settings for the Profile Manager UI at the given scope (a profile path, or `None` for the user-level/global scope): the raw stored values at that scope plus the effective values after full resolution.
+/// Reads the Claude settings for the Settings Hub UI at the given scope (a profile path, or `None` for the user-level/global scope): the raw stored values at that scope plus the effective values after full resolution.
 /// A corrupt config surfaces as an error.
 pub fn read_claude_settings(profile_path: Option<&str>) -> Result<ClaudeSettingsResponse, String> {
     let user_cfg = read_config_opt(&global_config_path()?)?;

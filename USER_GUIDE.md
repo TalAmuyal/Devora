@@ -46,11 +46,11 @@ Each profile is a self-contained directory with the following structure:
 - `workspaces/` contains the worktrees Devora creates for your workspaces
 
 You can have multiple profiles.
-To select a profile (or manage them) go to the **Profile Manager**.
-That can by done from the Workspace Hub by pressing `P` (uppercase) or the profile dropdown in the top-right corner.
+To select a profile (or manage them) go to the **Settings Hub**.
+That can be done from the Workspace Hub by pressing `P` (uppercase), the profile dropdown's "Manage Profiles…" item, or the burger (☰) menu's "Settings" item in the top-right corner.
 In addition, you can open it through the Command Palette (rapid shift-shift) by selecting the "Manage Profiles" command.
 
-**Note**: Deleting a profile (also via Settings) only removes it from Devora's registry. The profile directory and all its contents remain on disk.
+**Note**: Deleting a profile (also via the Settings Hub) only removes it from Devora's registry. The profile directory and all its contents remain on disk.
 
 ## Repos
 
@@ -268,7 +268,7 @@ The current version is displayed in the window title.
 - `R`: Refresh Workspace Hub
 - `1 / 2 / 3`: Filter workspaces by "Active" (has a task, default) / "Inactive" / "All"
 - `j / k`: Navigate list
-- `P`: Open the Profile Manager (list, switch, create, and delete profiles)
+- `P`: Open the Settings Hub (list, switch, create, and delete profiles)
 - `q`: Quit (or back in other pages)
 - `esc`: Same as `q`, and also "unfocuses" on text inputs
 

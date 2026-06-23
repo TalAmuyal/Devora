@@ -1,5 +1,5 @@
 /**
- * Modal for cloning a git repo into a profile's `repos/` directory, opened from the Command Palette, the Workspace Hub New Task form, or the Profile Manager.
+ * Modal for cloning a git repo into a profile's `repos/` directory, opened from the Command Palette, the Workspace Hub New Task form, or the Settings Hub.
  * One backdrop, two phases: a form (a single URL input + a live "Clones to:" hint) and a progress view (a hosted {@link createTaskCreationProgress}).
  * Pure UI — the caller wires the form submission and the returned progress handle to the backend.
  *

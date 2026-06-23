@@ -19,6 +19,7 @@ Below are terms that have a specific meaning in the context of Devora:
 - **Worktree**: A git worktree checkout inside a workspace; each registered repo gets its own worktree directory
 - **Prepare Command**: A user-configured shell command that runs after worktree creation (config key: `prepare-command`)
 - **Workspace Hub**: The UI for listing, filtering, creating, and managing workspaces. In Devora OG this is a full-screen TUI; in Devora-Ember this is a tab-covering overlay
+- **Settings Hub**: The Devora-Ember tab-covering overlay for managing profiles and editing settings — User Defaults, per-profile Claude models/effort, and registered repos. Reached from the Workspace Hub via `P`, the profile dropdown's "Manage Profiles…", or the burger menu's "Settings"
 - **Terminal Pane** (Ember): An xterm.js terminal instance within a session
 - **Tab Bar** (Ember): The strip at the bottom of the window showing open sessions
 - **Overlay** (Ember): A UI layer rendered on top of main content. Two types: Panel Overlay (covers main panel area, tied to a session) and Tab-Covering Overlay (covers entire window including tab bar)

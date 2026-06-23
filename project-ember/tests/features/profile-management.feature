@@ -1,7 +1,7 @@
 Feature: Profile management
   Profiles can be created, registered, switched, and deleted in Devora-Ember:
-  via the first-run welcome card, the Profile Manager overlay (P from the hub),
-  the hub's profile dropdown, and the command palette.
+  via the first-run welcome card, the Settings Hub overlay (P from the hub,
+  the hub's profile dropdown, or the hub's burger menu), and the command palette.
 
   Scenario: First-run welcome appears and cannot be dismissed
     Given no profiles are configured
@@ -19,20 +19,20 @@ Feature: Profile management
     And the directory "work/workspaces" should exist under the fixture root
     And the global config should list 1 profile
 
-  Scenario: Opening the Profile Manager with P and returning with q
+  Scenario: Opening the Settings Hub with P and returning with q
     Given a profile "Work" with 1 active workspaces
     And the Workspace Hub is open
     When the user presses "P"
-    Then the Profile Manager should be visible
-    And the Profile Manager should list 1 profile and a New Profile row
+    Then the Settings Hub should be visible
+    And the Settings Hub should list 1 profile and a New Profile row
     When the user presses "q"
     Then the Workspace Hub overlay should be present
 
-  Scenario: Creating a new profile from the Profile Manager
+  Scenario: Creating a new profile from the Settings Hub
     Given a profile "Work" with 1 active workspaces
     And the Workspace Hub is open
     When the user presses "P"
-    Then the Profile Manager should list 1 profile and a New Profile row
+    Then the Settings Hub should list 1 profile and a New Profile row
     When the user presses "n"
     And the user enters profile name "Personal" and path "personal" under the fixture root
     Then the profile form should report a new profile
@@ -46,7 +46,7 @@ Feature: Profile management
     And an unregistered initialized profile directory "Legacy"
     And the Workspace Hub is open
     When the user presses "P"
-    Then the Profile Manager should list 1 profile and a New Profile row
+    Then the Settings Hub should list 1 profile and a New Profile row
     When the user presses "n"
     And the user enters path "Legacy" under the fixture root in the profile form
     Then the profile form should detect the existing profile "Legacy"
@@ -55,13 +55,13 @@ Feature: Profile management
     Then the profile dropdown should be labeled "Legacy"
     And the global config should list 2 profiles
 
-  Scenario: Switching the active profile from the Profile Manager
+  Scenario: Switching the active profile from the Settings Hub
     Given a profile "Work" with 2 active workspaces with worktrees
     And a profile "Personal" with 1 active workspace with worktrees
     And the Workspace Hub is open
     Then the Workspace Hub should show 2 workspace items
     When the user presses "P"
-    Then the Profile Manager should list 2 profiles and a New Profile row
+    Then the Settings Hub should list 2 profiles and a New Profile row
     When the user presses "j"
     Then the focused profile should be "Personal"
     When the user presses "Enter"
@@ -74,13 +74,13 @@ Feature: Profile management
     And a profile "Personal" with 1 active workspace with worktrees
     And the Workspace Hub is open
     When the user presses "P"
-    Then the Profile Manager should list 2 profiles and a New Profile row
+    Then the Settings Hub should list 2 profiles and a New Profile row
     When the user presses "j"
     And the user presses "d"
     Then a confirmation dialog should be visible
     And the confirmation dialog should mention "remains on disk"
     When the user confirms the dialog
-    Then the Profile Manager should list 1 profile and a New Profile row
+    Then the Settings Hub should list 1 profile and a New Profile row
     And the profile directory "Personal" should still exist on disk
     And the global config should list 1 profile
 
@@ -91,12 +91,12 @@ Feature: Profile management
     Then a workspace session should be open
     When the Workspace Hub is open
     And the user presses "P"
-    Then the Profile Manager should list 1 profile and a New Profile row
+    Then the Settings Hub should list 1 profile and a New Profile row
     When the user presses "d"
     Then a notice dialog titled "Cannot delete profile" should be visible
     And the notice dialog should have no cancel button
     When the user confirms the dialog
-    Then the Profile Manager should list 1 profile and a New Profile row
+    Then the Settings Hub should list 1 profile and a New Profile row
     And the global config should list 1 profile
 
   Scenario: Hub profile dropdown offers New Profile and Manage Profiles
@@ -106,7 +106,13 @@ Feature: Profile management
     Then the profile dropdown should list profile "Work"
     And the profile dropdown should offer "New Profile…" and "Manage Profiles…"
     When the user clicks the "Manage Profiles…" dropdown action
-    Then the Profile Manager should be visible
+    Then the Settings Hub should be visible
+
+  Scenario: Hub burger menu opens the Settings Hub
+    Given a profile "Work" with 1 active workspaces
+    And the Workspace Hub is open
+    When the user opens Settings from the Workspace Hub menu
+    Then the Settings Hub should be visible
 
   Scenario: Command palette offers profile commands
     Given a profile "Work" with 1 active workspace with worktrees
@@ -125,7 +131,7 @@ Feature: Profile management
     Given a profile "Work" with 0 active workspaces
     And the Workspace Hub is open
     When the user presses "P"
-    Then the Profile Manager should list 1 profile and a New Profile row
+    Then the Settings Hub should list 1 profile and a New Profile row
     When the user presses "d"
     And the user confirms the dialog
     Then the Workspace Hub overlay should be present

@@ -1,6 +1,6 @@
 /**
  * Profile creation/registration form: Name + Root Path (with native folder picker) and live path validation driving three states — new directory, existing profile detected (name locks, button relabels to "Register Profile"), and invalid path.
- * Used inline in the Profile Manager's detail panel and inside the first-run welcome card.
+ * Used inline in the Settings Hub's detail panel and inside the first-run welcome card.
  * DOM: `div.pm-form`.
  */
 

@@ -1,6 +1,6 @@
 /**
  * Shared TypeScript shapes for the workspace/profile Tauri command payloads, matching the Rust `#[serde(rename_all = "camelCase")]` structs.
- * Imported by both the Workspace Hub and the Profile Manager so the two views can't drift.
+ * Imported by both the Workspace Hub and the Settings Hub so the two views can't drift.
  */
 
 export interface ProfileInfo {

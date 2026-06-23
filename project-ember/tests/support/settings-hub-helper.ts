@@ -1,9 +1,9 @@
 import { AppDriver } from './app-driver';
 import { UIDriver } from './ui-driver';
 
-export async function waitForProfileManager(driver: AppDriver): Promise<void> {
+export async function waitForSettingsHub(driver: AppDriver): Promise<void> {
   await driver.pollFor(
-    `return document.querySelector('.profile-manager') !== null`,
+    `return document.querySelector('.settings-hub') !== null`,
     true,
     5_000,
   );
@@ -28,7 +28,7 @@ export async function getFocusedProfileName(driver: AppDriver): Promise<string |
   );
 }
 
-/** Fill the profile form (Profile Manager detail panel or first-run welcome).
+/** Fill the profile form (Settings Hub detail panel or first-run welcome).
  * Types the path directly — never clicks Browse…, which would open a native macOS dialog that the harness cannot drive.
  * Waits for the path validation round-trip to settle (the status line appears).
  */

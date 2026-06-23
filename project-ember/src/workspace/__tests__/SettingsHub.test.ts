@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { ProfileManager, ProfileManagerCallbacks } from '../ProfileManager';
+import { SettingsHub, SettingsHubCallbacks } from '../SettingsHub';
 import { invoke } from '../../invoke';
 
 vi.mock('../../invoke', () => ({
@@ -61,7 +61,7 @@ function mockBackend(overrides?: {
 }
 
 interface Setup {
-  manager: ProfileManager;
+  manager: SettingsHub;
   callbacks: {
     getActiveProfilePath: ReturnType<typeof vi.fn>;
     setActiveProfilePath: ReturnType<typeof vi.fn>;
@@ -77,7 +77,7 @@ async function setup(view: 'list' | 'new' = 'list', activePath = '/profiles/work
     getOpenSessionsForProfile: vi.fn(() => [] as { title: string }[]),
     onClose: vi.fn(),
   };
-  const manager = new ProfileManager(callbacks as unknown as ProfileManagerCallbacks);
+  const manager = new SettingsHub(callbacks as unknown as SettingsHubCallbacks);
   document.body.appendChild(manager.getElement());
   await manager.load(view);
   // Let the focused profile's detail (repos + workspaces) settle.
@@ -104,7 +104,7 @@ async function flushDialog(): Promise<void> {
   await Promise.resolve();
 }
 
-describe('ProfileManager', () => {
+describe('SettingsHub', () => {
   afterEach(() => {
     document.body.innerHTML = '';
     vi.clearAllMocks();
@@ -148,6 +148,10 @@ describe('ProfileManager', () => {
     expect(detail.querySelector('.pm-detail-path')?.textContent).toBe('/profiles/work');
     expect(detail.textContent).toContain('2 workspaces');
     expect(detail.textContent).toContain('1 active task');
+
+    // The repos table is wrapped in the shared card chrome with a "Repos" header.
+    expect(detail.querySelector('.settings-card-header')?.textContent).toBe('Repos');
+    expect(detail.querySelector('.settings-card .pm-repo-table')).not.toBeNull();
 
     const rows = Array.from(document.querySelectorAll('.pm-repo-table tbody tr'));
     expect(rows).toHaveLength(2);

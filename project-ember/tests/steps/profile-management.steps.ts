@@ -10,12 +10,13 @@ import {
   writeTestConfig,
 } from '../support/fixture-helper';
 import {
-  waitForProfileManager,
+  waitForSettingsHub,
   waitForProfileItems,
   getFocusedProfileName,
   fillProfileForm,
   submitProfileForm,
-} from '../support/profile-manager-helper';
+} from '../support/settings-hub-helper';
+import { clickBurgerMenuItem } from '../support/ws-hub-helper';
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -124,15 +125,15 @@ Then(
 );
 
 // ---------------------------------------------------------------------------
-// Profile Manager page
+// Settings Hub page
 // ---------------------------------------------------------------------------
 
-Then('the Profile Manager should be visible', async function (this: EmberWorld) {
-  await waitForProfileManager(this.driver);
+Then('the Settings Hub should be visible', async function (this: EmberWorld) {
+  await waitForSettingsHub(this.driver);
 });
 
 Then(
-  'the Profile Manager should list {int} profile(s) and a New Profile row',
+  'the Settings Hub should list {int} profile(s) and a New Profile row',
   async function (this: EmberWorld, expected: number) {
     await waitForProfileItems(this.driver, expected);
     const ui = new UIDriver(this.driver);
@@ -269,6 +270,15 @@ When(
     );
   },
 );
+
+// ---------------------------------------------------------------------------
+// Hub burger menu
+// ---------------------------------------------------------------------------
+
+When('the user opens Settings from the Workspace Hub menu', async function (this: EmberWorld) {
+  // clickBurgerMenuItem throws if "Settings" is absent, so this also asserts the item is offered.
+  await clickBurgerMenuItem(this.driver, 'Settings');
+});
 
 // ---------------------------------------------------------------------------
 // Command palette

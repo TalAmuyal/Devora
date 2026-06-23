@@ -893,14 +893,16 @@
   opacity: 0.85;
 }
 
-/* Claude Models & Effort config card (ClaudeConfigCard) */
-.claude-config-card {
+/* Titled card chrome shared by the Claude Models & Effort card (ClaudeConfigCard) and the Settings Hub's Repos card (SettingsCard). */
+.claude-config-card,
+.settings-card {
   border: 1px solid var(--color-surface0);
   border-radius: var(--tab-border-radius);
   overflow: hidden;
 }
 
-.claude-config-card-header {
+.claude-config-card-header,
+.settings-card-header {
   padding: var(--space-sm) var(--space-md);
   background: var(--color-bg-secondary);
   border-bottom: 1px solid var(--color-surface0);
