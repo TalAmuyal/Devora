@@ -9,16 +9,17 @@ import (
 
 // Command describes a CLI command in the registry.
 type Command struct {
-	Name        string
-	Alias       string
-	Description string
-	ArgsHint    string
-	Group       string
-	MinArgs     int
-	Run         func(args []string) error
-	Flags       []cmdinfo.Flag
-	ValidArgs   []string
-	SubCommands []cmdinfo.SubCommand
+	Name           string
+	Alias          string
+	Description    string
+	ArgsHint       string
+	Group          string
+	MinArgs        int
+	Run            func(args []string) error
+	Flags          []cmdinfo.Flag
+	ValidArgs      []string
+	SubCommands    []cmdinfo.SubCommand
+	CompletesFiles bool
 }
 
 var groupOrder = []string{
@@ -292,12 +293,13 @@ var commands = []Command{
 		},
 	},
 	{
-		Name:        "preview",
-		Description: "Render a Markdown/HTML file in a preview pane",
-		ArgsHint:    "[--stack] <file>",
-		Group:       "Utility",
-		MinArgs:     1,
-		Run:         func(args []string) error { return runPreview(args) },
+		Name:           "preview",
+		Description:    "Render a Markdown/HTML file in a preview pane",
+		ArgsHint:       "[--stack] <file>",
+		Group:          "Utility",
+		MinArgs:        1,
+		CompletesFiles: true,
+		Run:            func(args []string) error { return runPreview(args) },
 		Flags: []cmdinfo.Flag{
 			{Name: "--stack", Description: "Open in a new pane instead of replacing the current preview"},
 		},
@@ -368,15 +370,16 @@ func CommandInfos() []cmdinfo.Command {
 	result := make([]cmdinfo.Command, len(commands))
 	for i, cmd := range commands {
 		result[i] = cmdinfo.Command{
-			Name:        cmd.Name,
-			Alias:       cmd.Alias,
-			Description: cmd.Description,
-			ArgsHint:    cmd.ArgsHint,
-			Group:       cmd.Group,
-			MinArgs:     cmd.MinArgs,
-			Flags:       cmd.Flags,
-			ValidArgs:   cmd.ValidArgs,
-			SubCommands: cmd.SubCommands,
+			Name:           cmd.Name,
+			Alias:          cmd.Alias,
+			Description:    cmd.Description,
+			ArgsHint:       cmd.ArgsHint,
+			Group:          cmd.Group,
+			MinArgs:        cmd.MinArgs,
+			Flags:          cmd.Flags,
+			ValidArgs:      cmd.ValidArgs,
+			SubCommands:    cmd.SubCommands,
+			CompletesFiles: cmd.CompletesFiles,
 		}
 	}
 	return result

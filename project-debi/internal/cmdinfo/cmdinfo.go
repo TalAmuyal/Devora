@@ -2,15 +2,16 @@ package cmdinfo
 
 // Command describes a CLI command.
 type Command struct {
-	Name        string
-	Alias       string
-	Description string
-	ArgsHint    string
-	Group       string
-	MinArgs     int
-	Flags       []Flag
-	ValidArgs   []string
-	SubCommands []SubCommand
+	Name           string
+	Alias          string
+	Description    string
+	ArgsHint       string
+	Group          string
+	MinArgs        int
+	Flags          []Flag
+	ValidArgs      []string
+	SubCommands    []SubCommand
+	CompletesFiles bool
 }
 
 // SubCommand describes a sub-command accepted by a parent command.
