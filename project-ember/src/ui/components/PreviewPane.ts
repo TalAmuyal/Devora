@@ -60,10 +60,14 @@ export function createPreviewPane(opts: { path: string; onClose: () => void }): 
 
   el.appendChild(container);
 
+  // Each (re)load is tagged so a slow render (mermaid diagrams are async) can't overwrite a newer one.
+  let loadSeq = 0;
   const loadBody = async (): Promise<void> => {
+    const seq = ++loadSeq;
     const next = isHtmlPath(path)
       ? await WebContentOverlay.createHtmlBody(path)
       : await WebContentOverlay.createMarkdownBody(path);
+    if (seq !== loadSeq) return; // a newer load superseded this one
     container.replaceChild(next, body);
     body = next;
   };

@@ -10,6 +10,11 @@ Feature: File preview pane
     Then the active session should have 1 preview pane
     And the preview pane should render the Markdown heading "First Doc"
 
+  Scenario: A Mermaid code block in Markdown renders as a themed diagram
+    When a Markdown file with a Mermaid diagram is previewed in the active session
+    Then the preview pane should render a Mermaid diagram containing "Client"
+    And the Mermaid diagram nodes should use a themed fill color
+
   Scenario: Previewing an HTML file uses a sandboxed iframe
     When an HTML file is previewed in the active session
     Then the active session should have 1 preview pane

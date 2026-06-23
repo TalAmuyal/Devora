@@ -52,6 +52,17 @@ When('an HTML file is previewed in the active session', async function (this: Em
   await sendPreview(this, makeTempFile(this, '.html', 'Hello HTML'), false);
 });
 
+When(
+  'a Markdown file with a Mermaid diagram is previewed in the active session',
+  async function (this: EmberWorld) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devora-preview-'));
+    const file = path.join(dir, 'diagram.md');
+    fs.writeFileSync(file, '# Diagram\n\n```mermaid\nflowchart LR\n  A[Client] --> B[Server]\n```\n');
+    (this.previewFiles ??= []).push(file);
+    await sendPreview(this, file, false);
+  },
+);
+
 When('a Markdown file is previewed for an unknown session', async function (this: EmberWorld) {
   const file = makeTempFile(this, '.md', 'Orphan');
   this.driver.ipcPostFireAndForget('/preview/open', { ptyId: 999999, path: file, stack: false });
@@ -88,6 +99,42 @@ Then(
       heading,
       10_000,
     );
+  },
+);
+
+Then(
+  'the preview pane should render a Mermaid diagram containing {string}',
+  async function (this: EmberWorld, label: string) {
+    // A rendered (not error) diagram contains the node label; an SVG appearing at all proves mermaid runs under the production CSP (no unsafe-eval) and its lazy diagram chunk loaded.
+    await this.driver.pollFor(
+      `return (() => {
+        const svg = document.querySelector('.preview-pane .mermaid-diagram svg');
+        return svg && (svg.textContent || '').includes(${JSON.stringify(label)}) ? ${JSON.stringify(label)} : null;
+      })()`,
+      label,
+      10_000,
+    );
+  },
+);
+
+Then(
+  'the Mermaid diagram nodes should use a themed fill color',
+  async function (this: EmberWorld) {
+    // The prior step guarantees the diagram has rendered. Mermaid colors its nodes via a runtime inline <style>; if the production CSP blocked that style, the node would fall back to the SVG default (black/none).
+    // A real fill therefore proves mermaid's inline styles applied under CSP.
+    const fill = await this.driver.eval(`
+      return (() => {
+        const svg = document.querySelector('.preview-pane .mermaid-diagram svg');
+        if (!svg) return 'no-svg';
+        const shape = svg.querySelector('.node rect, rect.basic, .node polygon, .node path, .node circle');
+        if (!shape) return 'no-shape';
+        return getComputedStyle(shape).fill || 'empty';
+      })()
+    `);
+    const unstyled = ['no-svg', 'no-shape', 'empty', 'none', 'rgb(0, 0, 0)'];
+    if (unstyled.includes(fill)) {
+      throw new Error(`Mermaid node fill not themed (got "${fill}") — inline styles may be CSP-blocked`);
+    }
   },
 );
 

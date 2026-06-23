@@ -1464,6 +1464,33 @@ kbd {
   color: var(--color-fg-secondary);
 }
 
+/* Rendered Mermaid diagram: centered, scrollable when wider than the pane. */
+.web-content-body .mermaid-diagram {
+  display: flex;
+  justify-content: center;
+  margin: var(--space-lg) 0;
+  overflow-x: auto;
+}
+
+.web-content-body .mermaid-diagram svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/* A diagram that failed to parse falls back to its source, flagged subtly. */
+.web-content-body pre.mermaid.mermaid-error {
+  border: 1px solid var(--color-status-error);
+}
+
+.web-content-body pre.mermaid.mermaid-error::before {
+  content: "⚠ Could not render this Mermaid diagram — showing source";
+  display: block;
+  margin-bottom: var(--space-sm);
+  color: var(--color-status-error);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-sm);
+}
+
 .web-content-iframe {
   flex: 1;
   border: none;
