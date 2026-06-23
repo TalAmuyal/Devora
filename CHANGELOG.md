@@ -14,6 +14,10 @@ Types of changes:
 
 ## Unreleased
 
+### Changed
+
+- Updated README.md with clearer installation instructions
+
 ## 2026-06-23.0
 
 ### Highlights

@@ -33,7 +33,7 @@ Use `--strict` to also check optional ones.
 
 ## Getting started
 
-1. Install (`curl -fsSL https://raw.githubusercontent.com/TalAmuyal/Devora/master/install.sh | bash` or see other options below)
+1. Install (see options below)
 2. Read the [User Guide](USER_GUIDE.md) for day-to-day usage (available from the app via F1)
 
 ### Install from a release
