@@ -14,38 +14,56 @@ Types of changes:
 
 ## Unreleased
 
+## 2026-06-23.0
+
+### Highlights
+
+#### Markdown/HTML preview
+
+Devora now has a built-in Markdown and HTML previewer, accessible via a new `debi preview` command.
+Markdown previews render Mermaid diagrams.
+
+Try it out with `debi preview path/to/file.md` or `debi preview path/to/file.html`.
+
+#### New Palette commands
+
+- `Clone repo into Profile`: clone a git repo into a profile's `repos/` directory from a pasted URL (GitHub HTTPS/SSH or repo-page URL)
+- `Duplicate current session`: duplicate the current workspace session (worktrees (with their commits) and CLAUDE.md)
+- `Close Current Session`: close the current workspace session/tab
+
+#### Customizable Claude Code configuration
+
+Both model and effort level are now configurable globally and per-profile, with a new "Claude Models & Effort" card in the Profile Manager.
+This decouples Devora release from Claude model releases, allowing you to use newly released models without updating Devora.
+
 ### Added
 
-- Added the ability to clone a git repo into a profile's `repos/` directory from a pasted URL (GitHub HTTPS/SSH or repo-page URL) — reachable from the Command Palette command, the Workspace Hub's New Task form, and the Profile Manager
-- Added the ability to duplicate an tasks workspace using "Duplicate Current Session" (Command Palette) or pressing the Workspace Hub's "Duplicate" button (next to "Open")
-- Added a "Close Current Session" command to the Command Palette
-- Added an "Add Repo to Workspace" command to the Command Palette that adds a repo (git worktree) to the active session's workspace, with streaming progress and cancel
+- Added the ability to clone a git repo into a profile's `repos/` directory from a pasted URL (GitHub HTTPS/SSH or repo-page URL) — reachable from the Command Palette, the Workspace Hub's New Task form, and the Profile Manager
 - Added a filter to the repo list (in the New Task form and the Add Repo dialog): type to narrow by name, with `↑/↓` to move and `Enter` to select/toggle
+- Added the ability to duplicate a workspace using "Duplicate Current Session" (Command Palette) or the Workspace Hub's "Duplicate" button (next to "Open")
+- Added a "Close Current Session" command to the Command Palette
 - Added configurable Claude model tiers (Opus/Sonnet/Haiku) and effort level, editable per user and per profile in the Profile Manager (a "User Defaults" entry plus a per-profile "Claude Models & Effort" card). Each setting can be a value, None (let Claude Code use its own default), or unset (fall through profile → user → Devora default); models are free text, so a newly released model can be used without updating Devora
 - Added an in-app **Health Hub** that checks Devora's dependencies, credentials, configs, etc. — reachable from the Command Palette and the Workspace Hub
 - Added `debi preview [--stack] <file>` to render a Markdown or HTML file in a preview pane to the right of the terminal
-	- Markdown previews renders Mermaid code blocks as diagrams
+	- Markdown previews render Mermaid code blocks as diagrams
 	- Re-previewing the same file refreshes its pane
 	- `--stack` opens an additional pane
 
 ### Changed
 
-- `ccc` now treats its `CLAUDE_CODE_*` env-vars as defaults, respecting any pre-existing definitions in the environment instead of overriding them
-- `debi health` gained a `--json` output mode
-- `debi health` now supports profile-by-path selection (a `--profile-path` flag and a `DEBI_PROFILE_PATH` env-var), and now honors `DEVORA_CONFIG_PATH`
-- Judge now allows `open` and `sed`
-- Judge now abstains on `Write` calls
-- The Claude model tiers and effort level are now resolved from config and injected into session shells by Devora, instead of being hardcoded in `ccc`
-- Updated the README to point to the user-guide in the app
 - The Command Palette now focuses its search field on open so you can type a filter immediately; `Esc` closes it and `↑/↓`/`Enter` navigate and run
-- Moved the Workspace Hub's "Health" and "Save loading latencies" actions into a new burger (☰) menu to the right of the profile dropdow
+- Moved the Workspace Hub's "Health" and "Save loading latencies" actions into a new burger (☰) menu to the right of the profile dropdown
+- `debi health` now supports profile-by-path selection (a `--profile-path` flag and a `DEBI_PROFILE_PATH` env-var), and now honors `DEVORA_CONFIG_PATH`
+- `debi health` gained a `--json` output mode
+- Judge now allows `open` and `sed`, and abstains on `Write` calls
+- `ccc` now treats its `CLAUDE_CODE_*` env-vars as defaults, respecting any pre-existing definitions in the environment instead of overriding them
 
 ### Removed
 
 - Removed the `ccc --fable` flag; set the Opus/Sonnet model to `claude-fable-5` in the Claude config instead
-- Removed the unused `review.open-mode` config key and the legacy OG Kitty/glimpse-tty path from the Crit wrapper; the published Ember build always opens Crit in its built-in overlay
 - Removed the `debi add` command (and its OG add-repo TUI) as part of the Devora OG → Ember migration; use the "Add Repo to Workspace" Command Palette command instead
 - Removed Kitty from `debi health` checks
+- Removed the unused `review.open-mode` config key and the legacy OG Kitty/glimpse-tty path from the Crit wrapper; the published Ember build always opens Crit in its built-in overlay
 
 ## 2026-06-16.0
 
