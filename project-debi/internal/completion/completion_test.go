@@ -80,6 +80,17 @@ func testCommands() []cmdinfo.Command {
 				},
 			},
 		},
+		{
+			Name:           "preview",
+			Description:    "Render a Markdown/HTML file in a preview pane",
+			ArgsHint:       "[--stack] <file>",
+			Group:          "Utility",
+			MinArgs:        1,
+			CompletesFiles: true,
+			Flags: []cmdinfo.Flag{
+				{Name: "--stack", Description: "Open in a new pane instead of replacing the current preview"},
+			},
+		},
 	}
 }
 
@@ -488,6 +499,59 @@ func TestGenerateFish_SubCommandFileCompletion(t *testing.T) {
 	// File completion uses -F flag in fish
 	if !strings.Contains(output, "-F") {
 		t.Fatal("fish output should contain '-F' flag for file completion in util validators")
+	}
+}
+
+func TestGenerateZsh_TopLevelFileCompletion(t *testing.T) {
+	var buf bytes.Buffer
+	GenerateZsh(&buf, "debi", testCommands())
+	output := buf.String()
+
+	// A top-level command with CompletesFiles (preview) must dispatch on whether the current word is a flag: bare TAB -> _files, '-' -> the flags.
+	// The dash-check is unique to this branch (util validators use a bare _files), so it scopes the assertion to the preview rendering context.
+	if !strings.Contains(output, "preview)") {
+		t.Fatal("zsh output should contain a 'preview)' case for the top-level command")
+	}
+	if !strings.Contains(output, `if [[ "${words[CURRENT]}" == -* ]]; then`) {
+		t.Fatal("zsh output should branch on whether the current word starts with '-' for preview")
+	}
+	if !strings.Contains(output, "_files") {
+		t.Fatal("zsh output should call _files for preview file completion")
+	}
+	if !strings.Contains(output, `'--stack:Open in a new pane instead of replacing the current preview'`) {
+		t.Fatal("zsh output should still offer the --stack flag for preview")
+	}
+}
+
+func TestGenerateBash_TopLevelFileCompletion(t *testing.T) {
+	var buf bytes.Buffer
+	GenerateBash(&buf, "debi", testCommands())
+	output := buf.String()
+
+	if !strings.Contains(output, "preview)") {
+		t.Fatal("bash output should contain a 'preview)' case for the top-level command")
+	}
+	if !strings.Contains(output, `if [[ "$cur" == -* ]]; then`) {
+		t.Fatal("bash output should branch on whether the current word starts with '-' for preview")
+	}
+	if !strings.Contains(output, "compgen -f") {
+		t.Fatal("bash output should call 'compgen -f' for preview file completion")
+	}
+	if !strings.Contains(output, `compgen -W "--stack -h --help"`) {
+		t.Fatal("bash output should still offer the --stack flag for preview")
+	}
+}
+
+func TestGenerateFish_TopLevelFileCompletion(t *testing.T) {
+	var buf bytes.Buffer
+	GenerateFish(&buf, "debi", testCommands())
+	output := buf.String()
+
+	if !strings.Contains(output, `complete -c debi -F -n "__fish_seen_subcommand_from preview"`) {
+		t.Fatal("fish output should force file completion (-F) for the preview command")
+	}
+	if !strings.Contains(output, `__fish_seen_subcommand_from preview" -a "--stack"`) {
+		t.Fatal("fish output should still offer the --stack flag for preview")
 	}
 }
 

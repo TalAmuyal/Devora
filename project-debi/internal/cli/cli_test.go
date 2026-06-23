@@ -1306,6 +1306,40 @@ func TestRun_Completion_ProducesOutput(t *testing.T) {
 	}
 }
 
+// TestRun_Completion_Zsh_PreviewCompletesFiles guards the full registry path: the `preview` command carries CompletesFiles, and CommandInfos() must propagate it so the generated zsh actually offers file completion.
+// The hand-built fixtures in the completion package bypass CommandInfos(), so this is the only test that would catch a dropped propagation.
+func TestRun_Completion_Zsh_PreviewCompletesFiles(t *testing.T) {
+	old := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdout = w
+
+	runErr := Run([]string{"completion", "zsh"})
+
+	w.Close()
+	os.Stdout = old
+
+	if runErr != nil {
+		t.Fatalf("expected no error, got: %s", runErr.Error())
+	}
+
+	var buf bytes.Buffer
+	io.Copy(&buf, r)
+	output := buf.String()
+
+	if !strings.Contains(output, "preview)") {
+		t.Fatal("zsh completion should contain a 'preview)' case")
+	}
+	if !strings.Contains(output, `if [[ "${words[CURRENT]}" == -* ]]; then`) {
+		t.Fatal("zsh completion should branch on the current word for preview file completion")
+	}
+	if !strings.Contains(output, "_files") {
+		t.Fatal("zsh completion should call _files for preview")
+	}
+}
+
 func TestRun_Completion_Help_PrintsGeneralHelp(t *testing.T) {
 	for _, flag := range []string{"-h", "--help"} {
 		t.Run(flag, func(t *testing.T) {

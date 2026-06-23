@@ -108,9 +108,17 @@ _{{.BinaryName}}_completions() {
             COMPREPLY=($(compgen -W "{{range .SubCommands}}{{.Name}} {{end}}-h --help" -- "$cur"))
             return
             ;;
-{{- else if or .Flags .ValidArgs}}
+{{- else if or .Flags .ValidArgs .CompletesFiles}}
         {{.Name}}{{if .Alias}}|{{.Alias}}{{end}})
+{{- if .CompletesFiles}}
+            if [[ "$cur" == -* ]]; then
+                COMPREPLY=($(compgen -W "{{range .ValidArgs}}{{.}} {{end}}{{range .Flags}}{{.Name}} {{end}}-h --help" -- "$cur"))
+            else
+                COMPREPLY=($(compgen -f -- "$cur"))
+            fi
+{{- else}}
             COMPREPLY=($(compgen -W "{{range .ValidArgs}}{{.}} {{end}}{{range .Flags}}{{.Name}} {{end}}-h --help" -- "$cur"))
+{{- end}}
             return
             ;;
 {{- end}}
@@ -185,7 +193,7 @@ _{{.BinaryName}}() {
                     ;;
                 esac
                 ;;
-{{- else if or .Flags .ValidArgs}}
+{{- else if or .Flags .ValidArgs .CompletesFiles}}
             {{.Name}}{{if .Alias}}|{{.Alias}}{{end}})
                 local -a completions
                 completions=(
@@ -198,7 +206,15 @@ _{{.BinaryName}}() {
                     '-h:Show help'
                     '--help:Show help'
                 )
+{{- if .CompletesFiles}}
+                if [[ "${words[CURRENT]}" == -* ]]; then
+                    _describe 'completions' completions
+                else
+                    _files
+                fi
+{{- else}}
                 _describe 'completions' completions
+{{- end}}
                 ;;
 {{- end}}
 {{- end}}
@@ -262,8 +278,11 @@ complete -c {{$.BinaryName}} -f -n "__{{$.BinaryName}}_seen_subcmd {{$cmd.Name}}
 complete -c {{$.BinaryName}} -f -n "__{{$.BinaryName}}_seen_subcmd {{$cmd.Name}} {{$sub.Name}}" -a "--help" -d "Show help"
 {{- end}}
 {{- end}}
-{{else if or .Flags .ValidArgs -}}
+{{else if or .Flags .ValidArgs .CompletesFiles -}}
 {{- $cmd := . -}}
+{{- if .CompletesFiles}}
+complete -c {{$.BinaryName}} -F -n "__fish_seen_subcommand_from {{$cmd.Name}}{{if $cmd.Alias}} {{$cmd.Alias}}{{end}}"
+{{- end}}
 {{- range .ValidArgs}}
 complete -c {{$.BinaryName}} -f -n "__fish_seen_subcommand_from {{$cmd.Name}}{{if $cmd.Alias}} {{$cmd.Alias}}{{end}}" -a "{{.}}"
 {{- end}}

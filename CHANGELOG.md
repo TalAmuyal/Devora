@@ -17,6 +17,7 @@ Types of changes:
 ### Changed
 
 - Updated README.md with clearer installation instructions
+- `debi preview <TAB>` now completes file paths; the `--stack`/`-h`/`--help` flags surface once the word begins with `-`
 
 ## 2026-06-23.0
 
