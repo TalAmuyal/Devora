@@ -9,7 +9,8 @@
   "dependencies": {
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-dialog": "^2.7.1",
-    "marked": "^18.0.3"
+    "marked": "^18.0.3",
+    "mermaid": "^11.15.0"
   },
   "devDependencies": {
     "@cucumber/cucumber": "^11",

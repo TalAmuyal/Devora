@@ -1,5 +1,5 @@
 import { invokeLogOnly } from '../invoke';
-import { marked } from 'marked';
+import { markdownToHtml, renderMermaidDiagrams } from './mermaid';
 
 export class WebContentOverlay {
 
@@ -17,7 +17,8 @@ export class WebContentOverlay {
       const markdown = await invokeLogOnly<string>('read_text_file', { path: filePath });
       const body = document.createElement('div');
       body.className = 'web-content-body';
-      body.innerHTML = await marked(markdown);
+      body.innerHTML = await markdownToHtml(markdown);
+      await renderMermaidDiagrams(body);
       return body;
     } catch (e) {
       return this.createErrorBody(e);

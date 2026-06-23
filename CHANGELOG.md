@@ -22,8 +22,11 @@ Types of changes:
 - Added an "Add Repo to Workspace" command to the Command Palette that adds a repo (git worktree) to the active session's workspace, with streaming progress and cancel
 - Added a filter to the repo list (in the New Task form and the Add Repo dialog): type to narrow by name, with `↑/↓` to move and `Enter` to select/toggle
 - Added configurable Claude model tiers (Opus/Sonnet/Haiku) and effort level, editable per user and per profile in the Profile Manager (a "User Defaults" entry plus a per-profile "Claude Models & Effort" card). Each setting can be a value, None (let Claude Code use its own default), or unset (fall through profile → user → Devora default); models are free text, so a newly released model can be used without updating Devora
-- Added an in-app **Health Hub** that checks Devora's dependencies, credentials, configs, etc. — reachable from the Command Palette and the Workspace Hub.
-- Added `debi preview [--stack] <file>` to render a Markdown or HTML file in a preview pane to the right of the terminal. Re-previewing the same file refreshes its pane, `--stack` opens an additional pane, the divider is draggable, and each preview pane has a close (×) button.
+- Added an in-app **Health Hub** that checks Devora's dependencies, credentials, configs, etc. — reachable from the Command Palette and the Workspace Hub
+- Added `debi preview [--stack] <file>` to render a Markdown or HTML file in a preview pane to the right of the terminal
+	- Markdown previews renders Mermaid code blocks as diagrams
+	- Re-previewing the same file refreshes its pane
+	- `--stack` opens an additional pane
 
 ### Changed
 
