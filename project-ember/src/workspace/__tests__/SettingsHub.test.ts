@@ -54,6 +54,12 @@ function mockBackend(overrides?: {
         };
       case 'set_claude_setting':
         return null;
+      case 'get_config_settings':
+        return { stored: {}, resolved: {} };
+      case 'set_config_setting':
+        return null;
+      case 'get_asana_token_status':
+        return false;
       default:
         throw new Error(`unexpected command ${cmd}`);
     }

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-set-asana-token"
+description = "Enables the set_asana_token command without any pre-configured scope."
+commands.allow = ["set_asana_token"]
+
+[[permission]]
+identifier = "deny-set-asana-token"
+description = "Denies the set_asana_token command without any pre-configured scope."
+commands.deny = ["set_asana_token"]

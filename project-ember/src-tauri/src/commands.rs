@@ -4,6 +4,7 @@ use std::sync::Mutex;
 use tauri::ipc::Channel;
 use tauri::State;
 
+use crate::credentials;
 use crate::health;
 use crate::ipc_server::IpcState;
 use crate::logging::LogState;
@@ -184,6 +185,44 @@ pub fn set_claude_setting(
     value: Option<String>,
 ) -> Result<(), String> {
     workspace::write_claude_setting(profile_path.as_deref(), &key, &state, value.as_deref())
+}
+
+/// Reads the generic config settings (terminal / PR / task-tracker) for one scope (a profile path, or `None` for the user-level/global scope): the raw stored values plus the effective resolved values.
+#[tauri::command]
+pub fn get_config_settings(
+    profile_path: Option<String>,
+) -> Result<workspace::ConfigSettingsResponse, String> {
+    workspace::read_config_settings(profile_path.as_deref())
+}
+
+/// Writes one generic config setting at the given scope.
+/// `state`: "value" (store the coerced `value`), "default" (remove the key).
+#[tauri::command]
+pub fn set_config_setting(
+    profile_path: Option<String>,
+    key: String,
+    state: String,
+    value: Option<String>,
+) -> Result<(), String> {
+    workspace::write_config_setting(profile_path.as_deref(), &key, &state, value.as_deref())
+}
+
+/// Whether an Asana API token is currently stored in the OS keychain.
+#[tauri::command]
+pub fn get_asana_token_status() -> Result<bool, String> {
+    credentials::asana_token_present()
+}
+
+/// Stores (or replaces) the Asana API token in the OS keychain.
+#[tauri::command]
+pub fn set_asana_token(token: String) -> Result<(), String> {
+    credentials::set_asana_token(&token)
+}
+
+/// Removes the stored Asana API token from the OS keychain (idempotent).
+#[tauri::command]
+pub fn clear_asana_token() -> Result<(), String> {
+    credentials::clear_asana_token()
 }
 
 /// Start a non-blocking task creation.

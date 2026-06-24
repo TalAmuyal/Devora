@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-get-asana-token-status"
+description = "Enables the get_asana_token_status command without any pre-configured scope."
+commands.allow = ["get_asana_token_status"]
+
+[[permission]]
+identifier = "deny-get-asana-token-status"
+description = "Denies the get_asana_token_status command without any pre-configured scope."
+commands.deny = ["get_asana_token_status"]

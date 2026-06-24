@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-clear-asana-token"
+description = "Enables the clear_asana_token command without any pre-configured scope."
+commands.allow = ["clear_asana_token"]
+
+[[permission]]
+identifier = "deny-clear-asana-token"
+description = "Denies the clear_asana_token command without any pre-configured scope."
+commands.deny = ["clear_asana_token"]

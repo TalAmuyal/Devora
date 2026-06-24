@@ -220,7 +220,7 @@ fn run_inner(
 
     let (ws_path, ws_name, mode) = select_workspace(&workspaces_dir, &repo_names, task_name)?;
 
-    let body = run_body(handle, &repos, &ws_path, &mode, on_event, warnings);
+    let body = run_body(handle, profile_path, &repos, &ws_path, &mode, on_event, warnings);
 
     match body {
         Ok(()) if handle.is_cancelled() => {
@@ -345,8 +345,14 @@ fn run_add_repo_inner(
         return Ok(Outcome::Cancelled);
     }
 
+    // The profile root is the grandparent of the workspace (`<profile-root>/workspaces/<ws>`), so the prepare-command resolves with the same profile → user precedence as the main creation path.
+    let profile_path = ws_path
+        .parent()
+        .and_then(Path::parent)
+        .map(|p| p.to_string_lossy().into_owned());
     run_prepare(
         handle,
+        profile_path.as_deref(),
         &[RepoSpec {
             source,
             name: worktree_dir_name.to_string(),
@@ -583,6 +589,7 @@ fn workspace_id_number(ws_path: &Path) -> Option<usize> {
 
 fn run_body(
     handle: &CreationHandle,
+    profile_path: &str,
     repos: &[RepoSpec],
     ws_path: &Path,
     mode: &Mode,
@@ -628,7 +635,7 @@ fn run_body(
         }
     }
 
-    run_prepare(handle, repos, ws_path, on_event, warnings)
+    run_prepare(handle, Some(profile_path), repos, ws_path, on_event, warnings)
 }
 
 /// Create one worktree from `source_repo`, detached at `target_ref`, then trust mise.
@@ -707,12 +714,13 @@ fn create_worktree_for_repo(
 /// Failures are non-fatal (reported as warnings) — matching the original behaviour — but the dependency cache is still in place, so a warm install is fast.
 fn run_prepare(
     handle: &CreationHandle,
+    profile_path: Option<&str>,
     repos: &[RepoSpec],
     ws_path: &Path,
     on_event: &Channel<CreationEvent>,
     warnings: &mut Vec<String>,
 ) -> Result<(), String> {
-    let Some(prepare_cmd) = get_prepare_command() else {
+    let Some(prepare_cmd) = workspace::get_prepare_command(profile_path) else {
         return Ok(());
     };
 
@@ -818,18 +826,6 @@ fn resolve_pinned_commit(source_ws: &Path, name: &str, selected_repo: &Path) -> 
         .output()
         .ok()?;
     reachable.status.success().then_some(sha)
-}
-
-fn get_prepare_command() -> Option<String> {
-    let path = workspace::global_config_path().ok()?;
-    if !path.exists() {
-        return None;
-    }
-    let config = workspace::read_json_file(&path).ok()?;
-    config
-        .get("prepare-command")
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string())
 }
 
 fn finalize_fresh(ws_path: &Path, task_name: &str) -> Result<(), String> {

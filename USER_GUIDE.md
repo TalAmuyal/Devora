@@ -142,43 +142,17 @@ mkdir -p ~/.zsh/completions
 debi completion zsh > ~/.zsh/completions/_debi
 ```
 
-## Config File Settings
+## Settings
 
-For now, some settings are configured directly in `config.json` (global or per-profile) rather than through the UI or `debi`.
+Devora's behavior is configured from the **[Settings Hub](#profiles)** (press `P` in the Workspace Hub).
+Each setting is edited at the **User Defaults** (global) scope and per-profile: a profile setting overrides the User Default, and leaving a setting on **Default** inherits it (profile → User Defaults → Devora's built-in).
 
-| Key | Values | Default | Scope |
-|-----|--------|---------|-------|
-| `terminal.default-app` | any shell command (e.g. `fish`, `nvim`, `tmux`) | empty (bare login shell) | profile-overridable |
-| `terminal.git-shortcuts` | `true`, `false` | `true` | profile-overridable |
+The Settings Hub manages:
 
-### `terminal.git-shortcuts`
-
-By default, each session has a shell.
-Set `terminal.default-app` to `nvim` (or any other command) to launch instead of a plain shell.
-
-Example:
-
-```json
-{
-	"terminal": {
-		"default-app": "nvim"
-	}
-}
-```
-
-### `terminal.git-shortcuts`
-
-Controls whether Devora session shells expose Debi's git shortcuts as bare commands (see [Git shortcuts](#git-shortcuts)).
-
-To turn this off, set `terminal.git-shortcuts` to `false` in `config.json` (globally or per-profile):
-
-```json
-{
-	"terminal": {
-		"git-shortcuts": false
-	}
-}
-```
+- **Claude Models & Effort** — the model for each tier and the effort level (see [The `ccc` Command](#the-ccc-command) below)
+- **Terminal & Session** — the per-session app launched instead of a bare shell (e.g. `nvim`), whether Devora exposes Debi's [git shortcuts](#git-shortcuts), and the prepare command run after each worktree is created
+- **Pull Requests** — auto-merge and the feature-branch prefix used by `debi pr submit`
+- **Task Tracker** — the provider and, for Asana, the workspace/project/tag/section IDs plus the API token (stored in your OS keychain, shared with `debi`)
 
 ## The `ccc` Command
 
