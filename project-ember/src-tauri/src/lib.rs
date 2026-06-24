@@ -1,4 +1,5 @@
 mod commands;
+mod credentials;
 mod health;
 mod http_util;
 mod ipc_server;
@@ -133,6 +134,11 @@ pub fn run() {
             commands::get_default_app,
             commands::get_claude_settings,
             commands::set_claude_setting,
+            commands::get_config_settings,
+            commands::set_config_setting,
+            commands::get_asana_token_status,
+            commands::set_asana_token,
+            commands::clear_asana_token,
             commands::create_workspace,
             commands::cancel_workspace_creation,
             commands::add_repo_to_workspace,

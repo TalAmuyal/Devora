@@ -534,6 +534,7 @@ dependencies = [
 name = "devora-ember"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "fs2",
  "http-body-util",
  "hyper",

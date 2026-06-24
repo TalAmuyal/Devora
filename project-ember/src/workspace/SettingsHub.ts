@@ -15,8 +15,51 @@ import { isEditableElementFocused } from '../ui/focus';
 import { pluralize } from '../ui/format';
 import { createProfileForm } from './ProfileForm';
 import { createClaudeConfigCard } from '../ui/components/ClaudeConfigCard';
+import { createConfigCard, ConfigFieldSpec } from '../ui/components/ConfigCard';
+import { createTaskTrackerCard } from '../ui/components/TaskTrackerCard';
 import { createSettingsCard } from '../ui/components/SettingsCard';
 import { ProfileInfo, RepoInfo, WorkspaceInfo } from './types';
+
+/** Terminal/session settings card fields. */
+const TERMINAL_FIELDS: ConfigFieldSpec[] = [
+  {
+    key: 'terminal.default-app',
+    label: 'Default app',
+    hint: 'launched per session',
+    field: { kind: 'text', placeholder: 'e.g. nvim (blank = bare shell)' },
+  },
+  {
+    key: 'terminal.git-shortcuts',
+    label: 'Git shortcuts',
+    hint: 'gst, gd, gri…',
+    field: { kind: 'bool' },
+  },
+  {
+    key: 'prepare-command',
+    label: 'Prepare command',
+    hint: 'runs after worktree add',
+    field: { kind: 'text', placeholder: 'e.g. mise install' },
+  },
+];
+
+/** Pull-request settings card fields. */
+const PR_FIELDS: ConfigFieldSpec[] = [
+  {
+    key: 'pr.auto-merge',
+    label: 'Auto-merge',
+    hint: 'debi pr submit',
+    field: { kind: 'bool' },
+    // A per-repo override (git local config) can flip this and the Hub can't see it, so we don't show an effective value.
+    showResolved: false,
+    note: 'Per-repo overrides via `debi pr auto-merge` still apply.',
+  },
+  {
+    key: 'feature.branch-prefix',
+    label: 'Branch prefix',
+    hint: 'feature-branch name',
+    field: { kind: 'text', placeholder: 'feature' },
+  },
+];
 
 /** A row in the master list: the global User Defaults, a profile, or the New Profile form. */
 type MasterRow =
@@ -116,11 +159,11 @@ export class SettingsHub {
   // --- Keyboard ---
 
   private handleKeyDown(e: KeyboardEvent): void {
-    // Let the config card own its own keys (its segmented buttons / chips / dropdown are focusable but not "editable", so they'd otherwise trigger j/k/d/n); this window listener is capture-phase, so the card can't pre-empt it — gate it here.
+    // Let the settings cards own their own keys (their segmented buttons / chips / dropdown / inputs are focusable but not always "editable", so they'd otherwise trigger j/k/d/n); this window listener is capture-phase, so a card can't pre-empt it — gate it here.
     const target = e.target;
     if (
       isEditableElementFocused() ||
-      (target instanceof Element && target.closest('.claude-config-card'))
+      (target instanceof Element && target.closest('.claude-config-card, .settings-card'))
     ) {
       return;
     }
@@ -473,8 +516,20 @@ export class SettingsHub {
     desc.textContent = 'Applied to every profile unless a profile overrides a setting.';
     wrap.appendChild(desc);
 
-    wrap.appendChild(createClaudeConfigCard({ profilePath: null }));
+    this.appendSettingsCards(wrap, null);
     return wrap;
+  }
+
+  /** Append the per-scope settings cards (shared by User Defaults and per-profile panels). */
+  private appendSettingsCards(container: HTMLElement, profilePath: string | null): void {
+    container.appendChild(createClaudeConfigCard({ profilePath }));
+    container.appendChild(
+      createConfigCard({ title: 'Terminal & Session', profilePath, fields: TERMINAL_FIELDS }),
+    );
+    container.appendChild(
+      createConfigCard({ title: 'Pull Requests', profilePath, fields: PR_FIELDS }),
+    );
+    container.appendChild(createTaskTrackerCard(profilePath));
   }
 
   private updateDetailPanel(): void {
@@ -579,7 +634,7 @@ export class SettingsHub {
     }
     detail.appendChild(reposCard);
 
-    detail.appendChild(createClaudeConfigCard({ profilePath: profile.path }));
+    this.appendSettingsCards(detail, profile.path);
 
     return detail;
   }
