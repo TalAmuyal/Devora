@@ -26,3 +26,10 @@ description = "Run all tests"
 depends = ["build"]
 run = "mv debi ~/.local/bin/."
 description = "Move the built binary to ~/.local/bin for experimental use"
+
+[tasks.deadcode]
+run = [
+  "go run golang.org/x/tools/cmd/deadcode@latest -test ./...",
+  "go run honnef.co/go/tools/cmd/staticcheck@latest -checks U1000 ./...",
+]
+description = "Scan for dead code: unreachable funcs (deadcode -test) + unused identifiers (staticcheck U1000)"

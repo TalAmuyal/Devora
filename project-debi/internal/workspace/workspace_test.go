@@ -78,20 +78,6 @@ func makeWorkspace(t *testing.T, workspacesRoot string, name string, initialized
 
 // --- State detection tests ---
 
-func TestIsActive_WithInitializedAndTask(t *testing.T) {
-	wsPath := makeWorkspace(t, t.TempDir(), "ws-1", true, true, nil)
-	if !IsActive(wsPath) {
-		t.Fatal("expected workspace to be active")
-	}
-}
-
-func TestIsActive_WithInitializedOnly(t *testing.T) {
-	wsPath := makeWorkspace(t, t.TempDir(), "ws-1", true, false, nil)
-	if IsActive(wsPath) {
-		t.Fatal("expected workspace to not be active (no task)")
-	}
-}
-
 func TestIsInactive_WithInitializedOnly(t *testing.T) {
 	wsPath := makeWorkspace(t, t.TempDir(), "ws-1", true, false, nil)
 	if !IsInactive(wsPath) {
@@ -103,27 +89,6 @@ func TestIsInactive_WithInitializedAndTask(t *testing.T) {
 	wsPath := makeWorkspace(t, t.TempDir(), "ws-1", true, true, nil)
 	if IsInactive(wsPath) {
 		t.Fatal("expected workspace to not be inactive (has task)")
-	}
-}
-
-func TestIsInvalid_WithNeitherFile(t *testing.T) {
-	wsPath := makeWorkspace(t, t.TempDir(), "ws-1", false, false, nil)
-	if !IsInvalid(wsPath) {
-		t.Fatal("expected workspace to be invalid")
-	}
-}
-
-func TestIsInvalid_WithTaskOnly(t *testing.T) {
-	wsPath := makeWorkspace(t, t.TempDir(), "ws-1", false, true, nil)
-	if !IsInvalid(wsPath) {
-		t.Fatal("expected workspace to be invalid (task only, not initialized)")
-	}
-}
-
-func TestIsInvalid_WithInitialized(t *testing.T) {
-	wsPath := makeWorkspace(t, t.TempDir(), "ws-1", true, false, nil)
-	if IsInvalid(wsPath) {
-		t.Fatal("expected workspace to not be invalid (initialized)")
 	}
 }
 
@@ -251,77 +216,6 @@ func TestGetWorkspaceRepos_ExcludesFiles(t *testing.T) {
 	}
 	if len(repos) != 0 {
 		t.Fatalf("expected empty result, got %v", repos)
-	}
-}
-
-// --- Filtered query tests ---
-
-func TestGetActiveWorkspaces_ReturnsOnlyActiveUnlocked(t *testing.T) {
-	tmpDir := setupConfigTest(t)
-	profileDir := filepath.Join(tmpDir, "profile")
-	createProfile(t, profileDir, map[string]any{"name": "test"})
-	config.SetActiveProfile(&config.Profile{Name: "test", RootPath: profileDir, Config: map[string]any{"name": "test"}})
-
-	workspacesRoot := filepath.Join(profileDir, "workspaces")
-	makeWorkspace(t, workspacesRoot, "ws-1", true, true, nil)   // active
-	makeWorkspace(t, workspacesRoot, "ws-2", true, false, nil)  // inactive
-	makeWorkspace(t, workspacesRoot, "ws-3", false, false, nil) // invalid
-
-	active, err := GetActiveWorkspaces()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(active) != 1 {
-		t.Fatalf("expected 1 active workspace, got %d: %v", len(active), active)
-	}
-	if filepath.Base(active[0]) != "ws-1" {
-		t.Fatalf("expected ws-1, got %s", filepath.Base(active[0]))
-	}
-}
-
-func TestGetInactiveWorkspaces_ReturnsOnlyInactiveUnlocked(t *testing.T) {
-	tmpDir := setupConfigTest(t)
-	profileDir := filepath.Join(tmpDir, "profile")
-	createProfile(t, profileDir, map[string]any{"name": "test"})
-	config.SetActiveProfile(&config.Profile{Name: "test", RootPath: profileDir, Config: map[string]any{"name": "test"}})
-
-	workspacesRoot := filepath.Join(profileDir, "workspaces")
-	makeWorkspace(t, workspacesRoot, "ws-1", true, true, nil)   // active
-	makeWorkspace(t, workspacesRoot, "ws-2", true, false, nil)  // inactive
-	makeWorkspace(t, workspacesRoot, "ws-3", false, false, nil) // invalid
-
-	inactive, err := GetInactiveWorkspaces()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(inactive) != 1 {
-		t.Fatalf("expected 1 inactive workspace, got %d: %v", len(inactive), inactive)
-	}
-	if filepath.Base(inactive[0]) != "ws-2" {
-		t.Fatalf("expected ws-2, got %s", filepath.Base(inactive[0]))
-	}
-}
-
-func TestGetInvalidWorkspaces_ReturnsOnlyInvalidUnlocked(t *testing.T) {
-	tmpDir := setupConfigTest(t)
-	profileDir := filepath.Join(tmpDir, "profile")
-	createProfile(t, profileDir, map[string]any{"name": "test"})
-	config.SetActiveProfile(&config.Profile{Name: "test", RootPath: profileDir, Config: map[string]any{"name": "test"}})
-
-	workspacesRoot := filepath.Join(profileDir, "workspaces")
-	makeWorkspace(t, workspacesRoot, "ws-1", true, true, nil)   // active
-	makeWorkspace(t, workspacesRoot, "ws-2", true, false, nil)  // inactive
-	makeWorkspace(t, workspacesRoot, "ws-3", false, false, nil) // invalid
-
-	invalid, err := GetInvalidWorkspaces()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(invalid) != 1 {
-		t.Fatalf("expected 1 invalid workspace, got %d: %v", len(invalid), invalid)
-	}
-	if filepath.Base(invalid[0]) != "ws-3" {
-		t.Fatalf("expected ws-3, got %s", filepath.Base(invalid[0]))
 	}
 }
 

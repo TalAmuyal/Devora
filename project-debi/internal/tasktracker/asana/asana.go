@@ -39,7 +39,6 @@ type Config struct {
 // tracker is the Tracker implementation for Asana.
 type tracker struct {
 	cfg         Config
-	client      *http.Client
 	cachedToken string
 }
 

@@ -17,6 +17,7 @@ Types of changes:
 ### Added
 
 - The Settings Hub now edits all of Devora's settings - at the **User Defaults** (global) and per-profile scopes - so they no longer require hand-editing `config.json`
+- A `mise deadcode` task in `project-debi` that scans Debi for dead code (`deadcode` + `staticcheck`)
 
 ### Changed
 
@@ -24,6 +25,10 @@ Types of changes:
 - Restyled the Settings Hub's Repos list as a card matching the Claude Models & Effort card
 - Updated README.md with clearer installation instructions
 - `debi preview <TAB>` now completes file paths; the `--stack`/`-h`/`--help` flags surface once the word begins with `-`
+
+### Removed
+
+- Removed dead code from Debi: orphaned workspace-filtering helpers and an unused Asana task-tracker field
 
 ### Fixed
 

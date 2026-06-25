@@ -90,16 +90,8 @@ func HasTask(workspacePath string) bool {
 	return err == nil
 }
 
-func IsActive(workspacePath string) bool {
-	return IsInitialized(workspacePath) && HasTask(workspacePath)
-}
-
 func IsInactive(workspacePath string) bool {
 	return IsInitialized(workspacePath) && !HasTask(workspacePath)
-}
-
-func IsInvalid(workspacePath string) bool {
-	return !IsInitialized(workspacePath)
 }
 
 // --- Workspace Enumeration ---
@@ -135,62 +127,6 @@ func GetWorkspaceRepos(workspacePath string) ([]string, error) {
 		}
 	}
 	return repos, nil
-}
-
-// --- Filtered Queries ---
-
-func GetActiveWorkspaces() ([]string, error) {
-	root, err := config.GetWorkspacesRootPath()
-	if err != nil {
-		return nil, err
-	}
-	workspaces, err := GetWorkspaces(root)
-	if err != nil {
-		return nil, err
-	}
-	var result []string
-	for _, ws := range workspaces {
-		if !IsWorkspaceLocked(ws) && IsActive(ws) {
-			result = append(result, ws)
-		}
-	}
-	return result, nil
-}
-
-func GetInactiveWorkspaces() ([]string, error) {
-	root, err := config.GetWorkspacesRootPath()
-	if err != nil {
-		return nil, err
-	}
-	workspaces, err := GetWorkspaces(root)
-	if err != nil {
-		return nil, err
-	}
-	var result []string
-	for _, ws := range workspaces {
-		if !IsWorkspaceLocked(ws) && IsInactive(ws) {
-			result = append(result, ws)
-		}
-	}
-	return result, nil
-}
-
-func GetInvalidWorkspaces() ([]string, error) {
-	root, err := config.GetWorkspacesRootPath()
-	if err != nil {
-		return nil, err
-	}
-	workspaces, err := GetWorkspaces(root)
-	if err != nil {
-		return nil, err
-	}
-	var result []string
-	for _, ws := range workspaces {
-		if !IsWorkspaceLocked(ws) && IsInvalid(ws) {
-			result = append(result, ws)
-		}
-	}
-	return result, nil
 }
 
 // --- Workspace Search ---
