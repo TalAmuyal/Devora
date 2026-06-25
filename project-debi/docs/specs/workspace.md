@@ -50,7 +50,7 @@ A workspace has exactly one of three states, determined by the presence of marke
 | **Inactive** | `initialized` marker exists AND `task.json` does NOT exist |
 | **Invalid** | `initialized` marker does NOT exist |
 
-Locked workspaces (those with `.creation-lock` held by another process) are excluded from all filtered query results (`GetActiveWorkspaces`, `GetInactiveWorkspaces`, `GetInvalidWorkspaces`, `SearchAvailableWorkspace`).
+Locked workspaces (those with `.creation-lock` held by another process) are excluded from `SearchAvailableWorkspace` results.
 
 ---
 
@@ -125,14 +125,6 @@ func HasTask(workspacePath string) bool
 
 Returns `true` if `task.json` exists at `GetWorkspaceTaskPath(workspacePath)`. Uses `os.Stat`; returns `false` on any error.
 
-### IsActive
-
-```go
-func IsActive(workspacePath string) bool
-```
-
-Returns `IsInitialized(workspacePath) && HasTask(workspacePath)`.
-
 ### IsInactive
 
 ```go
@@ -140,14 +132,6 @@ func IsInactive(workspacePath string) bool
 ```
 
 Returns `IsInitialized(workspacePath) && !HasTask(workspacePath)`.
-
-### IsInvalid
-
-```go
-func IsInvalid(workspacePath string) bool
-```
-
-Returns `!IsInitialized(workspacePath)`.
 
 ---
 
@@ -179,45 +163,6 @@ Returns the names of non-dot-prefixed directories within the workspace. These re
 - Filters to entries that are directories and whose names do NOT start with `"."`.
 - Returns the directory names (not full paths).
 - Order is not guaranteed.
-
----
-
-## Filtered Queries
-
-These functions query workspaces from the active profile's workspaces root (obtained via `config.GetWorkspacesRootPath()`). They exclude locked workspaces.
-
-### GetActiveWorkspaces
-
-```go
-func GetActiveWorkspaces() ([]string, error)
-```
-
-Returns paths of workspaces that are active (initialized AND has task) and NOT locked.
-
-- Calls `GetWorkspaces(config.GetWorkspacesRootPath())`.
-- Filters each workspace: `!IsWorkspaceLocked(ws) && IsActive(ws)`.
-
-### GetInactiveWorkspaces
-
-```go
-func GetInactiveWorkspaces() ([]string, error)
-```
-
-Returns paths of workspaces that are inactive (initialized AND no task) and NOT locked.
-
-- Calls `GetWorkspaces(config.GetWorkspacesRootPath())`.
-- Filters each workspace: `!IsWorkspaceLocked(ws) && IsInactive(ws)`.
-
-### GetInvalidWorkspaces
-
-```go
-func GetInvalidWorkspaces() ([]string, error)
-```
-
-Returns paths of workspaces that are invalid (not initialized) and NOT locked.
-
-- Calls `GetWorkspaces(config.GetWorkspacesRootPath())`.
-- Filters each workspace: `!IsWorkspaceLocked(ws) && IsInvalid(ws)`.
 
 ---
 
@@ -469,7 +414,7 @@ The workspace package is split across two files:
 
 | File | Contents |
 |------|----------|
-| `workspace.go` | Constants, locking, path helpers, state queries, enumeration, filtered queries, search, creation, CLAUDE.md management, deletion, CWD resolution, session working directory |
+| `workspace.go` | Constants, locking, path helpers, state queries, enumeration, search, creation, CLAUDE.md management, deletion, CWD resolution, session working directory |
 | `worktree.go` | Git operations: `MakeAndPrepareWorktree`, `GetRepoBranch`, `IsRepoClean`, `IsGitRepo` |
 
 ---
@@ -492,12 +437,6 @@ Use `t.TempDir()` to create isolated workspace structures. No git repos needed.
 - `GetWorkspaceRepos` returns only non-dot-prefixed directories
 - `GetWorkspaceRepos` excludes files (non-directories)
 - `GetWorkspaceRepos` excludes `.creation-lock` and other dot-prefixed entries
-
-**Filtered query tests:**
-- Mock the active profile's workspaces root by setting up the config state
-- Verify `GetActiveWorkspaces` returns only active, unlocked workspaces
-- Verify `GetInactiveWorkspaces` returns only inactive, unlocked workspaces
-- Verify `GetInvalidWorkspaces` returns only invalid, unlocked workspaces
 
 **Search tests:**
 - `SearchAvailableWorkspace` with matching inactive workspace -> returns it
@@ -565,7 +504,6 @@ The workspace package calls the following functions from `internal/config`. Thes
 
 | Function | Used by |
 |----------|---------|
-| `config.GetWorkspacesRootPath() (string, error)` | `GetActiveWorkspaces`, `GetInactiveWorkspaces`, `GetInvalidWorkspaces` |
 | `config.GetRegisteredRepos() ([]string, error)` | `getRepoPath` |
 | `config.GetPrepareCommand() *string` | `MakeAndPrepareWorktree` |
 | `config.GetProfiles() []config.Profile` | `ResolveWorkspaceFromCWD` |
