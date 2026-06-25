@@ -126,6 +126,7 @@ ALLOWED_COMMANDS = {
     "sort",
     "uniq",
     "grep",
+    "rg",
     "sed",
     "hash",
     "open",
