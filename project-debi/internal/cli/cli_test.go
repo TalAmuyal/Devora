@@ -74,20 +74,6 @@ func TestRun_UnknownCommand_ReturnsUsageError(t *testing.T) {
 	}
 }
 
-func TestRun_RenameMissingArg_ReturnsUsageError(t *testing.T) {
-	err := Run([]string{"rename"})
-	if err == nil {
-		t.Fatal("expected error for rename without arg")
-	}
-	if !strings.Contains(err.Error(), "usage") {
-		t.Fatalf("expected usage message, got: %s", err.Error())
-	}
-	var usageErr *UsageError
-	if !errors.As(err, &usageErr) {
-		t.Fatalf("expected UsageError, got %T: %s", err, err.Error())
-	}
-}
-
 // workspace-ui and add commands attempt real operations.
 // In test environments (no TTY, not inside a workspace), they produce
 // expected errors rather than "not yet implemented" messages.

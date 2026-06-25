@@ -29,22 +29,6 @@ func Create(title string, workspaceTaskPath string) error {
 	return writeTaskFile(workspaceTaskPath, data)
 }
 
-func UpdateTitle(newTitle string, workspaceTaskPath string) error {
-	content, err := os.ReadFile(workspaceTaskPath)
-	if err != nil {
-		return fmt.Errorf("read task file: %w", err)
-	}
-
-	var data taskData
-	if err := json.Unmarshal(content, &data); err != nil {
-		return fmt.Errorf("parse task JSON: %w", err)
-	}
-
-	data.Title = newTitle
-
-	return writeTaskFile(workspaceTaskPath, data)
-}
-
 func writeTaskFile(path string, data taskData) error {
 	content, err := json.MarshalIndent(data, "", "    ")
 	if err != nil {

@@ -362,7 +362,7 @@ Steps:
 func ResolveWorkspaceFromCWD(cwd string) (*config.Profile, string, error)
 ```
 
-Determines whether the given working directory is inside a known workspace. Used to detect the current workspace context from the CWD (e.g. by the `rename` command, profile resolution, and the git shortcuts).
+Determines whether the given working directory is inside a known workspace. Used to detect the current workspace context from the CWD (e.g. by profile resolution and the git shortcuts).
 
 Steps:
 
