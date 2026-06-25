@@ -64,14 +64,6 @@ var commands = []Command{
 		Group:       "Workspace Commands",
 		Run:         func(args []string) error { return runWorkspaceUI() },
 	},
-	{
-		Name:        "rename",
-		Description: "Rename the current terminal session",
-		ArgsHint:    "<new-name>",
-		Group:       "Workspace Commands",
-		MinArgs:     1,
-		Run:         func(args []string) error { return runRename(args[0]) },
-	},
 
 	// Health
 	{

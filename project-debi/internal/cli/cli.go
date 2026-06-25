@@ -13,14 +13,12 @@ import (
 	"devora/internal/shellinit"
 	"devora/internal/style"
 	"devora/internal/submit"
-	"devora/internal/task"
 	"devora/internal/tomlvalidate"
 	"devora/internal/yamlvalidate"
 	// Register the Asana task-tracker provider. The blank import runs the
 	// package's init(), which calls tasktracker.Register("asana", New).
 	_ "devora/internal/tasktracker/asana"
 	"devora/internal/tui"
-	"devora/internal/workspace"
 	"devora/internal/workspace/wsgit"
 	"errors"
 	"fmt"
@@ -535,30 +533,6 @@ func runGcl(args []string) error {
 		return err
 	}
 	return wsgitRunClean(os.Stdout, wsPath)
-}
-
-func runRename(newName string) error {
-	_, err := process.GetOutput([]string{"kitty", "@", "set-tab-title", newName})
-	if err != nil {
-		return err
-	}
-
-	cwd, err := os.Getwd()
-	if err != nil {
-		return nil
-	}
-
-	_, wsPath, err := workspace.ResolveWorkspaceFromCWD(cwd)
-	if err != nil || wsPath == "" {
-		return nil
-	}
-
-	taskPath := workspace.GetWorkspaceTaskPath(wsPath)
-	err = task.UpdateTitle(newName, taskPath)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil
-	}
-	return err
 }
 
 func checkBundledAppsInPath(resourcesDir, pathEnv string) string {

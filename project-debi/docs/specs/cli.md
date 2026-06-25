@@ -22,7 +22,6 @@ The CLI has the following commands:
 | Command | Args | Description |
 |---------|------|-------------|
 | `workspace-ui` | none | Open the Workspace Hub (deprecated) |
-| `rename` | `<new-name>` (positional, required) | Rename the current terminal session |
 
 ### Health
 
@@ -196,7 +195,6 @@ usage: debi <command> [args]
 
 Workspace Commands:
   workspace-ui          Open the Workspace Hub
-  rename <new-name>     Rename the current terminal session
 
 Health:
   health [flags]        Check Devora dependencies
@@ -291,20 +289,6 @@ func runWorkspaceUI() error
    - If `result.SelectedWorkspace` is set, derive `sessionName` from `ws.TaskTitle` (falling back to `ws.Name` if empty), then delegate to `tui.CreateAndAttachSession(ws.Path, sessionName)` to create and attach a terminal session.
    - If `result.NewWorkspace` is set, delegate to `tui.CreateAndAttachSession(ws.WorkspacePath, ws.SessionName)`.
    - If the user quit without selection (`result == nil`), return nil.
-
-### rename
-
-```go
-func runRename(newName string) error
-```
-
-Renames the current Kitty tab and, if running inside a workspace, updates the task title.
-
-1. Rename the Kitty tab via `process.GetOutput([]string{"kitty", "@", "set-tab-title", newName})`.
-2. Detect the current workspace from CWD (using `workspace.ResolveWorkspaceFromCWD`).
-3. Attempt to update the task title via `task.UpdateTitle(newName, taskPath)`. If the task file does not exist, the rename still succeeds.
-
-The workspace detection is best-effort: if the CWD cannot be resolved or the task file is absent, the rename still succeeds (only the tab title is changed).
 
 ### util
 
@@ -699,7 +683,6 @@ func main() {
 ## Testing
 
 - Test that unknown commands return an appropriate error.
-- Test that missing arguments for `rename` return an error.
 - Test that empty args print usage.
 - Test that `gaac`, `gaacp`, and `gbd` without required args return `UsageError`.
 - Test that all 23 git commands are recognized (do not return "unknown command").

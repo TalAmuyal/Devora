@@ -41,20 +41,6 @@ Creates a new task:
 
 The `workspaceTaskPath` is the absolute path to the `task.json` file (provided by the caller, typically from `workspace.GetWorkspaceTaskPath()`).
 
-### UpdateTitle
-
-```go
-func UpdateTitle(newTitle string, workspaceTaskPath string) error
-```
-
-Updates the title of an existing task:
-1. Read the task file from `workspaceTaskPath`.
-2. Parse the JSON into the task struct.
-3. Replace the `title` field with `newTitle`.
-4. Write the updated JSON back with 4-space indentation and mode `0644`.
-
-All other fields (`uid`, `started_at`) are preserved. Returns an error if the file does not exist, cannot be parsed, or cannot be written.
-
 ## Dependencies
 
 No external dependencies (stdlib only).

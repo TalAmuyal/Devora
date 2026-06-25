@@ -29,6 +29,7 @@ Types of changes:
 ### Removed
 
 - Removed dead code from Debi: orphaned workspace-filtering helpers and an unused Asana task-tracker field
+- Removed the `debi rename` command (and the now-unused `task.UpdateTitle`); session renaming is handled by Devora Ember
 
 ### Fixed
 
