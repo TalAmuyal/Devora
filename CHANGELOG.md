@@ -14,27 +14,25 @@ Types of changes:
 
 ## Unreleased
 
+## 2026-06-29.0
+
 ### Added
 
-- The Settings Hub now edits all of Devora's settings - at the **User Defaults** (global) and per-profile scopes - so they no longer require hand-editing `config.json`
-- A `mise deadcode` task in `project-debi` that scans Debi for dead code (`deadcode` + `staticcheck`)
+- Added a **Settings** entry to the Workspace Hub's burger (☰) menu, which opens the Settings Hub
+- The Settings Hub now edits all of Devora's settings and fully supports global vs per-profile scopes - so they no longer require hand-editing `config.json`
 
 ### Changed
 
-- Renamed the Profile Manager to the **Settings Hub**, and added a **Settings** entry to the Workspace Hub's burger (☰) menu (the profile dropdown's "Manage Profiles…" item is unchanged)
-- Restyled the Settings Hub's Repos list as a card matching the Claude Models & Effort card
-- Updated README.md with clearer installation instructions
+- `debi preview <TAB>` now completes file paths
 - Added `rg` to Judge's allowed commands list
-- `debi preview <TAB>` now completes file paths; the `--stack`/`-h`/`--help` flags surface once the word begins with `-`
 
 ### Removed
 
-- Removed dead code from Debi: orphaned workspace-filtering helpers and an unused Asana task-tracker field
-- Removed the `debi rename` command (and the now-unused `task.UpdateTitle`); session renaming is handled by Devora Ember
+- Removed the `debi rename` command; session renaming is handled by the Command Palette's "Repurpose Current Session"
 
 ### Fixed
 
-- Ember now honors a profile-level `prepare-command` when creating or adding to a workspace (it previously read only the global config)
+- Devora now honors a profile-level `prepare-command` when creating or adding to a workspace (it previously read only the global config)
 
 ## 2026-06-23.0
 
