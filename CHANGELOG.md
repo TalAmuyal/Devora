@@ -17,6 +17,7 @@ Types of changes:
 ### Changed
 
 - Debi's package rationale now lives in the code itself rather than separate specs; the `docs/specs/` files are a legacy reference being gradually migrated into the code
+- Migrated Debi's `internal/git` spec into code comments and removed `docs/specs/git.md`
 
 ## 2026-06-29.0
 

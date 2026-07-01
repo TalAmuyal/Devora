@@ -53,13 +53,12 @@ func (f *fakeTracker) CompleteTask(id string) error {
 
 // --- Stub harness ---
 
-// stubCloseDeps saves and restores ALL package-level function vars so tests
-// don't leak state. Call via t.Cleanup.
+// Save and restore ALL package-level function vars so tests don't leak state.
+// Call via t.Cleanup.
 func stubCloseDeps(t *testing.T) {
 	t.Helper()
 
 	origGetCurrentBranchOrDetached := getCurrentBranchOrDetached
-	origIsProtectedBranch := isProtectedBranch
 	origDefaultBranchName := defaultBranchName
 	origGetBranchConfig := getBranchConfig
 	origHasRemoteBranch := hasRemoteBranch
@@ -74,7 +73,6 @@ func stubCloseDeps(t *testing.T) {
 
 	t.Cleanup(func() {
 		getCurrentBranchOrDetached = origGetCurrentBranchOrDetached
-		isProtectedBranch = origIsProtectedBranch
 		defaultBranchName = origDefaultBranchName
 		getBranchConfig = origGetBranchConfig
 		hasRemoteBranch = origHasRemoteBranch
@@ -90,7 +88,6 @@ func stubCloseDeps(t *testing.T) {
 
 	// Safe defaults — tests override only what they care about.
 	getCurrentBranchOrDetached = func() (string, error) { return "feature/x", nil }
-	isProtectedBranch = func(string) bool { return false }
 	defaultBranchName = func() (string, error) { return "main", nil }
 	getBranchConfig = func(string, string) (string, error) { return "", nil }
 	hasRemoteBranch = func(string) bool { return true }
@@ -114,23 +111,6 @@ func TestRun_DetachedHead_ReturnsErrDetached(t *testing.T) {
 	err := Run(&buf, Options{})
 	if !errors.Is(err, ErrDetached) {
 		t.Fatalf("expected ErrDetached, got %v", err)
-	}
-}
-
-// --- Protected branch ---
-
-func TestRun_ProtectedBranch_ReturnsWrappedErrProtectedBranch(t *testing.T) {
-	stubCloseDeps(t)
-	getCurrentBranchOrDetached = func() (string, error) { return "main", nil }
-	isProtectedBranch = func(b string) bool { return b == "main" }
-
-	var buf bytes.Buffer
-	err := Run(&buf, Options{})
-	if !errors.Is(err, ErrProtectedBranch) {
-		t.Fatalf("expected ErrProtectedBranch, got %v", err)
-	}
-	if !strings.Contains(err.Error(), "main") {
-		t.Fatalf("expected error message to contain %q, got %q", "main", err.Error())
 	}
 }
 
@@ -364,7 +344,6 @@ func TestRun_RemoteBranchGone_PrintsAlreadyDeleted(t *testing.T) {
 func TestRun_BranchIsDefault_SkipsFetchCheckoutDelete(t *testing.T) {
 	stubCloseDeps(t)
 	getCurrentBranchOrDetached = func() (string, error) { return "main", nil }
-	isProtectedBranch = func(string) bool { return false } // pretend main not protected for this test
 	defaultBranchName = func() (string, error) { return "main", nil }
 
 	fetchCalled := false

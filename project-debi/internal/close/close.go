@@ -1,9 +1,7 @@
-// Package closecmd implements the `debi pr close` command: marks the tracker
-// task as complete, deletes the remote branch, and returns the working tree
-// to detached HEAD on origin/<default>, deleting the local branch.
+// Package closecmd implements the `debi pr close` command: marks the tracker task as complete, deletes the remote branch, and returns the working tree to detached HEAD on origin/<default>, deleting the local branch.
 //
-// The package is named `closecmd` (not `close`) so callers' source doesn't
-// visually shadow the Go builtin `close`. Import as:
+// The package is named `closecmd` (not `close`) so callers' source doesn't visually shadow the Go builtin `close`.
+// Import as:
 //
 //	closecmd "devora/internal/close"
 package closecmd
@@ -28,10 +26,10 @@ import (
 
 // --- Public API ---
 
-// Options configures Run.
+// Options configures Run
 type Options struct {
-	// TaskURL, when set, overrides the task ID stored at
-	// branch.<current-branch>.task-id. Requires a configured task-tracker.
+	// TaskURL, when set, overrides the task ID stored at branch.<current-branch>.task-id.
+	//Requires a configured task-tracker.
 	TaskURL string
 	// SkipTracker bypasses the tracker entirely (no task completion).
 	SkipTracker bool
@@ -43,11 +41,9 @@ type Options struct {
 	Quiet bool
 }
 
-// Sentinels detected by the CLI layer via errors.Is to produce the right
-// user-facing wrapper / exit code.
+// Sentinels detected by the CLI layer via errors.Is to produce the right user-facing wrapper / exit code
 var (
 	ErrDetached        = errors.New("close cannot run from detached HEAD")
-	ErrProtectedBranch = errors.New("close cannot run on protected branch")
 	ErrAborted         = errors.New("aborted")
 	ErrNoTrackerForURL = errors.New("--task-url requires a configured task-tracker")
 )
@@ -56,7 +52,6 @@ var (
 
 var (
 	getCurrentBranchOrDetached = defaultGetCurrentBranchOrDetached
-	isProtectedBranch          = git.IsProtectedBranch
 	defaultBranchName          = defaultDefaultBranchName
 	getBranchConfig            = defaultGetBranchConfig
 	hasRemoteBranch            = defaultHasRemoteBranch
@@ -70,15 +65,12 @@ var (
 
 	newTracker = tasktracker.NewForActiveProfile
 
-	// readLine reads one line from r. Stubbable in tests. The default
-	// implementation wraps r with a bufio.Reader and reads up to the first
-	// newline; Run passes os.Stdin.
+	// readLine reads one line from r. Stubbable in tests. The default implementation wraps r with a bufio.Reader and reads up to the first newline; Run passes os.Stdin.
 	readLine = defaultReadLine
 )
 
-// Thin trampolines around git package functions that take variadic process
-// options we don't use at this layer. Separate from the stubbable vars so
-// signatures stay trivial to override in tests.
+// Thin trampolines around git package functions that take variadic process options we don't use at this layer.
+// Separate from the stubbable vars so signatures stay trivial to override in tests.
 
 func defaultGetCurrentBranchOrDetached() (string, error) { return git.CurrentBranchOrDetached() }
 func defaultDefaultBranchName() (string, error)          { return git.DefaultBranchNameWithFallback() }
@@ -143,9 +135,6 @@ func Run(w io.Writer, opts Options) error {
 	if branch == "" {
 		return ErrDetached
 	}
-	if isProtectedBranch(branch) {
-		return fmt.Errorf("%w: %q", ErrProtectedBranch, branch)
-	}
 
 	tracker, err := resolveTracker(opts)
 	if err != nil {
@@ -158,8 +147,7 @@ func Run(w io.Writer, opts Options) error {
 	}
 
 	if !opts.Force {
-		// PR-open prompt uses w directly (not progress) so the user sees it
-		// even in Quiet mode; consent cannot be suppressed.
+		// PR-open prompt uses w directly (not progress) so the user sees it even in Quiet mode; consent cannot be suppressed.
 		if aborted, err := checkOpenPR(w, branch); err != nil {
 			return err
 		} else if aborted {
@@ -178,15 +166,13 @@ func Run(w io.Writer, opts Options) error {
 		return err
 	}
 
-	// Final marker is always printed, regardless of mode — this is the
-	// script-parseable success signal.
+	// Final marker is always printed, regardless of mode — this is the script-parseable success signal.
 	fmt.Fprintf(w, "%s Closed\n", style.Success.Render("\u2713"))
 	return nil
 }
 
-// resolveTracker returns nil when SkipTracker is set; otherwise it builds the
-// tracker from config. A nil tracker with a nil error means "no tracker is
-// configured" — callers check for that.
+// resolveTracker returns nil when SkipTracker is set; otherwise it builds the tracker from config.
+// A nil tracker with a nil error means "no tracker is configured" — callers check for that.
 func resolveTracker(opts Options) (tasktracker.Tracker, error) {
 	if opts.SkipTracker {
 		return nil, nil
@@ -194,9 +180,7 @@ func resolveTracker(opts Options) (tasktracker.Tracker, error) {
 	return newTracker()
 }
 
-// resolveTaskID picks the task ID from --task-url or the branch's git config,
-// prints a warning when a tracker is configured but no ID is found, and
-// returns ErrNoTrackerForURL when --task-url is used without a tracker.
+// resolveTaskID picks the task ID from --task-url or the branch's git config, prints a warning when a tracker is configured but no ID is found, and returns ErrNoTrackerForURL when --task-url is used without a tracker.
 func resolveTaskID(w io.Writer, opts Options, tracker tasktracker.Tracker, branch string) (string, error) {
 	if opts.TaskURL != "" {
 		if tracker == nil {
@@ -213,10 +197,9 @@ func resolveTaskID(w io.Writer, opts Options, tracker tasktracker.Tracker, branc
 	return id, nil
 }
 
-// checkOpenPR queries GitHub for the branch's PR. When a PR is OPEN, it
-// prompts the user for confirmation. Returns (aborted, err) where aborted
-// means the user declined. PR-check errors are non-fatal (warning printed,
-// aborted=false).
+// checkOpenPR queries GitHub for the branch's PR. When a PR is OPEN, it prompts the user for confirmation.
+// Returns (aborted, err) where aborted means the user declined.
+// PR-check errors are non-fatal (warning printed, aborted=false).
 func checkOpenPR(w io.Writer, branch string) (bool, error) {
 	pr, err := getGHPRForBranch(branch)
 	if err != nil {

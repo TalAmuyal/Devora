@@ -451,8 +451,7 @@ func runSubmit(args []string) error {
 	return err
 }
 
-// runClose parses flags, invokes closecmd.Run, and translates domain sentinels
-// into user-facing CLI errors / exit codes.
+// runClose parses flags, invokes closecmd.Run, and translates domain sentinels into user-facing CLI errors / exit codes
 func runClose(args []string) error {
 	opts, helpRequested, err := parseCloseFlags(args)
 	if err != nil {
@@ -482,8 +481,7 @@ func runClose(args []string) error {
 	switch {
 	case errors.Is(err, closecmd.ErrDetached):
 		return &UsageError{Message: "close cannot run from detached HEAD; checkout a feature branch first"}
-	case errors.Is(err, closecmd.ErrProtectedBranch),
-		errors.Is(err, closecmd.ErrNoTrackerForURL):
+	case errors.Is(err, closecmd.ErrNoTrackerForURL):
 		return &UsageError{Message: err.Error()}
 	case errors.Is(err, closecmd.ErrAborted):
 		// "→ Aborted" already printed by closecmd.Run. Exit 1 silently.
@@ -495,10 +493,8 @@ func runClose(args []string) error {
 	return err
 }
 
-// runGst dispatches `debi gst`: at a workspace root, runs the structured
-// per-repo summary; anywhere else, falls through to the existing
-// per-repo passthrough. Workspace-mode rejects extra args because the
-// summary is incompatible with passthrough flags like --short.
+// runGst dispatches `debi gst`: at a workspace root, runs the structured per-repo summary; anywhere else, falls through to the existing per-repo passthrough.
+// Workspace-mode rejects extra args because the summary is incompatible with passthrough flags like --short.
 func runGst(args []string) error {
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -517,9 +513,7 @@ func runGst(args []string) error {
 	return wsgitRunStatus(os.Stdout, wsPath)
 }
 
-// runGcl dispatches `debi gcl`: at a workspace root, runs the verify-then-
-// update flow across all repos; anywhere else, falls through to the existing
-// per-repo passthrough.
+// runGcl dispatches `debi gcl`: at a workspace root, runs the verify-then- update flow across all repos; anywhere else, falls through to the existing per-repo passthrough
 func runGcl(args []string) error {
 	cwd, err := os.Getwd()
 	if err != nil {

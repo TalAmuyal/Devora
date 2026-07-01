@@ -463,7 +463,6 @@ func runClose(args []string) error
 4. Calls `closeRun(os.Stdout, opts)` (a stubbable var pointing at `closecmd.Run`).
 5. Error translation:
    - `errors.Is(err, closecmd.ErrDetached)` -> `*UsageError{Message: err.Error()}`.
-   - `errors.Is(err, closecmd.ErrProtectedBranch)` -> `*UsageError{Message: err.Error()}` (the error wraps the branch name).
    - `errors.Is(err, closecmd.ErrNoTrackerForURL)` -> `*UsageError{Message: err.Error()}`.
    - `errors.Is(err, closecmd.ErrAborted)` -> `*process.PassthroughError{Code: 1}`. The `→ Aborted` line was already printed by `closecmd.Run`, and passthrough-error exits skip the crash log and the usage-error print.
    - `errors.As(err, &*credentials.NotFoundError)` -> prints the error and `credentials.SetupHint` to stderr, returns `*UsageError{Message: ""}`.

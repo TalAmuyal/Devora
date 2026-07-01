@@ -18,11 +18,6 @@ func DefaultBranchName(opts ...process.ExecOption) (string, error) {
 	return strings.TrimPrefix(output, "refs/remotes/origin/"), nil
 }
 
-// DefaultBranchNameWithFallback resolves origin's default branch via
-// `git symbolic-ref refs/remotes/origin/HEAD`; on failure, falls back to
-// checking, in order, whether "main" or "master" exists via
-// `git rev-parse --verify`, returning the first one found. Returns an error
-// if none of these paths succeed.
 func DefaultBranchNameWithFallback(opts ...process.ExecOption) (string, error) {
 	if branch, err := DefaultBranchName(opts...); err == nil {
 		return branch, nil
