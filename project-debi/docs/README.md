@@ -10,9 +10,12 @@ Start with [architecture.md](architecture.md) for the high-level picture, then r
 |----------|-------------|
 | [architecture.md](architecture.md) | Glossary, package dependency map, end-to-end flows |
 
-## Specs (normative)
+## Specs (legacy, being migrated)
 
-Specifications for the domain packages. These define the intended behavior of each package.
+These specs are a legacy reference.
+We no longer write new specs or update them when a package's API changes; instead, the "why" lives in the code itself.
+Existing specs are being gradually migrated into the code, and each spec is trimmed as the code absorbs its content.
+Treat the code as the source of truth, and consult a spec only for context the code has not yet absorbed.
 
 | Document | Package | Description |
 |----------|---------|-------------|
@@ -44,6 +47,7 @@ Specifications for the domain packages. These define the intended behavior of ea
 
 ## Spec Conventions
 
+These conventions describe the legacy specs as they were written; they are not a guide for new work (see "Specs (legacy, being migrated)" above).
+
 - Specs document the **exported API** and behavioral contracts for each package.
 - Testing sections are included only for **critical test cases** (complex concurrency, tricky edge cases). Routine test expectations are not listed — tests speak for themselves in the code.
-- Specs are **normative**: they define intended behavior.
