@@ -193,12 +193,11 @@ detached HEAD on origin/<default>
           │
           ▼
    ┌──────────────────┐
-   │   debi pr close  │  1. Guard: on a non-protected branch
-   │                  │  2. Resolve tracker + task-id (from --task-url or branch config)
-   │                  │  3. Unless --force, prompt when PR is still OPEN
-   │                  │  4. Parallel (best-effort): CompleteTask + delete remote branch
-   │                  │  5. git fetch origin; git checkout origin/<default>
-   │                  │  6. git branch -D <branch> (non-fatal)
+   │   debi pr close  │  1. Resolve tracker + task-id (from --task-url or branch config)
+   │                  │  2. Unless --force, prompt when PR is still OPEN
+   │                  │  3. Parallel (best-effort): CompleteTask + delete remote branch
+   │                  │  4. git fetch origin; git checkout origin/<default>
+   │                  │  5. git branch -D <branch> (non-fatal)
    └──────┬───────────┘
           ▼
 detached HEAD on origin/<default>

@@ -11,6 +11,8 @@ import {
   ClaudeHookType,
 } from '../support/claude-helper';
 
+const HOOK_LOG_TIMEOUT_MS = 20_000;
+
 async function pollForHookLog(logPath: string, timeoutMs: number): Promise<Map<string, string>> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
@@ -56,7 +58,7 @@ Then(
   'the hook script should have received DEVORA_PTY_ID',
   { timeout: 30_000 },
   async function (this: EmberWorld) {
-    const entries = await pollForHookLog(this.hookLogPath!, 15_000);
+    const entries = await pollForHookLog(this.hookLogPath!, HOOK_LOG_TIMEOUT_MS);
     const ptyId = entries.get('PTY_ID');
     if (ptyId === undefined) throw new Error('PTY_ID not found in hook log');
     assert.notStrictEqual(ptyId.trim(), '', 'PTY_ID is empty');
@@ -146,7 +148,7 @@ When(
     // before switching back to the previous session. This ensures the crit/open
     // IPC call has been made from the hook script.
     if (this.hookLogPath) {
-      await pollForHookLog(this.hookLogPath, 90_000);
+      await pollForHookLog(this.hookLogPath, HOOK_LOG_TIMEOUT_MS);
     }
 
     if (previousSessionId !== null && previousSessionId !== sessionId) {

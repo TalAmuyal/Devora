@@ -17,6 +17,11 @@ Types of changes:
 ### Changed
 
 - Debi's package rationale now lives in the code itself rather than separate specs; the `docs/specs/` files are a legacy reference being gradually migrated into the code
+- Migrated Debi's `internal/git` spec into code comments and removed `docs/specs/git.md`
+
+### Removed
+
+- `debi pr close` no longer refuses to run on a protected branch (`main`/`master`/`develop`) client-side; this is now expected to be enforced server-side (e.g. GitHub branch protection rules) — if you relied on the client-side check, verify your remote has equivalent protection configured
 
 ## 2026-06-29.0
 
