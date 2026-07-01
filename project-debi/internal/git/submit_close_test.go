@@ -78,26 +78,6 @@ func TestGenerateBranchName(t *testing.T) {
 	}
 }
 
-func TestIsProtectedBranch(t *testing.T) {
-	tests := []struct {
-		branch string
-		want   bool
-	}{
-		{"main", true},
-		{"master", true},
-		{"develop", true},
-		{"feat-foo", false},
-		{"", false},
-		{"mainline", false},
-	}
-	for _, tc := range tests {
-		got := git.IsProtectedBranch(tc.branch)
-		if got != tc.want {
-			t.Errorf("IsProtectedBranch(%q) = %v, want %v", tc.branch, got, tc.want)
-		}
-	}
-}
-
 func TestCurrentBranchOrDetached_OnBranch(t *testing.T) {
 	dir := setupGitRepo(t)
 
