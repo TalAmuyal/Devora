@@ -14,6 +14,10 @@ Types of changes:
 
 ## Unreleased
 
+### Changed
+
+- Debi's package rationale now lives in the code itself rather than separate specs; the `docs/specs/` files are a legacy reference being gradually migrated into the code
+
 ## 2026-06-29.0
 
 ### Added
