@@ -18,7 +18,7 @@ The CLI layer calls `cli.ResolveActiveProfile("")` before dispatching to `closec
 
 ## Stability
 
-Stable public API: `Run`, `Options`, `ErrDetached`, `ErrProtectedBranch`, `ErrAborted`, `ErrNoTrackerForURL`.
+Stable public API: `Run`, `Options`, `ErrDetached`, `ErrAborted`, `ErrNoTrackerForURL`.
 
 ## Dependencies
 
@@ -61,7 +61,6 @@ The open-PR confirmation prompt (`! PR #42 is still open: <url>` + `Are you sure
 ```go
 var (
     ErrDetached        = errors.New("close cannot run from detached HEAD")
-    ErrProtectedBranch = errors.New("close cannot run on protected branch")
     ErrAborted         = errors.New("aborted")
     ErrNoTrackerForURL = errors.New("--task-url requires a configured task-tracker")
 )
@@ -74,7 +73,6 @@ The CLI layer detects these via `errors.Is`.
 ```go
 var (
     getCurrentBranchOrDetached = defaultGetCurrentBranchOrDetached // wraps git.CurrentBranchOrDetached
-    isProtectedBranch          = git.IsProtectedBranch
     defaultBranchName          = defaultDefaultBranchName           // wraps git.DefaultBranchNameWithFallback
     getBranchConfig            = defaultGetBranchConfig             // wraps git.GetBranchConfig
     hasRemoteBranch            = defaultHasRemoteBranch             // wraps git.HasRemoteBranch
@@ -104,7 +102,7 @@ func Run(w io.Writer, opts Options) error
 
 Behavior:
 
-1. Resolve the current branch via `getCurrentBranchOrDetached()`. On detached HEAD, return `ErrDetached`. If the branch is protected (`git.IsProtectedBranch`), return `ErrProtectedBranch` wrapped with the branch name.
+1. Resolve the current branch via `getCurrentBranchOrDetached()`. On detached HEAD, return `ErrDetached`.
 2. Resolve tracker. `opts.SkipTracker` forces `tracker = nil`. Tracker construction errors propagate.
 3. Resolve the task id (via `resolveTaskID`):
    - When `opts.TaskURL` is set: require a tracker; otherwise return `ErrNoTrackerForURL`. Then `tracker.ParseTaskURL(opts.TaskURL)`.
@@ -133,7 +131,6 @@ Prints `message` to `w`, reads one line from stdin via `readLine`, and returns `
 | Condition | Behavior | CLI translation | Exit |
 |-----------|----------|-----------------|-----:|
 | Detached HEAD | Returns `ErrDetached` | Wrapped as `*cli.UsageError` with the sentinel message | 1 |
-| Protected branch | Returns wrapped `ErrProtectedBranch` | Wrapped as `*cli.UsageError` with the wrapped message | 1 |
 | `--task-url` without tracker | Returns `ErrNoTrackerForURL` | Wrapped as `*cli.UsageError` with the sentinel message | 1 |
 | User declines open-PR prompt | Prints `→ Aborted`; returns `ErrAborted` | Wrapped as `*process.PassthroughError{Code: 1}` so no additional output appears | 1 |
 | `*credentials.NotFoundError` surfaced by tracker | Returns the wrapped error | CLI prints error and `credentials.SetupHint`, wraps as `*cli.UsageError{""}` to suppress crash log | 1 |
@@ -164,7 +161,6 @@ Cyan for progress, green for success, yellow for warnings, red for the `!` atten
 `internal/close/close_test.go` covers:
 
 - Detached HEAD returns `ErrDetached`.
-- Protected branch returns wrapped `ErrProtectedBranch`.
 - `--task-url` without tracker returns `ErrNoTrackerForURL`; with tracker, uses `ParseTaskURL`.
 - Task id from `branch.<name>.task-id` is passed to `CompleteTask`.
 - Missing task id with tracker configured prints a warning and skips completion.

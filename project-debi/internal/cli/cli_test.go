@@ -1837,23 +1837,6 @@ func TestRun_Close_ErrDetached_ReturnsUsageError(t *testing.T) {
 	}
 }
 
-func TestRun_Close_ErrProtectedBranch_ReturnsUsageError(t *testing.T) {
-	stubCloseRun(t, func(io.Writer, closecmd.Options) error {
-		return fmt.Errorf("%w: %q", closecmd.ErrProtectedBranch, "main")
-	})
-	err := Run([]string{"pr", "close"})
-	if err == nil {
-		t.Fatal("expected error")
-	}
-	var usageErr *UsageError
-	if !errors.As(err, &usageErr) {
-		t.Fatalf("expected UsageError, got %T: %s", err, err.Error())
-	}
-	if !strings.Contains(err.Error(), "protected branch") {
-		t.Fatalf("expected message to mention protected branch, got: %s", err.Error())
-	}
-}
-
 func TestRun_Close_ErrNoTrackerForURL_ReturnsUsageError(t *testing.T) {
 	stubCloseRun(t, func(io.Writer, closecmd.Options) error { return closecmd.ErrNoTrackerForURL })
 	err := Run([]string{"pr", "close", "-t", "https://x"})

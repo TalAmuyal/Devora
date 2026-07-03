@@ -9,7 +9,7 @@ import (
 	"devora/internal/process"
 )
 
-// passthrough runs a git command with stdin/stdout/stderr connected to the terminal.
+// Run a git command with stdin/stdout/stderr connected to the terminal
 func passthrough(args ...string) error {
 	return process.RunPassthrough(append([]string{"git"}, args...))
 }
@@ -55,6 +55,7 @@ func Gbd(args []string) error {
 	return passthrough(append([]string{"branch", "-D"}, args...)...)
 }
 
+// Git Branch Delete Current - delete the current branch
 func Gbdc() error {
 	output, err := process.GetOutput([]string{"git", "symbolic-ref", "HEAD"})
 	if err != nil {
@@ -67,6 +68,7 @@ func Gbdc() error {
 	return Gbd([]string{branchName})
 }
 
+// Git Checkout Latest - fetch-then-checkout-default passthrough
 func Gcl() error {
 	if err := Gfo(nil); err != nil {
 		return err
@@ -74,6 +76,7 @@ func Gcl() error {
 	return Gcom(nil)
 }
 
+// Git Checkout Origin Master checks out `origin/<default-branch>`
 func Gcom(args []string) error {
 	branch, err := DefaultBranchName()
 	if err != nil {
@@ -171,6 +174,7 @@ func Grom() error {
 	return passthrough("rebase", "origin/"+branch)
 }
 
+// Git STatus
 func Gst(args []string) error {
 	return passthrough(append([]string{"status"}, args...)...)
 }

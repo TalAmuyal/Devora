@@ -37,7 +37,6 @@ Treat the code as the source of truth, and consult a spec only for context the c
 | [specs/jsonvalidate.md](specs/jsonvalidate.md) | `internal/jsonvalidate` | JSON validation with line:column error positions |
 | [specs/yamlvalidate.md](specs/yamlvalidate.md) | `internal/yamlvalidate` | YAML validation (multi-document) with line:column error positions |
 | [specs/tomlvalidate.md](specs/tomlvalidate.md) | `internal/tomlvalidate` | TOML validation with line:column error positions |
-| [specs/git.md](specs/git.md) | `internal/git` | Git shortcut commands and submit/close helpers |
 | [specs/prstatus.md](specs/prstatus.md) | `internal/prstatus` | PR status checking via gh CLI |
 | [specs/submit.md](specs/submit.md) | `internal/submit` | `debi pr submit`: commit, tracker task, PR creation |
 | [specs/close.md](specs/close.md) | `internal/close` (pkg `closecmd`) | `debi pr close`: task completion, branch cleanup |
