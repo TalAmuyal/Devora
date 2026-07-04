@@ -8,6 +8,7 @@ import (
 	"devora/internal/git"
 	"devora/internal/health"
 	"devora/internal/jsonvalidate"
+	"devora/internal/judgess"
 	"devora/internal/process"
 	"devora/internal/prstatus"
 	"devora/internal/shellinit"
@@ -221,25 +222,13 @@ func runPRCheck(args []string) error {
 	return prstatus.Run(os.Stdout, jsonOutput)
 }
 
-// submitRun is the submit entry point; stubbable for tests.
 var submitRun = submit.Run
-
-// closeRun is the close entry point; stubbable for tests.
 var closeRun = closecmd.Run
-
-// healthRun is the health entry point; stubbable for tests.
 var healthRun = health.Run
-
-// healthRunJSON is the JSON health entry point; stubbable for tests.
 var healthRunJSON = health.RunJSON
-
-// resolveActiveProfile is the profile resolver entry point; stubbable for tests so the three handlers (health/submit/close) can verify they invoke it.
+var judgessRun = judgess.Run
 var resolveActiveProfile = ResolveActiveProfile
-
-// resolveActiveProfileByPath resolves the active profile by root path (used by `debi health --profile-path`); stubbable for tests.
 var resolveActiveProfileByPath = ResolveActiveProfileByPath
-
-// Stubbable seams for the workspace-aware gst/gcl dispatchers.
 var (
 	wsgitEnsureAtWorkspaceRoot = wsgit.EnsureAtWorkspaceRoot
 	wsgitRunStatus             = wsgit.RunStatus
@@ -678,6 +667,24 @@ func runUtil(args []string) error {
 	default:
 		return &UsageError{Message: fmt.Sprintf("unknown util subcommand: %s\nusage: debi util <subcommand>", subcommand)}
 	}
+}
+
+const judgessUsage = `usage: debi judgess
+
+Judgess is Devora's Claude Code permission hook.
+Claude Code invokes it for each permission request, passing the request as JSON on stdin, and reads the decision from the exit code and stdout.`
+
+func runJudgess(args []string) error {
+	if len(args) > 0 && (args[0] == "-h" || args[0] == "--help") {
+		fmt.Println(judgessUsage)
+		return nil
+	}
+
+	if err := judgessRun(os.Stdin); err != nil {
+		fmt.Fprintf(os.Stderr, "judgess: %s\n", err.Error())
+		return &process.PassthroughError{Code: 1}
+	}
+	return nil
 }
 
 func runJSONValidate(args []string) error {

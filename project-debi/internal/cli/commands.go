@@ -321,6 +321,12 @@ var commands = []Command{
 			},
 		},
 	},
+	{
+		Name:        "judgess",
+		Description: "Run the Judgess permission hook (reads a request on stdin)",
+		Group:       "Utility",
+		Run:         func(args []string) error { return runJudgess(args) },
+	},
 }
 
 var commandIndex map[string]*Command

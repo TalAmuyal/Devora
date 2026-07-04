@@ -875,6 +875,61 @@ func TestRun_JSONValidate_Stdin_ValidJSON(t *testing.T) {
 	}
 }
 
+func TestRun_Judgess_Abstain_ReturnsNil(t *testing.T) {
+	stubJudgessRun(t, func(io.Reader) error { return nil })
+	if err := Run([]string{"judgess"}); err != nil {
+		t.Fatalf("expected nil (abstain), got: %s", err.Error())
+	}
+}
+
+func TestRun_Judgess_Help(t *testing.T) {
+	old := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdout = w
+
+	runErr := Run([]string{"judgess", "--help"})
+
+	w.Close()
+	os.Stdout = old
+
+	if runErr != nil {
+		t.Fatalf("expected no error for --help, got: %s", runErr.Error())
+	}
+	var buf bytes.Buffer
+	io.Copy(&buf, r)
+	if !strings.Contains(buf.String(), "usage: debi judgess") {
+		t.Fatalf("expected usage text on stdout, got: %q", buf.String())
+	}
+}
+
+func TestRun_Judgess_ParseError_ReturnsPassthroughError1(t *testing.T) {
+	// Capture stderr since runJudgess prints the diagnostic there.
+	oldStderr := os.Stderr
+	_, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stderr = w
+	defer func() {
+		w.Close()
+		os.Stderr = oldStderr
+	}()
+
+	stubJudgessRun(t, func(io.Reader) error { return errors.New("bad input") })
+
+	runErr := Run([]string{"judgess"})
+	var ptErr *process.PassthroughError
+	if !errors.As(runErr, &ptErr) {
+		t.Fatalf("expected PassthroughError, got %T: %v", runErr, runErr)
+	}
+	if ptErr.Code != 1 {
+		t.Fatalf("expected exit code 1, got: %d", ptErr.Code)
+	}
+}
+
 func TestRun_JSONValidate_NonexistentFile_ReturnsPassthroughError2(t *testing.T) {
 	// Capture stderr since runJSONValidate prints the error there
 	oldStderr := os.Stderr
@@ -1435,7 +1490,6 @@ func TestCommandIndex_AllCommandsResolvable(t *testing.T) {
 	}
 }
 
-// stubSubmitRun overrides submitRun for the duration of the test.
 func stubSubmitRun(t *testing.T, fn func(w io.Writer, opts submit.Options) error) {
 	t.Helper()
 	orig := submitRun
@@ -1443,7 +1497,6 @@ func stubSubmitRun(t *testing.T, fn func(w io.Writer, opts submit.Options) error
 	t.Cleanup(func() { submitRun = orig })
 }
 
-// stubCloseRun overrides closeRun for the duration of the test.
 func stubCloseRun(t *testing.T, fn func(w io.Writer, opts closecmd.Options) error) {
 	t.Helper()
 	orig := closeRun
@@ -1451,7 +1504,6 @@ func stubCloseRun(t *testing.T, fn func(w io.Writer, opts closecmd.Options) erro
 	t.Cleanup(func() { closeRun = orig })
 }
 
-// stubHealthRun overrides healthRun for the duration of the test.
 func stubHealthRun(t *testing.T, fn func(w io.Writer, strict bool, verbose bool) error) {
 	t.Helper()
 	orig := healthRun
@@ -1459,7 +1511,14 @@ func stubHealthRun(t *testing.T, fn func(w io.Writer, strict bool, verbose bool)
 	t.Cleanup(func() { healthRun = orig })
 }
 
-// stubResolveActiveProfile overrides resolveActiveProfile so handler tests don't touch the real user's config while still letting us assert that the resolver is invoked (and with what argument).
+func stubJudgessRun(t *testing.T, fn func(r io.Reader) error) {
+	t.Helper()
+	orig := judgessRun
+	judgessRun = fn
+	t.Cleanup(func() { judgessRun = orig })
+}
+
+// stubResolveActiveProfile overrides resolveActiveProfile so handler tests don't touch the real user's config while still letting us assert that the resolver is invoked (and with what argument)
 func stubResolveActiveProfile(t *testing.T, fn func(explicit string) (string, error)) {
 	t.Helper()
 	orig := resolveActiveProfile
@@ -1467,7 +1526,7 @@ func stubResolveActiveProfile(t *testing.T, fn func(explicit string) (string, er
 	t.Cleanup(func() { resolveActiveProfile = orig })
 }
 
-// stubResolveActiveProfileByPath overrides resolveActiveProfileByPath so handler tests can assert the path resolver is invoked (and with what path).
+// stubResolveActiveProfileByPath overrides resolveActiveProfileByPath so handler tests can assert the path resolver is invoked (and with what path)
 func stubResolveActiveProfileByPath(t *testing.T, fn func(path string) (string, error)) {
 	t.Helper()
 	orig := resolveActiveProfileByPath
@@ -1475,7 +1534,6 @@ func stubResolveActiveProfileByPath(t *testing.T, fn func(path string) (string, 
 	t.Cleanup(func() { resolveActiveProfileByPath = orig })
 }
 
-// stubHealthRunJSON overrides healthRunJSON for the duration of the test.
 func stubHealthRunJSON(t *testing.T, fn func(w io.Writer) error) {
 	t.Helper()
 	orig := healthRunJSON
@@ -2011,8 +2069,7 @@ func TestRun_Close_QuietFlag_SetsOption(t *testing.T) {
 	}
 }
 
-// chdirToNonGit changes the test's CWD to a fresh temp directory so
-// git-repo precondition checks fail.
+// chdirToNonGit changes the test's CWD to a fresh temp directory so git-repo precondition checks fail
 func chdirToNonGit(t *testing.T) {
 	t.Helper()
 	origDir, err := os.Getwd()
@@ -2089,8 +2146,6 @@ func TestRun_PRCheck_OutsideGitRepo_ReturnsUsageError(t *testing.T) {
 
 // --- wsgit dispatch tests ---
 
-// stubWsgitEnsureAtWorkspaceRoot overrides wsgitEnsureAtWorkspaceRoot for the
-// duration of the test.
 func stubWsgitEnsureAtWorkspaceRoot(t *testing.T, fn func(cwd string) (string, error)) {
 	t.Helper()
 	orig := wsgitEnsureAtWorkspaceRoot
