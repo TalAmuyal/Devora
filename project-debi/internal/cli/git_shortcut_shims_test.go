@@ -1,63 +1,98 @@
 package cli
 
 import (
-	"devora/internal/shellinit"
-	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
+
+	"devora/internal/gitcmd"
+	"devora/internal/shellinit"
 )
 
-// TestGitShortcutShims_MatchesRegistry is the CI drift guard: it generates the shims from the live command registry and asserts the produced directory contains exactly one shim per "Git Shortcuts" command, each with the exact expected content and mode.
-// Because expectations are derived from CommandInfos() itself, adding/removing/renaming a git shortcut keeps this honest and fails CI if shim generation drifts.
-func TestGitShortcutShims_MatchesRegistry(t *testing.T) {
-	dir := t.TempDir()
-	if err := shellinit.WriteShims(dir, CommandInfos()); err != nil {
-		t.Fatalf("WriteShims: %v", err)
-	}
+// frozenShimNames is the contract this package has with the outside world: Judge's command allowlist contains "gaac" and Ember's e2e suite probes `command -v gcl`, and users' muscle memory relies on all of them.
+// The list is duplicated here ON PURPOSE — deriving it from GitShimAliases would make the test blind to renames.
+// Additions are fine; renames/removals must be coordinated with Judge and the Ember e2e suite.
+var frozenShimNames = []string{
+	"gaa",
+	"gaaa",
+	"gaaap",
+	"gaac",
+	"gaacp",
+	"gb",
+	"gbd",
+	"gbdc",
+	"gcl",
+	"gcom",
+	"gd",
+	"gfo",
+	"gg",
+	"gl",
+	"gpo",
+	"gpof",
+	"gpop",
+	"gri",
+	"grl",
+	"grlp",
+	"grom",
+	"gst",
+	"gstash",
+	"gsum",
+}
 
-	var want []string
-	for _, c := range CommandInfos() {
-		if c.Group == shellinit.GitShortcutsGroup {
-			want = append(want, c.Name)
-		}
-	}
-	if len(want) == 0 {
-		t.Fatal("registry reports no Git Shortcuts commands")
-	}
-	sort.Strings(want)
+// passthroughFirstTokens are the git subcommands that shim targets may start with when they are not gitcmd customs
+var passthroughFirstTokens = map[string]bool{
+	"add":    true,
+	"branch": true,
+	"diff":   true,
+	"fetch":  true,
+	"grep":   true,
+	"log":    true,
+	"push":   true,
+	"stash":  true,
+	"status": true,
+}
 
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		t.Fatalf("read shim dir: %v", err)
-	}
+func TestGitShimAliases_NamesMatchFrozenContract(t *testing.T) {
 	var got []string
-	for _, e := range entries {
-		got = append(got, e.Name())
+	for _, alias := range shellinit.GitShimAliases {
+		got = append(got, alias.Name)
 	}
 	sort.Strings(got)
 
+	want := append([]string(nil), frozenShimNames...)
+	sort.Strings(want)
+
 	if strings.Join(got, ",") != strings.Join(want, ",") {
-		t.Fatalf("shim set does not match registry\n got: %v\nwant: %v", got, want)
+		t.Fatalf("shim alias names drifted from the frozen contract\n got: %v\nwant: %v", got, want)
+	}
+}
+
+func TestGitShimAliases_TargetsResolve(t *testing.T) {
+	customs := make(map[string]bool)
+	for _, info := range gitcmd.SubCommandInfos() {
+		customs[info.Name] = true
 	}
 
-	for _, name := range want {
-		path := filepath.Join(dir, name)
-		info, err := os.Stat(path)
-		if err != nil {
-			t.Fatalf("stat shim %q: %v", name, err)
+	for _, alias := range shellinit.GitShimAliases {
+		first := strings.Fields(alias.Target)[0]
+		if !customs[first] && !passthroughFirstTokens[first] {
+			t.Errorf("alias %q targets %q which is neither a gitcmd custom nor a known git subcommand", alias.Name, first)
 		}
-		if info.Mode().Perm() != 0o755 {
-			t.Errorf("shim %q mode = %v, want 0755", name, info.Mode().Perm())
-		}
-		content, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatalf("read shim %q: %v", name, err)
-		}
-		wantContent := "#!/bin/sh\nexec debi " + name + " \"$@\"\n"
-		if string(content) != wantContent {
-			t.Errorf("shim %q content = %q, want %q", name, string(content), wantContent)
+	}
+}
+
+func TestGitRegistryEntry_SubCommandsMatchGitcmd(t *testing.T) {
+	entry, ok := commandIndex["git"]
+	if !ok {
+		t.Fatal("registry has no git command")
+	}
+	infos := gitcmd.SubCommandInfos()
+	if len(entry.SubCommands) != len(infos) {
+		t.Fatalf("registry git SubCommands len = %d, want %d", len(entry.SubCommands), len(infos))
+	}
+	for i, info := range infos {
+		if entry.SubCommands[i].Name != info.Name {
+			t.Fatalf("registry git SubCommands[%d] = %q, want %q", i, entry.SubCommands[i].Name, info.Name)
 		}
 	}
 }

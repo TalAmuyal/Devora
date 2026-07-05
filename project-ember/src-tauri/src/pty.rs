@@ -77,8 +77,8 @@ impl PtyManager {
             if let Some(contents_dir) = exe_path.parent().and_then(|p| p.parent()) {
                 let resources_dir = contents_dir.join("Resources");
 
-                // Debi git-shortcut shims (gcl -> `debi gcl`, …).
-                // Prepended first so the bare shortcut resolves to the shim in any shell that doesn't already alias/function the name.
+                // Debi git-shortcut shims (gcl -> `debi git checkout-latest`, …).
+                // Prepended first so the bare alias resolves to the shim in any shell that doesn't already alias/function the name.
                 // Gated by the `terminal.git-shortcuts` config (resolved by the caller).
                 if git_shortcuts_enabled {
                     let git_shortcuts = resources_dir.join("git-shortcuts");

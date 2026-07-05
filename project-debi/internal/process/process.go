@@ -34,12 +34,13 @@ func (e *VerboseExecError) Unwrap() error {
 }
 
 type execConfig struct {
-	cwd    string
-	silent bool
-	stdout io.Writer
-	stderr io.Writer
-	env    []string
-	ctx    context.Context
+	cwd     string
+	silent  bool
+	stdout  io.Writer
+	stderr  io.Writer
+	noStdin bool
+	env     []string
+	ctx     context.Context
 }
 
 type ExecOption func(*execConfig)
@@ -71,6 +72,12 @@ func WithStdout(w io.Writer) ExecOption {
 // Takes precedence over WithSilent for stderr.
 func WithStderr(w io.Writer) ExecOption {
 	return func(cfg *execConfig) { cfg.stderr = w }
+}
+
+// WithNoStdin gives RunPassthrough's child no stdin (immediate EOF) instead of the parent's os.Stdin.
+// Required when running children in parallel, so they don't compete for the terminal.
+func WithNoStdin() ExecOption {
+	return func(cfg *execConfig) { cfg.noStdin = true }
 }
 
 // WithExtraEnv appends key=value entries to the parent process's environment
@@ -112,7 +119,9 @@ func RunPassthrough(command []string, opts ...ExecOption) error {
 		cmd.Env = append(os.Environ(), cfg.env...)
 	}
 
-	cmd.Stdin = os.Stdin
+	if !cfg.noStdin {
+		cmd.Stdin = os.Stdin
+	}
 
 	switch {
 	case cfg.stdout != nil:

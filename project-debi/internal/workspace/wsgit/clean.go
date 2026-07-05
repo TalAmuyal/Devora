@@ -13,7 +13,7 @@ import (
 	"devora/internal/workspace"
 )
 
-// RunClean implements workspace-mode `debi gcl`: a two-phase verify-then-update
+// RunClean implements workspace-mode `debi git checkout-latest`: a two-phase verify-then-update
 // flow. Phase 1 verifies every repo is clean and on detached HEAD; if any
 // repo fails, we abort and return a non-zero PassthroughError so no fetches
 // happen. Phase 2 runs `git fetch origin` and `git checkout origin/<default>`
@@ -63,7 +63,7 @@ func runVerifyPhase(wsPath string, repos []string) []RepoVerifyResult {
 	return results
 }
 
-// verifyRepo checks a single repo's eligibility for the gcl flow: clean
+// verifyRepo checks a single repo's eligibility for the checkout-latest flow: clean
 // working tree and detached HEAD.
 func verifyRepo(repoPath, name string) RepoVerifyResult {
 	res := RepoVerifyResult{Name: name}
@@ -118,7 +118,7 @@ func renderVerifyFailure(w io.Writer, results []RepoVerifyResult) {
 	fmt.Fprintln(w)
 	fmt.Fprintf(w, "%s  Aborted — %d of %d repos failed verification. No changes made.\n",
 		style.Error.Render("✗"), failed, len(results))
-	fmt.Fprintln(w, "   Fix the listed repos and re-run `debi gcl`.")
+	fmt.Fprintln(w, "   Fix the listed repos and re-run `gcl`.")
 }
 
 // verifyRowSummary returns (ok, reason). When ok is false, reason is a short
@@ -152,18 +152,14 @@ func runCleanPhase(w io.Writer, wsPath string, repos []string) []cleanRepoResult
 		wg.Add(1)
 		go func(idx int, name string) {
 			defer wg.Done()
-			results[idx] = runGclInRepo(filepath.Join(wsPath, name), name)
+			results[idx] = checkoutLatestInRepo(filepath.Join(wsPath, name), name)
 		}(i, repo)
 	}
 	wg.Wait()
 	return results
 }
 
-// runGclInRepo composes `git fetch origin` + `git checkout origin/<default>`
-// using captured output. Composing here (not calling git.Gcl) keeps
-// internal/git purely passthrough; capturing avoids interleaved progress
-// output across N parallel repos.
-func runGclInRepo(repoPath, name string) cleanRepoResult {
+func checkoutLatestInRepo(repoPath, name string) cleanRepoResult {
 	res := cleanRepoResult{Name: name}
 
 	if err := bestEffortFetch(repoPath); err != nil {

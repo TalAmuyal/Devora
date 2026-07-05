@@ -15,7 +15,7 @@ The CLI has the following commands:
 - `get-conf`,
 - `preview`,
 - Validation util commands (json-validate, yaml-validate, toml-validate)
-- Git shortcuts
+- `git` (custom subcommands, passthrough, and multi-repo fan-out)
 
 ### Workspace Commands
 
@@ -101,53 +101,16 @@ Flag syntax accepts both `--message=foo` and `--message foo`. `-v` and `-q` are 
 | `yaml-validate` | `<file\|->` (positional, required) | Validate a YAML file (multi-document streams supported); use `-` for stdin |
 | `toml-validate` | `<file\|->` (positional, required) | Validate a TOML file; use `-` for stdin |
 
-### Git Shortcuts
+### Git
 
-All git shortcuts run git commands in passthrough mode (stdin/stdout/stderr connected to the terminal).
-They return `PassthroughError` on non-zero exit.
-
-| Command | Args | Description |
-|---------|------|-------------|
-| `gaa` | none | `git add .` |
-| `gaac` | `<msg>` (required) | `git add . && git commit -m <msg>` |
-| `gaacp` | `<msg>` (required) | `gaac` then `git push origin` |
-| `gaaa` | none | `git add . && git commit --amend --no-edit` |
-| `gaaap` | none | `gaaa` then `gpof` |
-| `gb` | `[args]` | `git branch [args]` |
-| `gbd` | `<branch>...` (required) | `git branch -D <branch>...` |
-| `gbdc` | none | Delete current branch (detach first) |
-| `gcl` | none | `gfo` then `gcom` (workspace-aware: see [specs/wsgit.md](./wsgit.md)) |
-| `gcom` | `[args]` | `git checkout origin/<default-branch> [args]` |
-| `gd` | `[args]` | `git diff [args]` |
-| `gfo` | `[args]` | `git fetch origin [args]` |
-| `gg` | `[args]` | `git grep [args]` |
-| `gl` | `[args]` | `git log [args]` |
-| `gpo` | `[args]` | `git push origin [args]` |
-| `gpof` | `[args]` | `git push origin --force [args]` |
-| `gpop` | `[args]` | `git stash pop [args]` |
-| `gri` | `[N]` | Interactive rebase (N commits or since branch) |
-| `grl` | none | `gfo` then `grom` |
-| `grlp` | none | `grl` then `gpof` |
-| `grom` | none | `git rebase origin/<default-branch>` |
-| `gst` | `[args]` | `git status [args]` (workspace-aware: see [specs/wsgit.md](./wsgit.md)) |
-| `gstash` | `[args]` | `git stash [args]` |
-
-### Workspace-mode git commands
-
-`gst` and `gcl` dispatch on the caller's CWD before reaching `internal/git`:
-
-- When the resolved CWD is the exact root of a Devora workspace (`ws-N/`), the CLI invokes `wsgit.RunStatus` / `wsgit.RunClean` for an aggregated, parallel multi-repo flow.
-- Anywhere else (including inside any single repo, even one that lives inside a workspace), the CLI falls back to the per-repo passthrough wrappers `git.Gst` / `git.Gcl`, preserving their historical behavior.
-- At the workspace root, `gst` rejects extra positional args with `*UsageError` (since the workspace summary takes none); `gcl` accepts no args in either mode.
-
-Detection uses `wsgit.EnsureAtWorkspaceRoot(cwd)`; an `ErrNotAtWorkspaceRoot` result triggers the passthrough fallback. See [specs/wsgit.md](./wsgit.md) for the full output format and edge-case behavior.
+`debi git <args>` dispatches to Debi's custom git subcommands (e.g. `add-all-commit`, `rebase-latest`, `summary`), passes anything else through to the real git, and fans read-only subcommands out across immediate child repos when run outside a repository. The dispatch rules, custom-subcommand registry, and fan-out behavior live in `internal/gitcmd` — see its code comments. The short aliases (`gaa`, `gst`, ...) exist only as shell shims written by `internal/shellinit`.
 
 ### Utility
 
 | Command | Args | Description |
 |---------|------|-------------|
 | `completion` | `<bash\|zsh\|fish>` (positional, required) | Generate a shell completion script to stdout |
-| `git-shortcut-shims` | `<dir>` (positional, required) | Write a command shim per git shortcut into `<dir>` (used by the bundler) |
+| `git-shortcut-shims` | `<dir>` (positional, required) | Write a command shim per git shortcut alias into `<dir>` (used by the bundler) |
 
 ## CLI Framework
 
@@ -158,9 +121,9 @@ Commands are defined in a data-driven registry (`[]Command` slice in `commands.g
 
 Shared command metadata types (`Command`, `Flag`, `SubCommand`) are extracted to the `internal/cmdinfo` package to break a circular import between `cli` and `completion`. The `cmdinfo.Command` struct includes a `ValidArgs` field (`[]string`) for commands that accept a fixed set of positional arguments (e.g., `completion` accepts `bash`, `zsh`, `fish`), a `SubCommands` field (`[]SubCommand`) for commands that dispatch to named sub-commands (e.g., `pr` dispatches to `check`, `util` dispatches to `json-validate`, `yaml-validate`, and `toml-validate`), and a `CompletesFiles` field (`bool`) for top-level commands whose positional argument is a file path (e.g., `preview`). Each `SubCommand` has its own `Name`, `Description`, `Flags`, `ValidArgs`, and `CompletesFiles` fields. The `CommandInfos()` function converts the internal registry to `[]cmdinfo.Command` for use by external packages.
 
-Shell completion scripts are generated by the `internal/completion` package, which uses `text/template` to produce bash, zsh, and fish scripts from the command metadata. Commands with `Flags` or `ValidArgs` get second-level completion blocks that offer their ValidArgs, Flags, and universal `-h`/`--help` flags together. A command with `CompletesFiles` instead completes file paths when the current word is not an option, and offers its flags only once the word begins with `-` (so `debi preview <TAB>` lists files and `debi preview -<TAB>` lists `--stack`/`-h`/`--help`); fish offers files and options together via a force-files rule. Commands with `SubCommands` get second-level completion (sub-command names) and third-level completion (sub-command-specific flags or file completion). Commands with none of these (e.g., git shortcuts) get no subcommand completion.
+Shell completion scripts are generated by the `internal/completion` package, which uses `text/template` to produce bash, zsh, and fish scripts from the command metadata. Commands with `Flags` or `ValidArgs` get second-level completion blocks that offer their ValidArgs, Flags, and universal `-h`/`--help` flags together. A command with `CompletesFiles` instead completes file paths when the current word is not an option, and offers its flags only once the word begins with `-` (so `debi preview <TAB>` lists files and `debi preview -<TAB>` lists `--stack`/`-h`/`--help`); fish offers files and options together via a force-files rule. Commands with `SubCommands` get second-level completion (sub-command names) and third-level completion (sub-command-specific flags or file completion). Commands with none of these get no subcommand completion.
 
-Git-shortcut command shims are written by the `internal/shellinit` package (see [specs/shellinit.md](./shellinit.md)), which also reads the command metadata via `CommandInfos()` so the shim set stays in sync with the registry.
+Git-shortcut command shims are written by the `internal/shellinit` package from its own alias table (`GitShimAliases`); the drift-guard test in `internal/cli/git_shortcut_shims_test.go` keeps the table in sync with the `gitcmd` custom registry and the frozen alias names.
 
 ## UsageError
 
@@ -202,30 +165,8 @@ Health:
 PR:
   pr <subcommand>       Pull request commands
 
-Git Shortcuts:
-  gaa               Stage all changes
-  gaac <msg>        Stage all and commit with message
-  gaacp <msg>       Stage all, commit, and push to origin
-  gaaa              Stage all and amend last commit
-  gaaap             Stage all, amend, and force-push
-  gb [args]         git branch
-  gbd <branch>...   Force-delete branches
-  gbdc              Delete current branch (detach first)
-  gcl               Fetch origin and checkout default branch
-  gcom [args]       Checkout default branch from origin
-  gd [args]         git diff
-  gfo [args]        Fetch from origin
-  gg [args]         git grep
-  gl [args]         git log
-  gpo [args]        Push to origin
-  gpof [args]       Force-push to origin
-  gpop [args]       Pop git stash
-  gri [N]           Interactive rebase (N commits or since branch)
-  grl               Fetch and rebase on default branch
-  grlp              Fetch, rebase, and force-push
-  grom              Rebase on origin default branch
-  gst [args]        git status
-  gstash [args]     git stash
+Git:
+  git <subcommand|git-args>  Git with custom subcommands, passthrough, and multi-repo fan-out
 
 Utility:
   get-conf <key>              Print a resolved config value
@@ -400,10 +341,10 @@ Delegates to `completion.GenerateBash`, `completion.GenerateZsh`, or `completion
 func runGitShortcutShims(args []string) error
 ```
 
-Writes a command shim into the directory given as the single positional argument — one executable per git shortcut, each forwarding to `debi <name>`.
+Writes a command shim into the directory given as the single positional argument — one executable per alias in `shellinit.GitShimAliases`, each forwarding to `debi git <target>`.
 The bundler runs this to populate the Devora-Ember session-shell shim directory.
 Supports `-h`/`--help`.
-Delegates to `shellinit.WriteShims` with the live `CommandInfos()` registry.
+Delegates to `shellinit.WriteShims`.
 
 ### pr
 

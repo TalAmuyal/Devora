@@ -1,19 +1,15 @@
 package git_test
 
 import (
-	"bytes"
 	"errors"
-	"io"
-	"os"
-	"strings"
 	"testing"
 
 	"devora/internal/git"
 	"devora/internal/process"
 )
 
-func TestGri_InvalidArgument_ReturnsPassthroughError(t *testing.T) {
-	err := git.Gri([]string{"abc"})
+func TestRebaseInteractive_InvalidArgument_ReturnsPassthroughError(t *testing.T) {
+	err := git.RebaseInteractive([]string{"abc"})
 	if err == nil {
 		t.Fatal("expected error for invalid argument")
 	}
@@ -27,8 +23,8 @@ func TestGri_InvalidArgument_ReturnsPassthroughError(t *testing.T) {
 	}
 }
 
-func TestGri_ZeroArgument_ReturnsPassthroughError(t *testing.T) {
-	err := git.Gri([]string{"0"})
+func TestRebaseInteractive_ZeroArgument_ReturnsPassthroughError(t *testing.T) {
+	err := git.RebaseInteractive([]string{"0"})
 	if err == nil {
 		t.Fatal("expected error for zero argument")
 	}
@@ -39,8 +35,8 @@ func TestGri_ZeroArgument_ReturnsPassthroughError(t *testing.T) {
 	}
 }
 
-func TestGri_NegativeArgument_ReturnsPassthroughError(t *testing.T) {
-	err := git.Gri([]string{"-1"})
+func TestRebaseInteractive_NegativeArgument_ReturnsPassthroughError(t *testing.T) {
+	err := git.RebaseInteractive([]string{"-1"})
 	if err == nil {
 		t.Fatal("expected error for negative argument")
 	}
@@ -51,48 +47,4 @@ func TestGri_NegativeArgument_ReturnsPassthroughError(t *testing.T) {
 	}
 }
 
-func TestGri_HelpFlag_PrintsUsageAndReturnsNil(t *testing.T) {
-	// Capture stdout
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	err := git.Gri([]string{"--help"})
-
-	w.Close()
-	os.Stdout = oldStdout
-
-	if err != nil {
-		t.Fatalf("expected nil error for --help, got: %v", err)
-	}
-
-	var buf bytes.Buffer
-	io.Copy(&buf, r)
-	output := buf.String()
-	if !strings.Contains(output, "Usage:") {
-		t.Fatalf("expected help output to contain 'Usage:', got: %s", output)
-	}
-}
-
-func TestGri_ShortHelpFlag_PrintsUsageAndReturnsNil(t *testing.T) {
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	err := git.Gri([]string{"-h"})
-
-	w.Close()
-	os.Stdout = oldStdout
-
-	if err != nil {
-		t.Fatalf("expected nil error for -h, got: %v", err)
-	}
-
-	var buf bytes.Buffer
-	io.Copy(&buf, r)
-	output := buf.String()
-	if !strings.Contains(output, "Usage:") {
-		t.Fatalf("expected help output to contain 'Usage:', got: %s", output)
-	}
-}
-
+// Help flags (-h/--help) are short-circuited by gitcmd's runCustom before RebaseInteractive is reached; see gitcmd's TestRun_CustomHelp_ShortCircuits

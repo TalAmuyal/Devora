@@ -252,6 +252,48 @@ func TestRunPassthrough_WithStderr_CapturesOutput(t *testing.T) {
 	}
 }
 
+func stdinFromFile(t *testing.T, content string) {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "stdin.txt")
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write stdin file: %v", err)
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		t.Fatalf("open stdin file: %v", err)
+	}
+	orig := os.Stdin
+	os.Stdin = f
+	t.Cleanup(func() {
+		os.Stdin = orig
+		f.Close()
+	})
+}
+
+func TestRunPassthrough_DefaultStdin_InheritedByChild(t *testing.T) {
+	stdinFromFile(t, "from_parent_stdin")
+	var buf bytes.Buffer
+	err := RunPassthrough([]string{"cat"}, WithStdout(&buf))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(buf.String(), "from_parent_stdin") {
+		t.Fatalf("expected child to inherit stdin, got %q", buf.String())
+	}
+}
+
+func TestRunPassthrough_WithNoStdin_ChildGetsEOF(t *testing.T) {
+	stdinFromFile(t, "from_parent_stdin")
+	var buf bytes.Buffer
+	err := RunPassthrough([]string{"cat"}, WithStdout(&buf), WithNoStdin())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if buf.String() != "" {
+		t.Fatalf("expected no stdin for child, got %q", buf.String())
+	}
+}
+
 func TestRunPassthrough_WithStdoutStderr_OnFailure_CapturesOutput(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	err := RunPassthrough(

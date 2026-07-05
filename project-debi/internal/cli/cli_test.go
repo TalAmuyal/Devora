@@ -7,7 +7,6 @@ import (
 	"devora/internal/git"
 	"devora/internal/process"
 	"devora/internal/submit"
-	"devora/internal/workspace/wsgit"
 	"errors"
 	"fmt"
 	"io"
@@ -507,87 +506,6 @@ func TestRun_PRCheck_UnknownFlag_ReturnsUsageError(t *testing.T) {
 	}
 }
 
-func TestRun_GitCommands_Recognized(t *testing.T) {
-	origDir, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { os.Chdir(origDir) })
-	os.Chdir(t.TempDir())
-
-	commands := []string{
-		"gaa", "gaaa", "gaaap", "gb", "gbdc", "gcl", "gcom", "gd",
-		"gfo", "gg", "gl", "gpo", "gpof", "gpop", "gri",
-		"grl", "grlp", "grom", "gst", "gstash",
-	}
-	for _, cmd := range commands {
-		t.Run(cmd, func(t *testing.T) {
-			err := Run([]string{cmd})
-			if err != nil && strings.Contains(err.Error(), "unknown command") {
-				t.Fatalf("%s should be recognized, got: %s", cmd, err.Error())
-			}
-		})
-	}
-}
-
-func TestRun_GitCommandsWithArgs_Recognized(t *testing.T) {
-	origDir, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { os.Chdir(origDir) })
-	os.Chdir(t.TempDir())
-
-	commands := []struct {
-		args []string
-	}{
-		{[]string{"gaac", "test message"}},
-		{[]string{"gaacp", "test message"}},
-		{[]string{"gbd", "some-branch"}},
-	}
-	for _, tc := range commands {
-		t.Run(tc.args[0], func(t *testing.T) {
-			err := Run(tc.args)
-			if err != nil && strings.Contains(err.Error(), "unknown command") {
-				t.Fatalf("%s should be recognized, got: %s", tc.args[0], err.Error())
-			}
-		})
-	}
-}
-
-func TestRun_Gaac_MissingArg_ReturnsUsageError(t *testing.T) {
-	err := Run([]string{"gaac"})
-	if err == nil {
-		t.Fatal("expected error for gaac without arg")
-	}
-	var usageErr *UsageError
-	if !errors.As(err, &usageErr) {
-		t.Fatalf("expected UsageError, got %T: %s", err, err.Error())
-	}
-}
-
-func TestRun_Gaacp_MissingArg_ReturnsUsageError(t *testing.T) {
-	err := Run([]string{"gaacp"})
-	if err == nil {
-		t.Fatal("expected error for gaacp without arg")
-	}
-	var usageErr *UsageError
-	if !errors.As(err, &usageErr) {
-		t.Fatalf("expected UsageError, got %T: %s", err, err.Error())
-	}
-}
-
-func TestRun_Gbd_MissingArg_ReturnsUsageError(t *testing.T) {
-	err := Run([]string{"gbd"})
-	if err == nil {
-		t.Fatal("expected error for gbd without arg")
-	}
-	var usageErr *UsageError
-	if !errors.As(err, &usageErr) {
-		t.Fatalf("expected UsageError, got %T: %s", err, err.Error())
-	}
-}
-
 func TestCheckBundledAppsInPath_EmptyResourcesDir_ReturnsEmpty(t *testing.T) {
 	result := checkBundledAppsInPath("", "/usr/bin:/usr/local/bin")
 	if result != "" {
@@ -674,23 +592,59 @@ func TestFormatStartupError_ContainsDiagnosticDataOnly(t *testing.T) {
 func TestUsageMessage_ContainsAllCommands(t *testing.T) {
 	msg := usageMessage()
 
-	// Verify header
 	if !strings.HasPrefix(msg, "usage: debi <command> [args]") {
 		t.Fatalf("usage message should start with header, got: %q", msg[:50])
 	}
 
-	// Verify all group headers
 	for _, group := range groupOrder {
 		if !strings.Contains(msg, group+":") {
 			t.Fatalf("usage message should contain group header %q", group+":")
 		}
 	}
 
-	// Verify all command names appear
 	for _, cmd := range commands {
 		if !strings.Contains(msg, cmd.Name) {
 			t.Fatalf("usage message should contain command %q", cmd.Name)
 		}
+	}
+}
+
+// TestUsageMessage_EveryCommandGroupIsRendered guards against a command being registered under a group missing from groupOrder: usageMessage silently drops such groups, making the command invisible in `debi -h`
+func TestUsageMessage_EveryCommandGroupIsRendered(t *testing.T) {
+	rendered := make(map[string]bool)
+	for _, g := range groupOrder {
+		rendered[g] = true
+	}
+	for _, cmd := range commands {
+		if !rendered[cmd.Group] {
+			t.Fatalf("command %q has group %q which is not in groupOrder — it would be dropped from usage", cmd.Name, cmd.Group)
+		}
+	}
+}
+
+func TestRun_Git_EmptyArgs_UsageErrorListsCustomSubcommands(t *testing.T) {
+	err := Run([]string{"git"})
+
+	var usageErr *UsageError
+	if !errors.As(err, &usageErr) {
+		t.Fatalf("expected UsageError, got %T: %v", err, err)
+	}
+	for _, want := range []string{"add-all-commit", "rebase-latest", "summary"} {
+		if !strings.Contains(usageErr.Message, want) {
+			t.Fatalf("expected usage to list %q, got: %s", want, usageErr.Message)
+		}
+	}
+}
+
+func TestRun_Git_BadUsage_TranslatedToUsageError(t *testing.T) {
+	err := Run([]string{"git", "rebase-latest", "--bogus"})
+
+	var usageErr *UsageError
+	if !errors.As(err, &usageErr) {
+		t.Fatalf("expected UsageError, got %T: %v", err, err)
+	}
+	if !strings.Contains(usageErr.Message, "usage: debi git rebase-latest [--push]") {
+		t.Fatalf("unexpected message: %s", usageErr.Message)
 	}
 }
 
@@ -2084,167 +2038,5 @@ func TestRun_PRCheck_OutsideGitRepo_ReturnsUsageError(t *testing.T) {
 	}
 	if usageErr.Message != git.NotInRepoMessage {
 		t.Fatalf("expected message %q, got %q", git.NotInRepoMessage, usageErr.Message)
-	}
-}
-
-// --- wsgit dispatch tests ---
-
-// stubWsgitEnsureAtWorkspaceRoot overrides wsgitEnsureAtWorkspaceRoot for the
-// duration of the test.
-func stubWsgitEnsureAtWorkspaceRoot(t *testing.T, fn func(cwd string) (string, error)) {
-	t.Helper()
-	orig := wsgitEnsureAtWorkspaceRoot
-	wsgitEnsureAtWorkspaceRoot = fn
-	t.Cleanup(func() { wsgitEnsureAtWorkspaceRoot = orig })
-}
-
-func stubWsgitRunStatus(t *testing.T, fn func(io.Writer, string) error) {
-	t.Helper()
-	orig := wsgitRunStatus
-	wsgitRunStatus = fn
-	t.Cleanup(func() { wsgitRunStatus = orig })
-}
-
-func stubWsgitRunClean(t *testing.T, fn func(io.Writer, string) error) {
-	t.Helper()
-	orig := wsgitRunClean
-	wsgitRunClean = fn
-	t.Cleanup(func() { wsgitRunClean = orig })
-}
-
-func stubGitGst(t *testing.T, fn func(args []string) error) {
-	t.Helper()
-	orig := gitGst
-	gitGst = fn
-	t.Cleanup(func() { gitGst = orig })
-}
-
-func stubGitGcl(t *testing.T, fn func() error) {
-	t.Helper()
-	orig := gitGcl
-	gitGcl = fn
-	t.Cleanup(func() { gitGcl = orig })
-}
-
-func TestRun_Gst_NotAtWorkspaceRoot_FallsThroughToPerRepo(t *testing.T) {
-	stubWsgitEnsureAtWorkspaceRoot(t, func(string) (string, error) {
-		return "", wsgit.ErrNotAtWorkspaceRoot
-	})
-	wsgitCalled := false
-	stubWsgitRunStatus(t, func(io.Writer, string) error {
-		wsgitCalled = true
-		return nil
-	})
-	gstCalled := false
-	gotArgs := []string(nil)
-	stubGitGst(t, func(args []string) error {
-		gstCalled = true
-		gotArgs = args
-		return nil
-	})
-
-	if err := Run([]string{"gst", "--short"}); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if wsgitCalled {
-		t.Fatal("wsgitRunStatus should not be called when not at workspace root")
-	}
-	if !gstCalled {
-		t.Fatal("git.Gst should be called when not at workspace root")
-	}
-	if len(gotArgs) != 1 || gotArgs[0] != "--short" {
-		t.Fatalf("expected args [--short], got %v", gotArgs)
-	}
-}
-
-func TestRun_Gst_AtWorkspaceRoot_RoutesToWsgit(t *testing.T) {
-	stubWsgitEnsureAtWorkspaceRoot(t, func(cwd string) (string, error) {
-		return "/fake/ws-1", nil
-	})
-	gotPath := ""
-	stubWsgitRunStatus(t, func(_ io.Writer, wsPath string) error {
-		gotPath = wsPath
-		return nil
-	})
-	stubGitGst(t, func([]string) error {
-		t.Fatal("git.Gst should not be called at workspace root")
-		return nil
-	})
-
-	if err := Run([]string{"gst"}); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if gotPath != "/fake/ws-1" {
-		t.Fatalf("expected wsPath '/fake/ws-1', got %q", gotPath)
-	}
-}
-
-func TestRun_Gst_AtWorkspaceRoot_ExtraArgs_ReturnsUsageError(t *testing.T) {
-	stubWsgitEnsureAtWorkspaceRoot(t, func(cwd string) (string, error) {
-		return "/fake/ws-1", nil
-	})
-	stubWsgitRunStatus(t, func(io.Writer, string) error {
-		t.Fatal("wsgitRunStatus should not be called when args are present")
-		return nil
-	})
-	stubGitGst(t, func([]string) error {
-		t.Fatal("git.Gst should not be called at workspace root")
-		return nil
-	})
-
-	err := Run([]string{"gst", "--short"})
-	if err == nil {
-		t.Fatal("expected error when extra args at workspace root")
-	}
-	var usageErr *UsageError
-	if !errors.As(err, &usageErr) {
-		t.Fatalf("expected *UsageError, got %T: %s", err, err.Error())
-	}
-	if !strings.Contains(usageErr.Message, "no arguments") {
-		t.Fatalf("expected message to mention 'no arguments', got %q", usageErr.Message)
-	}
-}
-
-func TestRun_Gcl_NotAtWorkspaceRoot_FallsThroughToPerRepo(t *testing.T) {
-	stubWsgitEnsureAtWorkspaceRoot(t, func(string) (string, error) {
-		return "", wsgit.ErrNotAtWorkspaceRoot
-	})
-	stubWsgitRunClean(t, func(io.Writer, string) error {
-		t.Fatal("wsgitRunClean should not be called when not at workspace root")
-		return nil
-	})
-	gclCalled := false
-	stubGitGcl(t, func() error {
-		gclCalled = true
-		return nil
-	})
-
-	if err := Run([]string{"gcl"}); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !gclCalled {
-		t.Fatal("git.Gcl should be called when not at workspace root")
-	}
-}
-
-func TestRun_Gcl_AtWorkspaceRoot_RoutesToWsgit(t *testing.T) {
-	stubWsgitEnsureAtWorkspaceRoot(t, func(string) (string, error) {
-		return "/fake/ws-1", nil
-	})
-	gotPath := ""
-	stubWsgitRunClean(t, func(_ io.Writer, wsPath string) error {
-		gotPath = wsPath
-		return nil
-	})
-	stubGitGcl(t, func() error {
-		t.Fatal("git.Gcl should not be called at workspace root")
-		return nil
-	})
-
-	if err := Run([]string{"gcl"}); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if gotPath != "/fake/ws-1" {
-		t.Fatalf("expected wsPath '/fake/ws-1', got %q", gotPath)
 	}
 }
