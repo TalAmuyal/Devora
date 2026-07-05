@@ -14,21 +14,21 @@ Types of changes:
 
 ## Unreleased
 
+## 2026-07-05.0
+
 ### Added
 
 - A Code-Cleanup Claude Code plugin with a `code-cleanup` skill that directs a post-task cleanup of the current changes - decluttering the code and removing redundant comments via dedicated passes
 
 ### Changed
 
+- **Breaking**: the 23 top-level Debi git shortcut commands (`debi gaa` … `debi gstash`) were renamed and moved to be under a new `git` namespace (`debi git add-all`, etc.)
+	- If you installed shell completions, refresh them with `debi completion zsh > ~/.zsh/completions/_debi`
+	- Repo-required subcommands (`gcom`, `grl`, `grom`, `gbdc`, `gri`, `gcl`) now print a friendly error when run outside a repository, instead of producing a crash log
+	- `gst` at a workspace root now fans out plain `git status` per repo (and accepts git-status flags there); the aligned summary table moved to `gsum`
 - Devora's recommended Haiku-tier default and model suggestion chips now point at `claude-sonnet-5` (previously `claude-sonnet-4-6`)
 	- The Opus-tier suggestion list drops the superseded `claude-opus-4-7` in favor of `claude-fable-5`
 	- Sonnet 5 and Fable 5 requires updating Claude Code to a version that supports them
-- **Breaking**: the 23 top-level Debi git shortcut commands (`debi gaa` … `debi gstash`) were renamed and moved to be under a new `git` namespace (`debi git add-all`, etc.)
-	- If you installed shell completions, refresh them with `debi completion zsh > ~/.zsh/completions/_debi`
-- Debi's git subcommands that need a repository (`gcom`, `grl`, `grom`, `gbdc`, `gri`, `gcl`) now print a friendly error when run outside one, instead of producing a crash log
-- `gst` at a workspace root now fans out plain `git status` per repo (and accepts git-status flags there); the aligned summary table moved to `gsum`
-- Debi's package rationale now lives in the code itself rather than separate specs; the `docs/specs/` files are a legacy reference being gradually migrated into the code
-- Inlined Debi's specs for `internal/git`, `internal/health`, `shellinit`, and `wsgit`
 
 ### Removed
 
