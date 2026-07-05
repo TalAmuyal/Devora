@@ -14,7 +14,7 @@ Implement `debi pr close`: mark the tracker task (when one exists) as complete, 
 
 ## Profile Resolution
 
-The CLI layer calls `cli.ResolveActiveProfile("")` before dispatching to `closecmd.Run`, so profile-scoped config (such as `task-tracker.provider`) resolved from the current working directory is visible. See [cli.md](./cli.md) and [health.md](./health.md) for the resolution order. There is no `--profile` flag on `close`; CWD is the sole selector.
+The CLI layer calls `cli.ResolveActiveProfile("")` before dispatching to `closecmd.Run`, so profile-scoped config (such as `task-tracker.provider`) resolved from the current working directory is visible. See [cli.md](./cli.md) for the resolution order. There is no `--profile` flag on `close`; CWD is the sole selector.
 
 ## Stability
 

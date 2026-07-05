@@ -8,7 +8,7 @@ Implement `debi pr submit`: commit local changes, create a tracker task (when a 
 
 ## Profile Resolution
 
-The CLI layer calls `cli.ResolveActiveProfile("")` before dispatching to `submit.Run`, so profile-scoped config (such as `task-tracker.provider`) resolved from the current working directory is visible. See [cli.md](./cli.md) and [health.md](./health.md) for the resolution order. There is no `--profile` flag on `submit`; CWD is the sole selector.
+The CLI layer calls `cli.ResolveActiveProfile("")` before dispatching to `submit.Run`, so profile-scoped config (such as `task-tracker.provider`) resolved from the current working directory is visible. See [cli.md](./cli.md) for the resolution order. There is no `--profile` flag on `submit`; CWD is the sole selector.
 
 ## Stability
 
