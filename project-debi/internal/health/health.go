@@ -1,3 +1,6 @@
+// Package health checks Devora's external dependency and credential status.
+//
+// This package has no notion of profiles: the CLI layer resolves the active profile (via cli.ResolveActiveProfile) before calling Run/RunJSON, so config and credential reads here transparently pick up profile-scoped overrides.
 package health
 
 import (
@@ -42,6 +45,7 @@ type CredentialStatus int
 const (
 	CredentialOK CredentialStatus = iota
 	CredentialFailed
+	// CredentialUnchecked means the prerequisite tool (e.g. gh) wasn't found on PATH, so the check was skipped rather than attempted
 	CredentialUnchecked
 	// CredentialInfo marks an informational row that doesn't count toward the
 	// "Credentials met: X/Y" denominator (e.g., an optional tracker that
@@ -49,7 +53,7 @@ const (
 	CredentialInfo
 )
 
-// JSON status strings for CredentialReport.Status, consumed by the Ember UI.
+// JSON status strings for CredentialReport.Status, consumed by the Ember UI
 const (
 	credStatusOK        = "ok"
 	credStatusFailed    = "failed"
@@ -61,14 +65,14 @@ type CredentialResult struct {
 	Name    string
 	Status  CredentialStatus
 	Message string
-	// FixHint is a bare, copy-pasteable command that resolves the issue, when one exists (e.g. "gh auth login").
+	// FixHint is a bare, copy-pasteable command that resolves the issue, when one exists (e.g. "gh auth login")
 	// Empty when there is no single command.
 	FixHint string
 }
 
 // --- Structured report (the JSON shape Ember's Health Hub renders) ---
 
-// DependencyStatus is one dependency row.
+// DependencyStatus is one dependency row
 type DependencyStatus struct {
 	Name    string `json:"name"`
 	Found   bool   `json:"found"`
@@ -200,18 +204,12 @@ func checkCredentials(ghFound bool) []CredentialResult {
 	return results
 }
 
-// Stubbable in tests so we can exercise the tracker-credential branches
-// without touching config or the OS keychain.
+// Stubbable in tests so we can exercise the tracker-credential branches without touching config or the OS keychain
 var (
 	getTrackerProvider = config.GetTaskTrackerProvider
 	getTrackerToken    = credentials.GetToken
 )
 
-// checkTrackerCredential returns a credential row for the task-tracker. When
-// no tracker is configured, returns a neutral info row so users can see that
-// the feature exists but is unconfigured. When a tracker is configured but
-// the token is missing, the message points the user at credentials.SetupHint
-// so they know how to store one.
 func checkTrackerCredential() *CredentialResult {
 	provider := getTrackerProvider()
 	if provider == "" {
@@ -259,6 +257,7 @@ var dependencies = []Dependency{
 
 var versionPattern = regexp.MustCompile(`v?\d+(?:\.\d+)+`)
 
+// cleanVersion extracts a bare version number out of noisy version-command output (build dates, architecture strings, a leading "v"), since raw output format varies per tool
 func cleanVersion(raw string) string {
 	match := versionPattern.FindString(raw)
 	if match != "" {
@@ -459,6 +458,7 @@ func renderSummaryLine(w io.Writer, labelWidth int, label string, found, total i
 		found, total)
 }
 
+// Run prints a human-readable health report to w. It returns a *process.PassthroughError with exit code 1 if any required dependency is missing, or, in strict mode, if any optional dependency, credential check, or the zsh completion file is missing/not OK
 func Run(w io.Writer, strict bool, verbose bool) error {
 	report := Gather()
 
