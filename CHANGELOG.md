@@ -20,6 +20,9 @@ Types of changes:
 
 ### Changed
 
+- Devora's recommended Haiku-tier default and model suggestion chips now point at `claude-sonnet-5` (previously `claude-sonnet-4-6`)
+	- The Opus-tier suggestion list drops the superseded `claude-opus-4-7` in favor of `claude-fable-5`
+	- Sonnet 5 and Fable 5 requires updating Claude Code to a version that supports them
 - **Breaking**: the 23 top-level Debi git shortcut commands (`debi gaa` … `debi gstash`) were renamed and moved to be under a new `git` namespace (`debi git add-all`, etc.)
 	- If you installed shell completions, refresh them with `debi completion zsh > ~/.zsh/completions/_debi`
 - Debi's git subcommands that need a repository (`gcom`, `grl`, `grom`, `gbdc`, `gri`, `gcl`) now print a friendly error when run outside one, instead of producing a crash log

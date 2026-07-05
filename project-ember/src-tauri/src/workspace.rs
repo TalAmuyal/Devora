@@ -648,7 +648,7 @@ const CLAUDE_SETTINGS: [ClaudeSettingSpec; 4] = [
     ClaudeSettingSpec {
         key: "haiku-model",
         env_var: "ANTHROPIC_DEFAULT_HAIKU_MODEL",
-        default: "claude-sonnet-4-6",
+        default: "claude-sonnet-5",
     },
     ClaudeSettingSpec {
         key: "effort",
@@ -1673,7 +1673,7 @@ mod tests {
         let env = claude_launch_env(None);
         assert_eq!(get(&env, opus).as_deref(), Some("claude-opus-4-8"));
         assert_eq!(get(&env, sonnet).as_deref(), Some("claude-opus-4-8"));
-        assert_eq!(get(&env, haiku).as_deref(), Some("claude-sonnet-4-6"));
+        assert_eq!(get(&env, haiku).as_deref(), Some("claude-sonnet-5"));
         assert_eq!(get(&env, effort).as_deref(), Some("xhigh"));
 
         // 2. User-level: a value wins; null = None (env var omitted); absent = default.
