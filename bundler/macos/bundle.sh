@@ -173,6 +173,7 @@ bundle "$REPO_ROOT/project-judge/cc-plugin"           "$BUNDLED_CC_PLUGINS_DIR/j
 bundle "$REPO_ROOT/project-judge/main.py"             "$BUNDLED_CC_PLUGINS_DIR/judge/."       overwrite
 bundle "$REPO_ROOT/project-team-work/cc-plugin"       "$BUNDLED_CC_PLUGINS_DIR/team-work"     overwrite
 bundle "$REPO_ROOT/project-detached-flow/cc-plugin"   "$BUNDLED_CC_PLUGINS_DIR/detached-flow" overwrite
+bundle "$REPO_ROOT/project-code-cleanup/cc-plugin"    "$BUNDLED_CC_PLUGINS_DIR/code-cleanup"  overwrite
 bundle "$THIRD_PARTY_APPS_DIR/original-crit"          "$BUNDLED_APPS_DIR/original-crit"       check
 bundle "$REPO_ROOT/project-crit-integration/bin/crit" "$BUNDLED_APPS_DIR/crit"                overwrite
 bundle "$THIRD_PARTY_APPS_DIR/claude-code"            "$BUNDLED_CC_PLUGINS_DIR/crit"          overwrite

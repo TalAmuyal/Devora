@@ -24,6 +24,7 @@ Below are terms that have a specific meaning in the context of Devora:
 - **Tab Bar** (Ember): The strip at the bottom of the window showing open sessions
 - **Overlay** (Ember): A UI layer rendered on top of main content. Two types: Panel Overlay (covers main panel area, tied to a session) and Tab-Covering Overlay (covers entire window including tab bar)
 - **Judge**: A Claude Code plugin that auto-manages permission requests to reduce permission fatigue (`./project-judge/`)
+- **Code-Cleanup**: A Claude Code plugin that defines and directs the post-task cleanup process (`./project-code-cleanup/`)
 - **Debi**: Devora's CLI for workspace management and utilities (`./project-debi/`)
 - **CCC**: Customized Claude Code — a launcher script that wraps Claude Code with Devora-specific configuration (`./ccc.sh`). Written as CCC when used as a name, `ccc` when referring to the shell command
 - **CC Status Line**: A status line script for Claude Code that shows context-window usage and session cost (`./project-status-line/`)

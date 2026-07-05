@@ -82,6 +82,7 @@ Devora builds upon the following tools:
 - Ember (Tauri + xterm.js), as the UI framework
 - Debi (`./project-debi/`), Devora's CLI for workspace management and utilities
 - Judge (`./project-judge/`), a Claude Code plugin for auto-approving/rejecting permission requests aiming to reduce permission fatigue and speed up the development process
+- Code-Cleanup (`./project-code-cleanup/`), a Claude Code plugin that defines and directs a post-task cleanup process (code decluttering and comment cleanup)
 - CCC (`./ccc.sh`), a launcher script for Claude Code that customizes its behavior and integrates it with the rest of the IDE
 - CC Status Line (`./project-status-line/`), a simple status line script for Claude Code that shows the current context-window usage and session cost
 - Bundler (`./bundler/`), a tool for bundling the IDE into a self-contained app bundle for distribution

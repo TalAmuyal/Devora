@@ -187,6 +187,7 @@ copy_repo        "project-judge/cc-plugin"                    "$BUNDLED_CC_PLUGI
 copy_repo        "project-judge/main.py"                      "$BUNDLED_CC_PLUGINS_DIR/judge/."
 copy_repo        "project-detached-flow/cc-plugin"            "$BUNDLED_CC_PLUGINS_DIR/detached-flow"
 copy_repo        "project-team-work/cc-plugin"                "$BUNDLED_CC_PLUGINS_DIR/team-work"
+copy_repo        "project-code-cleanup/cc-plugin"             "$BUNDLED_CC_PLUGINS_DIR/code-cleanup"
 copy_third_party "claude-code"                                "$BUNDLED_CC_PLUGINS_DIR/crit"
 
 # --- Resources ---

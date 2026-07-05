@@ -14,6 +14,10 @@ Types of changes:
 
 ## Unreleased
 
+### Added
+
+- A Code-Cleanup Claude Code plugin with a `code-cleanup` skill that directs a post-task cleanup of the current changes - decluttering the code and removing redundant comments via dedicated passes
+
 ### Changed
 
 - **Breaking**: the 23 top-level Debi git shortcut commands (`debi gaa` … `debi gstash`) were renamed and moved to be under a new `git` namespace (`debi git add-all`, etc.)

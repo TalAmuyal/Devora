@@ -13,6 +13,14 @@ Devora/                           (DMG root)
       │  └─ bootstrap.sh
       └─ Resources/
          ├─ cc-plugins/
+         │  ├─ code-cleanup/
+         │  │  └─ skills/
+         │  │     ├─ code-cleanup/
+         │  │     │  └─ SKILL.md
+         │  │     ├─ comment-cleanup/
+         │  │     │  └─ SKILL.md
+         │  │     └─ declutter/
+         │  │        └─ SKILL.md
          │  ├─ crit/
          │  │  ├─ .claude-plugin/
          │  │  │  └─ plugin.json
