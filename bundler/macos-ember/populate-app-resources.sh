@@ -212,8 +212,8 @@ fi
 
 # --- Session-shell git-shortcut shims ---
 
-# Generate one shim per Debi git shortcut (gcl -> `debi gcl`, …) so the bare shortcut works in any session shell that has the shim dir on PATH.
-# Driven by Debi's own command registry so the set stays in sync; the shims' content is determined by project-debi, already a fingerprint source via the debi copy.
+# Generate one shim per Debi git shortcut alias (gcl -> `debi git checkout-latest`, …) so the bare alias works in any session shell that has the shim dir on PATH.
+# Driven by Debi's own alias table so the set stays in sync; the shims' content is determined by project-debi, already a fingerprint source via the debi copy.
 "$BUNDLED_APPS_DIR/debi" git-shortcut-shims "$RESOURCES_DIR/git-shortcuts"
 
 # --- Version & fingerprint ---

@@ -2,7 +2,7 @@ package cli
 
 import (
 	"devora/internal/cmdinfo"
-	"devora/internal/git"
+	"devora/internal/gitcmd"
 	"fmt"
 	"strings"
 )
@@ -26,7 +26,7 @@ var groupOrder = []string{
 	"Workspace Commands",
 	"Health",
 	"PR",
-	"Git Shortcuts",
+	"Git",
 	"Utility",
 }
 
@@ -57,15 +57,12 @@ var autoMergeFlags = []cmdinfo.Flag{
 }
 
 var commands = []Command{
-	// Workspace Commands
 	{
 		Name:        "workspace-ui",
 		Description: "Open the Workspace Hub (deprecated — will be removed with Devora OG)",
 		Group:       "Workspace Commands",
 		Run:         func(args []string) error { return runWorkspaceUI() },
 	},
-
-	// Health
 	{
 		Name:        "health",
 		Description: "Check Devora dependencies",
@@ -79,8 +76,6 @@ var commands = []Command{
 			{Name: "-p, --profile", Description: "Check a specific profile (defaults to CWD-based resolution)"},
 		},
 	},
-
-	// PR commands
 	{
 		Name:        "pr",
 		Description: "Pull request commands",
@@ -114,166 +109,15 @@ var commands = []Command{
 			},
 		},
 	},
-
-	// Git Shortcuts — no args
 	{
-		Name:        "gaa",
-		Description: "Stage all changes",
-		Group:       "Git Shortcuts",
-		Run:         func(args []string) error { return git.Gaa() },
+		Name:        "git",
+		Description: "Git with custom subcommands, passthrough, and multi-repo fan-out",
+		ArgsHint:    "<subcommand|git-args>",
+		Group:       "Git",
+		Run:         func(args []string) error { return runGit(args) },
+		// Completion offers only the custom subcommands; plain git subcommands (status, log, ...) are passed through but not completed — a deliberate trade-off
+		SubCommands: gitcmd.SubCommandInfos(),
 	},
-	{
-		Name:        "gaac",
-		Description: "Stage all and commit with message",
-		ArgsHint:    "<msg>",
-		Group:       "Git Shortcuts",
-		MinArgs:     1,
-		Run:         func(args []string) error { return git.Gaac(args) },
-	},
-	{
-		Name:        "gaacp",
-		Description: "Stage all, commit, and push to origin",
-		ArgsHint:    "<msg>",
-		Group:       "Git Shortcuts",
-		MinArgs:     1,
-		Run:         func(args []string) error { return git.Gaacp(args) },
-	},
-	{
-		Name:        "gaaa",
-		Description: "Stage all and amend last commit",
-		Group:       "Git Shortcuts",
-		Run:         func(args []string) error { return git.Gaaa() },
-	},
-	{
-		Name:        "gaaap",
-		Description: "Stage all, amend, and force-push",
-		Group:       "Git Shortcuts",
-		Run:         func(args []string) error { return git.Gaaap() },
-	},
-	{
-		Name:        "gb",
-		Description: "git branch",
-		ArgsHint:    "[args]",
-		Group:       "Git Shortcuts",
-		Run:         func(args []string) error { return git.Gb(args) },
-	},
-	{
-		Name:        "gbd",
-		Description: "Force-delete branches",
-		ArgsHint:    "<branch>...",
-		Group:       "Git Shortcuts",
-		MinArgs:     1,
-		Run:         func(args []string) error { return git.Gbd(args) },
-	},
-	{
-		Name:        "gbdc",
-		Description: "Delete current branch (detach first)",
-		Group:       "Git Shortcuts",
-		Run:         func(args []string) error { return git.Gbdc() },
-	},
-	{
-		Name:        "gcl",
-		Description: "Fetch origin and checkout default branch",
-		Group:       "Git Shortcuts",
-		Run:         func(args []string) error { return runGcl(args) },
-	},
-	{
-		Name:        "gcom",
-		Description: "Checkout default branch from origin",
-		ArgsHint:    "[args]",
-		Group:       "Git Shortcuts",
-		Run:         func(args []string) error { return git.Gcom(args) },
-	},
-	{
-		Name:        "gd",
-		Description: "git diff",
-		ArgsHint:    "[args]",
-		Group:       "Git Shortcuts",
-		Run:         func(args []string) error { return git.Gd(args) },
-	},
-	{
-		Name:        "gfo",
-		Description: "Fetch from origin",
-		ArgsHint:    "[args]",
-		Group:       "Git Shortcuts",
-		Run:         func(args []string) error { return git.Gfo(args) },
-	},
-	{
-		Name:        "gg",
-		Description: "git grep",
-		ArgsHint:    "[args]",
-		Group:       "Git Shortcuts",
-		Run:         func(args []string) error { return git.Gg(args) },
-	},
-	{
-		Name:        "gl",
-		Description: "git log",
-		ArgsHint:    "[args]",
-		Group:       "Git Shortcuts",
-		Run:         func(args []string) error { return git.Gl(args) },
-	},
-	{
-		Name:        "gpo",
-		Description: "Push to origin",
-		ArgsHint:    "[args]",
-		Group:       "Git Shortcuts",
-		Run:         func(args []string) error { return git.Gpo(args) },
-	},
-	{
-		Name:        "gpof",
-		Description: "Force-push to origin",
-		ArgsHint:    "[args]",
-		Group:       "Git Shortcuts",
-		Run:         func(args []string) error { return git.Gpof(args) },
-	},
-	{
-		Name:        "gpop",
-		Description: "Pop git stash",
-		ArgsHint:    "[args]",
-		Group:       "Git Shortcuts",
-		Run:         func(args []string) error { return git.Gpop(args) },
-	},
-	{
-		Name:        "gri",
-		Description: "Interactive rebase (N commits or since branch)",
-		ArgsHint:    "[N]",
-		Group:       "Git Shortcuts",
-		Run:         func(args []string) error { return git.Gri(args) },
-	},
-	{
-		Name:        "grl",
-		Description: "Fetch and rebase on default branch",
-		Group:       "Git Shortcuts",
-		Run:         func(args []string) error { return git.Grl() },
-	},
-	{
-		Name:        "grlp",
-		Description: "Fetch, rebase, and force-push",
-		Group:       "Git Shortcuts",
-		Run:         func(args []string) error { return git.Grlp() },
-	},
-	{
-		Name:        "grom",
-		Description: "Rebase on origin default branch",
-		Group:       "Git Shortcuts",
-		Run:         func(args []string) error { return git.Grom() },
-	},
-	{
-		Name:        "gst",
-		Description: "git status",
-		ArgsHint:    "[args]",
-		Group:       "Git Shortcuts",
-		Run:         func(args []string) error { return runGst(args) },
-	},
-	{
-		Name:        "gstash",
-		Description: "git stash",
-		ArgsHint:    "[args]",
-		Group:       "Git Shortcuts",
-		Run:         func(args []string) error { return git.Gstash(args) },
-	},
-
-	// Utility
 	{
 		Name:        "get-conf",
 		Description: "Print a resolved config value",
@@ -326,8 +170,7 @@ var commands = []Command{
 var commandIndex map[string]*Command
 
 func init() {
-	// Registered in init to avoid an initialization cycle: the Run closure
-	// calls runCompletion, which calls CommandInfos, which reads commands.
+	// Registered in init to avoid an initialization cycle: the Run closure calls runCompletion, which calls CommandInfos, which reads commands
 	commands = append(commands, Command{
 		Name:        "completion",
 		Description: "Generate shell completion script",
@@ -356,8 +199,7 @@ func init() {
 	}
 }
 
-// CommandInfos returns the command metadata from the registry,
-// suitable for use by packages that must not import cli (e.g. completion).
+// CommandInfos returns the command metadata from the registry, suitable for use by packages that must not import cli (e.g. completion)
 func CommandInfos() []cmdinfo.Command {
 	result := make([]cmdinfo.Command, len(commands))
 	for i, cmd := range commands {
@@ -377,9 +219,8 @@ func CommandInfos() []cmdinfo.Command {
 	return result
 }
 
-// usageMessage generates the usage text from the command registry.
 func usageMessage() string {
-	// Build the left-column text for each command to determine alignment.
+	// Build the left-column text for each command to determine alignment
 	type entry struct {
 		leftCol     string
 		description string
@@ -396,7 +237,7 @@ func usageMessage() string {
 		grouped[cmd.Group] = append(grouped[cmd.Group], entry{left, cmd.Description})
 	}
 
-	// Find the global maximum left-column width across all commands.
+	// Find the global maximum left-column width across all commands
 	maxLeft := 0
 	for _, entries := range grouped {
 		for _, e := range entries {
@@ -405,7 +246,7 @@ func usageMessage() string {
 			}
 		}
 	}
-	// Pad so the longest entry has a 2-space gap before the description.
+	// Pad so the longest entry has a 2-space gap before the description
 	padWidth := maxLeft + 2
 
 	var b strings.Builder
@@ -430,8 +271,6 @@ func usageMessage() string {
 	return b.String()
 }
 
-// usageErrorForCommand returns a UsageError with the standard usage hint
-// for a command that requires arguments.
 func usageErrorForCommand(cmd *Command) *UsageError {
 	hint := cmd.ArgsHint
 	if hint == "" {

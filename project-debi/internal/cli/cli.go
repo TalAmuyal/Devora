@@ -19,7 +19,6 @@ import (
 	// package's init(), which calls tasktracker.Register("asana", New).
 	_ "devora/internal/tasktracker/asana"
 	"devora/internal/tui"
-	"devora/internal/workspace/wsgit"
 	"errors"
 	"fmt"
 	"os"
@@ -238,15 +237,6 @@ var resolveActiveProfile = ResolveActiveProfile
 
 // resolveActiveProfileByPath resolves the active profile by root path (used by `debi health --profile-path`); stubbable for tests.
 var resolveActiveProfileByPath = ResolveActiveProfileByPath
-
-// Stubbable seams for the workspace-aware gst/gcl dispatchers.
-var (
-	wsgitEnsureAtWorkspaceRoot = wsgit.EnsureAtWorkspaceRoot
-	wsgitRunStatus             = wsgit.RunStatus
-	wsgitRunClean              = wsgit.RunClean
-	gitGst                     = git.Gst
-	gitGcl                     = git.Gcl
-)
 
 const submitUsage = `usage: debi pr submit -m <message> [flags]
 
@@ -493,42 +483,6 @@ func runClose(args []string) error {
 	return err
 }
 
-// runGst dispatches `debi gst`: at a workspace root, runs the structured per-repo summary; anywhere else, falls through to the existing per-repo passthrough.
-// Workspace-mode rejects extra args because the summary is incompatible with passthrough flags like --short.
-func runGst(args []string) error {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return gitGst(args)
-	}
-	wsPath, err := wsgitEnsureAtWorkspaceRoot(cwd)
-	if err != nil {
-		if errors.Is(err, wsgit.ErrNotAtWorkspaceRoot) {
-			return gitGst(args)
-		}
-		return err
-	}
-	if len(args) > 0 {
-		return &UsageError{Message: "workspace-mode gst takes no arguments; cd into a repo to use git-status flags"}
-	}
-	return wsgitRunStatus(os.Stdout, wsPath)
-}
-
-// runGcl dispatches `debi gcl`: at a workspace root, runs the verify-then- update flow across all repos; anywhere else, falls through to the existing per-repo passthrough
-func runGcl(args []string) error {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return gitGcl()
-	}
-	wsPath, err := wsgitEnsureAtWorkspaceRoot(cwd)
-	if err != nil {
-		if errors.Is(err, wsgit.ErrNotAtWorkspaceRoot) {
-			return gitGcl()
-		}
-		return err
-	}
-	return wsgitRunClean(os.Stdout, wsPath)
-}
-
 func checkBundledAppsInPath(resourcesDir, pathEnv string) string {
 	if resourcesDir == "" {
 		return ""
@@ -648,9 +602,8 @@ func runCompletion(args []string) error {
 
 const gitShortcutShimsUsage = `usage: debi git-shortcut-shims <dir>
 
-Write a command shim into <dir> for each git shortcut, so the bare shortcut
-(e.g. gcl) runs "debi gcl" when <dir> is on PATH. Used by the bundler to
-populate the Devora-Ember session-shell shims.`
+Write a command shim into <dir> for each git shortcut alias, so the bare alias (e.g. gcl) runs "debi git checkout-latest" when <dir> is on PATH.
+Used by the bundler to populate the Devora-Ember session-shell shims.`
 
 func runGitShortcutShims(args []string) error {
 	dir := args[0]
@@ -658,7 +611,7 @@ func runGitShortcutShims(args []string) error {
 		fmt.Println(gitShortcutShimsUsage)
 		return nil
 	}
-	return shellinit.WriteShims(dir, CommandInfos())
+	return shellinit.WriteShims(dir)
 }
 
 func runUtil(args []string) error {

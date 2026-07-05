@@ -1,63 +1,69 @@
 package shellinit
 
 import (
-	"devora/internal/cmdinfo"
 	"os"
 	"path/filepath"
 	"testing"
 )
 
-func testCommands() []cmdinfo.Command {
-	return []cmdinfo.Command{
-		{Name: "gcl", Group: "Git Shortcuts", Description: "Fetch origin and checkout default branch"},
-		{Name: "gst", Group: "Git Shortcuts", Description: "git status", ArgsHint: "[args]"},
-		{Name: "health", Group: "Health", Description: "Check Devora dependencies"},
-		{Name: "completion", Group: "Utility", Description: "Generate shell completion script"},
-	}
-}
-
-func TestWriteShims_CreatesShimPerGitShortcut(t *testing.T) {
+func TestWriteShims_CreatesShimPerAlias(t *testing.T) {
 	dir := t.TempDir()
-	if err := WriteShims(dir, testCommands()); err != nil {
+	if err := WriteShims(dir); err != nil {
 		t.Fatalf("WriteShims: %v", err)
 	}
 
-	for _, name := range []string{"gcl", "gst"} {
-		path := filepath.Join(dir, name)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("read shim dir: %v", err)
+	}
+	if len(entries) != len(GitShimAliases) {
+		t.Fatalf("shim count = %d, want %d", len(entries), len(GitShimAliases))
+	}
+
+	for _, alias := range GitShimAliases {
+		path := filepath.Join(dir, alias.Name)
 		info, err := os.Stat(path)
 		if err != nil {
-			t.Fatalf("expected shim %q: %v", name, err)
+			t.Fatalf("expected shim %q: %v", alias.Name, err)
 		}
 		if info.Mode().Perm() != 0o755 {
-			t.Errorf("shim %q mode = %v, want 0755", name, info.Mode().Perm())
+			t.Errorf("shim %q mode = %v, want 0755", alias.Name, info.Mode().Perm())
 		}
 		content, err := os.ReadFile(path)
 		if err != nil {
-			t.Fatalf("read shim %q: %v", name, err)
+			t.Fatalf("read shim %q: %v", alias.Name, err)
 		}
-		want := "#!/bin/sh\nexec debi " + name + " \"$@\"\n"
+		want := "#!/bin/sh\nexec debi git " + alias.Target + " \"$@\"\n"
 		if string(content) != want {
-			t.Errorf("shim %q content = %q, want %q", name, string(content), want)
+			t.Errorf("shim %q content = %q, want %q", alias.Name, string(content), want)
 		}
 	}
 }
 
-func TestWriteShims_SkipsNonGitCommands(t *testing.T) {
-	dir := t.TempDir()
-	if err := WriteShims(dir, testCommands()); err != nil {
-		t.Fatalf("WriteShims: %v", err)
+func TestWriteShims_KnownAliasTargets(t *testing.T) {
+	targets := make(map[string]string, len(GitShimAliases))
+	for _, alias := range GitShimAliases {
+		targets[alias.Name] = alias.Target
 	}
 
-	for _, name := range []string{"health", "completion"} {
-		if _, err := os.Stat(filepath.Join(dir, name)); !os.IsNotExist(err) {
-			t.Errorf("expected no shim for non-git command %q (stat err: %v)", name, err)
+	for name, want := range map[string]string{
+		"gaa":  "add .",
+		"gcl":  "checkout-latest",
+		"gst":  "status",
+		"gpof": "push origin --force",
+		"gpop": "stash pop",
+		"grlp": "rebase-latest --push",
+		"gsum": "summary",
+	} {
+		if targets[name] != want {
+			t.Errorf("alias %q target = %q, want %q", name, targets[name], want)
 		}
 	}
 }
 
 func TestWriteShims_CreatesMissingDir(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "nested", "git-shortcuts")
-	if err := WriteShims(dir, testCommands()); err != nil {
+	if err := WriteShims(dir); err != nil {
 		t.Fatalf("WriteShims: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "gcl")); err != nil {

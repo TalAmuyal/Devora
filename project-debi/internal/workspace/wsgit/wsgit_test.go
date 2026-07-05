@@ -330,9 +330,9 @@ func TestGatherRepoStatus_GhMissing_SkipsLookup(t *testing.T) {
 	}
 }
 
-// --- RunStatus ---
+// --- RunStatusDir ---
 
-func TestRunStatus_AlphabeticalAndOneBadRepoDoesntSilenceOthers(t *testing.T) {
+func TestRunStatusDir_AlphabeticalAndOneBadRepoDoesntSilenceOthers(t *testing.T) {
 	wsPath := t.TempDir()
 	repoA := filepath.Join(wsPath, "alpha")
 	repoB := filepath.Join(wsPath, "beta")
@@ -346,8 +346,8 @@ func TestRunStatus_AlphabeticalAndOneBadRepoDoesntSilenceOthers(t *testing.T) {
 	})
 
 	var buf bytes.Buffer
-	if err := RunStatus(&buf, wsPath); err != nil {
-		t.Fatalf("RunStatus error: %v", err)
+	if err := RunStatusDir(&buf, wsPath); err != nil {
+		t.Fatalf("RunStatusDir error: %v", err)
 	}
 	out := buf.String()
 	idxA := strings.Index(out, "alpha")

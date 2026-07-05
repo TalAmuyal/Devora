@@ -82,37 +82,58 @@ Once a workspace exists, you can manage it from the Workspace Hub (press `ctrl +
 
 ## Git shortcuts
 
-Devora provides a collection of git shortcuts for your convenience:
+Devora's git tooling is centered on `debi git`, a thin namespace over git:
 
-| Shortcut | Description |
-|----------|-------------|
-| `gst` | `git status` passthrough |
-| `gd` | `git diff` passthrough |
-| `gri N` | `git rebase -i HEAD~N` |
-| `gfo` | Fetches the latest changes from origin and prunes deleted branches |
-| `gcom` | Shortcut for "git checkout master*": checks out the default branch in detached mode |
-| `gcl` | Shortcut for "git checkout latest": equal to `gfo` then `gcom` |
-| `gaa` | Stages all changes (including untracked files) |
-| `gaaa` | Stages all changes (including untracked files) and amends to the previous commit |
-| `gaac` | Stages all changes (including untracked files) and commits with a message provided in the command arguments |
-| `grom` | Shortcut for "git rebase origin/master*": rebases the current branch onto the default branch |
-| `grl` | Shortcut for "git rebase latest": equal to `gfo` then `grom` |
-| `grlp` | Shortcut for "git rebase latest push": equal to `gfo` then `grl` then `git push --force` |
+- **Custom subcommands** with self-describing names (e.g. `debi git add-all-commit "msg"`, `debi git rebase-latest --push`) - run `debi git` to list them
+- **Passthrough**: anything else is forwarded to the real git (e.g. `debi git status`, `debi git -C repo log`)
+- **Multi-repo fan-out**: when run from a directory that is not inside a repository but whose immediate children are git repos (e.g. a workspace root), read-only subcommands (`status`, `diff`, `log`, `show`, `fetch`, `grep`, `blame`, `shortlog`, `describe`, `ls-files`) run in every child repo in parallel, printed under a `## <repo>` header per repo
+
+Devora session shells additionally provide short aliases for the common flows (controlled by the `terminal.git-shortcuts` setting):
+
+| Alias | Runs | Description |
+|-------|------|-------------|
+| `gst` | `debi git status` | `git status` passthrough; fans out per-repo at a workspace root |
+| `gsum` | `debi git summary` | Aligned per-repo summary: branch, staged/unstaged/untracked counts, commits behind origin, and PR state |
+| `gd` | `debi git diff` | `git diff` passthrough; fan-out capable |
+| `gl` | `debi git log` | `git log` passthrough; fan-out capable |
+| `gg` | `debi git grep` | `git grep` passthrough; fan-out capable |
+| `gfo` | `debi git fetch origin` | Fetch the latest changes from origin; fan-out capable |
+| `gaa` | `debi git add .` | Stage all changes (including untracked files) |
+| `gaac <msg>` | `debi git add-all-commit` | Stage all changes and commit with the given message |
+| `gaacp <msg>` | `debi git add-all-commit-push` | `gaac`, then push to origin |
+| `gaaa` | `debi git add-all-amend` | Stage all changes and amend the previous commit |
+| `gaaap` | `debi git add-all-amend-push` | `gaaa`, then force-push |
+| `gb` | `debi git branch` | `git branch` passthrough |
+| `gbd` | `debi git branch -D` | Force-delete branches |
+| `gbdc` | `debi git branch-delete-current` | Delete the current branch (detaches first) |
+| `gcom` | `debi git checkout-origin-default` | Check out `origin/<default>`* in detached mode |
+| `gcl` | `debi git checkout-latest` | Fetch origin, then `gcom`; workspace-aware (see below) |
+| `gri [N]` | `debi git rebase-interactive` | Interactive rebase of the last N commits (default: all since branching) |
+| `grom` | `debi git rebase-origin-default` | Rebase onto `origin/<default>`* without fetching |
+| `grl` | `debi git rebase-latest` | Fetch origin, then `grom` |
+| `grlp` | `debi git rebase-latest --push` | `grl`, then force-push |
+| `gpo` | `debi git push origin` | Push to origin |
+| `gpof` | `debi git push origin --force` | Force-push to origin |
+| `gstash` | `debi git stash` | `git stash` passthrough |
+| `gpop` | `debi git stash pop` | Pop the git stash |
 
 * The name of the default branch is detected automatically, so it works even if it's not called "master"
 
 ### Workspace-level git shortcuts
 
-Two of the git shortcuts are workspace-aware when run from the exact root of a workspace directory (`ws-N/`):
+From the exact root of a workspace directory (`ws-N/`):
 
-- `gst` prints an aligned per-worktree summary across every worktree in the workspace: branch (or `HEAD` if detached), staged/unstaged/untracked file counts, commits behind `origin/<default>`, and PR state
+- Read-only shortcuts (`gst`, `gd`, `gl`, `gg`, `gfo`, …) fan out across every worktree in parallel
+- `gsum` prints an aligned per-worktree summary across every worktree in the workspace: branch (or `HEAD` if detached), staged/unstaged/untracked file counts, commits behind `origin/<default>`, and PR state
 - `gcl` performs the "checkout latest" workflow across every worktree in the workspace in parallel, with a pre-check to ensure all worktrees are clean and on detached HEAD before doing any operations
 	- This makes it easy to sync up an entire workspace to the latest origin state with one command without worrying about accidentally losing uncommitted changes in any of the worktrees
+
+The fan-out is not limited to workspaces: it works in any directory whose immediate children are git repositories (e.g. `<profile-root>/repos/`).
 
 ## Debi
 
 Devora includes a CLI tool called `debi` for CLI-based workflows.
-Debi implements the git shortcuts described above, as well as other utilities.
+Debi implements the `debi git` namespace described above, as well as other utilities.
 
 Highlights:
 

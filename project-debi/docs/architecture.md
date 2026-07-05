@@ -24,7 +24,8 @@ cli
   ├── completion (shell completion script generation)
   ├── config     (profiles, repos, settings)
   ├── credentials (OS keychain lookup; for submit/close error translation)
-  ├── git        (git shortcut commands)
+  ├── gitcmd     (debi git dispatch: customs, passthrough, fan-out)
+  ├── git        (git compositions and plumbing)
   ├── jsonvalidate
   ├── process    (shell command execution)
   ├── prstatus   (PR status checking)

@@ -22,22 +22,16 @@ import (
 	"devora/internal/workspace"
 )
 
-// fetchTimeout caps each per-repo `git fetch origin` so a hung remote doesn't
-// stall the workspace-wide summary.
-const fetchTimeout = 30 * time.Second
+const fetchTimeout = 45 * time.Second
 
-// RunStatus implements workspace-mode `debi gst`: fan-out per-repo queries in
-// parallel, then render an aligned summary table. Always returns nil — gst is
-// a read-only summary and per-repo errors are surfaced inline.
-func RunStatus(w io.Writer, wsPath string) error {
-	repos, err := workspace.GetWorkspaceRepos(wsPath)
+func RunStatusDir(w io.Writer, dir string) error {
+	repos, err := workspace.GetWorkspaceRepos(dir)
 	if err != nil {
-		return fmt.Errorf("list workspace repos: %w", err)
+		return fmt.Errorf("list child repos: %w", err)
 	}
 
 	// ghMissing is set the first time any goroutine hits ErrGHNotInstalled.
-	// All goroutines then skip gh entirely and the renderer prints a single
-	// footnote rather than per-row noise.
+	// All goroutines then skip gh entirely and the renderer prints a single footnote rather than per-row noise.
 	var ghMissing atomic.Bool
 
 	results := make([]RepoStatus, len(repos))
@@ -46,7 +40,7 @@ func RunStatus(w io.Writer, wsPath string) error {
 		wg.Add(1)
 		go func(idx int, name string) {
 			defer wg.Done()
-			results[idx] = gatherRepoStatus(filepath.Join(wsPath, name), name, &ghMissing)
+			results[idx] = gatherRepoStatus(filepath.Join(dir, name), name, &ghMissing)
 		}(i, repo)
 	}
 	wg.Wait()
@@ -55,13 +49,10 @@ func RunStatus(w io.Writer, wsPath string) error {
 		return results[i].Name < results[j].Name
 	})
 
-	renderStatus(w, wsPath, results, ghMissing.Load())
+	renderStatus(w, dir, results, ghMissing.Load())
 	return nil
 }
 
-// gatherRepoStatus collects the per-repo data shown in the gst table: a best-
-// effort fetch, branch, working-tree counts, behind-count, and PR status. PR
-// lookup is skipped when HEAD is detached or when gh has been reported missing.
 func gatherRepoStatus(repoPath, name string, ghMissing *atomic.Bool) RepoStatus {
 	status := RepoStatus{Name: name, BehindOrigin: -1}
 
@@ -92,7 +83,7 @@ func gatherRepoStatus(repoPath, name string, ghMissing *atomic.Bool) RepoStatus 
 	}
 
 	if branch == "" {
-		// Detached: skip gh entirely. `gh pr view ""` is broken behavior.
+		// Detached: skip gh entirely; `gh pr view ""` is broken behavior
 		status.PRState = PRStateNone
 		return status
 	}
@@ -118,10 +109,6 @@ func gatherRepoStatus(repoPath, name string, ghMissing *atomic.Bool) RepoStatus 
 	return status
 }
 
-// bestEffortFetch runs `git fetch origin` with prompts disabled and a timeout
-// so a hung remote can't stall a parallel fan-out. Returns the raw error so
-// callers can choose to surface it (gcl) or treat it as a stale-data marker
-// (gst).
 func bestEffortFetch(repoPath string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
 	defer cancel()
@@ -137,9 +124,6 @@ func bestEffortFetch(repoPath string) error {
 	return err
 }
 
-// countBehindOrigin returns the number of commits in origin/<mainBranch> that
-// are missing from HEAD. Returns -1 when rev-list fails (e.g., the ref doesn't
-// exist locally) — the renderer prints "?" in that case.
 func countBehindOrigin(repoPath, mainBranch string) int {
 	out, err := process.GetOutput(
 		[]string{"git", "rev-list", "--count", "HEAD..origin/" + mainBranch},
@@ -155,9 +139,6 @@ func countBehindOrigin(repoPath, mainBranch string) int {
 	return n
 }
 
-// classifyPR maps gh.PRSummary into the typed PRState the renderer expects.
-// Unrecognized states return PRStateUnknown so misleading defaults don't leak
-// into the table.
 func classifyPR(pr *gh.PRSummary) PRState {
 	switch pr.State {
 	case "OPEN":
@@ -170,8 +151,6 @@ func classifyPR(pr *gh.PRSummary) PRState {
 	return PRStateUnknown
 }
 
-// renderStatus prints the aligned status table, optional warnings, and the
-// SUMMARY block.
 func renderStatus(w io.Writer, wsPath string, results []RepoStatus, ghMissing bool) {
 	wsName := filepath.Base(wsPath)
 	fmt.Fprintf(w, "WORKSPACE  %s (%d repos)\n\n", wsName, len(results))
@@ -248,11 +227,9 @@ func formatStatusRow(r RepoStatus, nameWidth, branchWidth int, ghMissing bool) s
 	)
 }
 
-// padCell renders text with cellStyle, then right-pads with plain spaces so
-// the visible width equals width. Computing padding from the unstyled text
-// avoids the column-drift you get from formatting an already-ANSI-escaped
-// string with `%-*s`. Parameter is named cellStyle (not style) to avoid
-// shadowing the internal/style package import.
+// padCell renders text with cellStyle, then right-pads with plain spaces so the visible width equals width.
+// Computing padding from the unstyled text avoids the column-drift you get from formatting an already-ANSI-escaped string with `%-*s`.
+// Parameter is named cellStyle to avoid shadowing the internal/style package import.
 func padCell(text string, width int, cellStyle lipgloss.Style) string {
 	rendered := cellStyle.Render(text)
 	pad := width - len(text)
