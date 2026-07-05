@@ -19,8 +19,7 @@ const EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
 const MODEL_SUGGESTIONS = [
   'claude-fable-5',
   'claude-opus-4-8',
-  'claude-opus-4-7',
-  'claude-sonnet-4-6',
+  'claude-sonnet-5',
 ];
 
 type SettingKey = 'opus-model' | 'sonnet-model' | 'haiku-model' | 'effort';

@@ -48,7 +48,7 @@ function mockBackend(overrides?: {
           resolved: {
             'opus-model': 'claude-opus-4-8',
             'sonnet-model': 'claude-opus-4-8',
-            'haiku-model': 'claude-sonnet-4-6',
+            'haiku-model': 'claude-sonnet-5',
             effort: 'xhigh',
           },
         };
