@@ -20,9 +20,25 @@ function openDropdown(element: HTMLElement): void {
   (element.querySelector('.dropdown-trigger') as HTMLButtonElement).click();
 }
 
+function makeRect(rect: Partial<DOMRect>): DOMRect {
+  return {
+    top: 0,
+    bottom: 0,
+    left: 0,
+    right: 0,
+    width: 0,
+    height: 0,
+    x: 0,
+    y: 0,
+    toJSON: () => ({}),
+    ...rect,
+  } as DOMRect;
+}
+
 describe('createDropdownMenu', () => {
   afterEach(() => {
     document.body.innerHTML = '';
+    vi.restoreAllMocks();
   });
 
   it('renders the trigger label and no popup initially', () => {
@@ -193,5 +209,99 @@ describe('createDropdownMenu', () => {
 
     expect(() => handle.setTriggerLabel('Ignored')).not.toThrow();
     expect(handle.element.querySelector('.dropdown-trigger-label')).toBeNull();
+  });
+
+  it('places the popup below the container, right-aligned, via fixed viewport coordinates', () => {
+    const handle = createDropdownMenu({ triggerLabel: 'Work', items: makeItems() });
+    document.body.appendChild(handle.element);
+    vi.spyOn(handle.element, 'getBoundingClientRect').mockReturnValue(
+      makeRect({ top: 100, bottom: 130, left: 200, right: 320 }),
+    );
+
+    openDropdown(handle.element);
+
+    const popup = handle.element.querySelector('.dropdown-popup') as HTMLElement;
+    expect(popup.style.top).toBe('136px');
+    expect(popup.style.right).toBe(`${window.innerWidth - 320}px`);
+    expect(popup.style.bottom).toBe('');
+  });
+
+  it('flips upward when the popup would not fit below the container', () => {
+    const handle = createDropdownMenu({ triggerLabel: 'Work', items: makeItems() });
+    document.body.appendChild(handle.element);
+    const viewportHeight = window.innerHeight;
+    // The popup doesn't exist until open, so the prototype mock supplies its 200px height
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(
+      makeRect({ height: 200 }),
+    );
+    vi.spyOn(handle.element, 'getBoundingClientRect').mockReturnValue(
+      makeRect({ top: viewportHeight - 68, bottom: viewportHeight - 38, left: 200, right: 320 }),
+    );
+
+    openDropdown(handle.element);
+
+    const popup = handle.element.querySelector('.dropdown-popup') as HTMLElement;
+    expect(popup.style.bottom).toBe('74px');
+    expect(popup.style.top).toBe('');
+  });
+
+  it('closes when an ancestor of the dropdown scrolls', () => {
+    const scroller = document.createElement('div');
+    document.body.appendChild(scroller);
+    const handle = createDropdownMenu({ triggerLabel: 'Work', items: makeItems() });
+    scroller.appendChild(handle.element);
+
+    openDropdown(handle.element);
+    scroller.dispatchEvent(new Event('scroll'));
+
+    expect(handle.element.querySelector('.dropdown-popup')).toBeNull();
+  });
+
+  it('stays open when an unrelated element scrolls (e.g. a background terminal)', () => {
+    const unrelated = document.createElement('div');
+    document.body.appendChild(unrelated);
+    const handle = createDropdownMenu({ triggerLabel: 'Work', items: makeItems() });
+    document.body.appendChild(handle.element);
+
+    openDropdown(handle.element);
+    unrelated.dispatchEvent(new Event('scroll'));
+
+    expect(handle.element.querySelector('.dropdown-popup')).not.toBeNull();
+  });
+
+  it('closes on window resize', () => {
+    const handle = createDropdownMenu({ triggerLabel: 'Work', items: makeItems() });
+    document.body.appendChild(handle.element);
+
+    openDropdown(handle.element);
+    window.dispatchEvent(new Event('resize'));
+
+    expect(handle.element.querySelector('.dropdown-popup')).toBeNull();
+  });
+
+  // Overlay teardown removes the dropdown's subtree without calling close().
+  it('does not swallow Escape after the container is removed while open', () => {
+    const windowHandler = vi.fn();
+    window.addEventListener('keydown', windowHandler);
+    const handle = createDropdownMenu({ triggerLabel: 'Work', items: makeItems() });
+    document.body.appendChild(handle.element);
+
+    openDropdown(handle.element);
+    handle.element.remove();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+
+    expect(windowHandler).toHaveBeenCalledOnce();
+    window.removeEventListener('keydown', windowHandler);
+  });
+
+  it('cleans up via the scroll listener after the container is removed while open', () => {
+    const handle = createDropdownMenu({ triggerLabel: 'Work', items: makeItems() });
+    document.body.appendChild(handle.element);
+
+    openDropdown(handle.element);
+    handle.element.remove();
+    document.body.dispatchEvent(new Event('scroll'));
+
+    expect(handle.element.querySelector('.dropdown-popup')).toBeNull();
   });
 });

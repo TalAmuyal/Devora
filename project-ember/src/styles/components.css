@@ -167,7 +167,6 @@
 /* DropdownMenu */
 
 .dropdown-menu {
-  position: relative;
   display: inline-block;
 }
 
@@ -196,9 +195,7 @@
 }
 
 .dropdown-popup {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
+  position: fixed; /* `fixed` so ancestor `overflow` clipping cannot hide the menu; `DropdownMenu.ts` sets the coordinates inline */
   min-width: 14rem;
   background: var(--color-bg);
   border: 1px solid var(--color-border);
