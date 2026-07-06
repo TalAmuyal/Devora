@@ -1,3 +1,4 @@
+// Package task writes the task.json file that marks a workspace as an active workspace, recording a UUID, a human-readable title, and a start date.
 package task
 
 import (
@@ -30,6 +31,7 @@ func Create(title string, workspaceTaskPath string) error {
 }
 
 func writeTaskFile(path string, data taskData) error {
+	// 4-space indent so the file is legible if a user opens it directly
 	content, err := json.MarshalIndent(data, "", "    ")
 	if err != nil {
 		return fmt.Errorf("marshal task JSON: %w", err)
