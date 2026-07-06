@@ -14,9 +14,10 @@ Types of changes:
 
 ## Unreleased
 
+## 2026-07-06.0
+
 ### Changed
 
-- Inlined Debi's spec for `internal/task`
 - Judge now auto-approves the following: `col`, `git fetch`, `debi git fetch`, `debi git ls-files`, `debi git status`, `debi git ls-tree`
 
 ### Fixed
