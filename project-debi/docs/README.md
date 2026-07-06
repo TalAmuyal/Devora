@@ -24,7 +24,6 @@ Treat the code as the source of truth, and consult a spec only for context the c
 | [specs/terminal.md](specs/terminal.md) | `internal/terminal` | Kitty terminal session management |
 | [specs/cli.md](specs/cli.md) | `internal/cli` | CLI entry point and subcommands |
 | [specs/process.md](specs/process.md) | `internal/process` | Shell command execution |
-| [specs/task.md](specs/task.md) | `internal/task` | Task JSON read/write |
 | [specs/crash.md](specs/crash.md) | `internal/crash` | Crash logging |
 | [specs/tui.md](specs/tui.md) | `internal/tui` | TUI pages, state machine, components |
 | [specs/tui-navigation.md](specs/tui-navigation.md) | `internal/tui` | Navigation key bindings: back, quit, exit behavior across all pages |

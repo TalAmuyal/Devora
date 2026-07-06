@@ -14,6 +14,10 @@ Types of changes:
 
 ## Unreleased
 
+### Changed
+
+- Inlined Debi's spec for `internal/task`
+
 ## 2026-07-05.0
 
 ### Added
