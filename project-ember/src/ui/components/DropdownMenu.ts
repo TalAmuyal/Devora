@@ -1,5 +1,6 @@
 /** Custom dropdown: a trigger button opening a popup of selectable options and action rows (with separators).
- * Closes on select, outside click, and Escape.
+ * The popup is position:fixed so ancestor overflow clipping cannot hide it, and flips above the trigger when there is no room below.
+ * Closes on select, outside click, Escape, ancestor scroll, and window resize.
  * Returns a handle for imperative control.
  * DOM: `div.dropdown-menu`.
  */
@@ -41,6 +42,8 @@ export interface DropdownMenuHandle {
   setTriggerLabel(label: string): void;
 }
 
+const POPUP_GAP_PX = 6;
+
 export function createDropdownMenu(options: DropdownMenuOptions): DropdownMenuHandle {
   let items = options.items;
   let popup: HTMLElement | null = null;
@@ -74,7 +77,15 @@ export function createDropdownMenu(options: DropdownMenuOptions): DropdownMenuHa
 
   container.appendChild(trigger);
 
+  // The container can be torn down without close() (e.g. overlay dismissal); handlers self-release.
+  const closeIfDetached = (): boolean => {
+    if (container.isConnected) return false;
+    close();
+    return true;
+  };
+
   const onOutsideClick = (e: MouseEvent): void => {
+    if (closeIfDetached()) return;
     if (!container.contains(e.target as Node)) {
       close();
     }
@@ -82,9 +93,19 @@ export function createDropdownMenu(options: DropdownMenuOptions): DropdownMenuHa
 
   // Capture phase so the dropdown swallows Escape before overlay-level dismissal handlers see it: Escape closes the popup, not the page.
   const onKeydown = (e: KeyboardEvent): void => {
+    if (closeIfDetached()) return;
     if (e.key === 'Escape') {
       e.preventDefault();
       e.stopImmediatePropagation();
+      close();
+    }
+  };
+
+  // Capture phase because scroll events do not bubble.
+  // The fixed-position popup cannot track its anchor, so close when an ancestor scrolls - but only an ancestor: unrelated scrollers (e.g. a terminal viewport running behind an overlay) must not dismiss the menu
+  const onAncestorScroll = (e: Event): void => {
+    if (closeIfDetached()) return;
+    if (e.target instanceof Node && e.target.contains(container)) {
       close();
     }
   };
@@ -96,6 +117,8 @@ export function createDropdownMenu(options: DropdownMenuOptions): DropdownMenuHa
     container.classList.remove('dropdown-open');
     document.removeEventListener('click', onOutsideClick, true);
     document.removeEventListener('keydown', onKeydown, true);
+    window.removeEventListener('scroll', onAncestorScroll, true);
+    window.removeEventListener('resize', close);
   }
 
   function open(): void {
@@ -146,9 +169,23 @@ export function createDropdownMenu(options: DropdownMenuOptions): DropdownMenuHa
     }
 
     container.appendChild(popup);
+
+    const rect = container.getBoundingClientRect();
+    const popupHeight = popup.getBoundingClientRect().height;
+    const overflowsBelow = rect.bottom + POPUP_GAP_PX + popupHeight > window.innerHeight;
+    const moreRoomAbove = rect.top > window.innerHeight - rect.bottom;
+    if (overflowsBelow && moreRoomAbove) {
+      popup.style.bottom = `${window.innerHeight - rect.top + POPUP_GAP_PX}px`;
+    } else {
+      popup.style.top = `${rect.bottom + POPUP_GAP_PX}px`;
+    }
+    popup.style.right = `${window.innerWidth - rect.right}px`;
+
     container.classList.add('dropdown-open');
     document.addEventListener('click', onOutsideClick, true);
     document.addEventListener('keydown', onKeydown, true);
+    window.addEventListener('scroll', onAncestorScroll, true);
+    window.addEventListener('resize', close);
   }
 
   trigger.addEventListener('click', () => {

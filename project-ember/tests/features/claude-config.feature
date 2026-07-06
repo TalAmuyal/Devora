@@ -3,6 +3,7 @@ Feature: Claude model and effort configuration
   Devora-Ember resolves the Claude Code model tiers and effort level from user/profile config (profile → user → Devora default, per key) and injects them into session shells as environment variables: the model tiers via the ANTHROPIC_DEFAULT_*_MODEL vars that Claude Code reads natively, and the effort via DEVORA_CCC_EFFORT which `ccc` turns into `--effort`.
   A setting can be a value, None (omit the var so Claude Code uses its default), or unset (fall through).
   Values use a `:value:` sentinel so an omitted var shows as `::`.
+  The settings are edited in the Settings Hub through the "Claude Models & Effort" card.
 
   Background:
     Given Ember is running
@@ -29,3 +30,15 @@ Feature: Claude model and effort configuration
     When a new session is created
     And "echo DEFAULTS=:$ANTHROPIC_DEFAULT_OPUS_MODEL:$DEVORA_CCC_EFFORT:" is typed in the terminal
     Then the terminal should contain "DEFAULTS=:claude-opus-4-8:xhigh:"
+
+  Scenario: Choosing an effort level from the Settings Hub dropdown
+    Given a profile "Work" with 1 active workspaces
+    And the Workspace Hub is open
+    When the user presses "P"
+    Then the Settings Hub should be visible
+    When the user opens the "User Defaults" settings detail
+    And the user switches the Effort row to Custom
+    And the user opens the effort dropdown
+    Then the effort dropdown items should be clickable at their on-screen position
+    When the user chooses the effort level "low"
+    Then the global config should have the Claude "effort" set to "low"

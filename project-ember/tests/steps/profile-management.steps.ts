@@ -17,6 +17,7 @@ import {
   submitProfileForm,
 } from '../support/settings-hub-helper';
 import { clickBurgerMenuItem } from '../support/ws-hub-helper';
+import { assertDropdownItemsHitTestable } from '../support/dropdown-helper';
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -150,6 +151,23 @@ Then(
   },
 );
 
+When(
+  'the user opens the {string} settings detail',
+  async function (this: EmberWorld, rowName: string) {
+    await this.driver.eval(`
+      const rows = Array.from(document.querySelectorAll('.pm-master-item'));
+      const row = rows.find((r) => r.querySelector('.pm-name')?.textContent === ${JSON.stringify(rowName)});
+      if (!row) throw new Error('Master row not found: ' + ${JSON.stringify(rowName)});
+      row.click();
+    `);
+    await this.driver.pollFor(
+      `return document.querySelector('.pm-detail-title')?.textContent ?? null`,
+      rowName,
+      5_000,
+    );
+  },
+);
+
 Then(
   'the profile directory {string} should still exist on disk',
   function (this: EmberWorld, name: string) {
@@ -229,6 +247,13 @@ When('the user clicks the profile dropdown', async function (this: EmberWorld) {
   await ui.click('.ws-profile-dropdown .dropdown-trigger');
   await ui.waitForElement('.ws-profile-dropdown .dropdown-popup', 3_000);
 });
+
+Then(
+  'the profile dropdown items should be clickable at their on-screen position',
+  async function (this: EmberWorld) {
+    await assertDropdownItemsHitTestable(this.driver, '.ws-profile-dropdown .dropdown-popup');
+  },
+);
 
 Then(
   'the profile dropdown should list profile {string}',

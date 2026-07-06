@@ -18,6 +18,10 @@ Types of changes:
 
 - Inlined Debi's spec for `internal/task`
 
+### Fixed
+
+- The effort dropdown in the Settings Hub's "Claude Models & Effort" card opened clipped by its card (hidden beneath the next card), making the effort level unpickable; dropdown menus now escape any such clipping and flip upward when there is no room below
+
 ## 2026-07-05.0
 
 ### Added

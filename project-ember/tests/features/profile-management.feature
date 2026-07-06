@@ -104,6 +104,7 @@ Feature: Profile management
     And the Workspace Hub is open
     When the user clicks the profile dropdown
     Then the profile dropdown should list profile "Work"
+    And the profile dropdown items should be clickable at their on-screen position
     And the profile dropdown should offer "New Profile…" and "Manage Profiles…"
     When the user clicks the "Manage Profiles…" dropdown action
     Then the Settings Hub should be visible
