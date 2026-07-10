@@ -46,6 +46,7 @@ When making a new architectural decision, create a new ADR file following the fo
 
 - [ADR-001: Ember Acceptance Testing Framework](docs/adrs/ADR-001-ember-bdd-testing-framework.md) — Eval bridge + Gherkin acceptance tests + Fake Claude API for testing the Tauri app
 - [ADR-002: Ember Centralized Error Reporting](docs/adrs/ADR-002-ember-centralized-error-reporting.md) — Single showError/report_error path, invoke wrapper with surfaced-by-default errors, ACL completeness test
+- [ADR-003: Ember Layer System (Stacked Pages & Pop-ups)](docs/adrs/ADR-003-ember-layer-system.md) — Single LayerStack owns key routing + focus by stack position; page/modal/popup/panel kinds; fixes cross-layer key/focus bugs
 
 ## Vision
 
