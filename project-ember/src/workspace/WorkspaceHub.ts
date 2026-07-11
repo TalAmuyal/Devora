@@ -12,6 +12,7 @@ import { createDropdownMenu, DropdownItem } from '../ui/components/DropdownMenu'
 import { createRepoList, RepoListHandle } from '../ui/components/RepoList';
 import { createTableShell } from '../ui/components/TableShell';
 import { isEditableElementFocused } from '../ui/focus';
+import { DismissDecision } from '../ui/layers/types';
 import { pluralize } from '../ui/format';
 import { createProfileForm } from './ProfileForm';
 import { ProfileInfo, RepoInfo, WorkspaceInfo } from './types';
@@ -115,7 +116,6 @@ export class WorkspaceHub {
     repoPaths: string[],
     sourceWorkspacePath: string | null,
   ) => void;
-  private onClose: () => void;
   private onOpenSettingsHub: (view: 'list' | 'new') => void;
   // Clone a repo into the given profile; `onDone` receives the cloned repo so the New Task form can refresh and pre-select it.
   private onCloneRepo: (
@@ -126,8 +126,7 @@ export class WorkspaceHub {
 
   private profiles: ProfileInfo[] = [];
   private activeProfilePath: string | null = null;
-  // Whether the last completed load found zero profiles.
-  // Deliberately NOT reset in unload(): main.ts consults it (via isZeroProfileLocked) while other overlays cover the hub, e.g. to decide where q/Esc should land.
+  // Whether the last completed load found zero profiles: drives the first-run welcome and the dismissal veto (handleUserDismiss). Re-derived by load()/reloadData().
   private zeroProfiles = false;
   private workspaces: WorkspaceInfo[] = [];
   private searchFilter: string = '';
@@ -159,8 +158,6 @@ export class WorkspaceHub {
   private searchHandle: SearchInputHandle | null = null;
   private masterListEl: HTMLElement | null = null;
 
-  private keyHandler = (e: KeyboardEvent) => this.handleKeyDown(e);
-
   constructor(
     onOpenWorkspace: (path: string, title: string, repos: string[]) => void,
     onStartTaskCreation: (
@@ -168,7 +165,6 @@ export class WorkspaceHub {
       repoPaths: string[],
       sourceWorkspacePath: string | null,
     ) => void,
-    onClose: () => void,
     onOpenSettingsHub: (view: 'list' | 'new') => void,
     onCloneRepo: (
       profilePath: string,
@@ -178,7 +174,6 @@ export class WorkspaceHub {
   ) {
     this.onOpenWorkspace = onOpenWorkspace;
     this.onStartTaskCreation = onStartTaskCreation;
-    this.onClose = onClose;
     this.onOpenSettingsHub = onOpenSettingsHub;
     this.onCloneRepo = onCloneRepo;
     this.onOpenHealth = onOpenHealth;
@@ -209,23 +204,22 @@ export class WorkspaceHub {
     return this.zeroProfiles;
   }
 
-  /** Single entry point for user-initiated dismissal (q/Esc/Ctrl+S, routed through the overlay's onUserDismiss override): closes the cheatsheet if open, refuses while zero-profile locked, otherwise closes the hub. */
-  handleUserDismiss(): void {
+  /** The page layer's dismissal decision (q/Esc/Ctrl+S): close the cheatsheet if open ('handled'), refuse while zero-profile locked ('veto'), otherwise let the stack pop the hub ('close'). */
+  handleUserDismiss(): DismissDecision {
     if (this.showCheatsheet) {
       this.showCheatsheet = false;
       this.render();
-      return;
+      return 'handled';
     }
     if (this.isZeroProfileLocked()) {
-      return;
+      return 'veto';
     }
-    this.onClose();
+    return 'close';
   }
 
   async load(): Promise<void> {
     this.profilingT0 = performance.now();
 
-    window.addEventListener('keydown', this.keyHandler, true);
     this.profilesLoaded = false;
     this.workspacesLoaded = false;
 
@@ -323,6 +317,37 @@ export class WorkspaceHub {
     this.preloadAllStatuses();
 
     await this.resolvePendingDuplication();
+  }
+
+  /**
+   * Re-fetch profiles and the active profile's workspaces, then re-render — preserving the current filter and cursor.
+   * Runs when the hub is revealed after a covering page (Settings, Health, the User Guide) closes, so profile edits/switches/deletions made there take effect.
+   * Unlike refresh(), it fires no toasts and touches no listeners; unlike load(), it keeps the search filter and focused row.
+   */
+  async reloadData(): Promise<void> {
+    try {
+      const profiles = await invoke<ProfileInfo[]>('list_profiles');
+      this.profiles = profiles;
+      this.zeroProfiles = profiles.length === 0;
+      // The active profile may have been switched or deleted under Settings.
+      if (!profiles.some((p) => p.path === this.activeProfilePath)) {
+        this.activeProfilePath = profiles[0]?.path ?? null;
+        this.statusCache.clear();
+        this.statusErrors.clear();
+      }
+    } catch (_) {
+      // invoke already surfaced the error; keep the previous zeroProfiles verdict.
+    }
+    this.profilesLoaded = true;
+
+    if (this.activeProfilePath) {
+      await this.loadWorkspaces();
+    } else {
+      this.workspaces = [];
+    }
+    this.workspacesLoaded = true;
+
+    this.renderAfterWorkspaceChange();
   }
 
   async refresh(): Promise<void> {
@@ -515,7 +540,6 @@ export class WorkspaceHub {
   }
 
   unload(): void {
-    window.removeEventListener('keydown', this.keyHandler, true);
     this.searchFilter = '';
     this.categoryFilter = 'active';
     this.focusedCardIndex = -1;
@@ -534,123 +558,81 @@ export class WorkspaceHub {
     this.profilingData = null;
   }
 
-  private handleKeyDown(e: KeyboardEvent): void {
+  /**
+   * The page layer's key handler (routed by the LayerStack).
+   * Returns `true` when it consumes the key.
+   * q/Esc/Ctrl+S dismissal is not handled here — it flows through handleUserDismiss (which owns the cheatsheet and zero-profile lock).
+   * The editable guard keeps navigation keys typing into inputs (the `n`-into-title contract).
+   */
+  handleKey(e: KeyboardEvent): boolean {
     if (isEditableElementFocused()) {
-      return;
+      return false;
     }
 
-    // First-run welcome: only the form is interactive (q/Esc are already swallowed upstream by the overlay's user-dismiss override).
+    // First-run welcome: only the profile form is interactive; navigation keys do nothing.
     if (this.isZeroProfileLocked()) {
-      return;
-    }
-
-    if (this.showCheatsheet && e.key === 'Escape') {
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      this.showCheatsheet = false;
-      this.render();
-      return;
+      return false;
     }
 
     const filtered = this.filteredWorkspaces();
 
     switch (e.key) {
-      case 'q': {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        if (this.showCheatsheet) {
-          this.showCheatsheet = false;
-          this.render();
-        } else {
-          this.onClose();
-        }
-        return;
-      }
-      case '?': {
-        e.preventDefault();
-        e.stopPropagation();
+      case '?':
         this.showCheatsheet = !this.showCheatsheet;
         this.render();
-        return;
-      }
-      case 'f': {
-        e.preventDefault();
-        e.stopPropagation();
+        return true;
+      case 'f':
         this.searchHandle?.focus();
-        return;
-      }
+        return true;
       case '1':
-        e.preventDefault();
-        e.stopPropagation();
         this.categoryFilter = 'active';
         this.focusedCardIndex = -1;
         this.render();
-        return;
+        return true;
       case '2':
-        e.preventDefault();
-        e.stopPropagation();
         this.categoryFilter = 'inactive';
         this.focusedCardIndex = -1;
         this.render();
-        return;
+        return true;
       case '3':
-        e.preventDefault();
-        e.stopPropagation();
         this.categoryFilter = 'all';
         this.focusedCardIndex = -1;
         this.render();
-        return;
+        return true;
       case 'j':
       case 'ArrowDown':
-        e.preventDefault();
-        e.stopPropagation();
         if (filtered.length > 0) {
           this.focusedCardIndex = Math.min(this.focusedCardIndex + 1, filtered.length - 1);
           this.updateCardFocus();
         }
-        return;
+        return true;
       case 'k':
       case 'ArrowUp':
-        e.preventDefault();
-        e.stopPropagation();
         if (filtered.length > 0) {
           this.focusedCardIndex = Math.max(this.focusedCardIndex - 1, 0);
           this.updateCardFocus();
         }
-        return;
+        return true;
       case 'Enter':
-        e.preventDefault();
-        e.stopPropagation();
         if (this.focusedCardIndex >= 0 && this.focusedCardIndex < filtered.length) {
           const ws = filtered[this.focusedCardIndex];
           this.onOpenWorkspace(ws.path, ws.taskTitle, ws.repos);
         }
-        return;
-      case 'n': {
-        e.preventDefault();
-        e.stopPropagation();
+        return true;
+      case 'n':
         this.toggleNewForm();
-        return;
-      }
-      case 'R': {
-        e.preventDefault();
-        e.stopPropagation();
+        return true;
+      case 'R':
         void this.refresh();
-        return;
-      }
-      case 'P': {
-        e.preventDefault();
-        e.stopPropagation();
+        return true;
+      case 'P':
         this.onOpenSettingsHub('list');
-        return;
-      }
-      case 'H': {
-        e.preventDefault();
-        e.stopPropagation();
+        return true;
+      case 'H':
         this.onOpenHealth();
-        return;
-      }
+        return true;
     }
+    return false;
   }
 
   private updateCardFocus(): void {

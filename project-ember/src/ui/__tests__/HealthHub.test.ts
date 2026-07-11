@@ -211,11 +211,12 @@ describe('HealthHub', () => {
     expect(el.querySelector('.health-error')?.textContent).toContain('Could not parse');
   });
 
-  it('re-runs the check when "r" is pressed', async () => {
+  it('re-runs the check when "r" is pressed, consuming the key', async () => {
     await mount();
     expect(invokeMock).toHaveBeenCalledTimes(1);
-    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'r', bubbles: true, cancelable: true }));
+    const consumed = hub.handleKey(new KeyboardEvent('keydown', { key: 'r' }));
     await flush();
+    expect(consumed).toBe(true);
     expect(invokeMock).toHaveBeenCalledTimes(2);
   });
 
@@ -226,10 +227,9 @@ describe('HealthHub', () => {
     expect(invokeMock).toHaveBeenCalledTimes(2);
   });
 
-  it('stops responding to "r" after unload', async () => {
+  it('leaves unrelated keys for the layer stack (returns false, no re-run)', async () => {
     await mount();
-    hub.unload();
-    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'r', bubbles: true, cancelable: true }));
+    expect(hub.handleKey(new KeyboardEvent('keydown', { key: 'q' }))).toBe(false);
     await flush();
     expect(invokeMock).toHaveBeenCalledTimes(1);
   });

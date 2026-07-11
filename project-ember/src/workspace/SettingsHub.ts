@@ -2,7 +2,7 @@
  * Settings Hub: a tab-covering overlay page (master/detail split, mirroring the Workspace Hub) for listing profiles, switching the active one, creating/registering new profiles (inline form behind a pinned "New Profile…" master row), and deleting profiles from the registry.
  * DOM: `div.settings-hub`.
  *
- * q/Esc never reach this page directly — KeyboardShortcuts routes user dismissal through the overlay's onUserDismiss override, which main.ts wires to "return to the Workspace Hub".
+ * q/Esc/Ctrl+S never reach this page's own keys — the LayerStack routes dismissal through the layer's onUserDismissRequest, which main.ts wires to "return to the Workspace Hub".
  */
 
 import { invoke } from '../invoke';
@@ -97,8 +97,6 @@ export class SettingsHub {
   private detailCache: Map<string, ProfileDetail> = new Map();
   private detailSeq = 0;
 
-  private keyHandler = (e: KeyboardEvent) => this.handleKeyDown(e);
-
   constructor(callbacks: SettingsHubCallbacks) {
     this.callbacks = callbacks;
     this.containerEl = document.createElement('div');
@@ -119,7 +117,6 @@ export class SettingsHub {
   }
 
   async load(view: SettingsHubView = 'list'): Promise<void> {
-    window.addEventListener('keydown', this.keyHandler, true);
     this.loaded = false;
     this.profiles = [];
     this.detailCache.clear();
@@ -147,7 +144,6 @@ export class SettingsHub {
   }
 
   unload(): void {
-    window.removeEventListener('keydown', this.keyHandler, true);
     this.detailSeq++;
     this.profiles = [];
     this.loaded = false;
@@ -158,17 +154,21 @@ export class SettingsHub {
 
   // --- Keyboard ---
 
-  private handleKeyDown(e: KeyboardEvent): void {
-    // Let the settings cards own their own keys (their segmented buttons / chips / dropdown / inputs are focusable but not always "editable", so they'd otherwise trigger j/k/d/n); this window listener is capture-phase, so a card can't pre-empt it — gate it here.
+  /**
+   * The page layer's key handler (routed by the LayerStack).
+   * Returns `true` when it consumes the key.
+   * Lets the settings cards own their own keys (their segmented buttons / chips / dropdown / inputs are focusable but not always "editable", so they'd otherwise trigger j/k/d/n) by yielding when focus is inside a card.
+   */
+  handleKey(e: KeyboardEvent): boolean {
     const target = e.target;
     if (
       isEditableElementFocused() ||
       (target instanceof Element && target.closest('.claude-config-card, .settings-card'))
     ) {
-      return;
+      return false;
     }
     if (!this.loaded) {
-      return;
+      return false;
     }
 
     const rows = this.rows();
@@ -177,19 +177,13 @@ export class SettingsHub {
     switch (e.key) {
       case 'j':
       case 'ArrowDown':
-        e.preventDefault();
-        e.stopPropagation();
         this.setFocus(Math.min(this.focusedIndex + 1, lastIndex));
-        return;
+        return true;
       case 'k':
       case 'ArrowUp':
-        e.preventDefault();
-        e.stopPropagation();
         this.setFocus(Math.max(this.focusedIndex - 1, 0));
-        return;
+        return true;
       case 'Enter': {
-        e.preventDefault();
-        e.stopPropagation();
         const row = rows[this.focusedIndex];
         if (row?.kind === 'profile') {
           this.setActiveAndClose(row.profile);
@@ -197,24 +191,21 @@ export class SettingsHub {
           // The form is already in the detail panel; focus it.
           this.focusForm();
         }
-        return;
+        return true;
       }
       case 'n':
-        e.preventDefault();
-        e.stopPropagation();
         this.setFocus(lastIndex);
         this.focusForm();
-        return;
+        return true;
       case 'd': {
-        e.preventDefault();
-        e.stopPropagation();
         const row = rows[this.focusedIndex];
         if (row?.kind === 'profile') {
           void this.handleDelete(row.profile);
         }
-        return;
+        return true;
       }
     }
+    return false;
   }
 
   private setFocus(index: number): void {

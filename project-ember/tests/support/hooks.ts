@@ -249,12 +249,8 @@ After(async function (this: EmberWorld) {
   writeTestConfig(testConfigPath!, []);
 
   try {
-    await this.driver.eval(`
-      if (window.__test.overlayManager.isTabCoveringOverlayActive()) {
-        window.__test.wsHub.unload();
-        window.__test.overlayManager.dismissTabCoveringOverlay();
-      }
-    `);
+    // Hard teardown of any open page layers (each runs its onCleanup, e.g. the hub's unload).
+    await this.driver.eval(`window.__test.layers.clear();`);
   } catch {
     // app may not have fully loaded
   }

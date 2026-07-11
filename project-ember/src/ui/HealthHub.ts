@@ -83,8 +83,6 @@ export class HealthHub {
   private error: string | null = null;
   private loadToken = 0;
 
-  private keyHandler = (e: KeyboardEvent) => this.handleKeyDown(e);
-
   constructor(options: HealthHubOptions) {
     this.getProfilePath = options.getProfilePath;
     this.containerEl = document.createElement('div');
@@ -96,12 +94,10 @@ export class HealthHub {
   }
 
   load(): void {
-    window.addEventListener('keydown', this.keyHandler, true);
     void this.fetchReport();
   }
 
   unload(): void {
-    window.removeEventListener('keydown', this.keyHandler, true);
     this.loadToken++;
     this.report = null;
     this.error = null;
@@ -135,14 +131,14 @@ export class HealthHub {
     }
   }
 
-  private handleKeyDown(e: KeyboardEvent): void {
-    if (isEditableElementFocused()) return;
-    // q/Esc dismissal is handled globally (KeyboardShortcuts → dismissActiveOverlay).
+  /** The page layer's key handler (routed by the LayerStack). Returns `true` when it consumes the key; q/Esc dismissal flows through the layer's default onUserDismissRequest. */
+  handleKey(e: KeyboardEvent): boolean {
+    if (isEditableElementFocused()) return false;
     if (e.key === 'r' && !this.loading) {
-      e.preventDefault();
-      e.stopPropagation();
       void this.fetchReport();
+      return true;
     }
+    return false;
   }
 
   // --- Rendering ---

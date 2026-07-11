@@ -40,8 +40,6 @@ export class CommandPalette {
   private listEl: HTMLElement | null = null;
   private loadToken = 0;
 
-  private keyHandler = (e: KeyboardEvent) => this.handleKeyDown(e);
-
   constructor(options: CommandPaletteOptions) {
     this.staticCommands = options.commands;
     this.dynamicCommands = options.dynamicCommands;
@@ -68,7 +66,6 @@ export class CommandPalette {
   load(): void {
     this.searchFilter = '';
     this.commands = this.staticCommands;
-    window.addEventListener('keydown', this.keyHandler, true);
     this.render();
     this.cursor.set(0);
 
@@ -89,7 +86,6 @@ export class CommandPalette {
   }
 
   unload(): void {
-    window.removeEventListener('keydown', this.keyHandler, true);
     this.loadToken++;
     this.searchFilter = '';
     this.searchHandle = null;
@@ -108,36 +104,38 @@ export class CommandPalette {
     );
   }
 
-  private handleKeyDown(e: KeyboardEvent): void {
+  /**
+   * The page layer's key handler (routed by the LayerStack).
+   * Returns `true` when it consumes the key.
+   * Ctrl+S is swallowed as a no-op so it neither opens the Workspace Hub nor closes the palette (the palette and hub are mutually exclusive).
+   * Type-first dismissal (Esc/q) is not handled here: with the search field focused Esc blurs via SearchInput and q types, and with it unfocused the LayerStack's default dismissal pops the palette.
+   */
+  handleKey(e: KeyboardEvent): boolean {
+    if (e.ctrlKey && !e.shiftKey && e.code === 'KeyS') {
+      return true;
+    }
     // While the filter is focused, ArrowUp/Down and Enter route through the SearchInput callbacks, and j/k are typed literally — so ignore here.
     if (isEditableElementFocused()) {
-      return;
+      return false;
     }
 
     switch (e.key) {
       case 'f':
-        e.preventDefault();
-        e.stopPropagation();
         this.searchHandle?.focus();
-        return;
+        return true;
       case 'j':
       case 'ArrowDown':
-        e.preventDefault();
-        e.stopPropagation();
         this.cursor.move(1);
-        return;
+        return true;
       case 'k':
       case 'ArrowUp':
-        e.preventDefault();
-        e.stopPropagation();
         this.cursor.move(-1);
-        return;
+        return true;
       case 'Enter':
-        e.preventDefault();
-        e.stopPropagation();
         this.execute();
-        return;
+        return true;
     }
+    return false;
   }
 
   private execute(): void {

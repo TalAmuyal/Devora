@@ -69,6 +69,22 @@ When(
   },
 );
 
+When('the user presses Ctrl+Right', async function (this: EmberWorld) {
+  const ui = new UIDriver(this.driver);
+  await ui.pressKey('ArrowRight', { ctrlKey: true, code: 'ArrowRight' });
+  await new Promise((r) => setTimeout(r, 150));
+});
+
+Then('the second session should be active', async function (this: EmberWorld) {
+  const activeId = await this.driver.eval(
+    'return window.__test.sessionManager.getActiveSessionId()',
+  );
+  const secondId = await this.driver.eval(
+    'return window.__test.sessionManager.getSessions()[1]?.id',
+  );
+  assert.strictEqual(activeId, secondId);
+});
+
 When(
   'the user filters workspaces by {string}',
   async function (this: EmberWorld, text: string) {

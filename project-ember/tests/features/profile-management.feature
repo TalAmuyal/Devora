@@ -137,3 +137,15 @@ Feature: Profile management
     And the user confirms the dialog
     Then the Workspace Hub overlay should be present
     And the first-run welcome card should be visible
+
+  # The hub stays alive beneath Settings, so its filter is preserved across the round-trip.
+  Scenario: Hub filter text survives a round-trip through Settings
+    Given a profile "Work" with 3 active workspaces
+    And the Workspace Hub is open
+    When the user filters workspaces by "Task 2"
+    Then the Workspace Hub should show 1 workspace items
+    When the user presses "P"
+    Then the Settings Hub should be visible
+    When the user presses "q"
+    Then the Workspace Hub overlay should be present
+    And the Workspace Hub should show 1 workspace items
