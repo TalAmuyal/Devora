@@ -67,7 +67,7 @@ A layer is pushed with a spec (`src/ui/layers/types.ts`):
 - `onKey(e) => boolean` — layer-specific keys, tried **first**; `true` consumes.
 - `onUserDismissRequest() => 'close' | 'handled' | 'veto'` — the response to a dismissal request (`q`, `Escape`, and `Ctrl+S` for pages). `close` pops the layer; `handled` means the layer did something internal instead (closed the hub cheatsheet, replaced itself) and the key is consumed without popping; `veto` refuses (the zero-profile lock) and still consumes.
 - `onCleanup()` — runs exactly once on pop/remove/replace.
-- `onReveal()` — runs when the layer becomes top again after a covering layer pops (refresh-on-reveal).
+- `onReveal()` — runs when the layer becomes top again after a covering **page** pops (refresh-on-reveal for returning from another page). A transient `modal`/`popup`/`panel` pop restores focus without re-running it.
 - `resolveFocus() => Focusable | null` — the focus target, resolved at push and at reveal.
 
 The stack supports both **true stacking** — the lower page stays alive and is revealed with its state preserved — and **replace** semantics, an atomic swap of the top layer; the call site chooses which a given transition uses. Removing a layer that is not on top does no focus or reveal work, and removing a page or modal also removes any popup anchored inside it.
@@ -134,7 +134,7 @@ Blocking `Ctrl+Shift+S` and `Ctrl+←/→` under a page is deliberate: both sile
 ### Focus lifecycle
 
 - **push** — mount the wrapper (`page` → `#app`; `modal` → `document.body` with a `${name}-backdrop` class; `popup`/`panel` stay where the caller placed them), set `tabIndex = -1`, and focus `resolveFocus() ?? wrapper` — except `popup`, which never moves focus.
-- **pop / remove-of-top** — run `onCleanup` (guarded by try/catch), remove the wrapper, then run the revealed layer's `onReveal` and focus its `resolveFocus() ?? wrapper`. When the stack empties, focus `resolveBaseFocus()` (the active session's terminal pane), **resolved at that moment** — this replaces every captured `restoreFocusTo` and fixes the stale-target defect.
+- **pop / remove-of-top** — run `onCleanup` (guarded by try/catch), remove the wrapper, then focus the revealed layer's `resolveFocus() ?? wrapper`; its `onReveal` runs only when the removed cover was a `page` (a navigation refresh — a transient modal does not re-run it, since on confirm the caller refreshes and on cancel nothing changed). When the stack empties, focus `resolveBaseFocus()` (the active session's terminal pane), **resolved at that moment** — this replaces every captured `restoreFocusTo` and fixes the stale-target defect.
 - **remove-of-non-top** — cleanup and detach only, with no focus or reveal work, so a backend-initiated close of a hidden session's panel does not steal focus.
 - **replaceTop** — old layer's cleanup, new layer mounted and focused once, no reveal of anything below.
 - **Tab trap** — only for a `modal` on top. `src/ui/layers/tabTrap.ts` collects focusables within the wrapper and cycles, recovering if focus escaped.

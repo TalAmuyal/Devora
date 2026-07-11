@@ -1,6 +1,7 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { SettingsHub, SettingsHubCallbacks } from '../SettingsHub';
 import { invoke } from '../../invoke';
+import { installModalStack, teardownModalStack } from '../../ui/components/__tests__/modalTestHarness';
 
 vi.mock('../../invoke', () => ({
   invoke: vi.fn(),
@@ -112,8 +113,10 @@ async function flushDialog(): Promise<void> {
 }
 
 describe('SettingsHub', () => {
+  // A LayerStack must exist for the delete-confirmation modal (showConfirmationDialog) to mount.
+  beforeEach(() => installModalStack());
   afterEach(() => {
-    document.body.innerHTML = '';
+    teardownModalStack();
     vi.clearAllMocks();
   });
 

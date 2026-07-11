@@ -285,8 +285,11 @@ export class LayerStack {
   }
 
   /**
-   * After removing the top layer: focus the base when the stack emptied, otherwise reveal and refocus the newly exposed layer — but only when a *covering* layer (page/modal) was removed.
-   * A transparent popup/panel never took focus or hid the layer beneath, so closing it leaves that layer undisturbed (this is why closing a dropdown does not re-run its host page's onReveal, per the ADR-003 onReveal contract).
+   * After removing the top layer: focus the base when the stack emptied, otherwise refocus the newly exposed layer — but only when a *covering* layer (page/modal) was removed.
+   * A transparent popup/panel never took focus or hid the layer beneath, so closing it leaves that layer undisturbed.
+   * `onReveal` fires only when a *page* cover is removed — it is a navigation refresh (returning from Settings/Health/the User Guide).
+   * A modal is a transient sub-interaction: on confirm the caller refreshes, on cancel nothing changed, so re-running the revealed page's `onReveal` would be redundant and could race its own reload.
+   * Focus is still restored for a modal.
    */
   private revealAfterTopRemoval(removedKind: LayerKind): void {
     const revealed = this.topEntry();
@@ -294,10 +297,11 @@ export class LayerStack {
       this.deps.resolveBaseFocus()?.focus();
       return;
     }
-    if (removedKind === 'page' || removedKind === 'modal') {
+    if (removedKind !== 'page' && removedKind !== 'modal') return;
+    if (removedKind === 'page') {
       revealed.spec.onReveal?.();
-      this.focusLayer(revealed);
     }
+    this.focusLayer(revealed);
   }
 
   private dismissLayer(entry: LayerEntry): void {

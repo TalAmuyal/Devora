@@ -1,15 +1,14 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { showTextInputDialog } from '../TextInputDialog';
+import { installModalStack, teardownModalStack, pressKey } from './modalTestHarness';
 
 const getInput = () => document.querySelector('.text-input-dialog-input') as HTMLInputElement;
 const getConfirm = () => document.querySelector('.text-input-dialog-confirm') as HTMLButtonElement;
 const getCancel = () => document.querySelector('.text-input-dialog-cancel') as HTMLButtonElement;
 
 describe('showTextInputDialog', () => {
-  afterEach(() => {
-    // Clean up any dialogs left in the DOM
-    document.querySelectorAll('.text-input-dialog-backdrop').forEach((el) => el.remove());
-  });
+  beforeEach(() => installModalStack());
+  afterEach(() => teardownModalStack());
 
   it('appends a backdrop and dialog to document.body', () => {
     showTextInputDialog({
@@ -100,7 +99,7 @@ describe('showTextInputDialog', () => {
       initialValue: 'Old task',
       confirmLabel: 'OK',
     });
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    pressKey({ key: 'Enter', code: 'Enter' });
     expect(await promise).toBe('Old task');
   });
 
@@ -136,7 +135,7 @@ describe('showTextInputDialog', () => {
       initialValue: 'Old task',
       confirmLabel: 'OK',
     });
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    pressKey({ key: 'Escape', code: 'Escape' });
     expect(await promise).toBeNull();
   });
 
@@ -186,25 +185,5 @@ describe('showTextInputDialog', () => {
     await promise;
     expect(document.querySelector('.text-input-dialog-backdrop')).toBeNull();
     expect(document.querySelector('.text-input-dialog')).toBeNull();
-  });
-
-  it('stops keyboard events from propagating beyond the backdrop', async () => {
-    const bodyHandler = vi.fn();
-    document.body.addEventListener('keydown', bodyHandler);
-
-    const promise = showTextInputDialog({
-      title: 'Title',
-      initialValue: 'Old task',
-      confirmLabel: 'OK',
-    });
-    const backdrop = document.querySelector('.text-input-dialog-backdrop') as HTMLElement;
-    backdrop.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', bubbles: true }));
-
-    expect(bodyHandler).not.toHaveBeenCalled();
-
-    // Clean up
-    document.body.removeEventListener('keydown', bodyHandler);
-    getCancel().click();
-    await promise;
   });
 });

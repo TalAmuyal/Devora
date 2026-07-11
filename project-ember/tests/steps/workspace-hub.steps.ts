@@ -444,6 +444,17 @@ Then(
 );
 
 Then(
+  'exactly {int} confirmation dialog(s) should be visible',
+  async function (this: EmberWorld, expected: number) {
+    // Give any extra dialog time to appear if a key wrongly leaked to the hub beneath.
+    await new Promise((r) => setTimeout(r, 300));
+    const ui = new UIDriver(this.driver);
+    const count = await ui.getElementCount('.confirmation-dialog');
+    assert.strictEqual(count, expected, `Expected ${expected} confirmation dialog(s), got ${count}`);
+  },
+);
+
+Then(
   'the task.json should no longer exist',
   async function (this: EmberWorld) {
     const taskPath = path.join(

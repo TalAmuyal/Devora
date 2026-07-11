@@ -174,6 +174,21 @@ describe('LayerStack — reveal & cleanup', () => {
     expect(onReveal).toHaveBeenCalledOnce();
   });
 
+  it('restores focus to the revealed page on a modal pop but does not fire its onReveal', () => {
+    const onReveal = vi.fn();
+    const focus = focusableSpy();
+    const { stack } = makeStack();
+    stack.push(spec('page', 'page', { onReveal, resolveFocus: () => focus }));
+    stack.push(spec('confirm', 'modal'));
+
+    const before = focus.focus.mock.calls.length;
+    stack.pop();
+
+    // A modal is a transient sub-interaction: focus returns to the page, but its navigation refresh does not re-run.
+    expect(onReveal).not.toHaveBeenCalled();
+    expect(focus.focus.mock.calls.length).toBeGreaterThan(before);
+  });
+
   it('does not reveal the layer below on replaceTop', () => {
     const onRevealA = vi.fn();
     const cleanupB = vi.fn();

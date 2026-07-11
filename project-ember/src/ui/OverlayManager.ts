@@ -1,8 +1,3 @@
-import {
-  showConfirmationDialog,
-  ConfirmationDialogOptions,
-} from './components/ConfirmationDialog';
-
 /** Anything that can take keyboard focus, e.g. a terminal pane or search input */
 export interface Focusable {
   focus(): void;
@@ -145,16 +140,6 @@ export class OverlayManager {
       if (entry.el.style.display !== 'none') return true;
     }
     return false;
-  }
-
-  // --- Popup / Dialog (deferred stubs) ---
-
-  showPopup(_content: HTMLElement): void {
-    console.warn('Popup overlay mode not yet implemented');
-  }
-
-  showDialog(options: ConfirmationDialogOptions): Promise<boolean> {
-    return showConfirmationDialog(options);
   }
 
   // --- General ---
