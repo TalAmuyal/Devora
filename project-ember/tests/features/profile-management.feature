@@ -84,6 +84,48 @@ Feature: Profile management
     And the profile directory "Personal" should still exist on disk
     And the global config should list 1 profile
 
+  # The delete confirmation is a modal layer: Escape cancels the dialog only, the Settings Hub stays open beneath.
+  Scenario: Escape on the delete-profile confirmation cancels only the dialog
+    Given a profile "Work" with 1 active workspace with worktrees
+    And a profile "Personal" with 1 active workspace with worktrees
+    And the Workspace Hub is open
+    When the user presses "P"
+    Then the Settings Hub should list 2 profiles and a New Profile row
+    When the user presses "j"
+    And the user presses "d"
+    Then a confirmation dialog should be visible
+    When the user presses "Escape"
+    Then no confirmation dialog should appear
+    And the Settings Hub should be visible
+    And the global config should list 2 profiles
+
+  # Enter is consumed by the modal (confirm), not by the Settings row beneath it.
+  Scenario: Enter on the delete-profile confirmation confirms instead of acting on the Settings row
+    Given a profile "Work" with 1 active workspace with worktrees
+    And a profile "Personal" with 1 active workspace with worktrees
+    And the Workspace Hub is open
+    When the user presses "P"
+    Then the Settings Hub should list 2 profiles and a New Profile row
+    When the user presses "j"
+    And the user presses "d"
+    Then a confirmation dialog should be visible
+    When the user presses "Enter"
+    Then the Settings Hub should list 1 profile and a New Profile row
+    And the global config should list 1 profile
+
+  # The modal barrier stops a second "d" from reaching the Settings Hub, so no second dialog stacks.
+  Scenario: Pressing d again over the delete confirmation opens only one dialog
+    Given a profile "Work" with 1 active workspace with worktrees
+    And a profile "Personal" with 1 active workspace with worktrees
+    And the Workspace Hub is open
+    When the user presses "P"
+    Then the Settings Hub should list 2 profiles and a New Profile row
+    When the user presses "j"
+    And the user presses "d"
+    Then a confirmation dialog should be visible
+    When the user presses "d"
+    Then exactly 1 confirmation dialog should be visible
+
   Scenario: Deleting a profile is blocked while it has open sessions
     Given a profile "Work" with 1 active workspace with worktrees
     And the Workspace Hub is open

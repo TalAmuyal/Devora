@@ -1,9 +1,9 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { showCloneRepoDialog } from '../CloneRepoDialog';
+import { installModalStack, teardownModalStack, pressKey } from './modalTestHarness';
 
-afterEach(() => {
-  document.querySelectorAll('.clone-repo-dialog-backdrop').forEach((el) => el.remove());
-});
+beforeEach(() => installModalStack());
+afterEach(() => teardownModalStack());
 
 function backdrop(): HTMLElement | null {
   return document.querySelector('.clone-repo-dialog-backdrop');
@@ -64,6 +64,15 @@ describe('showCloneRepoDialog', () => {
     const onCancel = vi.fn();
     handle.onCancel(onCancel);
     document.querySelector<HTMLButtonElement>('.clone-repo-dialog-cancel')!.click();
+    expect(onCancel).toHaveBeenCalledOnce();
+    expect(backdrop()).toBeNull();
+  });
+
+  it('Escape during the form fires onCancel and closes', () => {
+    const handle = showCloneRepoDialog({ profilePath: '/home/me/work' });
+    const onCancel = vi.fn();
+    handle.onCancel(onCancel);
+    pressKey({ key: 'Escape', code: 'Escape' });
     expect(onCancel).toHaveBeenCalledOnce();
     expect(backdrop()).toBeNull();
   });

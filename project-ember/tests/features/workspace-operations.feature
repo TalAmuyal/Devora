@@ -45,6 +45,18 @@ Feature: Workspace Hub - Remove Task and Delete operations
     And the workspace should still have uncommitted changes
     And the worktree directory should still exist
 
+  # The confirmation is a modal layer, so q dismisses the dialog (vim convention) and the hub stays open beneath.
+  Scenario: q dismisses the Remove Task confirmation and keeps the hub open
+    Given a profile "Work" with 1 active workspace with worktrees
+    And workspace "ws-1" has uncommitted changes in repo "test-repo"
+    And the Workspace Hub is open
+    When the user clicks the "Remove Task" button
+    Then a confirmation dialog should be visible
+    When the user presses "q"
+    Then no confirmation dialog should appear
+    And the Workspace Hub overlay should be present
+    And the task.json should still exist
+
   # --- Delete (inactive/invalid workspaces) ---
 
   Scenario: Delete inactive workspace without confirmation

@@ -3,10 +3,12 @@
  * One backdrop, two phases: a form (single-select repo + optional name postfix) and a progress view (a hosted {@link createTaskCreationProgress}).
  * Pure UI — the caller wires the form submission and the returned progress handle to the backend.
  *
+ * A `modal` layer (ADR-003): Escape/`q` cancel during the form phase and route to the progress footer action during creation; a backdrop click cancels only during the form phase.
  * DOM: `div.add-repo-dialog-backdrop > div.add-repo-dialog`.
  */
 
 import { RepoInfo } from '../../workspace/types';
+import { showModalDialog } from './ModalDialog';
 import { createRepoList } from './RepoList';
 import { createTaskCreationProgress, TaskCreationProgressHandle } from './TaskCreationProgress';
 
@@ -32,17 +34,8 @@ export function showAddRepoDialog(options: { repos: RepoInfo[] }): AddRepoDialog
   let phase: 'form' | 'progress' = 'form';
   let closed = false;
 
-  const backdrop = document.createElement('div');
-  backdrop.className = 'add-repo-dialog-backdrop';
-  backdrop.addEventListener('click', (e) => {
-    if (e.target === backdrop && phase === 'form') cancel();
-  });
-  // Keep typing inside the dialog from reaching global keyboard handlers.
-  backdrop.addEventListener('keydown', (e) => e.stopPropagation());
-
   const dialog = document.createElement('div');
   dialog.className = 'add-repo-dialog';
-  backdrop.appendChild(dialog);
 
   const title = document.createElement('div');
   title.className = 'add-repo-dialog-title';
@@ -105,31 +98,26 @@ export function showAddRepoDialog(options: { repos: RepoInfo[] }): AddRepoDialog
   function close(): void {
     if (closed) return;
     closed = true;
-    document.removeEventListener('keydown', onKeydown, true);
-    backdrop.remove();
+    modal.close();
   }
 
-  // Capture phase so Enter/Escape are handled before any global shortcut.
-  const onKeydown = (e: KeyboardEvent): void => {
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      e.stopPropagation();
+  const modal = showModalDialog({
+    name: 'add-repo-dialog',
+    element: dialog,
+    onDismiss: () => {
       if (phase === 'form') {
         cancel();
       } else {
         // Route to the progress footer action (cancel while running, close after a failure).
         dialog.querySelector<HTMLButtonElement>('.task-creation-action')?.click();
       }
-    } else if (e.key === 'Enter' && phase === 'form') {
-      e.preventDefault();
-      e.stopPropagation();
-      submit();
-    }
-  };
-  document.addEventListener('keydown', onKeydown, true);
-
-  document.body.appendChild(backdrop);
-  repoList.focus();
+    },
+    onConfirm: () => submit(),
+    onBackdropClick: () => {
+      if (phase === 'form') cancel();
+    },
+    resolveFocus: () => repoList,
+  });
 
   return {
     onSubmit: (cb) => {

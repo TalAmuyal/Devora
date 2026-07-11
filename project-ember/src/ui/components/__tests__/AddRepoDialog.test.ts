@@ -1,15 +1,15 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { showAddRepoDialog } from '../AddRepoDialog';
 import { RepoInfo } from '../../../workspace/types';
+import { installModalStack, teardownModalStack, pressKey } from './modalTestHarness';
 
 const repos: RepoInfo[] = [
   { name: 'repo-a', path: '/src/repo-a', source: 'registered' },
   { name: 'repo-b', path: '/src/repo-b', source: 'registered' },
 ];
 
-afterEach(() => {
-  document.querySelectorAll('.add-repo-dialog-backdrop').forEach((el) => el.remove());
-});
+beforeEach(() => installModalStack());
+afterEach(() => teardownModalStack());
 
 function backdrop(): HTMLElement | null {
   return document.querySelector('.add-repo-dialog-backdrop');
@@ -80,9 +80,25 @@ describe('showAddRepoDialog', () => {
     const handle = showAddRepoDialog({ repos });
     const onCancel = vi.fn();
     handle.onCancel(onCancel);
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    pressKey({ key: 'Escape', code: 'Escape' });
     expect(onCancel).toHaveBeenCalledOnce();
     expect(backdrop()).toBeNull();
+  });
+
+  it('Escape during progress routes to the footer action instead of cancelling', () => {
+    const handle = showAddRepoDialog({ repos });
+    const onCancel = vi.fn();
+    handle.onCancel(onCancel);
+    const progress = handle.showProgress('Adding: repo-a');
+    const actionFired = vi.fn();
+    progress.onCancel(actionFired);
+
+    pressKey({ key: 'Escape', code: 'Escape' });
+
+    expect(onCancel).not.toHaveBeenCalled(); // form-phase cancel does not fire
+    expect(actionFired).toHaveBeenCalledOnce(); // routed to the running-creation cancel
+    expect(backdrop()).not.toBeNull(); // dialog stays; the controller closes it
+    handle.close();
   });
 
   it('showProgress swaps to a progress view and hides the form', () => {

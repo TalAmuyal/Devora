@@ -1,11 +1,10 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { showConfirmationDialog } from '../ConfirmationDialog';
+import { installModalStack, teardownModalStack, pressKey } from './modalTestHarness';
 
 describe('showConfirmationDialog', () => {
-  afterEach(() => {
-    // Clean up any dialogs left in the DOM
-    document.querySelectorAll('.confirmation-dialog-backdrop').forEach((el) => el.remove());
-  });
+  beforeEach(() => installModalStack());
+  afterEach(() => teardownModalStack());
 
   it('appends a backdrop and dialog to document.body', () => {
     showConfirmationDialog({
@@ -133,7 +132,7 @@ describe('showConfirmationDialog', () => {
       body: 'Body',
       confirmLabel: 'Yes',
     });
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    pressKey({ key: 'Enter', code: 'Enter' });
     expect(await promise).toBe(true);
   });
 
@@ -143,7 +142,17 @@ describe('showConfirmationDialog', () => {
       body: 'Body',
       confirmLabel: 'Yes',
     });
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    pressKey({ key: 'Escape', code: 'Escape' });
+    expect(await promise).toBe(false);
+  });
+
+  it('resolves false when q is pressed (vim-style dismissal)', async () => {
+    const promise = showConfirmationDialog({
+      title: 'Title',
+      body: 'Body',
+      confirmLabel: 'Yes',
+    });
+    pressKey({ key: 'q', code: 'KeyQ' });
     expect(await promise).toBe(false);
   });
 
@@ -173,26 +182,13 @@ describe('showConfirmationDialog', () => {
     expect(document.querySelector('.confirmation-dialog')).toBeNull();
   });
 
-  it('stops keyboard events from propagating beyond the backdrop', async () => {
-    const bodyHandler = vi.fn();
-    document.body.addEventListener('keydown', bodyHandler);
-
-    const promise = showConfirmationDialog({
+  it('focuses the confirm button on open', () => {
+    showConfirmationDialog({
       title: 'Title',
       body: 'Body',
-      confirmLabel: 'Yes',
+      confirmLabel: 'OK',
     });
-    const backdrop = document.querySelector('.confirmation-dialog-backdrop') as HTMLElement;
-    const event = new KeyboardEvent('keydown', { key: 'a', bubbles: true });
-    backdrop.dispatchEvent(event);
-
-    expect(bodyHandler).not.toHaveBeenCalled();
-
-    // Clean up
-    document.body.removeEventListener('keydown', bodyHandler);
-    const confirm = document.querySelector('.confirmation-dialog-confirm') as HTMLButtonElement;
-    confirm.click();
-    await promise;
+    expect(document.activeElement).toBe(document.querySelector('.confirmation-dialog-confirm'));
   });
 
   it('confirm button has correct CSS class', () => {
@@ -233,7 +229,7 @@ describe('showConfirmationDialog', () => {
       confirmLabel: 'OK',
       hideCancel: true,
     });
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    pressKey({ key: 'Escape', code: 'Escape' });
     expect(await promise).toBe(false);
   });
 });
