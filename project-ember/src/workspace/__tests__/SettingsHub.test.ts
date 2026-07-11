@@ -92,8 +92,9 @@ async function setup(view: 'list' | 'new' = 'list', activePath = '/profiles/work
   return { manager, callbacks };
 }
 
-function windowKey(key: string): void {
-  window.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+/** Route a key through the Settings Hub's handler, as the LayerStack does. */
+function press(manager: SettingsHub, key: string): void {
+  manager.handleKey(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
 }
 
 function masterItems(): HTMLElement[] {
@@ -171,14 +172,14 @@ describe('SettingsHub', () => {
     mockBackend();
     const { manager } = await setup();
 
-    windowKey('j');
+    press(manager, 'j');
     expect(focusedName()).toBe('Personal');
-    windowKey('j');
+    press(manager, 'j');
     expect(focusedName()).toBe('New Profile…');
-    windowKey('j'); // clamped at the pinned row
+    press(manager, 'j'); // clamped at the pinned row
     expect(focusedName()).toBe('New Profile…');
-    windowKey('k');
-    windowKey('k');
+    press(manager, 'k');
+    press(manager, 'k');
     expect(focusedName()).toBe('Work');
     manager.unload();
   });
@@ -187,8 +188,8 @@ describe('SettingsHub', () => {
     mockBackend();
     const { manager, callbacks } = await setup();
 
-    windowKey('j'); // Personal
-    windowKey('Enter');
+    press(manager, 'j'); // Personal
+    press(manager, 'Enter');
 
     expect(callbacks.setActiveProfilePath).toHaveBeenCalledWith('/profiles/personal');
     expect(callbacks.onClose).toHaveBeenCalledOnce();
@@ -219,7 +220,7 @@ describe('SettingsHub', () => {
     const { manager, callbacks } = await setup();
     callbacks.getOpenSessionsForProfile.mockReturnValue([{ title: 'Fix login bug' }]);
 
-    windowKey('d');
+    press(manager, 'd');
     await flushDialog();
 
     const dialog = document.querySelector('.confirmation-dialog')!;
@@ -240,8 +241,8 @@ describe('SettingsHub', () => {
     mockBackend({ onUnregister: (path) => unregistered.push(path) });
     const { manager, callbacks } = await setup('list', '/profiles/work');
 
-    windowKey('j'); // Personal (not active)
-    windowKey('d');
+    press(manager, 'j'); // Personal (not active)
+    press(manager, 'd');
     await flushDialog();
 
     const dialog = document.querySelector('.confirmation-dialog')!;
@@ -263,7 +264,7 @@ describe('SettingsHub', () => {
     mockBackend();
     const { manager, callbacks } = await setup('list', '/profiles/work');
 
-    windowKey('d'); // delete Work (active)
+    press(manager, 'd'); // delete Work (active)
     await flushDialog();
     (document.querySelector('.confirmation-dialog-confirm') as HTMLButtonElement).click();
     await flushDialog();
@@ -278,7 +279,7 @@ describe('SettingsHub', () => {
     mockBackend({ profiles: [PROFILES[0]] });
     const { manager, callbacks } = await setup('list', '/profiles/work');
 
-    windowKey('d');
+    press(manager, 'd');
     await flushDialog();
     (document.querySelector('.confirmation-dialog-confirm') as HTMLButtonElement).click();
     await flushDialog();
@@ -289,12 +290,12 @@ describe('SettingsHub', () => {
     manager.unload();
   });
 
-  it('unload removes the window key handler', async () => {
+  it('handleKey is inert after unload', async () => {
     mockBackend();
     const { manager } = await setup();
     manager.unload();
 
-    windowKey('j');
+    press(manager, 'j');
     expect(document.querySelector('.pm-master-focused')).toBeNull();
   });
 });

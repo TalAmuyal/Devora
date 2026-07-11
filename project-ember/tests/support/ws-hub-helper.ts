@@ -2,17 +2,10 @@ import { AppDriver } from './app-driver';
 import { UIDriver } from './ui-driver';
 
 export async function ensureWsHubOpen(driver: AppDriver): Promise<void> {
-  // The cleanup and user-dismiss callbacks mirror production (main.ts openWsHub): without the cleanup, any dismissal leaks the hub's window keydown listener, which then swallows keys (e.g. Enter) meant for later overlays; without the user-dismiss override, q/Esc would bypass the hub's cheatsheet/zero-profile handling.
+  // Open through the same entry point production uses (main.ts openWsHub), so tests exercise the real page-layer wiring.
   await driver.eval(`
-    if (!window.__test.overlayManager.isTabCoveringOverlayActive()) {
-      await window.__test.wsHub.load();
-      window.__test.overlayManager.showTabCoveringOverlay(
-        window.__test.wsHub.getElement(),
-        () => window.__test.wsHub.unload(),
-        null,
-        undefined,
-        () => window.__test.wsHub.handleUserDismiss(),
-      );
+    if (window.__test.layers.topOf('page') === null) {
+      window.__test.openWsHub();
     }
   `);
   await driver.pollFor(
@@ -24,17 +17,9 @@ export async function ensureWsHubOpen(driver: AppDriver): Promise<void> {
 
 export async function startWsHubLoad(driver: AppDriver): Promise<void> {
   await driver.eval(`
-    window.__test.wsHub.unload();
-    window.__test.overlayManager.dismissTabCoveringOverlay();
-    window.__test.wsHub.activeProfilePath = null;
-    window.__test.wsHub.load();
-    window.__test.overlayManager.showTabCoveringOverlay(
-      window.__test.wsHub.getElement(),
-      () => window.__test.wsHub.unload(),
-      null,
-      undefined,
-      () => window.__test.wsHub.handleUserDismiss(),
-    );
+    window.__test.layers.clear();
+    window.__test.wsHub.setActiveProfilePath(null);
+    window.__test.openWsHub();
   `);
   await driver.pollFor(
     `return document.querySelector('.ws-hub') !== null`,
@@ -44,27 +29,14 @@ export async function startWsHubLoad(driver: AppDriver): Promise<void> {
 }
 
 export async function ensureWsHubClosed(driver: AppDriver): Promise<void> {
-  await driver.eval(`
-    if (window.__test.overlayManager.isTabCoveringOverlayActive()) {
-      window.__test.wsHub.unload();
-      window.__test.overlayManager.dismissTabCoveringOverlay();
-    }
-  `);
+  await driver.eval(`window.__test.layers.clear();`);
 }
 
 export async function reloadWsHub(driver: AppDriver): Promise<void> {
   await driver.eval(`
-    window.__test.wsHub.unload();
-    window.__test.overlayManager.dismissTabCoveringOverlay();
-    window.__test.wsHub.activeProfilePath = null;
-    await window.__test.wsHub.load();
-    window.__test.overlayManager.showTabCoveringOverlay(
-      window.__test.wsHub.getElement(),
-      () => window.__test.wsHub.unload(),
-      null,
-      undefined,
-      () => window.__test.wsHub.handleUserDismiss(),
-    );
+    window.__test.layers.clear();
+    window.__test.wsHub.setActiveProfilePath(null);
+    window.__test.openWsHub();
   `);
   await driver.pollFor(
     `return document.querySelector('.ws-master-item') !== null

@@ -16,11 +16,12 @@ export class UIDriver {
     const shiftKey = options?.shiftKey ?? false;
 
     await this.driver.eval(`
-      // Blur any focused element inside the Workspace Hub, Command Palette, or Settings Hub so their isEditableElementFocused() guard does not swallow navigation keys — any focused input (search or a form field) makes handleKeyDown return early.
+      // Blur any focused element inside the Workspace Hub, Command Palette, or Settings Hub so their isEditableElementFocused() guard does not swallow navigation keys — any focused input (search or a form field) makes the page's handleKey return early.
       // In the Tauri WKWebView an input can receive focus after render().
-      const panel = document.querySelector('.ws-hub, .command-palette, .settings-hub');
-      if (panel && panel.contains(document.activeElement)) {
-        document.activeElement.blur();
+      // Match the focused element's own page (closest), not the first page in the DOM, so a page stacked over another (Settings over a live hub) blurs correctly.
+      const active = document.activeElement;
+      if (active && active.closest('.ws-hub, .command-palette, .settings-hub')) {
+        active.blur();
       }
 
       window.dispatchEvent(new KeyboardEvent('keydown', {

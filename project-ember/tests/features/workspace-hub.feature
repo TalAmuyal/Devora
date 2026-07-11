@@ -131,3 +131,14 @@ Feature: Workspace Hub
     And the user presses "R"
     Then the refresh toast should read "Refreshed successfully"
     And the refresh toast should disappear
+
+  # Ctrl+←/→ is blocked while a page is open, so it neither switches the terminal tab nor steals focus from the hub.
+  Scenario: Ctrl+Right with the hub open does not switch tabs and the hub stays keyboard-operable
+    Given a profile "Work" with 3 active workspaces
+    And 2 sessions exist
+    And the Workspace Hub is open
+    When the user presses Ctrl+Right
+    Then the second session should be active
+    And the Workspace Hub overlay should be present
+    When the user presses "j"
+    Then the focused workspace should be "ws-2"

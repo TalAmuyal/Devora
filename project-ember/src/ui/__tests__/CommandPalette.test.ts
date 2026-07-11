@@ -34,10 +34,6 @@ function setup(): Setup {
   return { palette, runHub, runShell };
 }
 
-function windowKey(key: string): void {
-  window.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
-}
-
 function items(): HTMLElement[] {
   return Array.from(document.querySelectorAll('.command-palette-item')) as HTMLElement[];
 }
@@ -135,6 +131,10 @@ describe('CommandPalette dynamic commands', () => {
 describe('CommandPalette', () => {
   let s: Setup;
 
+  /** Route a key through the palette's handler, as the LayerStack does. Returns whether it was consumed. */
+  const press = (key: string, init: KeyboardEventInit = {}): boolean =>
+    s.palette.handleKey(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...init }));
+
   beforeEach(() => {
     s = setup();
   });
@@ -182,28 +182,34 @@ describe('CommandPalette', () => {
     expect(items()).toHaveLength(0);
     expect(document.querySelector('.empty-state')).not.toBeNull();
 
-    windowKey('Enter');
+    press('Enter');
     expect(s.runHub).not.toHaveBeenCalled();
     expect(s.runShell).not.toHaveBeenCalled();
   });
 
   it('navigates with j/ArrowDown and k/ArrowUp, clamping at the ends', () => {
     expect(selectedTitle()).toBe('Workspace Hub');
-    windowKey('j');
+    press('j');
     expect(selectedTitle()).toBe('New Shell');
-    windowKey('j'); // clamp at last
+    press('j'); // clamp at last
     expect(selectedTitle()).toBe('New Shell');
-    windowKey('ArrowUp');
+    press('ArrowUp');
     expect(selectedTitle()).toBe('Workspace Hub');
-    windowKey('k'); // clamp at first
+    press('k'); // clamp at first
     expect(selectedTitle()).toBe('Workspace Hub');
   });
 
   it('Enter executes the selected command', () => {
-    windowKey('j');
-    windowKey('Enter');
+    press('j');
+    press('Enter');
     expect(s.runShell).toHaveBeenCalledOnce();
     expect(s.runHub).not.toHaveBeenCalled();
+  });
+
+  it('consumes Ctrl+S as a no-op (mutual exclusion with the Workspace Hub)', () => {
+    expect(press('s', { code: 'KeyS', ctrlKey: true })).toBe(true);
+    expect(s.runHub).not.toHaveBeenCalled();
+    expect(s.runShell).not.toHaveBeenCalled();
   });
 
   it('double-click executes a command; single click only selects', () => {
@@ -217,7 +223,7 @@ describe('CommandPalette', () => {
   });
 
   it('f focuses the filter input', () => {
-    windowKey('f');
+    press('f');
     const input = document.querySelector('.search-input-field');
     expect(document.activeElement).toBe(input);
   });
@@ -232,7 +238,7 @@ describe('CommandPalette', () => {
     const input = document.querySelector('.search-input-field') as HTMLInputElement;
     input.focus();
     expect(document.activeElement).toBe(input);
-    windowKey('j');
+    expect(press('j')).toBe(false);
     expect(selectedTitle()).toBe('Workspace Hub');
   });
 
@@ -262,9 +268,9 @@ describe('CommandPalette', () => {
     palette.unload();
   });
 
-  it('unload removes the window listener', () => {
+  it('unload clears the palette and leaves handleKey a safe no-op', () => {
     s.palette.unload();
-    expect(() => windowKey('j')).not.toThrow();
+    expect(() => press('j')).not.toThrow();
     // After unload the DOM is cleared.
     expect(document.querySelector('.command-palette-item')).toBeNull();
   });
