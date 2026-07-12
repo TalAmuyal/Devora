@@ -248,6 +248,14 @@ When('the user clicks the profile dropdown', async function (this: EmberWorld) {
   await ui.waitForElement('.ws-profile-dropdown .dropdown-popup', 3_000);
 });
 
+Then('the profile dropdown should not be visible', async function (this: EmberWorld) {
+  await this.driver.pollFor(
+    `return document.querySelector('.ws-profile-dropdown .dropdown-popup') === null`,
+    true,
+    3_000,
+  );
+});
+
 Then(
   'the profile dropdown items should be clickable at their on-screen position',
   async function (this: EmberWorld) {

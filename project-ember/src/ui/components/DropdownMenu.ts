@@ -1,9 +1,13 @@
 /** Custom dropdown: a trigger button opening a popup of selectable options and action rows (with separators).
+ * The open popup is a `popup` layer on the LayerStack (ADR-003), so Escape/q close only the dropdown (central dismissal) and it auto-closes when its host page is removed.
  * The popup is position:fixed so ancestor overflow clipping cannot hide it, and flips above the trigger when there is no room below.
- * Closes on select, outside click, Escape, ancestor scroll, and window resize.
+ * It also closes on select, outside click, ancestor scroll, and window resize.
  * Returns a handle for imperative control.
  * DOM: `div.dropdown-menu`.
  */
+
+import { getLayerStack } from '../layers/stack';
+import type { LayerHandle } from '../layers/types';
 
 export type DropdownItem =
   | {
@@ -47,6 +51,7 @@ const POPUP_GAP_PX = 6;
 export function createDropdownMenu(options: DropdownMenuOptions): DropdownMenuHandle {
   let items = options.items;
   let popup: HTMLElement | null = null;
+  let layerHandle: LayerHandle | null = null;
 
   const container = document.createElement('div');
   container.className = 'dropdown-menu';
@@ -91,16 +96,6 @@ export function createDropdownMenu(options: DropdownMenuOptions): DropdownMenuHa
     }
   };
 
-  // Capture phase so the dropdown swallows Escape before overlay-level dismissal handlers see it: Escape closes the popup, not the page.
-  const onKeydown = (e: KeyboardEvent): void => {
-    if (closeIfDetached()) return;
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      close();
-    }
-  };
-
   // Capture phase because scroll events do not bubble.
   // The fixed-position popup cannot track its anchor, so close when an ancestor scrolls - but only an ancestor: unrelated scrollers (e.g. a terminal viewport running behind an overlay) must not dismiss the menu
   const onAncestorScroll = (e: Event): void => {
@@ -111,14 +106,10 @@ export function createDropdownMenu(options: DropdownMenuOptions): DropdownMenuHa
   };
 
   function close(): void {
-    if (!popup) return;
-    popup.remove();
-    popup = null;
-    container.classList.remove('dropdown-open');
-    document.removeEventListener('click', onOutsideClick, true);
-    document.removeEventListener('keydown', onKeydown, true);
-    window.removeEventListener('scroll', onAncestorScroll, true);
-    window.removeEventListener('resize', close);
+    // The layer's onCleanup performs the teardown (below), so every close path funnels through one removal.
+    if (layerHandle) {
+      getLayerStack().remove(layerHandle);
+    }
   }
 
   function open(): void {
@@ -183,9 +174,23 @@ export function createDropdownMenu(options: DropdownMenuOptions): DropdownMenuHa
 
     container.classList.add('dropdown-open');
     document.addEventListener('click', onOutsideClick, true);
-    document.addEventListener('keydown', onKeydown, true);
     window.addEventListener('scroll', onAncestorScroll, true);
     window.addEventListener('resize', close);
+
+    // A `popup` layer stays where it is in the DOM and is transparent to keys it does not handle; Escape/q hit the stack's default dismissal, which pops it.
+    layerHandle = getLayerStack().push({
+      name: 'dropdown-menu',
+      kind: 'popup',
+      element: popup,
+      onCleanup: () => {
+        popup = null;
+        layerHandle = null;
+        container.classList.remove('dropdown-open');
+        document.removeEventListener('click', onOutsideClick, true);
+        window.removeEventListener('scroll', onAncestorScroll, true);
+        window.removeEventListener('resize', close);
+      },
+    });
   }
 
   trigger.addEventListener('click', () => {
