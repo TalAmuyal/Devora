@@ -1,6 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createClaudeConfigCard } from '../ClaudeConfigCard';
 import { invoke } from '../../../invoke';
+import { installModalStack, teardownModalStack } from './modalTestHarness';
 
 vi.mock('../../../invoke', () => ({ invoke: vi.fn() }));
 const invokeMock = vi.mocked(invoke);
@@ -18,6 +19,8 @@ const SETTINGS = {
 };
 
 beforeEach(() => {
+  // The effort picker opens as a `popup` layer, so its keys route through a real LayerStack.
+  installModalStack();
   invokeMock.mockReset();
   invokeMock.mockImplementation(async (cmd: string, args?: unknown) => {
     if (cmd === 'get_claude_settings') return SETTINGS;
@@ -32,6 +35,8 @@ beforeEach(() => {
     throw new Error(`unexpected command ${cmd}`);
   });
 });
+
+afterEach(() => teardownModalStack());
 
 async function mountCard(profilePath: string | null = null): Promise<HTMLElement> {
   const card = createClaudeConfigCard({ profilePath });

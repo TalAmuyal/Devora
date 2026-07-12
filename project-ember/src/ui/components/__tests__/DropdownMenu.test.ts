@@ -1,5 +1,8 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createDropdownMenu, DropdownItem } from '../DropdownMenu';
+import { getLayerStack } from '../../layers/stack';
+import { installModalStack, teardownModalStack, pressKey } from './modalTestHarness';
+import type { LayerHandle } from '../../layers/types';
 
 function makeItems(overrides?: { onWork?: () => void; onNew?: () => void }): DropdownItem[] {
   return [
@@ -20,10 +23,20 @@ function openDropdown(element: HTMLElement): void {
   (element.querySelector('.dropdown-trigger') as HTMLButtonElement).click();
 }
 
+/** Push a `page` layer holding the dropdown, mirroring production where a dropdown lives inside a hub page. */
+function hostDropdownInPage(
+  element: HTMLElement,
+  onKey?: (e: KeyboardEvent) => boolean,
+): LayerHandle {
+  const page = document.createElement('div');
+  page.className = 'host-page';
+  page.appendChild(element);
+  return getLayerStack().push({ name: 'host-page', kind: 'page', element: page, onKey });
+}
+
 describe('createDropdownMenu', () => {
-  afterEach(() => {
-    document.body.innerHTML = '';
-  });
+  beforeEach(() => installModalStack());
+  afterEach(() => teardownModalStack());
 
   it('renders the trigger label and no popup initially', () => {
     const handle = createDropdownMenu({ triggerLabel: 'Work', items: makeItems() });
@@ -44,6 +57,17 @@ describe('createDropdownMenu', () => {
     expect(popup.querySelectorAll('.dropdown-item-option')).toHaveLength(2);
     expect(popup.querySelectorAll('.dropdown-separator')).toHaveLength(1);
     expect(popup.querySelectorAll('.dropdown-item-action')).toHaveLength(1);
+  });
+
+  it('pushes the open popup as a popup layer on top of the stack', () => {
+    const handle = createDropdownMenu({ triggerLabel: 'Work', items: makeItems() });
+    document.body.appendChild(handle.element);
+
+    openDropdown(handle.element);
+
+    const top = getLayerStack().top();
+    expect(top?.kind).toBe('popup');
+    expect(top?.element).toBe(handle.element.querySelector('.dropdown-popup'));
   });
 
   it('renders checkmark and detail on the checked option', () => {
@@ -79,6 +103,7 @@ describe('createDropdownMenu', () => {
 
     expect(onNew).toHaveBeenCalledOnce();
     expect(handle.element.querySelector('.dropdown-popup')).toBeNull();
+    expect(getLayerStack().isEmpty()).toBe(true);
   });
 
   it('closes on outside click without firing any onSelect', () => {
@@ -103,32 +128,76 @@ describe('createDropdownMenu', () => {
     openDropdown(handle.element);
 
     expect(handle.element.querySelector('.dropdown-popup')).toBeNull();
+    expect(getLayerStack().isEmpty()).toBe(true);
   });
 
-  it('closes on Escape without letting the event propagate', () => {
-    const windowHandler = vi.fn();
-    window.addEventListener('keydown', windowHandler);
+  it('closes only the dropdown on Escape and does not consult the host page', () => {
+    const pageOnKey = vi.fn(() => false);
     const handle = createDropdownMenu({ triggerLabel: 'Work', items: makeItems() });
-    document.body.appendChild(handle.element);
-
+    const page = hostDropdownInPage(handle.element, pageOnKey);
     openDropdown(handle.element);
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+
+    const e = pressKey({ key: 'Escape', code: 'Escape' });
 
     expect(handle.element.querySelector('.dropdown-popup')).toBeNull();
-    expect(windowHandler).not.toHaveBeenCalled();
-    window.removeEventListener('keydown', windowHandler);
+    expect(getLayerStack().top()).toBe(page);
+    expect(pageOnKey).not.toHaveBeenCalled();
+    expect(e.defaultPrevented).toBe(true);
   });
 
-  it('does not intercept Escape while closed', () => {
-    const windowHandler = vi.fn();
-    window.addEventListener('keydown', windowHandler);
+  it('closes the dropdown on q (vim-style dismissal)', () => {
+    const handle = createDropdownMenu({ triggerLabel: 'Work', items: makeItems() });
+    hostDropdownInPage(handle.element);
+    openDropdown(handle.element);
+
+    pressKey({ key: 'q', code: 'KeyQ' });
+
+    expect(handle.element.querySelector('.dropdown-popup')).toBeNull();
+  });
+
+  it('is removed together with its host page (no leaked outside-click listener)', () => {
+    const addSpy = vi.spyOn(document, 'addEventListener');
+    const removeSpy = vi.spyOn(document, 'removeEventListener');
+    const handle = createDropdownMenu({ triggerLabel: 'Work', items: makeItems() });
+    const page = hostDropdownInPage(handle.element);
+    openDropdown(handle.element);
+    const outsideClick = capturedClickListener(addSpy);
+
+    getLayerStack().remove(page);
+
+    expect(handle.element.querySelector('.dropdown-popup')).toBeNull();
+    expect(handle.element.classList.contains('dropdown-open')).toBe(false);
+    expect(removeSpy).toHaveBeenCalledWith('click', outsideClick, true);
+    addSpy.mockRestore();
+    removeSpy.mockRestore();
+  });
+
+  it('removes its outside-click listener on Escape (no leak)', () => {
+    const addSpy = vi.spyOn(document, 'addEventListener');
+    const removeSpy = vi.spyOn(document, 'removeEventListener');
+    const handle = createDropdownMenu({ triggerLabel: 'Work', items: makeItems() });
+    hostDropdownInPage(handle.element);
+    openDropdown(handle.element);
+    const outsideClick = capturedClickListener(addSpy);
+
+    pressKey({ key: 'Escape', code: 'Escape' });
+
+    expect(removeSpy).toHaveBeenCalledWith('click', outsideClick, true);
+    addSpy.mockRestore();
+    removeSpy.mockRestore();
+  });
+
+  it('does not intercept keys while closed', () => {
+    const spy = vi.fn();
+    window.addEventListener('keydown', spy, true);
     const handle = createDropdownMenu({ triggerLabel: 'Work', items: makeItems() });
     document.body.appendChild(handle.element);
 
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    const e = pressKey({ key: 'Escape', code: 'Escape' });
 
-    expect(windowHandler).toHaveBeenCalledOnce();
-    window.removeEventListener('keydown', windowHandler);
+    expect(spy).toHaveBeenCalledOnce();
+    expect(e.defaultPrevented).toBe(false); // an empty stack consumes nothing
+    window.removeEventListener('keydown', spy, true);
   });
 
   it('setItems replaces the rows of an open popup', () => {
@@ -141,6 +210,7 @@ describe('createDropdownMenu', () => {
     const popup = handle.element.querySelector('.dropdown-popup')!;
     expect(popup.querySelectorAll('.dropdown-item')).toHaveLength(1);
     expect(popup.textContent).toContain('Only');
+    expect(getLayerStack().depth()).toBe(1);
   });
 
   it('setTriggerLabel updates the trigger text', () => {
@@ -157,6 +227,7 @@ describe('createDropdownMenu', () => {
     document.body.appendChild(handle.element);
 
     expect(() => handle.close()).not.toThrow();
+    expect(getLayerStack().isEmpty()).toBe(true);
   });
 
   it('renders custom trigger content instead of a label span', () => {
@@ -195,3 +266,10 @@ describe('createDropdownMenu', () => {
     expect(handle.element.querySelector('.dropdown-trigger-label')).toBeNull();
   });
 });
+
+/** The capture-phase document 'click' listener the open dropdown registered, recovered from a spy. */
+function capturedClickListener(addSpy: ReturnType<typeof vi.spyOn>): EventListener {
+  const call = addSpy.mock.calls.find(([type]) => type === 'click');
+  if (!call) throw new Error('dropdown did not register a document click listener');
+  return call[1] as EventListener;
+}

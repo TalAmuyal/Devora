@@ -8,7 +8,7 @@ import { createSearchInput, SearchInputHandle } from '../ui/components/SearchInp
 import { createKeyboardHintBar } from '../ui/components/KeyboardHintBar';
 import { showConfirmationDialog } from '../ui/components/ConfirmationDialog';
 import { createToast, ToastHandle } from '../ui/components/Toast';
-import { createDropdownMenu, DropdownItem } from '../ui/components/DropdownMenu';
+import { createDropdownMenu, DropdownItem, DropdownMenuHandle } from '../ui/components/DropdownMenu';
 import { createRepoList, RepoListHandle } from '../ui/components/RepoList';
 import { createTableShell } from '../ui/components/TableShell';
 import { isEditableElementFocused } from '../ui/focus';
@@ -157,6 +157,9 @@ export class WorkspaceHub {
 
   private searchHandle: SearchInputHandle | null = null;
   private masterListEl: HTMLElement | null = null;
+  // Kept so an open header dropdown can be dismissed before render() rebuilds the header.
+  private profileDropdown: DropdownMenuHandle | null = null;
+  private burgerMenu: DropdownMenuHandle | null = null;
 
   constructor(
     onOpenWorkspace: (path: string, title: string, repos: string[]) => void,
@@ -626,9 +629,11 @@ export class WorkspaceHub {
         void this.refresh();
         return true;
       case 'P':
+        this.closeHeaderMenus();
         this.onOpenSettingsHub('list');
         return true;
       case 'H':
+        this.closeHeaderMenus();
         this.onOpenHealth();
         return true;
     }
@@ -728,7 +733,14 @@ export class WorkspaceHub {
 
   // --- Rendering ---
 
+  /** Close any open header dropdown so its popup layer is removed, not just detached, before the header is rebuilt or a page opens over it. */
+  private closeHeaderMenus(): void {
+    this.profileDropdown?.close();
+    this.burgerMenu?.close();
+  }
+
   private render(): void {
+    this.closeHeaderMenus();
     this.searchHandle = null;
     this.masterListEl = null;
     this.containerEl.innerHTML = '';
@@ -1311,6 +1323,7 @@ export class WorkspaceHub {
       items,
     });
     handle.element.classList.add('ws-burger-menu');
+    this.burgerMenu = handle;
     return handle.element;
   }
 
@@ -1355,6 +1368,7 @@ export class WorkspaceHub {
       items,
     });
     handle.element.classList.add('ws-profile-dropdown');
+    this.profileDropdown = handle;
     return handle.element;
   }
 

@@ -1,8 +1,12 @@
 /** Custom dropdown: a trigger button opening a popup of selectable options and action rows (with separators).
- * Closes on select, outside click, and Escape.
+ * The open popup is a `popup` layer on the LayerStack (ADR-003), so Escape/q close only the dropdown (central dismissal) and it auto-closes when its host page is removed.
+ * It also closes on select and outside click.
  * Returns a handle for imperative control.
  * DOM: `div.dropdown-menu`.
  */
+
+import { getLayerStack } from '../layers/stack';
+import type { LayerHandle } from '../layers/types';
 
 export type DropdownItem =
   | {
@@ -44,6 +48,7 @@ export interface DropdownMenuHandle {
 export function createDropdownMenu(options: DropdownMenuOptions): DropdownMenuHandle {
   let items = options.items;
   let popup: HTMLElement | null = null;
+  let layerHandle: LayerHandle | null = null;
 
   const container = document.createElement('div');
   container.className = 'dropdown-menu';
@@ -80,22 +85,11 @@ export function createDropdownMenu(options: DropdownMenuOptions): DropdownMenuHa
     }
   };
 
-  // Capture phase so the dropdown swallows Escape before overlay-level dismissal handlers see it: Escape closes the popup, not the page.
-  const onKeydown = (e: KeyboardEvent): void => {
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      close();
-    }
-  };
-
   function close(): void {
-    if (!popup) return;
-    popup.remove();
-    popup = null;
-    container.classList.remove('dropdown-open');
-    document.removeEventListener('click', onOutsideClick, true);
-    document.removeEventListener('keydown', onKeydown, true);
+    // The layer's onCleanup performs the teardown (below), so every close path funnels through one removal.
+    if (layerHandle) {
+      getLayerStack().remove(layerHandle);
+    }
   }
 
   function open(): void {
@@ -148,7 +142,19 @@ export function createDropdownMenu(options: DropdownMenuOptions): DropdownMenuHa
     container.appendChild(popup);
     container.classList.add('dropdown-open');
     document.addEventListener('click', onOutsideClick, true);
-    document.addEventListener('keydown', onKeydown, true);
+
+    // A `popup` layer stays where it is in the DOM and is transparent to keys it does not handle; Escape/q hit the stack's default dismissal, which pops it.
+    layerHandle = getLayerStack().push({
+      name: 'dropdown-menu',
+      kind: 'popup',
+      element: popup,
+      onCleanup: () => {
+        popup = null;
+        layerHandle = null;
+        container.classList.remove('dropdown-open');
+        document.removeEventListener('click', onOutsideClick, true);
+      },
+    });
   }
 
   trigger.addEventListener('click', () => {
