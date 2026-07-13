@@ -4,6 +4,7 @@ import { invoke, invokeLogOnly, Channel } from './invoke';
 import { SessionManager } from './session/SessionManager';
 import { TabBar } from './ui/TabBar';
 import { OverlayManager } from './ui/OverlayManager';
+import { SessionPanels } from './ui/SessionPanels';
 import { KeyboardShortcuts } from './ui/KeyboardShortcuts';
 import { CommandPalette } from './ui/CommandPalette';
 import { HealthHub } from './ui/HealthHub';
@@ -65,13 +66,16 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Test-query shim: pages now live on the LayerStack, not OverlayManager's tab-covering slot, so this query must reflect the stack.
   overlayManager.isTabCoveringOverlayActive = () => layers.topOf('page') !== null;
 
-  const origActivate = sessionManager.activateSession.bind(sessionManager);
-  sessionManager.activateSession = (id: number) => {
-    origActivate(id);
-    overlayManager.onSessionActivated(id);
-  };
+  let tabBar: TabBar;
+  const sessionPanels = new SessionPanels({
+    layers,
+    mainPanelEl,
+    getActiveSessionId: () => sessionManager.getActiveSessionId(),
+    onChange: () => tabBar.render(),
+  });
+  sessionManager.onActivate(() => sessionPanels.syncActive());
 
-  const tabBar = new TabBar(tabBarEl, sessionManager, overlayManager);
+  tabBar = new TabBar(tabBarEl, sessionManager, sessionPanels);
 
   // Programmatic close (opening a workspace / starting a task): pop the hub layer directly, bypassing the user-dismiss decision.
   const dismissWsHub = () => {
@@ -107,8 +111,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   const taskCreationController = new TaskCreationController({
     sessionManager,
-    overlayManager,
-    mainPanelEl,
+    sessionPanels,
     resolveAppCommand,
     onChange: () => tabBar.render(),
   });
@@ -523,9 +526,14 @@ document.addEventListener('DOMContentLoaded', async () => {
       return;
     }
     const content = WebContentOverlay.createUrlContent(url, 'Crit Review');
-    overlayManager.showPanelOverlay(session.id, content, mainPanelEl, session.terminalPane);
-    overlayManager.onSessionActivated(sessionManager.getActiveSessionId()!);
-    tabBar.render();
+    // Notify the backend on user dismissal (q/Esc) so the crit process can exit.
+    sessionPanels.show(session.id, content, () => {
+      const pid = session.getPtyId();
+      if (pid !== null) {
+        invokeLogOnly('crit_overlay_dismissed', { ptyId: pid }).catch(() => {});
+      }
+      return 'close';
+    });
   });
 
   // Preview pane integration: an external tool (debi preview) asks Ember to render a file beside the terminal of a specific PTY session.
@@ -539,41 +547,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     session.openPreview(path, stack);
   });
 
-  const origDismissPanelOverlay = overlayManager.dismissPanelOverlay.bind(overlayManager);
-
+  // Backend-initiated close (crit process exited): tear the panel down without notifying it back.
   await listen<{ ptyId: number }>('crit-close-overlay', (event) => {
     const { ptyId } = event.payload;
     const session = sessionManager.getSessions().find(s => s.getPtyId() === ptyId);
     if (session) {
-      origDismissPanelOverlay(session.id);
-      tabBar.render();
+      sessionPanels.dismiss(session.id);
     }
   });
-
-  // Patch dismissPanelOverlay to notify the backend when a crit overlay is dismissed by the user (q/Esc/tab close).
-  overlayManager.dismissPanelOverlay = (sessionId: number) => {
-    // A creation overlay owns its own dismissal: Esc/q cancels the in-flight creation (or closes it after a failure).
-    // The controller removes the overlay itself once that resolves.
-    if (taskCreationController.isCreating(sessionId) && overlayManager.hasPanelOverlay(sessionId)) {
-      taskCreationController.handleDismiss(sessionId);
-      return;
-    }
-
-    const hadOverlay = overlayManager.hasPanelOverlay(sessionId);
-
-    origDismissPanelOverlay(sessionId);
-
-    if (hadOverlay) {
-      const session = sessionManager.getSessions().find(s => s.id === sessionId);
-      const ptyId = session?.getPtyId();
-
-      if (ptyId !== null && ptyId !== undefined) {
-        invokeLogOnly('crit_overlay_dismissed', { ptyId }).catch(() => {});
-      }
-
-      tabBar.render();
-    }
-  };
 
   tabBar.render();
 
@@ -582,6 +563,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   (window as any).__test = {
     sessionManager,
     overlayManager,
+    sessionPanels,
     tabBar,
     wsHub,
     settingsHub,
