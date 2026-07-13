@@ -43,7 +43,7 @@ export async function assertActivePanelOverlay(
   timeoutMs = 5_000,
 ): Promise<void> {
   const has = await driver.pollFor(
-    `return window.__test.overlayManager.hasPanelOverlay(
+    `return window.__test.sessionPanels.has(
        window.__test.sessionManager.getActiveSessionId()
      )`,
     expected,
@@ -59,7 +59,7 @@ export async function assertSessionPanelOverlay(
   timeoutMs = 5_000,
 ): Promise<void> {
   const has = await driver.pollFor(
-    `return window.__test.overlayManager.hasPanelOverlay(
+    `return window.__test.sessionPanels.has(
        window.__test.sessionManager.getSessions()[${sessionIndex}]?.id
      )`,
     expected,
@@ -73,7 +73,7 @@ export async function assertPanelOverlayVisible(
   expected: boolean,
 ): Promise<void> {
   const visible = await driver.eval(
-    'return window.__test.overlayManager.hasAnyVisiblePanelOverlay()',
+    'return window.__test.sessionPanels.hasAnyVisible()',
   );
   assert.strictEqual(
     visible,

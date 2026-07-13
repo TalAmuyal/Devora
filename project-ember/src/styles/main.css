@@ -75,6 +75,15 @@ body {
   overflow-y: auto;
 }
 
+/* Invisible focus/keyboard-routing holder for the active session's panel (SessionPanels);
+   the visible surface is the .overlay-panel it represents. */
+.session-panel-sentinel {
+  position: absolute;
+  width: 0;
+  height: 0;
+  outline: none;
+}
+
 /* ── Tab bar ── */
 
 .tab-bar {

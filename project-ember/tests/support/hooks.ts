@@ -223,7 +223,7 @@ After({ tags: '@real-claude' }, async function (this: EmberWorld) {
     await this.driver.eval(`
       const sessions = window.__test.sessionManager.getSessions();
       for (const s of [...sessions]) {
-        window.__test.overlayManager.dismissPanelOverlay(s.id);
+        window.__test.sessionPanels.dismiss(s.id);
       }
     `);
   } catch {
@@ -267,7 +267,7 @@ After(async function (this: EmberWorld) {
     await this.driver.eval(`
       const sessions = window.__test.sessionManager.getSessions();
       for (const s of [...sessions]) {
-        window.__test.overlayManager.dismissPanelOverlay(s.id);
+        window.__test.sessionPanels.dismiss(s.id);
       }
       for (const s of [...sessions]) {
         window.__test.sessionManager.closeSession(s.id);

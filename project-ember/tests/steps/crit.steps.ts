@@ -88,6 +88,15 @@ Given(
   },
 );
 
+Given(
+  "the active session's terminal holds focus",
+  async function (this: EmberWorld) {
+    await this.driver.eval(
+      'window.__test.sessionManager.getActiveSession().terminalPane.focus()',
+    );
+  },
+);
+
 When(
   'an external tool sends a crit-done request for the active session',
   async function (this: EmberWorld) {
@@ -348,7 +357,7 @@ When(
       'return window.__test.sessionManager.getActiveSessionId()',
     );
     const closedNaturally = await this.driver.pollFor(
-      `return !window.__test.overlayManager.hasPanelOverlay(${JSON.stringify(sessionId)})`,
+      `return !window.__test.sessionPanels.has(${JSON.stringify(sessionId)})`,
       true,
       10_000,
     ).then(() => true, () => false);
