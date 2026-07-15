@@ -121,7 +121,7 @@ Under a `page`, only `F1` and the font-size combos reach the base; under a `moda
 | Shortcut | base (empty) | under panel/popup only | under page | under modal |
 |---|---|---|---|---|
 | `q` / Escape | → focused element | dismiss top layer | route via `onUserDismissRequest` | dismiss (cancel) via the modal's `onKey` |
-| `Ctrl+S` (Workspace Hub) | open hub | open hub | **dismiss key** (hub: close; Settings: back-to-hub; palette: no-op via its `onKey`) | blocked |
+| `Ctrl+S` (Workspace Hub) | open hub | open hub | **dismiss key** (hub: close; Settings: pop to whatever's beneath — the hub or the session; palette: no-op via its `onKey`) | blocked |
 | `F1` (User Guide) | open guide | open guide | **allowed** — pushes the guide over the page | blocked |
 | `Ctrl+Shift+S` (new session) | allowed | allowed | **blocked** | blocked |
 | `Ctrl+←/→` (switch tab) | allowed | **allowed** | **blocked** | blocked |

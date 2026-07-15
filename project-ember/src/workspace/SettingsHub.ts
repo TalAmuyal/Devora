@@ -2,7 +2,7 @@
  * Settings Hub: a tab-covering overlay page (master/detail split, mirroring the Workspace Hub) for listing profiles, switching the active one, creating/registering new profiles (inline form behind a pinned "New Profile…" master row), and deleting profiles from the registry.
  * DOM: `div.settings-hub`.
  *
- * q/Esc/Ctrl+S never reach this page's own keys — the LayerStack routes dismissal through the layer's onUserDismissRequest, which main.ts wires to "return to the Workspace Hub".
+ * q/Esc/Ctrl+S never reach this page's own keys — the LayerStack pops the page on dismissal, revealing whatever is beneath it: the Workspace Hub when Settings was opened from it, or the session it was opened over from the command palette.
  */
 
 import { invoke } from '../invoke';
@@ -80,7 +80,7 @@ export interface SettingsHubCallbacks {
   setActiveProfilePath: (path: string | null) => void;
   /** Open session tabs bound to the given profile (blockers for deletion). */
   getOpenSessionsForProfile: (profilePath: string) => ReadonlyArray<{ title: string }>;
-  /** Leave the Settings Hub (main.ts reopens the Workspace Hub). */
+  /** Leave the Settings Hub (main.ts pops the page, revealing whatever is beneath — the Workspace Hub or the session). */
   onClose: () => void;
   /** Clone a repo into the given profile; `onDone` is called once it lands so the detail can refresh. */
   onCloneRepo: (profilePath: string, onDone: () => void) => void;
@@ -347,7 +347,7 @@ export class SettingsHub {
           { keys: 'Enter', description: 'set active' },
           { keys: 'n', description: 'new profile' },
           { keys: 'd', description: 'delete' },
-          { keys: 'q/Esc', description: 'back to hub' },
+          { keys: 'q/Esc', description: 'close' },
         ],
       }),
     );

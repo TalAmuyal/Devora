@@ -56,18 +56,13 @@ function hubSpec(opts: { onReveal?: () => void; dismiss?: () => DismissDecision 
 }
 
 /**
- * Push the Settings Hub over whatever is open, mirroring `main.ts`: dismissal pops back to a live hub when one is beneath, otherwise atomically replaces itself with a fresh hub.
+ * Push the Settings Hub over whatever is open, mirroring `main.ts`: dismissal is the default 'close', so it pops the page — revealing the live hub beneath when one exists, or the base (the session) when opened from the palette.
  */
 function openSettings(stack: LayerStack): LayerHandle {
   return stack.push({
     name: 'settings-hub',
     kind: 'page',
     element: content('settings-hub'),
-    onUserDismissRequest: () => {
-      if (stack.find('ws-hub')) return 'close';
-      stack.replaceTop(hubSpec());
-      return 'handled';
-    },
   });
 }
 
@@ -102,15 +97,16 @@ describe('page routing — Settings over the hub', () => {
     expect(onReveal).toHaveBeenCalledOnce();
   });
 
-  it('dismissing Settings opened with no hub beneath replaces it with a fresh hub', () => {
-    const stack = makeStack();
+  it('dismissing Settings opened with no hub beneath closes it, revealing the base (the session)', () => {
+    const baseFocus = { focus: vi.fn() };
+    const stack = makeStack({ resolveBaseFocus: () => baseFocus });
     openSettings(stack); // palette path: nothing beneath
 
     dispatch({ key: 'q', code: 'KeyQ' });
 
     expect(stack.find('settings-hub')).toBeNull();
-    expect(stack.find('ws-hub')).not.toBeNull();
-    expect(stack.depth()).toBe(1);
+    expect(stack.isEmpty()).toBe(true);
+    expect(baseFocus.focus).toHaveBeenCalledOnce();
   });
 });
 

@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { isEditableElementFocused } from '../focus';
+import { isEditableElementFocused, blurOnEscape } from '../focus';
 
 describe('isEditableElementFocused', () => {
   afterEach(() => {
@@ -43,5 +43,41 @@ describe('isEditableElementFocused', () => {
     div.tabIndex = -1;
     div.focus();
     expect(isEditableElementFocused()).toBe(false);
+  });
+});
+
+describe('blurOnEscape', () => {
+  afterEach(() => {
+    (document.activeElement as HTMLElement | null)?.blur?.();
+    document.body.innerHTML = '';
+  });
+
+  function mountInput(): HTMLInputElement {
+    const input = document.createElement('input');
+    document.body.appendChild(input);
+    blurOnEscape(input);
+    input.focus();
+    return input;
+  }
+
+  function press(input: HTMLInputElement, key: string): KeyboardEvent {
+    const e = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+    input.dispatchEvent(e);
+    return e;
+  }
+
+  it('blurs the input and prevents default on Escape', () => {
+    const input = mountInput();
+    expect(document.activeElement).toBe(input);
+    const e = press(input, 'Escape');
+    expect(document.activeElement).not.toBe(input);
+    expect(e.defaultPrevented).toBe(true);
+  });
+
+  it('leaves focus and default alone for other keys', () => {
+    const input = mountInput();
+    const e = press(input, 'a');
+    expect(document.activeElement).toBe(input);
+    expect(e.defaultPrevented).toBe(false);
   });
 });

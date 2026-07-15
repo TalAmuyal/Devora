@@ -305,13 +305,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     kind: 'page',
     element: settingsHub.getElement(),
     onKey: (e) => settingsHub.handleKey(e),
-    onUserDismissRequest: () => {
-      // Pop back to the live hub beneath (its onReveal → reloadData picks up profile edits); with nothing behind it (opened from the palette), swap in a fresh hub.
-      if (layers.find('ws-hub')) return 'close';
-      wsHub.load();
-      layers.replaceTop(wsHubSpec());
-      return 'handled';
-    },
     onCleanup: () => settingsHub.unload(),
   });
 

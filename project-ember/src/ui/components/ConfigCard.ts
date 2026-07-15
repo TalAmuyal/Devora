@@ -13,6 +13,7 @@
  */
 
 import { invoke } from '../../invoke';
+import { blurOnEscape } from '../focus';
 import { createSettingsCard } from './SettingsCard';
 import { createSegmentedControl } from './SegmentedControl';
 
@@ -75,6 +76,8 @@ export function createConfigCard(options: ConfigCardOptions): HTMLElement {
   const draftValues = new Map<string, string>();
   // Serializes writes so a value-commit and a follow-on toggle apply in order.
   let writeChain: Promise<unknown> = Promise.resolve();
+  // Gate input auto-focus: off for the initial mount (so a revealed page keeps focus), on for later user-driven renders (mode switch / commit re-read).
+  let autoFocusEnabled = false;
 
   const reload = async (): Promise<void> => {
     try {
@@ -87,6 +90,7 @@ export function createConfigCard(options: ConfigCardOptions): HTMLElement {
     textModes.clear();
     draftValues.clear();
     render();
+    autoFocusEnabled = true;
   };
 
   const persist = (key: string, state: 'value' | 'default', value?: string): void => {
@@ -245,8 +249,10 @@ export function createConfigCard(options: ConfigCardOptions): HTMLElement {
           commitText(field.key, input.value);
         }
       });
+      blurOnEscape(input);
       value.appendChild(input);
-      queueMicrotask(() => input.focus());
+      // Focus the input on a user-initiated switch to Set (or a commit re-read); the flag is false during the initial mount so the card doesn't steal focus from the page.
+      if (autoFocusEnabled) queueMicrotask(() => input.focus());
     } else {
       appendResolvedHint(field, value);
     }

@@ -6,6 +6,7 @@
  */
 
 import { invoke } from '../../invoke';
+import { blurOnEscape } from '../focus';
 import { createStatusDot } from './StatusDot';
 
 export function createAsanaTokenRow(): HTMLElement {
@@ -85,6 +86,7 @@ export function createAsanaTokenRow(): HTMLElement {
       void save();
     }
   });
+  blurOnEscape(input);
   saveBtn.addEventListener('click', () => void save());
   clearBtn.addEventListener('click', async () => {
     try {

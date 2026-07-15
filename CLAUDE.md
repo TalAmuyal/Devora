@@ -22,7 +22,7 @@ Below are terms that have a specific meaning in the context of Devora:
 - **Settings Hub**: The Devora-Ember tab-covering overlay for managing profiles and editing settings — User Defaults, per-profile Claude models/effort, and registered repos. Reached from the Workspace Hub via `P`, the profile dropdown's "Manage Profiles…", or the burger menu's "Settings"
 - **Terminal Pane** (Ember): An xterm.js terminal instance within a session
 - **Tab Bar** (Ember): The strip at the bottom of the window showing open sessions
-- **Overlay** (Ember): A UI layer rendered on top of main content. Two types: Panel Overlay (covers main panel area, tied to a session) and Tab-Covering Overlay (covers entire window including tab bar)
+- **Overlay** (Ember): A UI layer rendered on top of main content — either covering just the main panel area and tied to a session (a panel overlay) or the whole window including the tab bar (a tab-covering overlay). Its stacking, key-routing, and focus behavior come from its layer kind in the LayerStack (see ADR-003)
 - **Judge**: A Claude Code plugin that auto-manages permission requests to reduce permission fatigue (`./project-judge/`)
 - **Code-Cleanup**: A Claude Code plugin that defines and directs the post-task cleanup process (`./project-code-cleanup/`)
 - **Debi**: Devora's CLI for workspace management and utilities (`./project-debi/`)

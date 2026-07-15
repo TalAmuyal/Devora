@@ -5,9 +5,9 @@ Devora-Ember (internally "Ember") is the Devora app: a native desktop build usin
 ## Architecture highlights
 
 - **Tauri WebView app window**: the app is a native desktop window embedding a WebView
-- **Native web content**: Crit UI, User Guide, etc. render natively in the WebView via the overlay system
+- **Native web content**: Crit UI, User Guide, etc. render natively in the WebView via the layer system
 - **Native workspace management UI**: the Workspace Hub is a web UI overlay
-- **Overlay system**: tab-covering overlays (Workspace Hub, User Guide, cheatsheet) and panel overlays (Crit)
+- **Layer system**: tab-covering pages (Workspace Hub, User Guide) and per-session panels (Crit), stacked and keyboard-routed by a single `LayerStack` (ADR-003)
 
 ## Supported Platform
 
