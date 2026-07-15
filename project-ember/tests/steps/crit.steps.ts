@@ -173,7 +173,7 @@ Given(
     // Wait for the Workspace Hub to close (create_workspace fetches from
     // git remote and creates worktrees, which takes time)
     await this.driver.pollFor(
-      'return window.__test.overlayManager.isTabCoveringOverlayActive()',
+      `return window.__test.layers.topOf('page') !== null`,
       false,
       90_000,
     );
