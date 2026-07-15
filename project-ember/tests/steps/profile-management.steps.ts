@@ -55,7 +55,7 @@ Then(
     // Give a dismissal time to happen if the zero-profile lock failed.
     await new Promise((r) => setTimeout(r, 300));
     const stillOpen = await this.driver.eval(
-      `return window.__test.overlayManager.isTabCoveringOverlayActive()
+      `return window.__test.layers.topOf('page') !== null
            && document.querySelector('.ws-welcome') !== null`,
     );
     assert.strictEqual(stillOpen, true, `Hub should stay open after pressing "${key}"`);

@@ -3,7 +3,6 @@ import { listen } from '@tauri-apps/api/event';
 import { invoke, invokeLogOnly, Channel } from './invoke';
 import { SessionManager } from './session/SessionManager';
 import { TabBar } from './ui/TabBar';
-import { OverlayManager } from './ui/OverlayManager';
 import { SessionPanels } from './ui/SessionPanels';
 import { KeyboardShortcuts } from './ui/KeyboardShortcuts';
 import { CommandPalette } from './ui/CommandPalette';
@@ -52,7 +51,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   const mainPanelEl = document.getElementById('main-panel')!;
   const tabBarEl = document.getElementById('tab-bar')!;
 
-  const overlayManager = new OverlayManager(appEl);
   const sessionManager = new SessionManager(mainPanelEl);
 
   // The single owner of layer keyboard routing and focus (ADR-003). Install it first, before any other keydown handler.
@@ -62,9 +60,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     resolveBaseFocus: () => sessionManager.getActiveSession()?.terminalPane ?? null,
   });
   layers.install();
-
-  // Test-query shim: pages now live on the LayerStack, not OverlayManager's tab-covering slot, so this query must reflect the stack.
-  overlayManager.isTabCoveringOverlayActive = () => layers.topOf('page') !== null;
 
   let tabBar: TabBar;
   const sessionPanels = new SessionPanels({
@@ -562,7 +557,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   (window as any).__test = {
     sessionManager,
-    overlayManager,
     sessionPanels,
     tabBar,
     wsHub,

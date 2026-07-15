@@ -122,7 +122,7 @@ Then(
   'the Workspace Hub should be visible',
   async function (this: EmberWorld) {
     const visible = await this.driver.eval(
-      'return window.__test.overlayManager.isTabCoveringOverlayActive()',
+      `return window.__test.layers.topOf('page') !== null`,
     );
     assert.strictEqual(visible, true);
   },
@@ -132,7 +132,7 @@ Then(
   'the Workspace Hub should not be visible',
   async function (this: EmberWorld) {
     await this.driver.pollFor(
-      'return window.__test.overlayManager.isTabCoveringOverlayActive()',
+      `return window.__test.layers.topOf('page') !== null`,
       false,
       3_000,
     );

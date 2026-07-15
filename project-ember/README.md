@@ -110,21 +110,25 @@ When Claude Code's behavior changes or new `@real-claude` scenarios are added:
 | `session/SessionTab.ts` | Session tab: holds a terminal pane and optional panel overlay |
 | `session/SessionManager.ts` | Manages ordered list of session tabs: create, close, switch, reorder |
 | `ui/TabBar.ts` | Bottom tab bar showing all session tabs |
-| `ui/OverlayManager.ts` | Overlay system: tab-covering (full window) and panel (main area only) modes |
+| `ui/layers/LayerStack.ts` | Layer system (ADR-003): single keydown dispatcher and focus-by-stack-position for pages, modals, popups, and session panels |
 | `ui/KeyboardShortcuts.ts` | Window-level keyboard shortcut handling |
 | `workspace/WorkspaceHub.ts` | Workspace Hub (tab-covering overlay): list, filter, create, open workspaces |
 | `webview/WebContentOverlay.ts` | Web content rendering in panel overlays (URLs via iframe, markdown via `marked`) |
 | `styles/theme.css` | Centralized CSS custom properties (Catppuccin Macchiato defaults, overridden at runtime from theme file) |
 
-### Overlay System
+### Layer System
 
-| Mode | Covers tab bar? | Tied to tab? | Use case |
-|------|----------------|--------------|----------|
-| Tab-covering | Yes | No | Workspace Hub, User Guide, cheatsheet |
-| Panel | No | Yes | Crit review UI |
+Stacked UI surfaces are managed by a single `LayerStack` (`src/ui/layers/`, see [ADR-003](../docs/adrs/ADR-003-ember-layer-system.md)) that owns the only `window`-capture keydown listener and resolves focus from stack position. Each surface is a layer of one kind:
 
-Tab-covering overlays may register an `onCleanup` hook via `showTabCoveringOverlay`; it runs on every dismissal path.
-Dismissing the Workspace Hub (`Escape`, `q`, or `Ctrl+S`) fully tears it down and restores terminal focus.
+| Kind | Covers tab bar? | Modality | Examples |
+|------|----------------|----------|----------|
+| `page` | Yes | Opaque barrier | Workspace / Settings / Health Hub, User Guide, Command Palette |
+| `modal` | Yes (backdrop) | Opaque barrier + Tab trap | Confirmation, text input, add-repo, clone-repo |
+| `popup` | No (anchored) | Transparent to unhandled keys | Dropdown menus |
+| `panel` | No | Transparent, pinned to the bottom | Crit review, task-creation progress |
+
+A layer releases its own `window` listeners and state in its `onCleanup` hook, which the stack runs exactly once when the layer is removed.
+Dismissing a page (`Escape`, `q`, or `Ctrl+S`) restores focus to the revealed layer, or to the active terminal when the stack empties.
 
 ## Keyboard Shortcuts
 
@@ -188,7 +192,7 @@ project-ember/
 │   ├── index.html, main.ts
 │   ├── terminal/TerminalPane.ts
 │   ├── session/SessionTab.ts, SessionManager.ts
-│   ├── ui/TabBar.ts, OverlayManager.ts, KeyboardShortcuts.ts
+│   ├── ui/TabBar.ts, layers/, KeyboardShortcuts.ts
 │   ├── workspace/WorkspaceHub.ts
 │   ├── webview/WebContentOverlay.ts
 │   └── styles/theme.css, main.css
