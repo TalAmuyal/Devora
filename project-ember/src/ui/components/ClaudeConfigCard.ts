@@ -9,6 +9,7 @@
  */
 
 import { invoke } from '../../invoke';
+import { blurOnEscape } from '../focus';
 import { createSegmentedControl } from './SegmentedControl';
 import { createDropdownMenu } from './DropdownMenu';
 
@@ -61,6 +62,8 @@ export function createClaudeConfigCard(options: ClaudeConfigCardOptions): HTMLEl
   let settings: ClaudeSettings = { stored: {}, resolved: {} as Record<SettingKey, string | null> };
   // Serializes writes so a value-commit and a follow-on segment switch apply in order.
   let writeChain: Promise<unknown> = Promise.resolve();
+  // Gate input auto-focus: off for the initial mount (so a revealed page keeps focus), on for later user-driven renders (mode switch / commit re-read).
+  let autoFocusEnabled = false;
 
   const deriveMode = (key: SettingKey): Mode => {
     if (!(key in settings.stored)) return 'default';
@@ -81,6 +84,7 @@ export function createClaudeConfigCard(options: ClaudeConfigCardOptions): HTMLEl
       if (typeof stored === 'string') customValues.set(row.key, stored);
     }
     render();
+    autoFocusEnabled = true;
   };
 
   // `state` is the backend vocabulary: "value" writes a string, "none" writes null, "default" removes the key.
@@ -184,6 +188,7 @@ export function createClaudeConfigCard(options: ClaudeConfigCardOptions): HTMLEl
         commitModel(row, input.value);
       }
     });
+    blurOnEscape(input);
     wrap.appendChild(input);
 
     const chips = document.createElement('div');
@@ -200,8 +205,8 @@ export function createClaudeConfigCard(options: ClaudeConfigCardOptions): HTMLEl
     }
     wrap.appendChild(chips);
 
-    // Focus the field when the user just switched into Custom mode.
-    queueMicrotask(() => input.focus());
+    // Focus the field on a user-initiated switch to Custom (or a commit re-read); the flag is false during the initial mount so the card doesn't steal focus from the page.
+    if (autoFocusEnabled) queueMicrotask(() => input.focus());
     return wrap;
   };
 

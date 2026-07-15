@@ -17,6 +17,7 @@ Types of changes:
 ### Added
 
 - A Code-Cleanup Claude Code plugin with a `code-cleanup` skill that directs a post-task cleanup of the current changes - decluttering the code and removing redundant comments via dedicated passes
+- [ADR-003: Ember Layer System (Stacked Pages & Pop-ups)](docs/adrs/ADR-003-ember-layer-system.md)
 
 ### Changed
 
@@ -27,6 +28,8 @@ Types of changes:
 
 - Debi's package rationale now lives in the code itself rather than separate specs; the `docs/specs/` files are a legacy reference being gradually migrated into the code
 - Migrated Debi's `internal/git` spec into code comments and removed `docs/specs/git.md`; migrated the `shellinit` and `wsgit` specs the same way as part of the `debi git` rework
+- Refactor: Replaced the Overlay Manager with a new Layer Stack system ; see [ADR-003](docs/adrs/ADR-003-ember-layer-system.md) for details
+	- Fixed a few edge cases by  migrating to the new design
 
 ### Removed
 

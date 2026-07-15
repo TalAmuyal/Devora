@@ -183,6 +183,25 @@ describe('createClaudeConfigCard', () => {
     });
   });
 
+  it('does not focus the Custom input on the initial mount', async () => {
+    // Attach before the async render so a stray focus() would actually take effect (and be caught).
+    const card = createClaudeConfigCard({ profilePath: null });
+    document.body.appendChild(card);
+    await flush();
+    const input = row(card, 0).querySelector<HTMLInputElement>('.claude-config-input');
+    expect(input).not.toBeNull(); // opus is stored → Custom input rendered
+    expect(document.activeElement).not.toBe(input);
+  });
+
+  it('focuses the input when the user switches a row to Custom', async () => {
+    const card = await mountCard();
+    document.body.appendChild(card);
+    clickSegment(row(card, 1), 'Custom'); // sonnet, previously Default
+    await flush();
+    const input = row(card, 1).querySelector<HTMLInputElement>('.claude-config-input');
+    expect(document.activeElement).toBe(input);
+  });
+
   it('passes the profile path through to both commands', async () => {
     const card = await mountCard('/home/me/devora');
     expect(invokeMock).toHaveBeenCalledWith('get_claude_settings', {

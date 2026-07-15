@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createConfigCard, ConfigFieldSpec } from '../ConfigCard';
 import { invoke } from '../../../invoke';
 
@@ -6,6 +6,11 @@ vi.mock('../../../invoke', () => ({ invoke: vi.fn() }));
 const invokeMock = vi.mocked(invoke);
 
 const flush = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
+
+afterEach(() => {
+  (document.activeElement as HTMLElement | null)?.blur?.();
+  document.body.innerHTML = '';
+});
 
 const SETTINGS = {
   stored: { 'terminal.git-shortcuts': false } as Record<string, string | boolean>,
@@ -167,6 +172,45 @@ describe('createConfigCard', () => {
     const card = await mountCard(fields);
     // provider resolves to null in SETTINGS, so the conditional field is hidden.
     expect(card.querySelectorAll('.config-row')).toHaveLength(1);
+  });
+
+  it('does not focus a text input on the initial mount even when the value is already set', async () => {
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'get_config_settings') {
+        return {
+          stored: { 'terminal.default-app': 'nvim' },
+          resolved: { 'terminal.default-app': 'nvim' },
+        };
+      }
+      throw new Error(`unexpected command ${cmd}`);
+    });
+    const card = createConfigCard({ title: 'Test', profilePath: null, fields: [FIELDS[0]] });
+    document.body.appendChild(card);
+    await flush();
+    const input = card.querySelector<HTMLInputElement>('.config-input');
+    // The stored value renders the input in Set mode, but focus must stay off it on mount.
+    expect(input).not.toBeNull();
+    expect(document.activeElement).not.toBe(input);
+  });
+
+  it('focuses the input when the user switches a text field to Set', async () => {
+    const card = await mountCard([FIELDS[0]]);
+    document.body.appendChild(card);
+    clickSegment(row(card, 0), 'Set');
+    await flush();
+    const input = row(card, 0).querySelector<HTMLInputElement>('.config-input');
+    expect(document.activeElement).toBe(input);
+  });
+
+  it('blurs a focused text input on Escape', async () => {
+    const card = await mountCard([FIELDS[0]]);
+    document.body.appendChild(card);
+    clickSegment(row(card, 0), 'Set');
+    await flush();
+    const input = row(card, 0).querySelector<HTMLInputElement>('.config-input')!;
+    expect(document.activeElement).toBe(input);
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    expect(document.activeElement).not.toBe(input);
   });
 
   it('appends extraRows after the fields', async () => {

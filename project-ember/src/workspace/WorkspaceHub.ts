@@ -11,7 +11,7 @@ import { createToast, ToastHandle } from '../ui/components/Toast';
 import { createDropdownMenu, DropdownItem, DropdownMenuHandle } from '../ui/components/DropdownMenu';
 import { createRepoList, RepoListHandle } from '../ui/components/RepoList';
 import { createTableShell } from '../ui/components/TableShell';
-import { isEditableElementFocused } from '../ui/focus';
+import { isEditableElementFocused, blurOnEscape } from '../ui/focus';
 import { DismissDecision } from '../ui/layers/types';
 import { pluralize } from '../ui/format';
 import { createProfileForm } from './ProfileForm';
@@ -1500,6 +1500,7 @@ export class WorkspaceHub {
     nameInput.className = 'ws-new-form-input';
     nameInput.placeholder = 'e.g. Fix login bug';
     nameInput.value = this.newFormTitle;
+    blurOnEscape(nameInput);
     form.appendChild(nameInput);
 
     const isDuplicating = this.duplicationSource !== null;
