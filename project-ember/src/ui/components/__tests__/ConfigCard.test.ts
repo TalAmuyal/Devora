@@ -128,6 +128,34 @@ describe('createConfigCard', () => {
     });
   });
 
+  it('text field: no Save button on a freshly revealed blank field, and it appears once a value is typed', async () => {
+    const card = await mountCard([FIELDS[0]]);
+    clickSegment(row(card, 0), 'Set');
+    await flush();
+    const input = row(card, 0).querySelector<HTMLInputElement>('.config-input')!;
+    const save = () => row(card, 0).querySelector<HTMLButtonElement>('.config-save')!;
+    expect(save().hidden).toBe(true);
+    input.value = 'nvim';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(save().hidden).toBe(false);
+  });
+
+  it('text field: clicking Save commits the typed value', async () => {
+    const card = await mountCard([FIELDS[0]]);
+    clickSegment(row(card, 0), 'Set');
+    await flush();
+    const input = row(card, 0).querySelector<HTMLInputElement>('.config-input')!;
+    input.value = 'nvim';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    row(card, 0).querySelector<HTMLButtonElement>('.config-save')!.click();
+    await flush();
+    expect(lastSetCall()).toMatchObject({
+      key: 'terminal.default-app',
+      state: 'value',
+      value: 'nvim',
+    });
+  });
+
   it('text field: committing an empty value reverts to Default', async () => {
     const card = await mountCard();
     clickSegment(row(card, 0), 'Set');

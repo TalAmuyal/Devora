@@ -974,6 +974,37 @@
   border-color: var(--color-border-active);
 }
 
+/* A reveal-input paired with its Save button (CommitInput). */
+.config-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+/* Shown only while the input holds an unsaved value; makes the Enter-to-commit gesture discoverable and clickable. */
+.config-save {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 7px;
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-surface1);
+  border-radius: 6px;
+  font-size: var(--font-size-sm);
+  line-height: 1;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.config-save[hidden] {
+  display: none;
+}
+
+.config-save:hover {
+  border-color: var(--color-border-active);
+}
+
 .config-hint {
   font-size: var(--font-size-sm);
   color: var(--color-overlay1);

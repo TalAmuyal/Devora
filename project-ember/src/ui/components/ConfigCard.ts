@@ -3,7 +3,7 @@
  * Used for the Terminal & Session, Pull Requests, and Task Tracker cards.
  *
  * Each field is a labeled row whose control depends on its kind:
- *  - `text`: a [Set | Default] toggle — Set reveals an input (commit with Enter; an empty value reverts to Default).
+ *  - `text`: a [Set | Default] toggle — Set reveals an input (commit with Enter or its Save button; an empty value reverts to Default).
  *  - `bool`: an [On | Off | Default] toggle.
  *  - `enum`: one segment per option (each maps to a stored value or "Default").
  * "Default" removes the key at this scope so it inherits (profile → User Defaults → Devora default); in Default mode the resolved value is shown as a hint unless `showResolved` is false.
@@ -12,10 +12,10 @@
  * DOM: `div.settings-card` (shared chrome) containing `div.config-row`s.
  */
 
-import { blurOnEscape } from '../focus';
 import { createSettingsEditor } from '../settingsEditor';
 import { createSettingsCard } from './SettingsCard';
 import { createSegmentedControl } from './SegmentedControl';
+import { createCommitInput } from './CommitInput';
 
 /** A stored config value (a string, or a bool for `bool` fields). */
 export type ConfigValue = string | boolean;
@@ -206,21 +206,15 @@ export function createConfigCard(options: ConfigCardOptions): HTMLElement {
     const value = document.createElement('div');
     value.className = 'config-row-value';
     if (mode === 'set') {
-      const input = document.createElement('input');
-      input.type = 'text';
-      input.className = 'config-input';
-      if (placeholder) input.placeholder = placeholder;
-      input.value = editor.getDraft(field.key) ?? (typeof stored === 'string' ? stored : '');
-      input.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          e.stopPropagation();
-          editor.commit(field.key, input.value);
-        }
+      const savedValue = typeof stored === 'string' ? stored : '';
+      const commitInput = createCommitInput({
+        placeholder,
+        value: editor.getDraft(field.key) ?? savedValue,
+        savedValue,
+        onCommit: (raw) => editor.commit(field.key, raw),
       });
-      blurOnEscape(input);
-      value.appendChild(input);
-      editor.focusOnRender(field.key, input);
+      value.appendChild(commitInput.root);
+      editor.focusOnRender(field.key, commitInput.input);
     } else {
       appendResolvedHint(field, value);
     }
