@@ -21,11 +21,11 @@ Types of changes:
 
 ### Changed
 
+- Renamed the Ember Command Palette's "Manage Profiles" to "Settings / Manage Profiles" to make it clearer that it opens the Settings Hub
 - **Breaking**: the 23 top-level Debi git shortcut commands (`debi gaa` … `debi gstash`) were renamed and moved to be under a new `git` namespace (`debi git add-all`, etc.)
 	- If you installed shell completions, refresh them with `debi completion zsh > ~/.zsh/completions/_debi`
 - Debi's git subcommands that need a repository (`gcom`, `grl`, `grom`, `gbdc`, `gri`, `gcl`) now print a friendly error when run outside one, instead of producing a crash log
 - `gst` at a workspace root now fans out plain `git status` per repo (and accepts git-status flags there); the aligned summary table moved to `gsum`
-
 - Debi's package rationale now lives in the code itself rather than separate specs; the `docs/specs/` files are a legacy reference being gradually migrated into the code
 - Migrated Debi's `internal/git` spec into code comments and removed `docs/specs/git.md`; migrated the `shellinit` and `wsgit` specs the same way as part of the `debi git` rework
 - Refactor: Replaced the Overlay Manager with a new Layer Stack system ; see [ADR-003](docs/adrs/ADR-003-ember-layer-system.md) for details

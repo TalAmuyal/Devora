@@ -423,7 +423,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       },
       {
         id: 'manage-profiles',
-        title: 'Manage Profiles',
+        title: 'Settings / Manage Profiles',
         description: 'Open the Settings Hub — switch, create, and delete profiles; edit Claude models, effort, and repos',
         icon: '⚙',
         shortcut: [],

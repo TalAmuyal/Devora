@@ -162,7 +162,7 @@ Feature: Profile management
     And the Command Palette is open
     When the user filters commands by "profile"
     Then the palette should include the command "New Profile"
-    And the palette should include the command "Manage Profiles"
+    And the palette should include the command "Settings / Manage Profiles"
     And the palette should include the command "Switch Profile: Personal"
     When the user filters commands by "Switch Profile: Personal"
     And the user presses "Enter"

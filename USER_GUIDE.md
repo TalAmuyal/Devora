@@ -48,7 +48,7 @@ Each profile is a self-contained directory with the following structure:
 You can have multiple profiles.
 To select a profile (or manage them) go to the **Settings Hub**.
 That can be done from the Workspace Hub by pressing `P` (uppercase), the profile dropdown's "Manage Profiles…" item, or the burger (☰) menu's "Settings" item in the top-right corner.
-In addition, you can open it through the Command Palette (rapid shift-shift) by selecting the "Manage Profiles" command.
+In addition, you can open it through the Command Palette (rapid shift-shift) by selecting the "Settings / Manage Profiles" command.
 
 **Note**: Deleting a profile (also via the Settings Hub) only removes it from Devora's registry. The profile directory and all its contents remain on disk.
 
