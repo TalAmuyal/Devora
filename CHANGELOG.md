@@ -33,6 +33,7 @@ Types of changes:
 
 ### Changed
 
+- Renamed the Ember Command Palette's "Manage Profiles" to "Settings / Manage Profiles" to make it clearer that it opens the Settings Hub
 - **Breaking**: the 23 top-level Debi git shortcut commands (`debi gaa` … `debi gstash`) were renamed and moved to be under a new `git` namespace (`debi git add-all`, etc.)
 	- If you installed shell completions, refresh them with `debi completion zsh > ~/.zsh/completions/_debi`
 	- Repo-required subcommands (`gcom`, `grl`, `grom`, `gbdc`, `gri`, `gcl`) now print a friendly error when run outside a repository, instead of producing a crash log
