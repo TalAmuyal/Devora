@@ -32,6 +32,10 @@ Types of changes:
 - Refactor: Replaced the Overlay Manager with a new Layer Stack system ; see [ADR-003](docs/adrs/ADR-003-ember-layer-system.md) for details
 	- Fixed a few edge cases by  migrating to the new design
 
+### Fixed
+
+- Settings Hub: a config card's segmented control no longer steals focus into an unrelated text input
+
 ### Removed
 
 - `debi pr close` no longer refuses to run on a protected branch (`main`/`master`/`develop`) client-side; this is now expected to be enforced server-side (e.g. GitHub branch protection rules) — if you relied on the client-side check, verify your remote has equivalent protection configured
