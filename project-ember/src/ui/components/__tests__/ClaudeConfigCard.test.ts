@@ -44,7 +44,7 @@ async function mountCard(profilePath: string | null = null): Promise<HTMLElement
 }
 
 function row(card: HTMLElement, index: number): HTMLElement {
-  return card.querySelectorAll<HTMLElement>('.claude-config-row')[index];
+  return card.querySelectorAll<HTMLElement>('.config-row')[index];
 }
 
 function activeSegment(rowEl: HTMLElement): string {
@@ -66,7 +66,7 @@ function lastSetCall(): Record<string, unknown> | undefined {
 describe('createClaudeConfigCard', () => {
   it('renders one row per setting and loads from get_claude_settings', async () => {
     const card = await mountCard();
-    expect(card.querySelectorAll('.claude-config-row').length).toBe(4);
+    expect(card.querySelectorAll('.config-row').length).toBe(4);
     expect(invokeMock).toHaveBeenCalledWith('get_claude_settings', { profilePath: null });
   });
 
@@ -80,16 +80,16 @@ describe('createClaudeConfigCard', () => {
 
   it('shows the stored value in the Custom input, and resolved values in Default/None hints', async () => {
     const card = await mountCard();
-    expect(row(card, 0).querySelector<HTMLInputElement>('.claude-config-input')!.value).toBe(
+    expect(row(card, 0).querySelector<HTMLInputElement>('.config-input')!.value).toBe(
       'claude-fable-5',
     );
-    expect(row(card, 1).querySelector('.claude-config-hint')!.textContent).toContain(
+    expect(row(card, 1).querySelector('.config-hint')!.textContent).toContain(
       'claude-opus-4-8',
     );
-    expect(row(card, 2).querySelector('.claude-config-hint')!.textContent).toContain(
+    expect(row(card, 2).querySelector('.config-hint')!.textContent).toContain(
       'Claude Code decides',
     );
-    expect(row(card, 3).querySelector('.claude-config-hint')!.textContent).toContain('xhigh');
+    expect(row(card, 3).querySelector('.config-hint')!.textContent).toContain('xhigh');
   });
 
   it('persists Default and None segment clicks', async () => {
@@ -117,7 +117,7 @@ describe('createClaudeConfigCard', () => {
   it('switching to Custom seeds the input from the resolved value without persisting', async () => {
     const card = await mountCard();
     clickSegment(row(card, 1), 'Custom'); // sonnet
-    const input = row(card, 1).querySelector<HTMLInputElement>('.claude-config-input')!;
+    const input = row(card, 1).querySelector<HTMLInputElement>('.config-input')!;
     expect(input.value).toBe('claude-opus-4-8'); // seeded from resolved
     expect(invokeMock.mock.calls.some((c) => c[0] === 'set_claude_setting')).toBe(false);
   });
@@ -125,7 +125,7 @@ describe('createClaudeConfigCard', () => {
   it('commits a typed model id on Enter', async () => {
     const card = await mountCard();
     clickSegment(row(card, 1), 'Custom');
-    const input = row(card, 1).querySelector<HTMLInputElement>('.claude-config-input')!;
+    const input = row(card, 1).querySelector<HTMLInputElement>('.config-input')!;
     input.value = 'claude-opus-4-7';
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     await flush();
@@ -139,7 +139,7 @@ describe('createClaudeConfigCard', () => {
 
   it('commits a suggestion chip click', async () => {
     const card = await mountCard();
-    const chip = row(card, 0).querySelector<HTMLButtonElement>('.claude-config-chip')!;
+    const chip = row(card, 0).querySelector<HTMLButtonElement>('.config-chip')!;
     const expected = chip.textContent;
     chip.click();
     await flush();
@@ -153,7 +153,7 @@ describe('createClaudeConfigCard', () => {
 
   it('maps a cleared input to Default rather than an empty value', async () => {
     const card = await mountCard();
-    const input = row(card, 0).querySelector<HTMLInputElement>('.claude-config-input')!;
+    const input = row(card, 0).querySelector<HTMLInputElement>('.config-input')!;
     input.value = '   ';
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     await flush();
@@ -212,7 +212,7 @@ describe('createClaudeConfigCard', () => {
     const card = createClaudeConfigCard({ profilePath: null });
     document.body.appendChild(card);
     await flush();
-    const input = row(card, 0).querySelector<HTMLInputElement>('.claude-config-input');
+    const input = row(card, 0).querySelector<HTMLInputElement>('.config-input');
     expect(input).not.toBeNull(); // opus is stored → Custom input rendered
     expect(document.activeElement).not.toBe(input);
   });
@@ -222,7 +222,7 @@ describe('createClaudeConfigCard', () => {
     document.body.appendChild(card);
     clickSegment(row(card, 1), 'Custom'); // sonnet, previously Default
     await flush();
-    const input = row(card, 1).querySelector<HTMLInputElement>('.claude-config-input');
+    const input = row(card, 1).querySelector<HTMLInputElement>('.config-input');
     expect(document.activeElement).toBe(input);
   });
 
@@ -230,13 +230,13 @@ describe('createClaudeConfigCard', () => {
     // opus is stored -> its Custom input is visible; clicking the effort control must not grab it.
     const card = await mountCard();
     document.body.appendChild(card);
-    const opusInput = row(card, 0).querySelector<HTMLInputElement>('.claude-config-input');
+    const opusInput = row(card, 0).querySelector<HTMLInputElement>('.config-input');
     expect(opusInput).not.toBeNull();
     expect(document.activeElement).not.toBe(opusInput);
 
     clickSegment(row(card, 3), 'max'); // effort — unrelated to the opus row
     await flush();
-    const opusInputAfter = row(card, 0).querySelector<HTMLInputElement>('.claude-config-input');
+    const opusInputAfter = row(card, 0).querySelector<HTMLInputElement>('.config-input');
     expect(document.activeElement).not.toBe(opusInputAfter);
   });
 
@@ -262,7 +262,7 @@ describe('createClaudeConfigCard', () => {
 
     clickSegment(row(card, 0), 'Custom'); // opus, earlier in the DOM than the already-Custom sonnet
     await flush();
-    const opusInput = row(card, 0).querySelector<HTMLInputElement>('.claude-config-input');
+    const opusInput = row(card, 0).querySelector<HTMLInputElement>('.config-input');
     expect(document.activeElement).toBe(opusInput);
   });
 
@@ -270,14 +270,14 @@ describe('createClaudeConfigCard', () => {
     const card = await mountCard();
     clickSegment(row(card, 1), 'Custom'); // sonnet: Default -> Custom, not yet committed
     expect(activeSegment(row(card, 1))).toBe('Custom');
-    expect(row(card, 1).querySelector('.claude-config-input')).not.toBeNull();
+    expect(row(card, 1).querySelector('.config-input')).not.toBeNull();
 
     clickSegment(row(card, 3), 'max'); // write the unrelated effort row -> reload
     await flush();
 
     // The switch (and its seeded value) survives the reload triggered elsewhere.
     expect(activeSegment(row(card, 1))).toBe('Custom');
-    const input = row(card, 1).querySelector<HTMLInputElement>('.claude-config-input');
+    const input = row(card, 1).querySelector<HTMLInputElement>('.config-input');
     expect(input).not.toBeNull();
     expect(input!.value).toBe('claude-opus-4-8'); // seeded from the resolved value
     const sonnetWrites = invokeMock.mock.calls.filter(

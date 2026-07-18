@@ -946,8 +946,7 @@ kbd {
   flex-shrink: 0;
 }
 
-/* The Repos and Claude config cards stack in the detail panel, each spaced from what's above it. */
-.pm-detail .claude-config-card,
+/* The settings cards stack in the detail panel, each spaced from what's above it. */
 .pm-detail .settings-card {
   margin-top: var(--space-lg);
 }

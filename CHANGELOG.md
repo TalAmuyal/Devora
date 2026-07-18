@@ -45,6 +45,7 @@ Types of changes:
 - The Settings Hub's Effort control is now a single segmented control listing every choice at once, replacing the two-step toggle plus level dropdown
 - Refactor: Replaced the Overlay Manager with a new Layer Stack system ; see [ADR-003](docs/adrs/ADR-003-ember-layer-system.md) for details
 	- Fixed a few edge cases by  migrating to the new design
+- Refactor: Extracted the Settings Hub config cards' shared local-first editing engine (serialized writes, reload-after-write, reveal-input focus and drafts) into a single `settingsEditor` module, and moved the Claude Models & Effort card onto the shared card chrome and row styles
 - Devora's recommended Haiku-tier default and model suggestion chips now point at `claude-sonnet-5` (previously `claude-sonnet-4-6`)
 	- The Opus-tier suggestion list drops the superseded `claude-opus-4-7` in favor of `claude-fable-5`
 	- Sonnet 5 and Fable 5 requires updating Claude Code to a version that supports them
