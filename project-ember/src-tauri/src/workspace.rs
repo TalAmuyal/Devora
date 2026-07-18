@@ -658,7 +658,7 @@ const CLAUDE_SETTINGS: [ClaudeSettingSpec; 4] = [
 ];
 
 /// Valid Claude Code effort levels (low → max).
-/// Mirrored in the Ember UI dropdown (`src/ui/components/ClaudeConfigCard.ts`) — keep the two lists in sync.
+/// Mirrored in the Ember UI Effort control (`src/ui/components/ClaudeConfigCard.ts`) — keep the two lists in sync.
 pub const CLAUDE_EFFORT_LEVELS: [&str; 5] = ["low", "medium", "high", "xhigh", "max"];
 
 /// One resolved setting: either a concrete value to apply, or None (impose nothing).

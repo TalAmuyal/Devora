@@ -1,8 +1,9 @@
 /**
  * Claude Models & Effort config card: edits the Opus/Sonnet/Haiku model tiers and the effort level for one scope (a profile, or `null` for user-level/global defaults).
  *
- * Each row is a tri-state control (`Custom | Default | None`): a concrete value, "Default" (unset here → falls through profile → user → Devora default), or "None" (impose nothing, so Claude Code uses its own default).
- * Custom models are free text (decoupled from Devora releases) with suggestion chips; effort is a dropdown of the supported levels.
+ * The three model rows are a tri-state control (`Custom | Default | None`): a concrete value, "Default" (unset here → falls through profile → user → Devora default), or "None" (impose nothing, so Claude Code uses its own default).
+ * Custom models are free text (decoupled from Devora releases) with suggestion chips.
+ * The Effort row is a single segmented control listing every choice at once — "Default", the supported levels (highest → lowest), and "None" — since effort is a closed set rather than free text.
  *
  * Reads via `get_claude_settings` and writes via `set_claude_setting`; after every write it re-reads so the "Default →" hint reflects the live resolution.
  * DOM: `div.claude-config-card`.
@@ -11,10 +12,11 @@
 import { invoke } from '../../invoke';
 import { blurOnEscape } from '../focus';
 import { createSegmentedControl } from './SegmentedControl';
-import { createDropdownMenu } from './DropdownMenu';
 
-/** Supported Claude Code effort levels. Mirrors `CLAUDE_EFFORT_LEVELS` in workspace.rs. */
+/** Supported Claude Code effort levels, lowest → highest. Mirrors `CLAUDE_EFFORT_LEVELS` in workspace.rs. */
 const EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
+
+const EFFORT_LEVELS_DESC = [...EFFORT_LEVELS].reverse();
 
 /** Suggestions only — any model id can be typed (a new model needs no Devora release). */
 const MODEL_SUGGESTIONS = [
@@ -119,11 +121,14 @@ export function createClaudeConfigCard(options: ClaudeConfigCardOptions): HTMLEl
   };
 
   const renderRow = (row: RowSpec): HTMLElement => {
-    const mode = modes.get(row.key) ?? 'default';
-
     const rowEl = document.createElement('div');
     rowEl.className = 'claude-config-row';
+    rowEl.appendChild(renderLabel(row));
+    rowEl.appendChild(row.kind === 'effort' ? renderEffortControl() : renderModelControl(row));
+    return rowEl;
+  };
 
+  const renderLabel = (row: RowSpec): HTMLElement => {
     const labelEl = document.createElement('div');
     labelEl.className = 'claude-config-row-label';
     const nameEl = document.createElement('div');
@@ -134,42 +139,68 @@ export function createClaudeConfigCard(options: ClaudeConfigCardOptions): HTMLEl
     hintEl.className = 'claude-config-row-env';
     hintEl.textContent = row.hint;
     labelEl.appendChild(hintEl);
-    rowEl.appendChild(labelEl);
+    return labelEl;
+  };
 
+  const renderControl = (segmented: HTMLElement, value: HTMLElement | null): HTMLElement => {
     const controlEl = document.createElement('div');
     controlEl.className = 'claude-config-row-control';
-
-    controlEl.appendChild(
-      createSegmentedControl<Mode>({
-        items: [
-          { key: 'custom', label: 'Custom' },
-          { key: 'default', label: 'Default' },
-          { key: 'none', label: 'None' },
-        ],
-        activeKey: mode,
-        onSelect: (next) => onModeSelect(row, next),
-      }),
-    );
+    controlEl.appendChild(segmented);
 
     const valueEl = document.createElement('div');
     valueEl.className = 'claude-config-row-value';
-    valueEl.appendChild(renderValue(row, mode));
+    if (value !== null) valueEl.appendChild(value);
     controlEl.appendChild(valueEl);
 
-    rowEl.appendChild(controlEl);
-    return rowEl;
+    return controlEl;
   };
 
-  const renderValue = (row: RowSpec, mode: Mode): HTMLElement => {
+  const renderModelControl = (row: RowSpec): HTMLElement => {
+    const mode = modes.get(row.key) ?? 'default';
+    const segmented = createSegmentedControl<Mode>({
+      items: [
+        { key: 'custom', label: 'Custom' },
+        { key: 'default', label: 'Default' },
+        { key: 'none', label: 'None' },
+      ],
+      activeKey: mode,
+      onSelect: (next) => onModeSelect(row, next),
+    });
+    const value = mode === 'custom' ? renderModelInput(row) : overrideHint(row.key, mode);
+    return renderControl(segmented, value);
+  };
+
+  const renderEffortControl = (): HTMLElement => {
+    const mode = modes.get('effort') ?? 'default';
+    // In "custom" mode this is the raw stored level; a hand-edited config can pin a value outside EFFORT_LEVELS, in which case no segment matches.
+    const stored = customValues.get('effort');
+
+    const segmented = createSegmentedControl<string>({
+      items: [
+        { key: 'default', label: 'Default' },
+        ...EFFORT_LEVELS_DESC.map((level) => ({ key: level, label: level })),
+        { key: 'none', label: 'None' },
+      ],
+      activeKey: mode === 'custom' ? (stored ?? '') : mode,
+      onSelect: onEffortSelect,
+    });
+
+    let value: HTMLElement | null = null;
+    if (mode !== 'custom') {
+      value = overrideHint('effort', mode);
+    } else if (stored && !EFFORT_LEVELS.includes(stored as (typeof EFFORT_LEVELS)[number])) {
+      // Surface an off-list level (from a hand-edited config), since no segment is highlighted for it.
+      value = mutedHint(`→ ${stored}`);
+    }
+    return renderControl(segmented, value);
+  };
+
+  const overrideHint = (key: SettingKey, mode: 'default' | 'none'): HTMLElement => {
     if (mode === 'none') {
       return mutedHint('No override — Claude Code decides');
     }
-    if (mode === 'default') {
-      const resolved = settings.resolved[row.key] ?? null;
-      return mutedHint(resolved === null ? '→ Claude Code default' : `→ ${resolved}`);
-    }
-    // mode === 'custom'
-    return row.kind === 'effort' ? renderEffortPicker(row) : renderModelInput(row);
+    const resolved = settings.resolved[key] ?? null;
+    return mutedHint(resolved === null ? '→ Claude Code default' : `→ ${resolved}`);
   };
 
   const renderModelInput = (row: RowSpec): HTMLElement => {
@@ -210,24 +241,6 @@ export function createClaudeConfigCard(options: ClaudeConfigCardOptions): HTMLEl
     return wrap;
   };
 
-  const renderEffortPicker = (row: RowSpec): HTMLElement => {
-    const current = customValues.get(row.key) ?? settings.resolved[row.key] ?? 'xhigh';
-    return createDropdownMenu({
-      triggerLabel: EFFORT_LEVELS.includes(current as (typeof EFFORT_LEVELS)[number])
-        ? current
-        : 'Select…',
-      items: EFFORT_LEVELS.map((level) => ({
-        kind: 'option' as const,
-        label: level,
-        checked: level === current,
-        onSelect: () => {
-          customValues.set(row.key, level);
-          persist(row.key, 'value', level);
-        },
-      })),
-    }).element;
-  };
-
   const onModeSelect = (row: RowSpec, next: Mode): void => {
     if (next === 'custom') {
       // Local switch only — nothing is written until a concrete value is committed.
@@ -240,6 +253,16 @@ export function createClaudeConfigCard(options: ClaudeConfigCardOptions): HTMLEl
       return;
     }
     persist(row.key, next);
+  };
+
+  // Effort is a closed set, so every segment commits immediately.
+  const onEffortSelect = (next: string): void => {
+    if (next === 'default' || next === 'none') {
+      persist('effort', next);
+    } else {
+      customValues.set('effort', next);
+      persist('effort', 'value', next);
+    }
   };
 
   // For models, "value" means a concrete model id; a cleared field maps to "default".

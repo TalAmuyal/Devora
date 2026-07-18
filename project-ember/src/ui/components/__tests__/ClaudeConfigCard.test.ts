@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createClaudeConfigCard } from '../ClaudeConfigCard';
 import { invoke } from '../../../invoke';
-import { installModalStack, teardownModalStack } from './modalTestHarness';
 
 vi.mock('../../../invoke', () => ({ invoke: vi.fn() }));
 const invokeMock = vi.mocked(invoke);
@@ -19,8 +18,6 @@ const SETTINGS = {
 };
 
 beforeEach(() => {
-  // The effort picker opens as a `popup` layer, so its keys route through a real LayerStack.
-  installModalStack();
   invokeMock.mockReset();
   invokeMock.mockImplementation(async (cmd: string, args?: unknown) => {
     if (cmd === 'get_claude_settings') return SETTINGS;
@@ -36,7 +33,9 @@ beforeEach(() => {
   });
 });
 
-afterEach(() => teardownModalStack());
+afterEach(() => {
+  document.body.innerHTML = '';
+});
 
 async function mountCard(profilePath: string | null = null): Promise<HTMLElement> {
   const card = createClaudeConfigCard({ profilePath });
@@ -166,20 +165,45 @@ describe('createClaudeConfigCard', () => {
     });
   });
 
-  it('commits an effort level chosen from the dropdown', async () => {
+  it('renders the effort segments as Default, levels high→low, then None', async () => {
     const card = await mountCard();
-    clickSegment(row(card, 3), 'Custom'); // effort
-    row(card, 3).querySelector<HTMLButtonElement>('.dropdown-trigger')!.click();
-    const option = Array.from(
-      row(card, 3).querySelectorAll<HTMLButtonElement>('.dropdown-item-option'),
-    ).find((b) => b.textContent?.includes('max'));
-    option!.click();
+    const labels = Array.from(
+      row(card, 3).querySelectorAll<HTMLButtonElement>('.segmented-control-btn'),
+    ).map((b) => b.textContent);
+    expect(labels).toEqual(['Default', 'max', 'xhigh', 'high', 'medium', 'low', 'None']);
+  });
+
+  it('commits an effort level chosen from the segmented control', async () => {
+    const card = await mountCard();
+    clickSegment(row(card, 3), 'max'); // effort
     await flush();
     expect(lastSetCall()).toEqual({
       profilePath: null,
       key: 'effort',
       state: 'value',
       value: 'max',
+    });
+  });
+
+  it('commits None and Default from the effort segmented control', async () => {
+    const card = await mountCard();
+
+    clickSegment(row(card, 3), 'None');
+    await flush();
+    expect(lastSetCall()).toEqual({
+      profilePath: null,
+      key: 'effort',
+      state: 'none',
+      value: null,
+    });
+
+    clickSegment(row(card, 3), 'Default');
+    await flush();
+    expect(lastSetCall()).toEqual({
+      profilePath: null,
+      key: 'effort',
+      state: 'default',
+      value: null,
     });
   });
 

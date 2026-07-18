@@ -28,6 +28,7 @@ Types of changes:
 - `gst` at a workspace root now fans out plain `git status` per repo (and accepts git-status flags there); the aligned summary table moved to `gsum`
 - Debi's package rationale now lives in the code itself rather than separate specs; the `docs/specs/` files are a legacy reference being gradually migrated into the code
 - Migrated Debi's `internal/git` spec into code comments and removed `docs/specs/git.md`; migrated the `shellinit` and `wsgit` specs the same way as part of the `debi git` rework
+- The Settings Hub's Effort control is now a single segmented control listing every choice at once, replacing the two-step toggle plus level dropdown
 - Refactor: Replaced the Overlay Manager with a new Layer Stack system ; see [ADR-003](docs/adrs/ADR-003-ember-layer-system.md) for details
 	- Fixed a few edge cases by  migrating to the new design
 
