@@ -163,7 +163,7 @@ export class SettingsHub {
     const target = e.target;
     if (
       isEditableElementFocused() ||
-      (target instanceof Element && target.closest('.claude-config-card, .settings-card'))
+      (target instanceof Element && target.closest('.settings-card'))
     ) {
       return false;
     }
