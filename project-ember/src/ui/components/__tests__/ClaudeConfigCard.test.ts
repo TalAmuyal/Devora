@@ -266,6 +266,26 @@ describe('createClaudeConfigCard', () => {
     expect(document.activeElement).toBe(opusInput);
   });
 
+  it('keeps an uncommitted Custom switch when another row is written', async () => {
+    const card = await mountCard();
+    clickSegment(row(card, 1), 'Custom'); // sonnet: Default -> Custom, not yet committed
+    expect(activeSegment(row(card, 1))).toBe('Custom');
+    expect(row(card, 1).querySelector('.claude-config-input')).not.toBeNull();
+
+    clickSegment(row(card, 3), 'max'); // write the unrelated effort row -> reload
+    await flush();
+
+    // The switch (and its seeded value) survives the reload triggered elsewhere.
+    expect(activeSegment(row(card, 1))).toBe('Custom');
+    const input = row(card, 1).querySelector<HTMLInputElement>('.claude-config-input');
+    expect(input).not.toBeNull();
+    expect(input!.value).toBe('claude-opus-4-8'); // seeded from the resolved value
+    const sonnetWrites = invokeMock.mock.calls.filter(
+      (c) => c[0] === 'set_claude_setting' && (c[1] as { key?: string })?.key === 'sonnet-model',
+    );
+    expect(sonnetWrites).toHaveLength(0); // sonnet itself was never persisted
+  });
+
   it('passes the profile path through to both commands', async () => {
     const card = await mountCard('/home/me/devora');
     expect(invokeMock).toHaveBeenCalledWith('get_claude_settings', {

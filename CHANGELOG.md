@@ -52,6 +52,7 @@ Types of changes:
 ### Fixed
 
 - Settings Hub: a config card's segmented control no longer steals focus into an unrelated text input
+- Settings Hub: switching a setting to `Custom`/`Set` (revealing its input) is no longer discarded when you then change another setting in the same card
 
 ### Removed
 
