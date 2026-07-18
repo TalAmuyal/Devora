@@ -63,8 +63,8 @@ export function createClaudeConfigCard(options: ClaudeConfigCardOptions): HTMLEl
   let settings: ClaudeSettings = { stored: {}, resolved: {} as Record<SettingKey, string | null> };
   // Serializes writes so a value-commit and a follow-on segment switch apply in order.
   let writeChain: Promise<unknown> = Promise.resolve();
-  // Gate input auto-focus: off for the initial mount (so a revealed page keeps focus), on for later user-driven renders (mode switch / commit re-read).
-  let autoFocusEnabled = false;
+  // The row whose Custom input should grab focus on the next render; null on the initial mount and after unrelated renders, so neither steals focus.
+  let pendingFocusKey: SettingKey | null = null;
 
   const deriveMode = (key: SettingKey): Mode => {
     if (!(key in settings.stored)) return 'default';
@@ -85,7 +85,6 @@ export function createClaudeConfigCard(options: ClaudeConfigCardOptions): HTMLEl
       if (typeof stored === 'string') customValues.set(row.key, stored);
     }
     render();
-    autoFocusEnabled = true;
   };
 
   // `state` is the backend vocabulary: "value" writes a string, "none" writes null, "default" removes the key.
@@ -235,8 +234,11 @@ export function createClaudeConfigCard(options: ClaudeConfigCardOptions): HTMLEl
     }
     wrap.appendChild(chips);
 
-    // Focus the field on a user-initiated switch to Custom (or a commit re-read); the flag is false during the initial mount so the card doesn't steal focus from the page.
-    if (autoFocusEnabled) queueMicrotask(() => input.focus());
+    // Several Custom inputs can be visible at once; focus only the row just targeted.
+    if (pendingFocusKey === row.key) {
+      pendingFocusKey = null;
+      queueMicrotask(() => input.focus());
+    }
     return wrap;
   };
 
@@ -248,6 +250,7 @@ export function createClaudeConfigCard(options: ClaudeConfigCardOptions): HTMLEl
         const resolved = settings.resolved[row.key];
         if (typeof resolved === 'string') customValues.set(row.key, resolved);
       }
+      pendingFocusKey = row.key;
       render();
       return;
     }
@@ -272,6 +275,8 @@ export function createClaudeConfigCard(options: ClaudeConfigCardOptions): HTMLEl
       persist(row.key, 'default');
     } else {
       customValues.set(row.key, value);
+      // The row stays Custom after the write; keep focus on its input through the reload.
+      pendingFocusKey = row.key;
       persist(row.key, 'value', value);
     }
   };

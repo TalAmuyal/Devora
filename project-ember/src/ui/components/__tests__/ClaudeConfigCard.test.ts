@@ -226,6 +226,46 @@ describe('createClaudeConfigCard', () => {
     expect(document.activeElement).toBe(input);
   });
 
+  it('does not move focus into a Custom input when a different row/control is used', async () => {
+    // opus is stored -> its Custom input is visible; clicking the effort control must not grab it.
+    const card = await mountCard();
+    document.body.appendChild(card);
+    const opusInput = row(card, 0).querySelector<HTMLInputElement>('.claude-config-input');
+    expect(opusInput).not.toBeNull();
+    expect(document.activeElement).not.toBe(opusInput);
+
+    clickSegment(row(card, 3), 'max'); // effort — unrelated to the opus row
+    await flush();
+    const opusInputAfter = row(card, 0).querySelector<HTMLInputElement>('.claude-config-input');
+    expect(document.activeElement).not.toBe(opusInputAfter);
+  });
+
+  it('focuses the switched row itself, not another row already in Custom', async () => {
+    // sonnet is stored (Custom, later in the DOM); switching the earlier opus row must focus opus.
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'get_claude_settings') {
+        return {
+          stored: { 'sonnet-model': 'claude-opus-4-8' },
+          resolved: {
+            'opus-model': 'claude-opus-4-8',
+            'sonnet-model': 'claude-opus-4-8',
+            'haiku-model': null,
+            effort: null,
+          },
+        };
+      }
+      throw new Error(`unexpected command ${cmd}`);
+    });
+    const card = createClaudeConfigCard({ profilePath: null });
+    document.body.appendChild(card);
+    await flush();
+
+    clickSegment(row(card, 0), 'Custom'); // opus, earlier in the DOM than the already-Custom sonnet
+    await flush();
+    const opusInput = row(card, 0).querySelector<HTMLInputElement>('.claude-config-input');
+    expect(document.activeElement).toBe(opusInput);
+  });
+
   it('passes the profile path through to both commands', async () => {
     const card = await mountCard('/home/me/devora');
     expect(invokeMock).toHaveBeenCalledWith('get_claude_settings', {

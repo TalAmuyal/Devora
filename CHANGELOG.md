@@ -49,6 +49,10 @@ Types of changes:
 	- The Opus-tier suggestion list drops the superseded `claude-opus-4-7` in favor of `claude-fable-5`
 	- Sonnet 5 and Fable 5 requires updating Claude Code to a version that supports them
 
+### Fixed
+
+- Settings Hub: a config card's segmented control no longer steals focus into an unrelated text input
+
 ### Removed
 
 - `debi pr close` no longer refuses to run on a protected branch (`main`/`master`/`develop`) client-side; this is now expected to be enforced server-side (e.g. GitHub branch protection rules) — if you relied on the client-side check, verify your remote has equivalent protection configured

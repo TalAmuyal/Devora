@@ -76,8 +76,8 @@ export function createConfigCard(options: ConfigCardOptions): HTMLElement {
   const draftValues = new Map<string, string>();
   // Serializes writes so a value-commit and a follow-on toggle apply in order.
   let writeChain: Promise<unknown> = Promise.resolve();
-  // Gate input auto-focus: off for the initial mount (so a revealed page keeps focus), on for later user-driven renders (mode switch / commit re-read).
-  let autoFocusEnabled = false;
+  // The field whose Set input should grab focus on the next render; null on the initial mount and after unrelated renders, so neither steals focus.
+  let pendingFocusKey: string | null = null;
 
   const reload = async (): Promise<void> => {
     try {
@@ -90,7 +90,6 @@ export function createConfigCard(options: ConfigCardOptions): HTMLElement {
     textModes.clear();
     draftValues.clear();
     render();
-    autoFocusEnabled = true;
   };
 
   const persist = (key: string, state: 'value' | 'default', value?: string): void => {
@@ -226,6 +225,7 @@ export function createConfigCard(options: ConfigCardOptions): HTMLElement {
             if (!draftValues.has(field.key) && typeof stored === 'string') {
               draftValues.set(field.key, stored);
             }
+            pendingFocusKey = field.key;
             render();
           } else {
             persist(field.key, 'default');
@@ -251,8 +251,11 @@ export function createConfigCard(options: ConfigCardOptions): HTMLElement {
       });
       blurOnEscape(input);
       value.appendChild(input);
-      // Focus the input on a user-initiated switch to Set (or a commit re-read); the flag is false during the initial mount so the card doesn't steal focus from the page.
-      if (autoFocusEnabled) queueMicrotask(() => input.focus());
+      // Several Set inputs can be visible at once; focus only the field just targeted.
+      if (pendingFocusKey === field.key) {
+        pendingFocusKey = null;
+        queueMicrotask(() => input.focus());
+      }
     } else {
       appendResolvedHint(field, value);
     }
@@ -267,6 +270,8 @@ export function createConfigCard(options: ConfigCardOptions): HTMLElement {
       persist(key, 'default');
     } else {
       draftValues.set(key, trimmed);
+      // The field stays Set after the write; keep focus on its input through the reload.
+      pendingFocusKey = key;
       persist(key, 'value', trimmed);
     }
   };

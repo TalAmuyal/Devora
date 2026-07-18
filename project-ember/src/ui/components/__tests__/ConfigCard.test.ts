@@ -202,6 +202,30 @@ describe('createConfigCard', () => {
     expect(document.activeElement).toBe(input);
   });
 
+  it('does not move focus into a Set input when a different field/control is used', async () => {
+    // default-app is stored -> its input stays visible; toggling the git-shortcuts bool must not grab it.
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'get_config_settings') {
+        return {
+          stored: { 'terminal.default-app': 'nvim', 'terminal.git-shortcuts': false },
+          resolved: { 'terminal.default-app': 'nvim', 'terminal.git-shortcuts': false },
+        };
+      }
+      if (cmd === 'set_config_setting') return null;
+      throw new Error(`unexpected command ${cmd}`);
+    });
+    const card = await mountCard([FIELDS[0], FIELDS[1]]); // default-app (text), git-shortcuts (bool)
+    document.body.appendChild(card);
+    const input = row(card, 0).querySelector<HTMLInputElement>('.config-input');
+    expect(input).not.toBeNull();
+    expect(document.activeElement).not.toBe(input);
+
+    clickSegment(row(card, 1), 'On'); // toggle the bool — unrelated to the text field
+    await flush();
+    const inputAfter = row(card, 0).querySelector<HTMLInputElement>('.config-input');
+    expect(document.activeElement).not.toBe(inputAfter);
+  });
+
   it('blurs a focused text input on Escape', async () => {
     const card = await mountCard([FIELDS[0]]);
     document.body.appendChild(card);
