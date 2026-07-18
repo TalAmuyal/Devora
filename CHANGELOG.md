@@ -30,6 +30,7 @@ Types of changes:
 
 - A Code-Cleanup Claude Code plugin with a `code-cleanup` skill that directs a post-task cleanup of the current changes - decluttering the code and removing redundant comments via dedicated passes
 - [ADR-003: Ember Layer System (Stacked Pages & Pop-ups)](docs/adrs/ADR-003-ember-layer-system.md)
+- Settings Hub: a text/model field now shows a Save button next to its input while it holds an unsaved value
 
 ### Changed
 

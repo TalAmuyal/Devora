@@ -137,6 +137,33 @@ describe('createClaudeConfigCard', () => {
     });
   });
 
+  it('hides the Save button for a stored value at rest and shows it after an edit', async () => {
+    const card = await mountCard();
+    const opusInput = row(card, 0).querySelector<HTMLInputElement>('.config-input')!;
+    const save = () => row(card, 0).querySelector<HTMLButtonElement>('.config-save')!;
+    // opus is stored as 'claude-fable-5' -> input matches the saved value -> nothing to save.
+    expect(save().hidden).toBe(true);
+    opusInput.value = 'claude-opus-4-7';
+    opusInput.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(save().hidden).toBe(false);
+  });
+
+  it('commits a typed model id when Save is clicked', async () => {
+    const card = await mountCard();
+    clickSegment(row(card, 1), 'Custom'); // sonnet
+    const input = row(card, 1).querySelector<HTMLInputElement>('.config-input')!;
+    input.value = 'claude-opus-4-7';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    row(card, 1).querySelector<HTMLButtonElement>('.config-save')!.click();
+    await flush();
+    expect(lastSetCall()).toEqual({
+      profilePath: null,
+      key: 'sonnet-model',
+      state: 'value',
+      value: 'claude-opus-4-7',
+    });
+  });
+
   it('commits a suggestion chip click', async () => {
     const card = await mountCard();
     const chip = row(card, 0).querySelector<HTMLButtonElement>('.config-chip')!;

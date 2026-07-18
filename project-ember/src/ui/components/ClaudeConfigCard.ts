@@ -9,10 +9,10 @@
  * DOM: `div.settings-card` (shared chrome) containing `div.config-row`s.
  */
 
-import { blurOnEscape } from '../focus';
 import { createSettingsEditor } from '../settingsEditor';
 import { createSettingsCard } from './SettingsCard';
 import { createSegmentedControl } from './SegmentedControl';
+import { createCommitInput } from './CommitInput';
 
 /** Supported Claude Code effort levels, lowest → highest. Mirrors `CLAUDE_EFFORT_LEVELS` in workspace.rs. */
 const EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
@@ -177,20 +177,15 @@ export function createClaudeConfigCard(options: ClaudeConfigCardOptions): HTMLEl
     const wrap = document.createElement('div');
     wrap.className = 'config-combo';
 
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.className = 'config-input';
-    input.placeholder = 'model id, then Enter';
-    input.value = editor.getDraft(row.key) ?? '';
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        e.stopPropagation();
-        editor.commit(row.key, input.value);
-      }
+    const stored = editor.settings.stored[row.key];
+    const savedValue = typeof stored === 'string' ? stored : '';
+    const commitInput = createCommitInput({
+      placeholder: 'model id, then Enter',
+      value: editor.getDraft(row.key) ?? '',
+      savedValue,
+      onCommit: (raw) => editor.commit(row.key, raw),
     });
-    blurOnEscape(input);
-    wrap.appendChild(input);
+    wrap.appendChild(commitInput.root);
 
     const chips = document.createElement('div');
     chips.className = 'config-chips';
@@ -206,7 +201,7 @@ export function createClaudeConfigCard(options: ClaudeConfigCardOptions): HTMLEl
     }
     wrap.appendChild(chips);
 
-    editor.focusOnRender(row.key, input);
+    editor.focusOnRender(row.key, commitInput.input);
     return wrap;
   };
 
