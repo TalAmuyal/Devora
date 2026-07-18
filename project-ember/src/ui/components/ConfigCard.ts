@@ -71,7 +71,7 @@ export function createConfigCard(options: ConfigCardOptions): HTMLElement {
   const card = createSettingsCard(options.title);
 
   let settings: ConfigSettings = { stored: {}, resolved: {} };
-  // Local override for text fields switched to "Set" but not yet committed (no write until Enter).
+  // Fields switched to "Set" but not yet committed. Survives reloads (a write to another field must not collapse it); cleared when the field is left or committed.
   const textModes = new Map<string, TextMode>();
   const draftValues = new Map<string, string>();
   // Serializes writes so a value-commit and a follow-on toggle apply in order.
@@ -87,8 +87,6 @@ export function createConfigCard(options: ConfigCardOptions): HTMLElement {
     } catch {
       return; // invoke already surfaced the error
     }
-    textModes.clear();
-    draftValues.clear();
     render();
   };
 
@@ -228,6 +226,7 @@ export function createConfigCard(options: ConfigCardOptions): HTMLElement {
             pendingFocusKey = field.key;
             render();
           } else {
+            textModes.delete(field.key);
             persist(field.key, 'default');
           }
         },
@@ -266,6 +265,7 @@ export function createConfigCard(options: ConfigCardOptions): HTMLElement {
   const commitText = (key: string, raw: string): void => {
     const trimmed = raw.trim();
     if (trimmed === '') {
+      textModes.delete(key);
       draftValues.delete(key);
       persist(key, 'default');
     } else {

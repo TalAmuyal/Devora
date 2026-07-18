@@ -237,6 +237,51 @@ describe('createConfigCard', () => {
     expect(document.activeElement).not.toBe(input);
   });
 
+  it('keeps an uncommitted Set switch when another field is written', async () => {
+    const card = await mountCard();
+    clickSegment(row(card, 0), 'Set'); // default-app: Default -> Set, not yet committed
+    expect(row(card, 0).querySelector('.config-input')).not.toBeNull();
+
+    clickSegment(row(card, 1), 'On'); // write the unrelated git-shortcuts bool -> reload
+    await flush();
+
+    // The switch survives the reload triggered elsewhere.
+    expect(activeSegment(row(card, 0))).toBe('Set');
+    expect(row(card, 0).querySelector('.config-input')).not.toBeNull();
+    const appWrites = invokeMock.mock.calls.filter(
+      (c) => c[0] === 'set_config_setting' && (c[1] as { key?: string })?.key === 'terminal.default-app',
+    );
+    expect(appWrites).toHaveLength(0); // default-app itself was never persisted
+  });
+
+  it('remembers the last text value when re-entering Set after Default', async () => {
+    // Stateful backend so a committed value actually persists across reloads.
+    const stored: Record<string, string | boolean> = {};
+    invokeMock.mockImplementation(async (cmd: string, args?: unknown) => {
+      if (cmd === 'get_config_settings') return { stored: { ...stored }, resolved: {} };
+      if (cmd === 'set_config_setting') {
+        const { key, state, value } = args as { key: string; state: string; value: string | null };
+        if (state === 'default') delete stored[key];
+        else stored[key] = value!;
+        return null;
+      }
+      throw new Error(`unexpected command ${cmd}`);
+    });
+    const card = await mountCard([FIELDS[0]]);
+
+    clickSegment(row(card, 0), 'Set');
+    const input = row(card, 0).querySelector<HTMLInputElement>('.config-input')!;
+    input.value = 'nvim';
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await flush(); // committed -> stored
+
+    clickSegment(row(card, 0), 'Default');
+    await flush(); // key removed
+
+    clickSegment(row(card, 0), 'Set'); // re-enter
+    expect(row(card, 0).querySelector<HTMLInputElement>('.config-input')!.value).toBe('nvim');
+  });
+
   it('appends extraRows after the fields', async () => {
     const extra = document.createElement('div');
     extra.className = 'token-editor';

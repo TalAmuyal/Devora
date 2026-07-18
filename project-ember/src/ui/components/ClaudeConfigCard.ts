@@ -59,7 +59,8 @@ export function createClaudeConfigCard(options: ClaudeConfigCardOptions): HTMLEl
   const card = document.createElement('div');
   card.className = 'claude-config-card';
 
-  const modes = new Map<SettingKey, Mode>();
+  // Rows switched to Custom but not yet committed. Survives reloads (a write to another row must not collapse it); cleared when the row is left or committed.
+  const pendingCustomEntry = new Set<SettingKey>();
   const customValues = new Map<SettingKey, string>();
   let settings: ClaudeSettings = { stored: {}, resolved: {} as Record<SettingKey, string | null> };
   // Serializes writes so a value-commit and a follow-on segment switch apply in order.
@@ -72,6 +73,9 @@ export function createClaudeConfigCard(options: ClaudeConfigCardOptions): HTMLEl
     return settings.stored[key] === null ? 'none' : 'custom';
   };
 
+  const displayMode = (key: SettingKey): Mode =>
+    pendingCustomEntry.has(key) ? 'custom' : deriveMode(key);
+
   const reload = async (): Promise<void> => {
     try {
       settings = await invoke<ClaudeSettings>('get_claude_settings', {
@@ -81,7 +85,6 @@ export function createClaudeConfigCard(options: ClaudeConfigCardOptions): HTMLEl
       return; // invoke already surfaced the error
     }
     for (const row of ROWS) {
-      modes.set(row.key, deriveMode(row.key));
       const stored = settings.stored[row.key];
       if (typeof stored === 'string') customValues.set(row.key, stored);
     }
@@ -155,7 +158,7 @@ export function createClaudeConfigCard(options: ClaudeConfigCardOptions): HTMLEl
   };
 
   const renderModelControl = (row: RowSpec): HTMLElement => {
-    const mode = modes.get(row.key) ?? 'default';
+    const mode = displayMode(row.key);
     const segmented = createSegmentedControl<Mode>({
       items: [
         { key: 'custom', label: 'Custom' },
@@ -170,7 +173,7 @@ export function createClaudeConfigCard(options: ClaudeConfigCardOptions): HTMLEl
   };
 
   const renderEffortControl = (): HTMLElement => {
-    const mode = modes.get('effort') ?? 'default';
+    const mode = displayMode('effort');
     // In "custom" mode this is the raw stored level; a hand-edited config can pin a value outside EFFORT_LEVELS, in which case no segment matches.
     const stored = customValues.get('effort');
 
@@ -246,7 +249,7 @@ export function createClaudeConfigCard(options: ClaudeConfigCardOptions): HTMLEl
   const onModeSelect = (row: RowSpec, next: Mode): void => {
     if (next === 'custom') {
       // Local switch only — nothing is written until a concrete value is committed.
-      modes.set(row.key, 'custom');
+      pendingCustomEntry.add(row.key);
       if (!customValues.has(row.key)) {
         const resolved = settings.resolved[row.key];
         if (typeof resolved === 'string') customValues.set(row.key, resolved);
@@ -255,6 +258,7 @@ export function createClaudeConfigCard(options: ClaudeConfigCardOptions): HTMLEl
       render();
       return;
     }
+    pendingCustomEntry.delete(row.key);
     persist(row.key, next);
   };
 
@@ -272,6 +276,7 @@ export function createClaudeConfigCard(options: ClaudeConfigCardOptions): HTMLEl
   const commitModel = (row: RowSpec, raw: string): void => {
     const value = raw.trim();
     if (value === '') {
+      pendingCustomEntry.delete(row.key);
       customValues.delete(row.key);
       persist(row.key, 'default');
     } else {
