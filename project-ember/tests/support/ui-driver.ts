@@ -105,13 +105,15 @@ export class UIDriver {
     );
   }
 
-  async waitForElementCount(
+  // Counts elements the browser actually renders (computed display !== 'none'), an author `display` rule can override the UA `[hidden]{display:none}` rule, so an attribute-only selector like `:not([hidden])` is blind to whether the element is truly hidden.
+  async waitForVisibleElementCount(
     selector: string,
     expected: number,
     timeoutMs = 5_000,
   ): Promise<void> {
     await this.driver.pollFor(
-      `return document.querySelectorAll(${JSON.stringify(selector)}).length`,
+      `return Array.from(document.querySelectorAll(${JSON.stringify(selector)}))
+        .filter((el) => getComputedStyle(el).display !== 'none').length`,
       expected,
       timeoutMs,
     );

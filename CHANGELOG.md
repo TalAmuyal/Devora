@@ -22,6 +22,7 @@ Types of changes:
 ### Fixed
 
 - Workspace Hub: while the cheatsheet was open, hub keys (`n`/`R`/`1`/`2`/`3`/`f`/`Enter`/`j`/`k`) still operated the hidden hub beneath it
+- "New Task" and "Add Repo" repo filters now hide non-matching rows as you type
 
 ## 2026-07-06.0
 
