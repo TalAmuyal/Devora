@@ -11,6 +11,7 @@ import { createStatusDot, StatusDotVariant } from './components/StatusDot';
 import { createKeyboardHintBar } from './components/KeyboardHintBar';
 import { createToast } from './components/Toast';
 import { isEditableElementFocused } from './focus';
+import { createVimScroll } from './vimScroll';
 
 interface DependencyStatus {
   name: string;
@@ -82,6 +83,7 @@ export class HealthHub {
   private loading = false;
   private error: string | null = null;
   private loadToken = 0;
+  private scroll = createVimScroll();
 
   constructor(options: HealthHubOptions) {
     this.getProfilePath = options.getProfilePath;
@@ -94,6 +96,7 @@ export class HealthHub {
   }
 
   load(): void {
+    this.scroll.reset();
     void this.fetchReport();
   }
 
@@ -138,6 +141,8 @@ export class HealthHub {
       void this.fetchReport();
       return true;
     }
+    const content = this.containerEl.querySelector<HTMLElement>('.health-content');
+    if (content && this.scroll.handleKey(e, content)) return true;
     return false;
   }
 
@@ -177,6 +182,7 @@ export class HealthHub {
     this.containerEl.appendChild(
       createKeyboardHintBar({
         hints: [
+          { keys: 'j/k · Ctrl+D/U · gg/G', description: 'scroll' },
           { keys: 'r', description: 're-run' },
           { keys: 'q/Esc', description: 'close' },
         ],

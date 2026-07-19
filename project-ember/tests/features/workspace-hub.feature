@@ -57,6 +57,19 @@ Feature: Workspace Hub
     When the user presses "?"
     Then the cheatsheet should not be visible
 
+  Scenario: Scroll the cheatsheet with Vim keys
+    Given a profile "Work" with 1 active workspaces
+    And the Workspace Hub is open
+    When the user presses "?"
+    Then the cheatsheet should be visible
+    And the cheatsheet should overflow its viewport
+    When the user presses Ctrl+D
+    Then the cheatsheet scroll offset should be greater than 0
+    When the user presses "g" 2 times
+    Then the cheatsheet scroll offset should be 0
+    When the user presses "G"
+    Then the cheatsheet scroll offset should be greater than 0
+
   Scenario: Switching profiles loads workspace status
     Given a profile "Work" with 2 active workspaces with worktrees
     And a profile "Personal" with 1 active workspace with worktrees

@@ -12,6 +12,7 @@ import { createDropdownMenu, DropdownItem, DropdownMenuHandle } from '../ui/comp
 import { createRepoList, RepoListHandle } from '../ui/components/RepoList';
 import { createTableShell } from '../ui/components/TableShell';
 import { isEditableElementFocused, blurOnEscape } from '../ui/focus';
+import { createVimScroll } from '../ui/vimScroll';
 import { DismissDecision } from '../ui/layers/types';
 import { pluralize } from '../ui/format';
 import { createProfileForm } from './ProfileForm';
@@ -149,6 +150,7 @@ export class WorkspaceHub {
   private availableRepos: RepoInfo[] = [];
   private focusedCardIndex = -1;
   private showCheatsheet = false;
+  private cheatsheetScroll = createVimScroll();
   private profilesLoaded = false;
   private workspacesLoaded = false;
 
@@ -577,13 +579,22 @@ export class WorkspaceHub {
       return false;
     }
 
+    if (e.key === '?') {
+      this.showCheatsheet = !this.showCheatsheet;
+      if (this.showCheatsheet) this.cheatsheetScroll.reset();
+      this.render();
+      return true;
+    }
+
+    // While the cheatsheet covers the hub, keys drive its scrolling only; every other hub key is inert (the master list beneath it is hidden). The layer wrapper (.overlay-tab-covering) is the cheatsheet's scroll container.
+    if (this.showCheatsheet) {
+      const container = this.containerEl.parentElement;
+      return container ? this.cheatsheetScroll.handleKey(e, container) : false;
+    }
+
     const filtered = this.filteredWorkspaces();
 
     switch (e.key) {
-      case '?':
-        this.showCheatsheet = !this.showCheatsheet;
-        this.render();
-        return true;
       case 'f':
         this.searchHandle?.focus();
         return true;
@@ -744,6 +755,9 @@ export class WorkspaceHub {
     this.searchHandle = null;
     this.masterListEl = null;
     this.containerEl.innerHTML = '';
+
+    // In cheatsheet mode the hub grows to its (overflowing) content so its background covers the whole scroll area, instead of the layer wrapper's base color showing through past the viewport.
+    this.containerEl.classList.toggle('ws-hub-cheatsheet', this.showCheatsheet);
 
     if (this.showCheatsheet) {
       this.containerEl.appendChild(this.renderCheatsheet());
@@ -1693,7 +1707,7 @@ export class WorkspaceHub {
 
     const hint = document.createElement('div');
     hint.className = 'ws-cheatsheet-hint';
-    hint.textContent = 'Press ? or Esc or q to go back';
+    hint.textContent = 'Scroll: j/k · Ctrl+D/U · gg/G      Press ? or Esc or q to go back';
     sheet.appendChild(hint);
 
     return sheet;

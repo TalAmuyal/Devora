@@ -226,6 +226,12 @@ body {
     var(--color-mantle);
 }
 
+/* Cheatsheet mode: let the hub grow past the viewport so its background paints the full scrollable height (the normal hub stays height:100% for its master-list internal scroll). */
+.ws-hub.ws-hub-cheatsheet {
+  height: auto;
+  min-height: 100%;
+}
+
 /* Header */
 
 .page-header {
