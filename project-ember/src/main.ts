@@ -18,6 +18,7 @@ import { SettingsHub, SettingsHubView } from './workspace/SettingsHub';
 import { initLayerStack } from './ui/layers/stack';
 import type { LayerHandle, LayerSpec } from './ui/layers/types';
 import { WebContentOverlay } from './webview/WebContentOverlay';
+import { createVimScroll } from './ui/vimScroll';
 import {
   clearErrorBanners,
   installGlobalErrorHandlers,
@@ -474,7 +475,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     try {
       const guidePath = await invoke<string>('get_user_guide_path');
       const content = await WebContentOverlay.createMarkdownContent(guidePath, 'User Guide');
-      layers.push({ name: 'user-guide', kind: 'page', element: content });
+      const vimScroll = createVimScroll();
+      layers.push({
+        name: 'user-guide',
+        kind: 'page',
+        element: content,
+        onKey: (e) => {
+          const body = content.querySelector<HTMLElement>('.web-content-body');
+          return body ? vimScroll.handleKey(e, body) : false;
+        },
+      });
     } catch (_) {
       // invoke already surfaced the error
     }

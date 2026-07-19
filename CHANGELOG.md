@@ -14,6 +14,15 @@ Types of changes:
 
 ## Unreleased
 
+### Added
+
+- Vim-style keyboard scrolling (`j`/`k`, `Ctrl+D`/`Ctrl+U`, `gg`/`G`) in the cheatsheet, the User Guide, and the Health Hub, via a shared `createVimScroll` primitive
+- [ADR-004: Ember Vim-Inspired Navigation](docs/adrs/ADR-004-ember-vim-inspired-navigation.md)
+
+### Fixed
+
+- Workspace Hub: while the cheatsheet was open, hub keys (`n`/`R`/`1`/`2`/`3`/`f`/`Enter`/`j`/`k`) still operated the hidden hub beneath it
+
 ## 2026-07-06.0
 
 ### Changed

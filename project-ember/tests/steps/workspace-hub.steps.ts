@@ -165,6 +165,47 @@ Then(
   },
 );
 
+// The cheatsheet's scroll container is the layer wrapper it lives inside (.overlay-tab-covering).
+const CHEATSHEET_SCROLLER = "document.querySelector('.ws-cheatsheet')?.closest('.overlay-tab-covering')";
+
+When('the user presses Ctrl+D', async function (this: EmberWorld) {
+  const ui = new UIDriver(this.driver);
+  await ui.pressKey('d', { ctrlKey: true, code: 'KeyD' });
+});
+
+Then(
+  'the cheatsheet should overflow its viewport',
+  async function (this: EmberWorld) {
+    const json = await this.driver.eval(`
+      const wrap = ${CHEATSHEET_SCROLLER};
+      const hub = document.querySelector('.ws-hub');
+      return JSON.stringify({
+        overflows: !!wrap && wrap.scrollHeight > wrap.clientHeight,
+        // The hub carries the page background; it must span the whole scroll area, else its base color is revealed past the viewport when scrolling.
+        hubCoversScroll: !!hub && hub.classList.contains('ws-hub-cheatsheet') && hub.offsetHeight >= wrap.scrollHeight - 2,
+      });
+    `);
+    const { overflows, hubCoversScroll } = JSON.parse(json);
+    assert.strictEqual(overflows, true, 'expected the cheatsheet to be taller than its viewport (so scrolling is observable)');
+    assert.strictEqual(hubCoversScroll, true, 'expected the hub background to span the full scroll height');
+  },
+);
+
+// The relative motions scroll smoothly (animated), so poll rather than read once.
+Then(
+  'the cheatsheet scroll offset should be greater than 0',
+  async function (this: EmberWorld) {
+    await this.driver.pollFor(`return (${CHEATSHEET_SCROLLER}?.scrollTop ?? 0) > 0`, true, 2000);
+  },
+);
+
+Then(
+  'the cheatsheet scroll offset should be 0',
+  async function (this: EmberWorld) {
+    await this.driver.pollFor(`return (${CHEATSHEET_SCROLLER}?.scrollTop ?? -1) === 0`, true, 2000);
+  },
+);
+
 Given(
   'a profile {string} with {int} active workspace(s) with worktrees',
   async function (this: EmberWorld, name: string, count: number) {
