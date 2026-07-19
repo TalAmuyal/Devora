@@ -15,7 +15,6 @@ export class SessionTab {
   readonly profilePath: string | null; // profile the workspace belongs to; null for plain shells
   readonly containerEl: HTMLElement;
   readonly terminalPane: TerminalPane;
-  panelOverlayEl: HTMLElement | null = null; // for panel overlay tied to this tab
 
   // The terminal and any preview panes share a horizontal flex row inside containerEl.
   private readonly splitEl: HTMLElement;

@@ -223,7 +223,7 @@ After({ tags: '@real-claude' }, async function (this: EmberWorld) {
     await this.driver.eval(`
       const sessions = window.__test.sessionManager.getSessions();
       for (const s of [...sessions]) {
-        window.__test.overlayManager.dismissPanelOverlay(s.id);
+        window.__test.sessionPanels.dismiss(s.id);
       }
     `);
   } catch {
@@ -249,12 +249,8 @@ After(async function (this: EmberWorld) {
   writeTestConfig(testConfigPath!, []);
 
   try {
-    await this.driver.eval(`
-      if (window.__test.overlayManager.isTabCoveringOverlayActive()) {
-        window.__test.wsHub.unload();
-        window.__test.overlayManager.dismissTabCoveringOverlay();
-      }
-    `);
+    // Hard teardown of any open page layers (each runs its onCleanup, e.g. the hub's unload).
+    await this.driver.eval(`window.__test.layers.clear();`);
   } catch {
     // app may not have fully loaded
   }
@@ -271,7 +267,7 @@ After(async function (this: EmberWorld) {
     await this.driver.eval(`
       const sessions = window.__test.sessionManager.getSessions();
       for (const s of [...sessions]) {
-        window.__test.overlayManager.dismissPanelOverlay(s.id);
+        window.__test.sessionPanels.dismiss(s.id);
       }
       for (const s of [...sessions]) {
         window.__test.sessionManager.closeSession(s.id);

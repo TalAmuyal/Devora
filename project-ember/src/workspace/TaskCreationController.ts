@@ -7,11 +7,12 @@
 import { invoke, invokeLogOnly, Channel } from '../invoke';
 import { showError } from '../errors';
 import { SessionManager } from '../session/SessionManager';
-import { OverlayManager } from '../ui/OverlayManager';
+import { SessionPanels } from '../ui/SessionPanels';
 import {
   createTaskCreationProgress,
   TaskCreationProgressHandle,
 } from '../ui/components/TaskCreationProgress';
+import { DismissDecision } from '../ui/layers/types';
 import { CreationEvent } from './types';
 
 interface InFlightCreation {
@@ -28,8 +29,7 @@ interface InFlightCreation {
 
 export interface TaskCreationControllerDeps {
   sessionManager: SessionManager;
-  overlayManager: OverlayManager;
-  mainPanelEl: HTMLElement;
+  sessionPanels: SessionPanels;
   /** Resolve the per-profile terminal app command (mirrors opening an existing workspace). */
   resolveAppCommand: (profilePath: string | null) => Promise<string | undefined>;
   /** Re-render the tab bar after tabs/overlays change. */
@@ -68,13 +68,8 @@ export class TaskCreationController {
     progress.onCancel(() => this.cancel(session.id));
     progress.onClose(() => this.close(session.id));
 
-    this.deps.overlayManager.showPanelOverlay(
-      session.id,
-      progress.element,
-      this.deps.mainPanelEl,
-      session.terminalPane,
-    );
-    this.deps.overlayManager.onSessionActivated(session.id);
+    // The progress panel owns its own dismissal (Esc/q cancels or closes); the controller tears it down once that resolves.
+    this.deps.sessionPanels.show(session.id, progress.element, () => this.handleDismiss(session.id));
     this.deps.onChange();
 
     const onEvent = new Channel<CreationEvent>();
@@ -132,9 +127,8 @@ export class TaskCreationController {
     if (!creation) return;
     const session = this.deps.sessionManager.getSessions().find((s) => s.id === sessionId);
 
-    // Delete first so dismissing the overlay takes the plain (non-creation) teardown path.
     this.creations.delete(sessionId);
-    this.deps.overlayManager.dismissPanelOverlay(sessionId);
+    this.deps.sessionPanels.dismiss(sessionId);
 
     if (!session) return;
     session.setWorkspacePath(workspace.path);
@@ -174,24 +168,24 @@ export class TaskCreationController {
   /** Remove the overlay and close the tab (used on cancellation completion and after a failure). */
   private close(sessionId: number): void {
     this.creations.delete(sessionId);
-    this.deps.overlayManager.dismissPanelOverlay(sessionId);
+    this.deps.sessionPanels.dismiss(sessionId);
     this.deps.sessionManager.closeSession(sessionId);
     this.deps.onChange();
   }
 
-  /** True while a creation overlay is showing for this session (used to route Esc/q dismissal). */
-  isCreating(sessionId: number): boolean {
-    return this.creations.has(sessionId);
-  }
-
-  /** Esc/q dismissal of a creation overlay: cancel while running, close after a failure. */
-  handleDismiss(sessionId: number): void {
+  /**
+   * Esc/q dismissal of a creation overlay: cancel while running, close after a failure.
+   * Returns `handled` so the layer stack leaves the panel in place — teardown happens here (close), or later when the backend confirms the cancel.
+   */
+  handleDismiss(sessionId: number): DismissDecision {
     const creation = this.creations.get(sessionId);
-    if (!creation) return;
-    if (creation.failed) {
-      this.close(sessionId);
-    } else {
-      this.cancel(sessionId);
+    if (creation) {
+      if (creation.failed) {
+        this.close(sessionId);
+      } else {
+        this.cancel(sessionId);
+      }
     }
+    return 'handled';
   }
 }

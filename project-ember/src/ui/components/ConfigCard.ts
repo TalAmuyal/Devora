@@ -3,18 +3,19 @@
  * Used for the Terminal & Session, Pull Requests, and Task Tracker cards.
  *
  * Each field is a labeled row whose control depends on its kind:
- *  - `text`: a [Set | Default] toggle — Set reveals an input (commit with Enter; an empty value reverts to Default).
+ *  - `text`: a [Set | Default] toggle — Set reveals an input (commit with Enter or its Save button; an empty value reverts to Default).
  *  - `bool`: an [On | Off | Default] toggle.
  *  - `enum`: one segment per option (each maps to a stored value or "Default").
  * "Default" removes the key at this scope so it inherits (profile → User Defaults → Devora default); in Default mode the resolved value is shown as a hint unless `showResolved` is false.
  *
- * Mirrors ClaudeConfigCard's local-first, write-on-commit, re-read-after-write UX (no Save button).
+ * The local-first read/write/re-read/focus mechanics live in the shared `settingsEditor` (also used by ClaudeConfigCard); this file owns only the field kinds and rendering.
  * DOM: `div.settings-card` (shared chrome) containing `div.config-row`s.
  */
 
-import { invoke } from '../../invoke';
+import { createSettingsEditor } from '../settingsEditor';
 import { createSettingsCard } from './SettingsCard';
 import { createSegmentedControl } from './SegmentedControl';
+import { createCommitInput } from './CommitInput';
 
 /** A stored config value (a string, or a bool for `bool` fields). */
 export type ConfigValue = string | boolean;
@@ -69,41 +70,13 @@ type TextMode = 'set' | 'default';
 export function createConfigCard(options: ConfigCardOptions): HTMLElement {
   const card = createSettingsCard(options.title);
 
-  let settings: ConfigSettings = { stored: {}, resolved: {} };
-  // Local override for text fields switched to "Set" but not yet committed (no write until Enter).
-  const textModes = new Map<string, TextMode>();
-  const draftValues = new Map<string, string>();
-  // Serializes writes so a value-commit and a follow-on toggle apply in order.
-  let writeChain: Promise<unknown> = Promise.resolve();
-
-  const reload = async (): Promise<void> => {
-    try {
-      settings = await invoke<ConfigSettings>('get_config_settings', {
-        profilePath: options.profilePath,
-      });
-    } catch {
-      return; // invoke already surfaced the error
-    }
-    textModes.clear();
-    draftValues.clear();
-    render();
-  };
-
-  const persist = (key: string, state: 'value' | 'default', value?: string): void => {
-    writeChain = writeChain
-      .then(() =>
-        invoke('set_config_setting', {
-          profilePath: options.profilePath,
-          key,
-          state,
-          value: value ?? null,
-        }),
-      )
-      .then(
-        () => reload(),
-        () => {}, // invoke already surfaced the error
-      );
-  };
+  const editor = createSettingsEditor<ConfigSettings>({
+    getCommand: 'get_config_settings',
+    setCommand: 'set_config_setting',
+    profilePath: options.profilePath,
+    initial: { stored: {}, resolved: {} },
+    render: () => render(),
+  });
 
   const render = (): void => {
     // Drop everything after the header, then rebuild the rows.
@@ -111,11 +84,11 @@ export function createConfigCard(options: ConfigCardOptions): HTMLElement {
       card.removeChild(card.lastChild as ChildNode);
     }
     for (const field of options.fields) {
-      if (field.visibleWhen && !field.visibleWhen(settings.resolved)) continue;
+      if (field.visibleWhen && !field.visibleWhen(editor.settings.resolved)) continue;
       card.appendChild(renderRow(field));
     }
     if (options.extraRows) {
-      for (const el of options.extraRows(settings.resolved)) {
+      for (const el of options.extraRows(editor.settings.resolved)) {
         card.appendChild(el);
       }
     }
@@ -164,7 +137,7 @@ export function createConfigCard(options: ConfigCardOptions): HTMLElement {
   };
 
   const renderBool = (field: ConfigFieldSpec, control: HTMLElement): void => {
-    const stored = settings.stored[field.key];
+    const stored = editor.settings.stored[field.key];
     const active = stored === true ? 'on' : stored === false ? 'off' : 'default';
     control.appendChild(
       createSegmentedControl({
@@ -175,8 +148,8 @@ export function createConfigCard(options: ConfigCardOptions): HTMLElement {
         ],
         activeKey: active,
         onSelect: (next) => {
-          if (next === 'default') persist(field.key, 'default');
-          else persist(field.key, 'value', next === 'on' ? 'true' : 'false');
+          if (next === 'default') editor.persist(field.key, 'default');
+          else editor.persist(field.key, 'value', next === 'on' ? 'true' : 'false');
         },
       }),
     );
@@ -184,7 +157,7 @@ export function createConfigCard(options: ConfigCardOptions): HTMLElement {
   };
 
   const renderEnum = (field: ConfigFieldSpec, opts: EnumOption[], control: HTMLElement): void => {
-    const stored = settings.stored[field.key];
+    const stored = editor.settings.stored[field.key];
     const found = opts.findIndex((o) =>
       o.state === 'default' ? stored === undefined : typeof stored === 'string' && stored === (o.value ?? ''),
     );
@@ -195,8 +168,8 @@ export function createConfigCard(options: ConfigCardOptions): HTMLElement {
         activeKey: String(activeIndex),
         onSelect: (next) => {
           const opt = opts[Number(next)];
-          if (opt.state === 'default') persist(field.key, 'default');
-          else persist(field.key, 'value', opt.value ?? '');
+          if (opt.state === 'default') editor.persist(field.key, 'default');
+          else editor.persist(field.key, 'value', opt.value ?? '');
         },
       }),
     );
@@ -204,9 +177,12 @@ export function createConfigCard(options: ConfigCardOptions): HTMLElement {
   };
 
   const renderText = (field: ConfigFieldSpec, placeholder: string | undefined, control: HTMLElement): void => {
-    const stored = settings.stored[field.key];
-    const mode: TextMode =
-      textModes.get(field.key) ?? (typeof stored === 'string' ? 'set' : 'default');
+    const stored = editor.settings.stored[field.key];
+    const mode: TextMode = editor.hasPendingEntry(field.key)
+      ? 'set'
+      : typeof stored === 'string'
+        ? 'set'
+        : 'default';
 
     control.appendChild(
       createSegmentedControl<TextMode>({
@@ -217,14 +193,11 @@ export function createConfigCard(options: ConfigCardOptions): HTMLElement {
         activeKey: mode,
         onSelect: (next) => {
           if (next === 'set') {
-            // Local switch only — nothing is written until the value is committed.
-            textModes.set(field.key, 'set');
-            if (!draftValues.has(field.key) && typeof stored === 'string') {
-              draftValues.set(field.key, stored);
-            }
-            render();
+            // Local switch only — nothing is written until the value is committed. Seed the input from the stored value.
+            editor.beginEntry(field.key, typeof stored === 'string' ? stored : undefined);
           } else {
-            persist(field.key, 'default');
+            editor.endEntry(field.key);
+            editor.persist(field.key, 'default');
           }
         },
       }),
@@ -233,47 +206,30 @@ export function createConfigCard(options: ConfigCardOptions): HTMLElement {
     const value = document.createElement('div');
     value.className = 'config-row-value';
     if (mode === 'set') {
-      const input = document.createElement('input');
-      input.type = 'text';
-      input.className = 'config-input';
-      if (placeholder) input.placeholder = placeholder;
-      input.value = draftValues.get(field.key) ?? (typeof stored === 'string' ? stored : '');
-      input.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          e.stopPropagation();
-          commitText(field.key, input.value);
-        }
+      const savedValue = typeof stored === 'string' ? stored : '';
+      const commitInput = createCommitInput({
+        placeholder,
+        value: editor.getDraft(field.key) ?? savedValue,
+        savedValue,
+        onCommit: (raw) => editor.commit(field.key, raw),
       });
-      value.appendChild(input);
-      queueMicrotask(() => input.focus());
+      value.appendChild(commitInput.root);
+      editor.focusOnRender(field.key, commitInput.input);
     } else {
       appendResolvedHint(field, value);
     }
     control.appendChild(value);
   };
 
-  // A non-empty value is stored; clearing the field reverts to Default (inherit).
-  const commitText = (key: string, raw: string): void => {
-    const trimmed = raw.trim();
-    if (trimmed === '') {
-      draftValues.delete(key);
-      persist(key, 'default');
-    } else {
-      draftValues.set(key, trimmed);
-      persist(key, 'value', trimmed);
-    }
-  };
-
   const appendResolvedHint = (field: ConfigFieldSpec, parent: HTMLElement): void => {
     if (field.showResolved === false) return;
     const hint = document.createElement('span');
     hint.className = 'config-hint';
-    hint.textContent = formatResolved(settings.resolved[field.key]);
+    hint.textContent = formatResolved(editor.settings.resolved[field.key]);
     parent.appendChild(hint);
   };
 
-  void reload();
+  void editor.reload();
   return card;
 }
 

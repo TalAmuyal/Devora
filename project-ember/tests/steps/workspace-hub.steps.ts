@@ -69,6 +69,22 @@ When(
   },
 );
 
+When('the user presses Ctrl+Right', async function (this: EmberWorld) {
+  const ui = new UIDriver(this.driver);
+  await ui.pressKey('ArrowRight', { ctrlKey: true, code: 'ArrowRight' });
+  await new Promise((r) => setTimeout(r, 150));
+});
+
+Then('the second session should be active', async function (this: EmberWorld) {
+  const activeId = await this.driver.eval(
+    'return window.__test.sessionManager.getActiveSessionId()',
+  );
+  const secondId = await this.driver.eval(
+    'return window.__test.sessionManager.getSessions()[1]?.id',
+  );
+  assert.strictEqual(activeId, secondId);
+});
+
 When(
   'the user filters workspaces by {string}',
   async function (this: EmberWorld, text: string) {
@@ -106,7 +122,7 @@ Then(
   'the Workspace Hub should be visible',
   async function (this: EmberWorld) {
     const visible = await this.driver.eval(
-      'return window.__test.overlayManager.isTabCoveringOverlayActive()',
+      `return window.__test.layers.topOf('page') !== null`,
     );
     assert.strictEqual(visible, true);
   },
@@ -116,7 +132,7 @@ Then(
   'the Workspace Hub should not be visible',
   async function (this: EmberWorld) {
     await this.driver.pollFor(
-      'return window.__test.overlayManager.isTabCoveringOverlayActive()',
+      `return window.__test.layers.topOf('page') !== null`,
       false,
       3_000,
     );
@@ -424,6 +440,17 @@ Then(
     const ui = new UIDriver(this.driver);
     const visible = await ui.hasElement('.confirmation-dialog');
     assert.strictEqual(visible, false, 'Confirmation dialog should not be visible');
+  },
+);
+
+Then(
+  'exactly {int} confirmation dialog(s) should be visible',
+  async function (this: EmberWorld, expected: number) {
+    // Give any extra dialog time to appear if a key wrongly leaked to the hub beneath.
+    await new Promise((r) => setTimeout(r, 300));
+    const ui = new UIDriver(this.driver);
+    const count = await ui.getElementCount('.confirmation-dialog');
+    assert.strictEqual(count, expected, `Expected ${expected} confirmation dialog(s), got ${count}`);
   },
 );
 

@@ -3,7 +3,7 @@ import { listen } from '@tauri-apps/api/event';
 import { invoke, invokeLogOnly, Channel } from './invoke';
 import { SessionManager } from './session/SessionManager';
 import { TabBar } from './ui/TabBar';
-import { OverlayManager } from './ui/OverlayManager';
+import { SessionPanels } from './ui/SessionPanels';
 import { KeyboardShortcuts } from './ui/KeyboardShortcuts';
 import { CommandPalette } from './ui/CommandPalette';
 import { HealthHub } from './ui/HealthHub';
@@ -15,6 +15,8 @@ import { WorkspaceHub } from './workspace/WorkspaceHub';
 import { TaskCreationController } from './workspace/TaskCreationController';
 import { CreationEvent, RepoInfo } from './workspace/types';
 import { SettingsHub, SettingsHubView } from './workspace/SettingsHub';
+import { initLayerStack } from './ui/layers/stack';
+import type { LayerHandle, LayerSpec } from './ui/layers/types';
 import { WebContentOverlay } from './webview/WebContentOverlay';
 import {
   clearErrorBanners,
@@ -49,22 +51,31 @@ document.addEventListener('DOMContentLoaded', async () => {
   const mainPanelEl = document.getElementById('main-panel')!;
   const tabBarEl = document.getElementById('tab-bar')!;
 
-  const overlayManager = new OverlayManager(appEl);
   const sessionManager = new SessionManager(mainPanelEl);
 
-  const origActivate = sessionManager.activateSession.bind(sessionManager);
-  sessionManager.activateSession = (id: number) => {
-    origActivate(id);
-    overlayManager.onSessionActivated(id);
-  };
+  // The single owner of layer keyboard routing and focus (ADR-003). Install it first, before any other keydown handler.
+  const layers = initLayerStack({
+    pageHost: appEl,
+    modalHost: document.body,
+    resolveBaseFocus: () => sessionManager.getActiveSession()?.terminalPane ?? null,
+  });
+  layers.install();
 
-  const tabBar = new TabBar(tabBarEl, sessionManager, overlayManager);
+  let tabBar: TabBar;
+  const sessionPanels = new SessionPanels({
+    layers,
+    mainPanelEl,
+    getActiveSessionId: () => sessionManager.getActiveSessionId(),
+    onChange: () => tabBar.render(),
+  });
+  sessionManager.onActivate(() => sessionPanels.syncActive());
 
-  // The Workspace Hub and Command Palette are mutually-exclusive tab-covering overlays — neither opens while the other is open
-  let commandPaletteOpen = false;
+  tabBar = new TabBar(tabBarEl, sessionManager, sessionPanels);
 
+  // Programmatic close (opening a workspace / starting a task): pop the hub layer directly, bypassing the user-dismiss decision.
   const dismissWsHub = () => {
-    overlayManager.dismissTabCoveringOverlay();
+    const hub = layers.find('ws-hub');
+    if (hub) layers.remove(hub);
   };
 
   // Resolve the per-profile terminal app command (e.g. nvim); undefined falls back to a plain shell.
@@ -95,8 +106,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   const taskCreationController = new TaskCreationController({
     sessionManager,
-    overlayManager,
-    mainPanelEl,
+    sessionPanels,
     resolveAppCommand,
     onChange: () => tabBar.render(),
   });
@@ -257,36 +267,25 @@ document.addEventListener('DOMContentLoaded', async () => {
   const wsHub = new WorkspaceHub(
     (path, title, repos) => openWorkspace(path, title, repos, wsHub.getActiveProfilePath()),
     startTaskCreation,
-    dismissWsHub,
     (view) => openSettingsHub(view),
     cloneRepoIntoProfile,
     () => openHealthHub(),
   );
 
-  const teardownWsHub = () => {
-    wsHub.unload();
-  };
+  const wsHubSpec = (): LayerSpec => ({
+    name: 'ws-hub',
+    kind: 'page',
+    element: wsHub.getElement(),
+    onKey: (e) => wsHub.handleKey(e),
+    // User dismissal (q/Esc/Ctrl+S) routes through the hub so it can close its cheatsheet first and refuse while zero-profile locked.
+    onUserDismissRequest: () => wsHub.handleUserDismiss(),
+    onReveal: () => void wsHub.reloadData(),
+    onCleanup: () => wsHub.unload(),
+  });
 
   const openWsHub = () => {
     wsHub.load();
-    overlayManager.showTabCoveringOverlay(
-      wsHub.getElement(),
-      teardownWsHub,
-      sessionManager.getActiveSession()?.terminalPane,
-      undefined,
-      // User dismissal (q/Esc/Ctrl+S) goes through the hub so it can close its cheatsheet first and refuse while zero-profile locked.
-      () => wsHub.handleUserDismiss(),
-    );
-  };
-
-  const toggleWsHub = () => {
-    if (commandPaletteOpen) return;
-    if (overlayManager.isTabCoveringOverlayActive()) {
-      // Respect the active overlay's user-dismiss override (zero-profile lock, Settings-Hub-back-to-hub) instead of force-dismissing.
-      overlayManager.dismissActiveOverlay();
-    } else {
-      openWsHub();
-    }
+    layers.push(wsHubSpec());
   };
 
   const settingsHub = new SettingsHub({
@@ -294,21 +293,24 @@ document.addEventListener('DOMContentLoaded', async () => {
     setActiveProfilePath: (path) => wsHub.setActiveProfilePath(path),
     getOpenSessionsForProfile: (profilePath) =>
       sessionManager.getSessions().filter((s) => s.profilePath === profilePath),
-    onClose: () => openWsHub(),
+    // A completed action (set active / register / delete-last-profile) dismisses Settings the same way q/Esc does.
+    onClose: () => {
+      layers.requestUserDismiss();
+    },
     onCloneRepo: (profilePath, onDone) => cloneRepoIntoProfile(profilePath, onDone),
   });
 
+  const settingsHubSpec = (): LayerSpec => ({
+    name: 'settings-hub',
+    kind: 'page',
+    element: settingsHub.getElement(),
+    onKey: (e) => settingsHub.handleKey(e),
+    onCleanup: () => settingsHub.unload(),
+  });
+
   const openSettingsHub = (view: SettingsHubView = 'list') => {
-    if (commandPaletteOpen) return;
     void settingsHub.load(view);
-    overlayManager.showTabCoveringOverlay(
-      settingsHub.getElement(),
-      () => settingsHub.unload(),
-      null,
-      undefined,
-      // q/Esc/Ctrl+S on the Settings Hub returns to the Workspace Hub (showTabCoveringOverlay replaces this overlay and runs its cleanup).
-      () => openWsHub(),
-    );
+    layers.push(settingsHubSpec());
   };
 
   // Duplicate the active session into a new workspace: open the Hub's New Task form pre-filled with this session's repos (pinned to their current commits) and its title.
@@ -323,15 +325,19 @@ document.addEventListener('DOMContentLoaded', async () => {
     openWsHub();
   };
 
-  // Every palette command closes the palette (the active tab-covering overlay) before acting
+  let paletteHandle: LayerHandle | null = null;
+  const dismissPalette = () => {
+    if (paletteHandle) layers.remove(paletteHandle);
+  };
+
   const closePaletteThen = (action: () => void) => () => {
-    overlayManager.dismissTabCoveringOverlay();
+    dismissPalette();
     action();
   };
 
   const commandPalette = new CommandPalette({
     // Type-first palette: the search field is focused on open, so Escape closes the overlay directly (single press).
-    onRequestClose: () => overlayManager.dismissTabCoveringOverlay(),
+    onRequestClose: () => dismissPalette(),
     commands: [
       {
         id: 'workspace-hub',
@@ -417,7 +423,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       },
       {
         id: 'manage-profiles',
-        title: 'Manage Profiles',
+        title: 'Settings / Manage Profiles',
         description: 'Open the Settings Hub — switch, create, and delete profiles; edit Claude models, effort, and repos',
         icon: '⚙',
         shortcut: [],
@@ -444,43 +450,31 @@ document.addEventListener('DOMContentLoaded', async () => {
     },
   });
 
-  const teardownPalette = () => {
-    commandPalette.unload();
-    commandPaletteOpen = false;
-  };
-
   const openCommandPalette = () => {
-    if (overlayManager.isTabCoveringOverlayActive()) return;
+    // Mutually exclusive with the pages (hub, Settings, guide) and any modal.
+    if (layers.topOf('page') !== null || layers.topOf('modal') !== null) return;
     commandPalette.load();
-    overlayManager.showTabCoveringOverlay(
-      commandPalette.getElement(),
-      teardownPalette,
-      sessionManager.getActiveSession()?.terminalPane,
-      'overlay-passthrough',
-    );
-    // Focus the search field after the overlay is attached (this overrides the wrapper focus showTabCoveringOverlay just set).
-    commandPalette.focusSearch();
-    commandPaletteOpen = true;
+    paletteHandle = layers.push({
+      name: 'command-palette',
+      kind: 'page',
+      element: commandPalette.getElement(),
+      onKey: (e) => commandPalette.handleKey(e),
+      // The search field is focused on open (resolved at push) so the user can type a filter immediately.
+      resolveFocus: () => ({ focus: () => commandPalette.focusSearch() }),
+      onCleanup: () => {
+        commandPalette.unload();
+        paletteHandle = null;
+      },
+      wrapperClass: 'overlay-passthrough',
+    });
   };
 
   const openUserGuide = async () => {
+    if (layers.find('user-guide')) return;
     try {
       const guidePath = await invoke<string>('get_user_guide_path');
       const content = await WebContentOverlay.createMarkdownContent(guidePath, 'User Guide');
-      overlayManager.showTabCoveringOverlay(
-        content,
-        undefined,
-        sessionManager.getActiveSession()?.terminalPane,
-        undefined,
-        // Opened over the zero-profile welcome there is nothing behind the guide — return to the hub instead of an empty terminal area.
-        () => {
-          if (wsHub.isZeroProfileLocked()) {
-            openWsHub();
-          } else {
-            overlayManager.dismissTabCoveringOverlay();
-          }
-        },
-      );
+      layers.push({ name: 'user-guide', kind: 'page', element: content });
     } catch (_) {
       // invoke already surfaced the error
     }
@@ -492,29 +486,23 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   const openHealthHub = () => {
     healthHub.load();
-    overlayManager.showTabCoveringOverlay(
-      healthHub.getElement(),
-      () => healthHub.unload(),
-      sessionManager.getActiveSession()?.terminalPane,
-      undefined,
-      // Opened over the zero-profile welcome there is nothing behind it — return to the hub instead of an empty terminal area.
-      () => {
-        if (wsHub.isZeroProfileLocked()) {
-          openWsHub();
-        } else {
-          overlayManager.dismissTabCoveringOverlay();
-        }
-      },
-    );
+    layers.push({
+      name: 'health-hub',
+      kind: 'page',
+      element: healthHub.getElement(),
+      onKey: (e) => healthHub.handleKey(e),
+      onCleanup: () => healthHub.unload(),
+    });
   };
 
-  new KeyboardShortcuts(
+  const shortcuts = new KeyboardShortcuts(
     sessionManager,
-    overlayManager,
-    toggleWsHub,
+    openWsHub,
     openCommandPalette,
     openUserGuide,
   );
+  layers.setKeyObserver((e) => shortcuts.observeKey(e));
+  layers.setGlobalHandler((e) => shortcuts.handleGlobal(e));
 
   // Crit panel overlay integration: listen for backend events requesting a Crit review overlay, and wire overlay dismissal back to the backend.
   await listen<{ ptyId: number; url: string }>('crit-open-overlay', (event) => {
@@ -526,9 +514,14 @@ document.addEventListener('DOMContentLoaded', async () => {
       return;
     }
     const content = WebContentOverlay.createUrlContent(url, 'Crit Review');
-    overlayManager.showPanelOverlay(session.id, content, mainPanelEl, session.terminalPane);
-    overlayManager.onSessionActivated(sessionManager.getActiveSessionId()!);
-    tabBar.render();
+    // Notify the backend on user dismissal (q/Esc) so the crit process can exit.
+    sessionPanels.show(session.id, content, () => {
+      const pid = session.getPtyId();
+      if (pid !== null) {
+        invokeLogOnly('crit_overlay_dismissed', { ptyId: pid }).catch(() => {});
+      }
+      return 'close';
+    });
   });
 
   // Preview pane integration: an external tool (debi preview) asks Ember to render a file beside the terminal of a specific PTY session.
@@ -542,41 +535,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     session.openPreview(path, stack);
   });
 
-  const origDismissPanelOverlay = overlayManager.dismissPanelOverlay.bind(overlayManager);
-
+  // Backend-initiated close (crit process exited): tear the panel down without notifying it back.
   await listen<{ ptyId: number }>('crit-close-overlay', (event) => {
     const { ptyId } = event.payload;
     const session = sessionManager.getSessions().find(s => s.getPtyId() === ptyId);
     if (session) {
-      origDismissPanelOverlay(session.id);
-      tabBar.render();
+      sessionPanels.dismiss(session.id);
     }
   });
-
-  // Patch dismissPanelOverlay to notify the backend when a crit overlay is dismissed by the user (q/Esc/tab close).
-  overlayManager.dismissPanelOverlay = (sessionId: number) => {
-    // A creation overlay owns its own dismissal: Esc/q cancels the in-flight creation (or closes it after a failure).
-    // The controller removes the overlay itself once that resolves.
-    if (taskCreationController.isCreating(sessionId) && overlayManager.hasPanelOverlay(sessionId)) {
-      taskCreationController.handleDismiss(sessionId);
-      return;
-    }
-
-    const hadOverlay = overlayManager.hasPanelOverlay(sessionId);
-
-    origDismissPanelOverlay(sessionId);
-
-    if (hadOverlay) {
-      const session = sessionManager.getSessions().find(s => s.id === sessionId);
-      const ptyId = session?.getPtyId();
-
-      if (ptyId !== null && ptyId !== undefined) {
-        invokeLogOnly('crit_overlay_dismissed', { ptyId }).catch(() => {});
-      }
-
-      tabBar.render();
-    }
-  };
 
   tabBar.render();
 
@@ -584,16 +550,18 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   (window as any).__test = {
     sessionManager,
-    overlayManager,
+    sessionPanels,
     tabBar,
     wsHub,
     settingsHub,
     openSettingsHub,
     commandPalette,
     openCommandPalette,
-    toggleWsHub,
     healthHub,
     openHealthHub,
+    layers,
+    openWsHub,
+    dismissTopLayer: () => layers.requestUserDismiss(),
     showError,
     clearErrorBanners,
   };

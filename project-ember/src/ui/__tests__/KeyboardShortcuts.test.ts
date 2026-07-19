@@ -1,38 +1,36 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { KeyboardShortcuts } from '../KeyboardShortcuts';
 import type { SessionManager } from '../../session/SessionManager';
-import type { OverlayManager } from '../OverlayManager';
 
 interface Harness {
   shortcuts: KeyboardShortcuts;
   createSession: ReturnType<typeof vi.fn>;
-  onToggleWsHub: ReturnType<typeof vi.fn>;
+  activateNext: ReturnType<typeof vi.fn>;
+  activatePrevious: ReturnType<typeof vi.fn>;
+  onOpenWsHub: ReturnType<typeof vi.fn>;
   onOpenCommandPalette: ReturnType<typeof vi.fn>;
   onOpenUserGuide: ReturnType<typeof vi.fn>;
-  dismissActiveOverlay: ReturnType<typeof vi.fn>;
 }
 
 function makeHarness(): Harness {
   const createSession = vi.fn();
-  const onToggleWsHub = vi.fn();
+  const activateNext = vi.fn();
+  const activatePrevious = vi.fn();
+  const onOpenWsHub = vi.fn();
   const onOpenCommandPalette = vi.fn();
   const onOpenUserGuide = vi.fn();
-  const dismissActiveOverlay = vi.fn(() => false);
 
   const sessionManager = {
     createSession,
+    activateNext,
+    activatePrevious,
     getActiveSession: () => null,
     getSessions: () => [],
   } as unknown as SessionManager;
 
-  const overlayManager = {
-    dismissActiveOverlay,
-  } as unknown as OverlayManager;
-
   const shortcuts = new KeyboardShortcuts(
     sessionManager,
-    overlayManager,
-    onToggleWsHub,
+    onOpenWsHub,
     onOpenCommandPalette,
     onOpenUserGuide,
   );
@@ -40,116 +38,121 @@ function makeHarness(): Harness {
   return {
     shortcuts,
     createSession,
-    onToggleWsHub,
+    activateNext,
+    activatePrevious,
+    onOpenWsHub,
     onOpenCommandPalette,
     onOpenUserGuide,
-    dismissActiveOverlay,
   };
 }
 
-function keydown(init: KeyboardEventInit): void {
-  window.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init }));
+/** Drive the global handler the way the LayerStack would when a key reaches the base. Returns whether it consumed the key. */
+function global(shortcuts: KeyboardShortcuts, init: KeyboardEventInit): boolean {
+  return shortcuts.handleGlobal(new KeyboardEvent('keydown', init));
 }
 
+/** Feed a keydown to the key observer (the LayerStack calls this on every keydown; it never consumes). */
+function observe(shortcuts: KeyboardShortcuts, init: KeyboardEventInit): void {
+  shortcuts.observeKey(new KeyboardEvent('keydown', init));
+}
+
+/** Shift-Shift fires on keyup, which KeyboardShortcuts still owns as a window listener. */
 function keyup(init: KeyboardEventInit): void {
   window.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, cancelable: true, ...init }));
 }
 
-describe('KeyboardShortcuts', () => {
-  let harness: Harness;
+describe('KeyboardShortcuts — global handler', () => {
+  let h: Harness;
 
   beforeEach(() => {
-    harness = makeHarness();
+    h = makeHarness();
+  });
+
+  it('Ctrl+S opens the Workspace Hub and consumes the key', () => {
+    expect(global(h.shortcuts, { key: 's', code: 'KeyS', ctrlKey: true })).toBe(true);
+    expect(h.onOpenWsHub).toHaveBeenCalledOnce();
+    expect(h.onOpenCommandPalette).not.toHaveBeenCalled();
+  });
+
+  it('Ctrl+Shift+S creates a new session', () => {
+    expect(global(h.shortcuts, { key: 'S', code: 'KeyS', ctrlKey: true, shiftKey: true })).toBe(true);
+    expect(h.createSession).toHaveBeenCalledOnce();
+  });
+
+  it('Ctrl+ArrowRight/Left switch sessions', () => {
+    expect(global(h.shortcuts, { key: 'ArrowRight', code: 'ArrowRight', ctrlKey: true })).toBe(true);
+    expect(h.activateNext).toHaveBeenCalledOnce();
+    expect(global(h.shortcuts, { key: 'ArrowLeft', code: 'ArrowLeft', ctrlKey: true })).toBe(true);
+    expect(h.activatePrevious).toHaveBeenCalledOnce();
+  });
+
+  it('F1 opens the User Guide', () => {
+    expect(global(h.shortcuts, { key: 'F1', code: 'F1' })).toBe(true);
+    expect(h.onOpenUserGuide).toHaveBeenCalledOnce();
+  });
+
+  it('leaves an unhandled key for the focused terminal (returns false, no action)', () => {
+    expect(global(h.shortcuts, { key: 'a', code: 'KeyA' })).toBe(false);
+    expect(h.onOpenWsHub).not.toHaveBeenCalled();
+    expect(h.createSession).not.toHaveBeenCalled();
+  });
+});
+
+describe('KeyboardShortcuts — Shift-Shift double-tap', () => {
+  let h: Harness;
+
+  beforeEach(() => {
+    h = makeHarness();
   });
 
   afterEach(() => {
     vi.useRealTimers();
   });
 
-  it('Ctrl+S toggles the Workspace Hub', () => {
-    keydown({ key: 's', code: 'KeyS', ctrlKey: true });
-    expect(harness.onToggleWsHub).toHaveBeenCalledOnce();
-    expect(harness.onOpenCommandPalette).not.toHaveBeenCalled();
-  });
-
-  it('Ctrl+Shift+S creates a new session', () => {
-    keydown({ key: 'S', code: 'KeyS', ctrlKey: true, shiftKey: true });
-    expect(harness.createSession).toHaveBeenCalledOnce();
-  });
-
-  it('shift+shift (rapid double-tap) opens the Command Palette, not the Hub', () => {
-    keydown({ key: 'Shift', code: 'ShiftLeft', shiftKey: true });
+  const doubleTap = (shortcuts: KeyboardShortcuts): void => {
+    observe(shortcuts, { key: 'Shift', code: 'ShiftLeft', shiftKey: true });
     keyup({ key: 'Shift', code: 'ShiftLeft' });
-    keydown({ key: 'Shift', code: 'ShiftLeft', shiftKey: true });
+    observe(shortcuts, { key: 'Shift', code: 'ShiftLeft', shiftKey: true });
     keyup({ key: 'Shift', code: 'ShiftLeft' });
+  };
 
-    expect(harness.onOpenCommandPalette).toHaveBeenCalledOnce();
-    expect(harness.onToggleWsHub).not.toHaveBeenCalled();
+  it('a rapid double-tap opens the Command Palette, not the Hub', () => {
+    doubleTap(h.shortcuts);
+    expect(h.onOpenCommandPalette).toHaveBeenCalledOnce();
+    expect(h.onOpenWsHub).not.toHaveBeenCalled();
   });
 
   it('two Shift taps further apart than the threshold do not open the palette', () => {
     vi.useFakeTimers();
-    keydown({ key: 'Shift', code: 'ShiftLeft', shiftKey: true });
+    observe(h.shortcuts, { key: 'Shift', code: 'ShiftLeft', shiftKey: true });
     keyup({ key: 'Shift', code: 'ShiftLeft' });
     vi.advanceTimersByTime(600);
-    keydown({ key: 'Shift', code: 'ShiftLeft', shiftKey: true });
+    observe(h.shortcuts, { key: 'Shift', code: 'ShiftLeft', shiftKey: true });
     keyup({ key: 'Shift', code: 'ShiftLeft' });
 
-    expect(harness.onOpenCommandPalette).not.toHaveBeenCalled();
+    expect(h.onOpenCommandPalette).not.toHaveBeenCalled();
   });
 
   it('fires again on a fresh double-tap after an intervening key (e.g. dismissing the palette)', () => {
-    const doubleTap = (): void => {
-      keydown({ key: 'Shift', code: 'ShiftLeft', shiftKey: true });
-      keyup({ key: 'Shift', code: 'ShiftLeft' });
-      keydown({ key: 'Shift', code: 'ShiftLeft', shiftKey: true });
-      keyup({ key: 'Shift', code: 'ShiftLeft' });
-    };
+    doubleTap(h.shortcuts);
+    expect(h.onOpenCommandPalette).toHaveBeenCalledTimes(1);
 
-    doubleTap();
-    expect(harness.onOpenCommandPalette).toHaveBeenCalledTimes(1);
-
-    // Dismiss the palette with Escape — a non-Shift key in between attempts.
-    keydown({ key: 'Escape', code: 'Escape' });
+    // An intervening non-Shift key (the Escape/q that dismisses the palette).
+    observe(h.shortcuts, { key: 'Escape', code: 'Escape' });
     keyup({ key: 'Escape', code: 'Escape' });
 
-    // The very next double-tap must work, with no wasted/extra Shift tap.
-    doubleTap();
-    expect(harness.onOpenCommandPalette).toHaveBeenCalledTimes(2);
+    doubleTap(h.shortcuts);
+    expect(h.onOpenCommandPalette).toHaveBeenCalledTimes(2);
   });
 
   it('a non-Shift key between Shift taps cancels the double-tap', () => {
-    keydown({ key: 'Shift', code: 'ShiftLeft', shiftKey: true });
+    observe(h.shortcuts, { key: 'Shift', code: 'ShiftLeft', shiftKey: true });
     keyup({ key: 'Shift', code: 'ShiftLeft' });
-    keydown({ key: 'a', code: 'KeyA' });
+    observe(h.shortcuts, { key: 'a', code: 'KeyA' });
     keyup({ key: 'a', code: 'KeyA' });
-    keydown({ key: 'Shift', code: 'ShiftLeft', shiftKey: true });
+    observe(h.shortcuts, { key: 'Shift', code: 'ShiftLeft', shiftKey: true });
     keyup({ key: 'Shift', code: 'ShiftLeft' });
 
-    expect(harness.onOpenCommandPalette).not.toHaveBeenCalled();
-  });
-
-  it('F1 opens the User Guide', () => {
-    keydown({ key: 'F1', code: 'F1' });
-    expect(harness.onOpenUserGuide).toHaveBeenCalledOnce();
-  });
-
-  it('q attempts overlay dismissal when no editable element is focused', () => {
-    keydown({ key: 'q', code: 'KeyQ' });
-    expect(harness.dismissActiveOverlay).toHaveBeenCalledOnce();
-  });
-
-  it('q does not dismiss an overlay while a contentEditable element is focused', () => {
-    const editable = document.createElement('div');
-    editable.contentEditable = 'true';
-    document.body.appendChild(editable);
-    editable.focus();
-    expect(document.activeElement).toBe(editable);
-
-    keydown({ key: 'q', code: 'KeyQ' });
-    expect(harness.dismissActiveOverlay).not.toHaveBeenCalled();
-
-    editable.blur();
-    editable.remove();
+    expect(h.onOpenCommandPalette).not.toHaveBeenCalled();
   });
 });

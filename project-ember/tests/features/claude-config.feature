@@ -31,14 +31,11 @@ Feature: Claude model and effort configuration
     And "echo DEFAULTS=:$ANTHROPIC_DEFAULT_OPUS_MODEL:$DEVORA_CCC_EFFORT:" is typed in the terminal
     Then the terminal should contain "DEFAULTS=:claude-opus-4-8:xhigh:"
 
-  Scenario: Choosing an effort level from the Settings Hub dropdown
+  Scenario: Setting the effort level from the Settings Hub
     Given a profile "Work" with 1 active workspaces
     And the Workspace Hub is open
     When the user presses "P"
     Then the Settings Hub should be visible
     When the user opens the "User Defaults" settings detail
-    And the user switches the Effort row to Custom
-    And the user opens the effort dropdown
-    Then the effort dropdown items should be clickable at their on-screen position
-    When the user chooses the effort level "low"
+    And the user sets the effort level to "low"
     Then the global config should have the Claude "effort" set to "low"

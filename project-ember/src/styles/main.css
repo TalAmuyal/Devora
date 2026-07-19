@@ -54,14 +54,12 @@ body {
   overflow-y: auto;
 }
 
-/* Transparent wrapper variant: lets the overlay content paint its own dim
-   backdrop so the terminal shows through (used by the Command Palette). */
+/* Transparent wrapper variant: lets the overlay content paint its own dim backdrop so the terminal shows through (used by the Command Palette). */
 .overlay-tab-covering.overlay-passthrough {
   background: transparent;
 }
 
-/* The wrapper takes keyboard focus when shown (see OverlayManager); hide the
-   focus ring since it is a full-window container, not an interactive control. */
+/* The wrapper takes keyboard focus when shown (see LayerStack); hide the focus ring since it is a full-window container, not an interactive control. */
 .overlay-tab-covering:focus {
   outline: none;
 }
@@ -73,6 +71,14 @@ body {
   z-index: 50;
   background: var(--color-bg);
   overflow-y: auto;
+}
+
+/* Invisible focus/keyboard-routing holder for the active session's panel (SessionPanels); the visible surface is the .overlay-panel it represents. */
+.session-panel-sentinel {
+  position: absolute;
+  width: 0;
+  height: 0;
+  outline: none;
 }
 
 /* ── Tab bar ── */
@@ -940,8 +946,7 @@ kbd {
   flex-shrink: 0;
 }
 
-/* The Repos and Claude config cards stack in the detail panel, each spaced from what's above it. */
-.pm-detail .claude-config-card,
+/* The settings cards stack in the detail panel, each spaced from what's above it. */
 .pm-detail .settings-card {
   margin-top: var(--space-lg);
 }

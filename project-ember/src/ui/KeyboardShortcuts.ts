@@ -1,13 +1,16 @@
 import { SessionManager } from '../session/SessionManager';
-import { OverlayManager } from './OverlayManager';
-import { isEditableElementFocused } from './focus';
 
 const SHIFT_SHIFT_THRESHOLD_MS = 500;
 
+/**
+ * The base (empty-stack / through-a-page-barrier) global shortcuts, driven by the LayerStack (ADR-003).
+ *
+ * This owns no `window`-capture keydown listener of its own: `observeKey` is registered as the stack's key observer (Shift-Shift tracking; never consumes) and `handleGlobal` as the stack's global handler (returns `true` when it consumes).
+ * Only the keyup listener for the Shift-Shift double-tap stays here.
+ */
 export class KeyboardShortcuts {
   private sessionManager: SessionManager;
-  private overlayManager: OverlayManager;
-  private onToggleWsHub: () => void;
+  private onOpenWsHub: () => void;
   private onOpenCommandPalette: () => void;
   private onOpenUserGuide: () => void;
 
@@ -17,28 +20,25 @@ export class KeyboardShortcuts {
 
   constructor(
     sessionManager: SessionManager,
-    overlayManager: OverlayManager,
-    onToggleWsHub: () => void,
+    onOpenWsHub: () => void,
     onOpenCommandPalette: () => void,
     onOpenUserGuide: () => void,
   ) {
     this.sessionManager = sessionManager;
-    this.overlayManager = overlayManager;
-    this.onToggleWsHub = onToggleWsHub;
+    this.onOpenWsHub = onOpenWsHub;
     this.onOpenCommandPalette = onOpenCommandPalette;
     this.onOpenUserGuide = onOpenUserGuide;
 
-    window.addEventListener('keydown', (e) => this.handleKeyDown(e), true);
     window.addEventListener('keyup', (e) => this.handleKeyUp(e), true);
   }
 
-  private handleKeyDown(e: KeyboardEvent): void {
-    /*
-     * Track Shift-Shift (a rapid double-tap of a lone Shift).
-     * A tap only counts if Shift was pressed and released with no other key in between.
-     * We decide "lone" on the Shift *press* (ignoring auto-repeat) rather than restoring a flag after a release — that's what makes the next double-tap fire reliably right after an intervening key, such as the Escape/q that dismisses the palette.
-     * Any non-Shift key both breaks the current press and discards a pending first tap.
-     */
+  /**
+   * The LayerStack's key observer: sees every keydown and never consumes.
+   * Tracks Shift-Shift (a rapid double-tap of a lone Shift): a tap only counts if Shift was pressed and released with no other key in between.
+   * We decide "lone" on the Shift *press* (ignoring auto-repeat) rather than restoring a flag after a release — that's what makes the next double-tap fire reliably right after an intervening key, such as the Escape/q that dismisses the palette.
+   * Any non-Shift key both breaks the current press and discards a pending first tap.
+   */
+  observeKey(e: KeyboardEvent): void {
     if (e.key === 'Shift') {
       if (!e.repeat) {
         this.shiftIsLone = true;
@@ -47,111 +47,68 @@ export class KeyboardShortcuts {
       this.shiftIsLone = false;
       this.lastShiftTapTime = 0;
     }
+  }
 
+  /** The LayerStack's global handler for base shortcuts. Returns `true` when it consumes the key. */
+  handleGlobal(e: KeyboardEvent): boolean {
     // Use e.code (physical key) for matching, because macOS WKWebView transforms e.key into control characters when Ctrl is held
     const code = e.code;
     const ctrl = e.ctrlKey;
     const shift = e.shiftKey;
 
-    if (e.key === 'Escape' || e.key === 'q') {
-      if (isEditableElementFocused()) {
-        return;
-      }
-      if (this.overlayManager.dismissActiveOverlay()) {
-        e.preventDefault();
-        e.stopPropagation();
-        return;
-      }
-    }
-
     if (e.key === 'F1') {
-      e.preventDefault();
-      e.stopPropagation();
       this.onOpenUserGuide();
-      return;
+      return true;
     }
-
     if (ctrl && !shift && code === 'KeyS') {
-      e.preventDefault();
-      e.stopPropagation();
-      this.onToggleWsHub();
-      return;
+      this.onOpenWsHub();
+      return true;
     }
-
     if (ctrl && shift && code === 'KeyS') {
-      e.preventDefault();
-      e.stopPropagation();
       this.sessionManager.createSession();
-      return;
+      return true;
     }
-
     if (ctrl && !shift && code === 'ArrowLeft') {
-      e.preventDefault();
-      e.stopPropagation();
       this.sessionManager.activatePrevious();
-      return;
+      return true;
     }
-
     if (ctrl && !shift && code === 'ArrowRight') {
-      e.preventDefault();
-      e.stopPropagation();
       this.sessionManager.activateNext();
-      return;
+      return true;
     }
-
     if (ctrl && shift && code === 'ArrowLeft') {
-      e.preventDefault();
-      e.stopPropagation();
       this.sessionManager.moveTabBackward();
-      return;
+      return true;
     }
-
     if (ctrl && shift && code === 'ArrowRight') {
-      e.preventDefault();
-      e.stopPropagation();
       this.sessionManager.moveTabForward();
-      return;
+      return true;
     }
-
     if (ctrl && shift && (code === 'Equal' || code === 'NumpadAdd')) {
-      e.preventDefault();
-      e.stopPropagation();
       this.changeFontSize(2);
-      return;
+      return true;
     }
-
     if (ctrl && !shift && code === 'Equal') {
-      e.preventDefault();
-      e.stopPropagation();
       this.setFontSize(15);
-      return;
+      return true;
     }
-
     if (ctrl && shift && (code === 'Minus' || code === 'NumpadSubtract')) {
-      e.preventDefault();
-      e.stopPropagation();
       this.changeFontSize(-2);
-      return;
+      return true;
     }
-
     if (ctrl && !shift && code === 'Digit1') {
-      e.preventDefault();
-      e.stopPropagation();
       this.setFontSize(12);
-      return;
+      return true;
     }
     if (ctrl && !shift && code === 'Digit2') {
-      e.preventDefault();
-      e.stopPropagation();
       this.setFontSize(15);
-      return;
+      return true;
     }
     if (ctrl && !shift && code === 'Digit3') {
-      e.preventDefault();
-      e.stopPropagation();
       this.setFontSize(26);
-      return;
+      return true;
     }
+    return false;
   }
 
   private handleKeyUp(e: KeyboardEvent): void {

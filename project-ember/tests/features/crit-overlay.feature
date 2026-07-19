@@ -14,3 +14,10 @@ Feature: Crit overlay integration
     Given the active session has a crit overlay
     When an external tool sends a crit-done request for the active session
     Then the active session should not have a panel overlay
+
+  Scenario: q dismisses the crit overlay while the terminal holds focus
+    Given no overlay is open
+    And the active session has a crit overlay
+    And the active session's terminal holds focus
+    When the user presses "q" without first taking focus
+    Then the active session should not have a panel overlay

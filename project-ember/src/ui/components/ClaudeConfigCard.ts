@@ -1,19 +1,23 @@
 /**
  * Claude Models & Effort config card: edits the Opus/Sonnet/Haiku model tiers and the effort level for one scope (a profile, or `null` for user-level/global defaults).
  *
- * Each row is a tri-state control (`Custom | Default | None`): a concrete value, "Default" (unset here → falls through profile → user → Devora default), or "None" (impose nothing, so Claude Code uses its own default).
- * Custom models are free text (decoupled from Devora releases) with suggestion chips; effort is a dropdown of the supported levels.
+ * The three model rows are a tri-state control (`Custom | Default | None`): a concrete value, "Default" (unset here → falls through profile → user → Devora default), or "None" (impose nothing, so Claude Code uses its own default).
+ * Custom models are free text (decoupled from Devora releases) with suggestion chips.
+ * The Effort row is a single segmented control listing every choice at once — "Default", the supported levels (highest → lowest), and "None" — since effort is a closed set rather than free text.
  *
- * Reads via `get_claude_settings` and writes via `set_claude_setting`; after every write it re-reads so the "Default →" hint reflects the live resolution.
- * DOM: `div.claude-config-card`.
+ * The local-first read/write/re-read/focus mechanics live in the shared `settingsEditor`; this file owns only the tri-state model, the effort control, and rendering.
+ * DOM: `div.settings-card` (shared chrome) containing `div.config-row`s.
  */
 
-import { invoke } from '../../invoke';
+import { createSettingsEditor } from '../settingsEditor';
+import { createSettingsCard } from './SettingsCard';
 import { createSegmentedControl } from './SegmentedControl';
-import { createDropdownMenu } from './DropdownMenu';
+import { createCommitInput } from './CommitInput';
 
-/** Supported Claude Code effort levels. Mirrors `CLAUDE_EFFORT_LEVELS` in workspace.rs. */
+/** Supported Claude Code effort levels, lowest → highest. Mirrors `CLAUDE_EFFORT_LEVELS` in workspace.rs. */
 const EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
+
+const EFFORT_LEVELS_DESC = [...EFFORT_LEVELS].reverse();
 
 /** Suggestions only — any model id can be typed (a new model needs no Devora release). */
 const MODEL_SUGGESTIONS = [
@@ -52,209 +56,183 @@ export interface ClaudeConfigCardOptions {
 }
 
 export function createClaudeConfigCard(options: ClaudeConfigCardOptions): HTMLElement {
-  const card = document.createElement('div');
-  card.className = 'claude-config-card';
+  const card = createSettingsCard('Claude Models & Effort');
 
-  const modes = new Map<SettingKey, Mode>();
-  const customValues = new Map<SettingKey, string>();
-  let settings: ClaudeSettings = { stored: {}, resolved: {} as Record<SettingKey, string | null> };
-  // Serializes writes so a value-commit and a follow-on segment switch apply in order.
-  let writeChain: Promise<unknown> = Promise.resolve();
+  const editor = createSettingsEditor<ClaudeSettings>({
+    getCommand: 'get_claude_settings',
+    setCommand: 'set_claude_setting',
+    profilePath: options.profilePath,
+    initial: { stored: {}, resolved: {} as Record<SettingKey, string | null> },
+    render: () => render(),
+    afterLoad: (settings, ed) => {
+      for (const row of ROWS) {
+        const stored = settings.stored[row.key];
+        if (typeof stored === 'string') ed.setDraft(row.key, stored);
+      }
+    },
+  });
 
   const deriveMode = (key: SettingKey): Mode => {
-    if (!(key in settings.stored)) return 'default';
-    return settings.stored[key] === null ? 'none' : 'custom';
+    if (!(key in editor.settings.stored)) return 'default';
+    return editor.settings.stored[key] === null ? 'none' : 'custom';
   };
 
-  const reload = async (): Promise<void> => {
-    try {
-      settings = await invoke<ClaudeSettings>('get_claude_settings', {
-        profilePath: options.profilePath,
-      });
-    } catch {
-      return; // invoke already surfaced the error
-    }
-    for (const row of ROWS) {
-      modes.set(row.key, deriveMode(row.key));
-      const stored = settings.stored[row.key];
-      if (typeof stored === 'string') customValues.set(row.key, stored);
-    }
-    render();
-  };
-
-  // `state` is the backend vocabulary: "value" writes a string, "none" writes null, "default" removes the key.
-  // (The UI "custom" mode maps to the "value" write.)
-  const persist = (key: SettingKey, state: 'value' | 'none' | 'default', value?: string): void => {
-    writeChain = writeChain
-      .then(() =>
-        invoke('set_claude_setting', {
-          profilePath: options.profilePath,
-          key,
-          state,
-          value: value ?? null,
-        }),
-      )
-      .then(
-        () => reload(),
-        () => {}, // invoke already surfaced the error
-      );
-  };
+  const displayMode = (key: SettingKey): Mode =>
+    editor.hasPendingEntry(key) ? 'custom' : deriveMode(key);
 
   const render = (): void => {
-    card.innerHTML = '';
-
-    const header = document.createElement('div');
-    header.className = 'claude-config-card-header';
-    header.textContent = 'Claude Models & Effort';
-    card.appendChild(header);
-
+    // Drop everything after the header, then rebuild the rows.
+    while (card.childNodes.length > 1) {
+      card.removeChild(card.lastChild as ChildNode);
+    }
     for (const row of ROWS) {
       card.appendChild(renderRow(row));
     }
   };
 
   const renderRow = (row: RowSpec): HTMLElement => {
-    const mode = modes.get(row.key) ?? 'default';
-
     const rowEl = document.createElement('div');
-    rowEl.className = 'claude-config-row';
-
-    const labelEl = document.createElement('div');
-    labelEl.className = 'claude-config-row-label';
-    const nameEl = document.createElement('div');
-    nameEl.className = 'claude-config-row-name';
-    nameEl.textContent = row.label;
-    labelEl.appendChild(nameEl);
-    const hintEl = document.createElement('div');
-    hintEl.className = 'claude-config-row-env';
-    hintEl.textContent = row.hint;
-    labelEl.appendChild(hintEl);
-    rowEl.appendChild(labelEl);
-
-    const controlEl = document.createElement('div');
-    controlEl.className = 'claude-config-row-control';
-
-    controlEl.appendChild(
-      createSegmentedControl<Mode>({
-        items: [
-          { key: 'custom', label: 'Custom' },
-          { key: 'default', label: 'Default' },
-          { key: 'none', label: 'None' },
-        ],
-        activeKey: mode,
-        onSelect: (next) => onModeSelect(row, next),
-      }),
-    );
-
-    const valueEl = document.createElement('div');
-    valueEl.className = 'claude-config-row-value';
-    valueEl.appendChild(renderValue(row, mode));
-    controlEl.appendChild(valueEl);
-
-    rowEl.appendChild(controlEl);
+    rowEl.className = 'config-row';
+    rowEl.appendChild(renderLabel(row));
+    rowEl.appendChild(row.kind === 'effort' ? renderEffortControl() : renderModelControl(row));
     return rowEl;
   };
 
-  const renderValue = (row: RowSpec, mode: Mode): HTMLElement => {
+  const renderLabel = (row: RowSpec): HTMLElement => {
+    const labelEl = document.createElement('div');
+    labelEl.className = 'config-row-label';
+    const nameEl = document.createElement('div');
+    nameEl.className = 'config-row-name';
+    nameEl.textContent = row.label;
+    labelEl.appendChild(nameEl);
+    const hintEl = document.createElement('div');
+    hintEl.className = 'config-row-hint';
+    hintEl.textContent = row.hint;
+    labelEl.appendChild(hintEl);
+    return labelEl;
+  };
+
+  const renderControl = (segmented: HTMLElement, value: HTMLElement | null): HTMLElement => {
+    const controlEl = document.createElement('div');
+    controlEl.className = 'config-row-control';
+    controlEl.appendChild(segmented);
+
+    const valueEl = document.createElement('div');
+    valueEl.className = 'config-row-value';
+    if (value !== null) valueEl.appendChild(value);
+    controlEl.appendChild(valueEl);
+
+    return controlEl;
+  };
+
+  const renderModelControl = (row: RowSpec): HTMLElement => {
+    const mode = displayMode(row.key);
+    const segmented = createSegmentedControl<Mode>({
+      items: [
+        { key: 'custom', label: 'Custom' },
+        { key: 'default', label: 'Default' },
+        { key: 'none', label: 'None' },
+      ],
+      activeKey: mode,
+      onSelect: (next) => onModeSelect(row, next),
+    });
+    const value = mode === 'custom' ? renderModelInput(row) : overrideHint(row.key, mode);
+    return renderControl(segmented, value);
+  };
+
+  const renderEffortControl = (): HTMLElement => {
+    const mode = displayMode('effort');
+    // In "custom" mode this is the raw stored level; a hand-edited config can pin a value outside EFFORT_LEVELS, in which case no segment matches.
+    const stored = editor.getDraft('effort');
+
+    const segmented = createSegmentedControl<string>({
+      items: [
+        { key: 'default', label: 'Default' },
+        ...EFFORT_LEVELS_DESC.map((level) => ({ key: level, label: level })),
+        { key: 'none', label: 'None' },
+      ],
+      activeKey: mode === 'custom' ? (stored ?? '') : mode,
+      onSelect: onEffortSelect,
+    });
+
+    let value: HTMLElement | null = null;
+    if (mode !== 'custom') {
+      value = overrideHint('effort', mode);
+    } else if (stored && !EFFORT_LEVELS.includes(stored as (typeof EFFORT_LEVELS)[number])) {
+      // Surface an off-list level (from a hand-edited config), since no segment is highlighted for it.
+      value = mutedHint(`→ ${stored}`);
+    }
+    return renderControl(segmented, value);
+  };
+
+  const overrideHint = (key: SettingKey, mode: 'default' | 'none'): HTMLElement => {
     if (mode === 'none') {
       return mutedHint('No override — Claude Code decides');
     }
-    if (mode === 'default') {
-      const resolved = settings.resolved[row.key] ?? null;
-      return mutedHint(resolved === null ? '→ Claude Code default' : `→ ${resolved}`);
-    }
-    // mode === 'custom'
-    return row.kind === 'effort' ? renderEffortPicker(row) : renderModelInput(row);
+    const resolved = editor.settings.resolved[key] ?? null;
+    return mutedHint(resolved === null ? '→ Claude Code default' : `→ ${resolved}`);
   };
 
   const renderModelInput = (row: RowSpec): HTMLElement => {
     const wrap = document.createElement('div');
-    wrap.className = 'claude-config-combo';
+    wrap.className = 'config-combo';
 
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.className = 'claude-config-input';
-    input.placeholder = 'model id, then Enter';
-    input.value = customValues.get(row.key) ?? '';
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        e.stopPropagation();
-        commitModel(row, input.value);
-      }
+    const stored = editor.settings.stored[row.key];
+    const savedValue = typeof stored === 'string' ? stored : '';
+    const commitInput = createCommitInput({
+      placeholder: 'model id, then Enter',
+      value: editor.getDraft(row.key) ?? '',
+      savedValue,
+      onCommit: (raw) => editor.commit(row.key, raw),
     });
-    wrap.appendChild(input);
+    wrap.appendChild(commitInput.root);
 
     const chips = document.createElement('div');
-    chips.className = 'claude-config-chips';
+    chips.className = 'config-chips';
     for (const suggestion of MODEL_SUGGESTIONS) {
       const chip = document.createElement('button');
-      chip.className = 'claude-config-chip';
+      chip.className = 'config-chip';
       chip.textContent = suggestion;
       chip.addEventListener('click', () => {
         chip.blur();
-        commitModel(row, suggestion);
+        editor.commit(row.key, suggestion);
       });
       chips.appendChild(chip);
     }
     wrap.appendChild(chips);
 
-    // Focus the field when the user just switched into Custom mode.
-    queueMicrotask(() => input.focus());
+    editor.focusOnRender(row.key, commitInput.input);
     return wrap;
-  };
-
-  const renderEffortPicker = (row: RowSpec): HTMLElement => {
-    const current = customValues.get(row.key) ?? settings.resolved[row.key] ?? 'xhigh';
-    return createDropdownMenu({
-      triggerLabel: EFFORT_LEVELS.includes(current as (typeof EFFORT_LEVELS)[number])
-        ? current
-        : 'Select…',
-      items: EFFORT_LEVELS.map((level) => ({
-        kind: 'option' as const,
-        label: level,
-        checked: level === current,
-        onSelect: () => {
-          customValues.set(row.key, level);
-          persist(row.key, 'value', level);
-        },
-      })),
-    }).element;
   };
 
   const onModeSelect = (row: RowSpec, next: Mode): void => {
     if (next === 'custom') {
-      // Local switch only — nothing is written until a concrete value is committed.
-      modes.set(row.key, 'custom');
-      if (!customValues.has(row.key)) {
-        const resolved = settings.resolved[row.key];
-        if (typeof resolved === 'string') customValues.set(row.key, resolved);
-      }
-      render();
+      // Local switch only — nothing is written until a concrete value is committed. Seed the input from the resolved value.
+      const resolved = editor.settings.resolved[row.key];
+      editor.beginEntry(row.key, typeof resolved === 'string' ? resolved : undefined);
       return;
     }
-    persist(row.key, next);
+    editor.endEntry(row.key);
+    editor.persist(row.key, next);
   };
 
-  // For models, "value" means a concrete model id; a cleared field maps to "default".
-  const commitModel = (row: RowSpec, raw: string): void => {
-    const value = raw.trim();
-    if (value === '') {
-      customValues.delete(row.key);
-      persist(row.key, 'default');
+  // Effort is a closed set, so every segment commits immediately.
+  const onEffortSelect = (next: string): void => {
+    if (next === 'default' || next === 'none') {
+      editor.persist('effort', next);
     } else {
-      customValues.set(row.key, value);
-      persist(row.key, 'value', value);
+      editor.setDraft('effort', next);
+      editor.persist('effort', 'value', next);
     }
   };
 
-  void reload();
+  void editor.reload();
   return card;
 }
 
 function mutedHint(text: string): HTMLElement {
   const el = document.createElement('span');
-  el.className = 'claude-config-hint';
+  el.className = 'config-hint';
   el.textContent = text;
   return el;
 }

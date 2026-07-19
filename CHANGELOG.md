@@ -29,16 +29,32 @@ Types of changes:
 ### Added
 
 - A Code-Cleanup Claude Code plugin with a `code-cleanup` skill that directs a post-task cleanup of the current changes - decluttering the code and removing redundant comments via dedicated passes
+- [ADR-003: Ember Layer System (Stacked Pages & Pop-ups)](docs/adrs/ADR-003-ember-layer-system.md)
+- Settings Hub: a text/model field now shows a Save button next to its input while it holds an unsaved value
 
 ### Changed
 
+- Renamed the Ember Command Palette's "Manage Profiles" to "Settings / Manage Profiles" to make it clearer that it opens the Settings Hub
 - **Breaking**: the 23 top-level Debi git shortcut commands (`debi gaa` … `debi gstash`) were renamed and moved to be under a new `git` namespace (`debi git add-all`, etc.)
 	- If you installed shell completions, refresh them with `debi completion zsh > ~/.zsh/completions/_debi`
 	- Repo-required subcommands (`gcom`, `grl`, `grom`, `gbdc`, `gri`, `gcl`) now print a friendly error when run outside a repository, instead of producing a crash log
 	- `gst` at a workspace root now fans out plain `git status` per repo (and accepts git-status flags there); the aligned summary table moved to `gsum`
+- Debi's git subcommands that need a repository (`gcom`, `grl`, `grom`, `gbdc`, `gri`, `gcl`) now print a friendly error when run outside one, instead of producing a crash log
+- `gst` at a workspace root now fans out plain `git status` per repo (and accepts git-status flags there); the aligned summary table moved to `gsum`
+- Debi's package rationale now lives in the code itself rather than separate specs; the `docs/specs/` files are a legacy reference being gradually migrated into the code
+- Migrated Debi's `internal/git` spec into code comments and removed `docs/specs/git.md`; migrated the `shellinit` and `wsgit` specs the same way as part of the `debi git` rework
+- The Settings Hub's Effort control is now a single segmented control listing every choice at once, replacing the two-step toggle plus level dropdown
+- Refactor: Replaced the Overlay Manager with a new Layer Stack system ; see [ADR-003](docs/adrs/ADR-003-ember-layer-system.md) for details
+	- Fixed a few edge cases by  migrating to the new design
+- Refactor: Extracted the Settings Hub config cards' shared local-first editing engine (serialized writes, reload-after-write, reveal-input focus and drafts) into a single `settingsEditor` module, and moved the Claude Models & Effort card onto the shared card chrome and row styles
 - Devora's recommended Haiku-tier default and model suggestion chips now point at `claude-sonnet-5` (previously `claude-sonnet-4-6`)
 	- The Opus-tier suggestion list drops the superseded `claude-opus-4-7` in favor of `claude-fable-5`
 	- Sonnet 5 and Fable 5 requires updating Claude Code to a version that supports them
+
+### Fixed
+
+- Settings Hub: a config card's segmented control no longer steals focus into an unrelated text input
+- Settings Hub: switching a setting to `Custom`/`Set` (revealing its input) is no longer discarded when you then change another setting in the same card
 
 ### Removed
 

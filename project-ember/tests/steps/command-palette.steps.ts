@@ -15,7 +15,7 @@ import {
 Given('no overlay is open', async function (this: EmberWorld) {
   await ensureWsHubClosed(this.driver);
   await this.driver.pollFor(
-    'return window.__test.overlayManager.isTabCoveringOverlayActive()',
+    `return window.__test.layers.topOf('page') !== null`,
     false,
     3_000,
   );

@@ -56,7 +56,7 @@ Then(
     // Give a dismissal time to happen if the zero-profile lock failed.
     await new Promise((r) => setTimeout(r, 300));
     const stillOpen = await this.driver.eval(
-      `return window.__test.overlayManager.isTabCoveringOverlayActive()
+      `return window.__test.layers.topOf('page') !== null
            && document.querySelector('.ws-welcome') !== null`,
     );
     assert.strictEqual(stillOpen, true, `Hub should stay open after pressing "${key}"`);
@@ -246,6 +246,14 @@ When('the user clicks the profile dropdown', async function (this: EmberWorld) {
   await ui.waitForElement('.ws-profile-dropdown .dropdown-trigger');
   await ui.click('.ws-profile-dropdown .dropdown-trigger');
   await ui.waitForElement('.ws-profile-dropdown .dropdown-popup', 3_000);
+});
+
+Then('the profile dropdown should not be visible', async function (this: EmberWorld) {
+  await this.driver.pollFor(
+    `return document.querySelector('.ws-profile-dropdown .dropdown-popup') === null`,
+    true,
+    3_000,
+  );
 });
 
 Then(

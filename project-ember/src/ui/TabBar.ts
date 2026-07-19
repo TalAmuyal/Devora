@@ -1,20 +1,20 @@
 import { SessionManager } from '../session/SessionManager';
-import { OverlayManager } from './OverlayManager';
+import { SessionPanels } from './SessionPanels';
 
 export class TabBar {
   private containerEl: HTMLElement;
   private sessionManager: SessionManager;
-  private overlayManager: OverlayManager;
+  private sessionPanels: SessionPanels;
 
   constructor(
     containerEl: HTMLElement,
     sessionManager: SessionManager,
-    overlayManager: OverlayManager,
+    sessionPanels: SessionPanels,
   ) {
     this.containerEl = containerEl;
     this.containerEl.classList.add('tab-bar');
     this.sessionManager = sessionManager;
-    this.overlayManager = overlayManager;
+    this.sessionPanels = sessionPanels;
 
     // Re-render whenever sessions change
     this.sessionManager.onChange(() => this.render());
@@ -29,7 +29,7 @@ export class TabBar {
 
     for (const session of sessions) {
       const isActive = session.id === activeId;
-      const hasOverlay = this.overlayManager.hasPanelOverlay(session.id);
+      const hasOverlay = this.sessionPanels.has(session.id);
 
       const tabEl = document.createElement('div');
       tabEl.className = 'tab' + (isActive ? ' tab-active' : '');

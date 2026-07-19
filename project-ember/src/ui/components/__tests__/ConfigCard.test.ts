@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createConfigCard, ConfigFieldSpec } from '../ConfigCard';
 import { invoke } from '../../../invoke';
 
@@ -6,6 +6,11 @@ vi.mock('../../../invoke', () => ({ invoke: vi.fn() }));
 const invokeMock = vi.mocked(invoke);
 
 const flush = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
+
+afterEach(() => {
+  (document.activeElement as HTMLElement | null)?.blur?.();
+  document.body.innerHTML = '';
+});
 
 const SETTINGS = {
   stored: { 'terminal.git-shortcuts': false } as Record<string, string | boolean>,
@@ -123,6 +128,34 @@ describe('createConfigCard', () => {
     });
   });
 
+  it('text field: no Save button on a freshly revealed blank field, and it appears once a value is typed', async () => {
+    const card = await mountCard([FIELDS[0]]);
+    clickSegment(row(card, 0), 'Set');
+    await flush();
+    const input = row(card, 0).querySelector<HTMLInputElement>('.config-input')!;
+    const save = () => row(card, 0).querySelector<HTMLButtonElement>('.config-save')!;
+    expect(save().hidden).toBe(true);
+    input.value = 'nvim';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(save().hidden).toBe(false);
+  });
+
+  it('text field: clicking Save commits the typed value', async () => {
+    const card = await mountCard([FIELDS[0]]);
+    clickSegment(row(card, 0), 'Set');
+    await flush();
+    const input = row(card, 0).querySelector<HTMLInputElement>('.config-input')!;
+    input.value = 'nvim';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    row(card, 0).querySelector<HTMLButtonElement>('.config-save')!.click();
+    await flush();
+    expect(lastSetCall()).toMatchObject({
+      key: 'terminal.default-app',
+      state: 'value',
+      value: 'nvim',
+    });
+  });
+
   it('text field: committing an empty value reverts to Default', async () => {
     const card = await mountCard();
     clickSegment(row(card, 0), 'Set');
@@ -167,6 +200,114 @@ describe('createConfigCard', () => {
     const card = await mountCard(fields);
     // provider resolves to null in SETTINGS, so the conditional field is hidden.
     expect(card.querySelectorAll('.config-row')).toHaveLength(1);
+  });
+
+  it('does not focus a text input on the initial mount even when the value is already set', async () => {
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'get_config_settings') {
+        return {
+          stored: { 'terminal.default-app': 'nvim' },
+          resolved: { 'terminal.default-app': 'nvim' },
+        };
+      }
+      throw new Error(`unexpected command ${cmd}`);
+    });
+    const card = createConfigCard({ title: 'Test', profilePath: null, fields: [FIELDS[0]] });
+    document.body.appendChild(card);
+    await flush();
+    const input = card.querySelector<HTMLInputElement>('.config-input');
+    // The stored value renders the input in Set mode, but focus must stay off it on mount.
+    expect(input).not.toBeNull();
+    expect(document.activeElement).not.toBe(input);
+  });
+
+  it('focuses the input when the user switches a text field to Set', async () => {
+    const card = await mountCard([FIELDS[0]]);
+    document.body.appendChild(card);
+    clickSegment(row(card, 0), 'Set');
+    await flush();
+    const input = row(card, 0).querySelector<HTMLInputElement>('.config-input');
+    expect(document.activeElement).toBe(input);
+  });
+
+  it('does not move focus into a Set input when a different field/control is used', async () => {
+    // default-app is stored -> its input stays visible; toggling the git-shortcuts bool must not grab it.
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'get_config_settings') {
+        return {
+          stored: { 'terminal.default-app': 'nvim', 'terminal.git-shortcuts': false },
+          resolved: { 'terminal.default-app': 'nvim', 'terminal.git-shortcuts': false },
+        };
+      }
+      if (cmd === 'set_config_setting') return null;
+      throw new Error(`unexpected command ${cmd}`);
+    });
+    const card = await mountCard([FIELDS[0], FIELDS[1]]); // default-app (text), git-shortcuts (bool)
+    document.body.appendChild(card);
+    const input = row(card, 0).querySelector<HTMLInputElement>('.config-input');
+    expect(input).not.toBeNull();
+    expect(document.activeElement).not.toBe(input);
+
+    clickSegment(row(card, 1), 'On'); // toggle the bool — unrelated to the text field
+    await flush();
+    const inputAfter = row(card, 0).querySelector<HTMLInputElement>('.config-input');
+    expect(document.activeElement).not.toBe(inputAfter);
+  });
+
+  it('blurs a focused text input on Escape', async () => {
+    const card = await mountCard([FIELDS[0]]);
+    document.body.appendChild(card);
+    clickSegment(row(card, 0), 'Set');
+    await flush();
+    const input = row(card, 0).querySelector<HTMLInputElement>('.config-input')!;
+    expect(document.activeElement).toBe(input);
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    expect(document.activeElement).not.toBe(input);
+  });
+
+  it('keeps an uncommitted Set switch when another field is written', async () => {
+    const card = await mountCard();
+    clickSegment(row(card, 0), 'Set'); // default-app: Default -> Set, not yet committed
+    expect(row(card, 0).querySelector('.config-input')).not.toBeNull();
+
+    clickSegment(row(card, 1), 'On'); // write the unrelated git-shortcuts bool -> reload
+    await flush();
+
+    // The switch survives the reload triggered elsewhere.
+    expect(activeSegment(row(card, 0))).toBe('Set');
+    expect(row(card, 0).querySelector('.config-input')).not.toBeNull();
+    const appWrites = invokeMock.mock.calls.filter(
+      (c) => c[0] === 'set_config_setting' && (c[1] as { key?: string })?.key === 'terminal.default-app',
+    );
+    expect(appWrites).toHaveLength(0); // default-app itself was never persisted
+  });
+
+  it('remembers the last text value when re-entering Set after Default', async () => {
+    // Stateful backend so a committed value actually persists across reloads.
+    const stored: Record<string, string | boolean> = {};
+    invokeMock.mockImplementation(async (cmd: string, args?: unknown) => {
+      if (cmd === 'get_config_settings') return { stored: { ...stored }, resolved: {} };
+      if (cmd === 'set_config_setting') {
+        const { key, state, value } = args as { key: string; state: string; value: string | null };
+        if (state === 'default') delete stored[key];
+        else stored[key] = value!;
+        return null;
+      }
+      throw new Error(`unexpected command ${cmd}`);
+    });
+    const card = await mountCard([FIELDS[0]]);
+
+    clickSegment(row(card, 0), 'Set');
+    const input = row(card, 0).querySelector<HTMLInputElement>('.config-input')!;
+    input.value = 'nvim';
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await flush(); // committed -> stored
+
+    clickSegment(row(card, 0), 'Default');
+    await flush(); // key removed
+
+    clickSegment(row(card, 0), 'Set'); // re-enter
+    expect(row(card, 0).querySelector<HTMLInputElement>('.config-input')!.value).toBe('nvim');
   });
 
   it('appends extraRows after the fields', async () => {
