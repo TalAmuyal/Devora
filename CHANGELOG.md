@@ -18,6 +18,14 @@ Types of changes:
 
 - Vim-style keyboard scrolling (`j`/`k`, `Ctrl+D`/`Ctrl+U`, `gg`/`G`) in the cheatsheet, the User Guide, and the Health Hub, via a shared `createVimScroll` primitive
 - [ADR-004: Ember Vim-Inspired Navigation](docs/adrs/ADR-004-ember-vim-inspired-navigation.md)
+- Settings Hub:
+	- Claude Code's start-up permission mode is now configurable, Devora's default remains `plan`
+	- An On/Off toggle (on by default) to start Claude Code in "opusplan mode" (Opus-class plans, Sonnet-class implements)
+
+### Changed
+
+- Devora now defaults the Claude model to `opusplan`; toggle it off from the Settings Hub
+- Renamed the Settings Hub's "Claude Models & Effort" card to "Claude Launch Settings"
 
 ### Fixed
 

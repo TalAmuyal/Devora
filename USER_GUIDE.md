@@ -170,7 +170,7 @@ Each setting is edited at the **User Defaults** (global) scope and per-profile: 
 
 The Settings Hub manages:
 
-- **Claude Models & Effort** — the model for each tier and the effort level (see [The `ccc` Command](#the-ccc-command) below)
+- **Claude Launch Settings** — the default model, the model for each tier, the effort level, and the permission mode (see [The `ccc` Command](#the-ccc-command) below)
 - **Terminal & Session** — the per-session app launched instead of a bare shell (e.g. `nvim`), whether Devora exposes Debi's [git shortcuts](#git-shortcuts), and the prepare command run after each worktree is created
 - **Pull Requests** — auto-merge and the feature-branch prefix used by `debi pr submit`
 - **Task Tracker** — the provider and, for Asana, the workspace/project/tag/section IDs plus the API token (stored in your OS keychain, shared with `debi`)
@@ -182,12 +182,13 @@ Run it from within a workspace to start a Claude Code session with all Devora in
 
 What it does:
 
+- **Default model**: Sets the default model to `opusplan` by default (Opus while planning, Sonnet during execution) -- toggle it off to let Claude Code pick its own model
 - **Model upgrades**: Default models are upgraded -- Sonnet is replaced with Opus, and Haiku with Sonnet
 	- This provides stronger reasoning out of the box
 	- The cost-per-token is higher, but that should be balanced by lower token usage due to better performance
-	- These defaults, and the effort level below, are configurable (globally and per profile)
+	- These defaults, and the effort level and permission mode below, are configurable (globally and per profile)
 - **Effort level**: Sets the effort level to `xhigh` (extra-high) by default, so that Claude Code always tries to give a better result
-- **Plan mode**: Claude Code starts in plan permission mode by default, which requires explicit approval before making changes and takes advantage of the Crit integration
+- **Plan mode**: Claude Code starts in plan permission mode by default, which requires explicit approval before making changes and takes advantage of the Crit integration -- the permission mode is configurable
 - **Plugins**: Auto-loads Devora plugins (including Judge -- see below)
 
 ## Crit Integration

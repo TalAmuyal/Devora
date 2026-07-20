@@ -33,7 +33,7 @@ Given(
 );
 
 // ---------------------------------------------------------------------------
-// Claude Models & Effort card (Settings Hub)
+// Claude Launch Settings card (Settings Hub)
 // ---------------------------------------------------------------------------
 
 // The Effort row is a single segmented control listing every level; clicking a level commits it.
@@ -73,6 +73,75 @@ When(
   },
 );
 
+// The Default model row is a 2-state On/Off toggle; clicking Off imposes None (the ANTHROPIC_MODEL var is omitted).
+When('the user turns the default model off', async function (this: EmberWorld) {
+  await this.driver.pollFor(
+    `
+    const rows = Array.from(document.querySelectorAll('.settings-card .config-row'));
+    return rows.some((r) => r.querySelector('.config-row-name')?.textContent === 'Default model');
+    `,
+    true,
+    5_000,
+  );
+  await this.driver.eval(`
+    const rows = Array.from(document.querySelectorAll('.settings-card .config-row'));
+    const row = rows.find((r) => r.querySelector('.config-row-name')?.textContent === 'Default model');
+    if (!row) throw new Error('Default model row not found in the Claude config card');
+    const off = Array.from(row.querySelectorAll('.segmented-control-btn')).find((b) => b.textContent === 'Off');
+    if (!off) throw new Error('Off segment not found in the Default model toggle');
+    off.click();
+  `);
+  // The card persists, re-reads, and re-renders; the Off segment becoming active marks the write as committed.
+  await this.driver.pollFor(
+    `
+    const rows = Array.from(document.querySelectorAll('.settings-card .config-row'));
+    const row = rows.find((r) => r.querySelector('.config-row-name')?.textContent === 'Default model');
+    const active = row?.querySelector('.segmented-control-btn.segmented-control-active');
+    return active?.textContent ?? null;
+    `,
+    'Off',
+    5_000,
+  );
+});
+
+// The Permission mode row is a tri-state combo; switching to Custom reveals suggestion chips, and clicking one commits it.
+When(
+  'the user sets the permission mode to {string}',
+  async function (this: EmberWorld, mode: string) {
+    await this.driver.pollFor(
+      `
+      const rows = Array.from(document.querySelectorAll('.settings-card .config-row'));
+      return rows.some((r) => r.querySelector('.config-row-name')?.textContent === 'Permission mode');
+      `,
+      true,
+      5_000,
+    );
+    await this.driver.eval(`
+      const findRow = () => Array.from(document.querySelectorAll('.settings-card .config-row'))
+        .find((r) => r.querySelector('.config-row-name')?.textContent === 'Permission mode');
+      let row = findRow();
+      if (!row) throw new Error('Permission mode row not found in the Claude config card');
+      const custom = Array.from(row.querySelectorAll('.segmented-control-btn')).find((b) => b.textContent === 'Custom');
+      if (!custom) throw new Error('Custom segment not found in the Permission mode combo');
+      custom.click();
+      row = findRow(); // the card re-renders synchronously to reveal the chips
+      const chip = Array.from(row.querySelectorAll('.config-chip')).find((c) => c.textContent === ${JSON.stringify(mode)});
+      if (!chip) throw new Error('Permission mode chip not found: ' + ${JSON.stringify(mode)});
+      chip.click();
+    `);
+    // The commit persists, re-reads, and re-renders; the value appearing in the Custom input marks the write as committed.
+    await this.driver.pollFor(
+      `
+      const rows = Array.from(document.querySelectorAll('.settings-card .config-row'));
+      const row = rows.find((r) => r.querySelector('.config-row-name')?.textContent === 'Permission mode');
+      return row?.querySelector('.config-input')?.value ?? null;
+      `,
+      mode,
+      5_000,
+    );
+  },
+);
+
 Then(
   'the global config should have the Claude {string} set to {string}',
   function (this: EmberWorld, key: string, value: string) {
@@ -81,6 +150,18 @@ Then(
       config.claude?.[key],
       value,
       `Global config should have claude.${key} = ${value}, got: ${JSON.stringify(config.claude)}`,
+    );
+  },
+);
+
+Then(
+  'the global config should have the Claude {string} set to None',
+  function (this: EmberWorld, key: string) {
+    const config = JSON.parse(fs.readFileSync(this.testConfigPath!, 'utf8'));
+    assert.strictEqual(
+      config.claude?.[key],
+      null,
+      `Global config should have claude.${key} = null (None), got: ${JSON.stringify(config.claude)}`,
     );
   },
 );
