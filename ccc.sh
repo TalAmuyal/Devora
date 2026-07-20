@@ -50,4 +50,4 @@ if [[ "$USER_SET_EFFORT" -eq 0 && -n "${DEVORA_CCC_EFFORT:-}" ]]; then
 	ARGS+=(--effort "$DEVORA_CCC_EFFORT")
 fi
 
-claude "${EFFORT_ARGS[@]}" --permission-mode plan "${ARGS[@]}"
+claude --permission-mode plan "${ARGS[@]}"
