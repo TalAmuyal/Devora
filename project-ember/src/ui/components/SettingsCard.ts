@@ -1,5 +1,5 @@
 /**
- * A titled card surface: a bordered, rounded container with a header strip, matching the Claude Models & Effort card's chrome (shared CSS, see `.settings-card` in components.css).
+ * A titled card surface: a bordered, rounded container with a header strip, matching the Claude Launch Settings card's chrome (shared CSS, see `.settings-card` in components.css).
  * The caller appends the body content (a table, rows, or a message) after the header.
  * DOM: `div.settings-card > div.settings-card-header + <caller content>`.
  */

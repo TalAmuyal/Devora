@@ -1,7 +1,8 @@
 #!/bin/bash
 
 # Launch Claude Code with custom configuration
-# Model tiers (ANTHROPIC_DEFAULT_*_MODEL) and the effort level (DEVORA_CCC_EFFORT) are resolved from user/profile config and injected by Devora's PTY layer
+# The default model, model tiers, etc. are resolved from user/profile config and are injected by Devora's PTY layer.
+# The ANTHROPIC_* vars are read by Claude Code natively; the DEVORA_CCC_* vars are turned into CLI flags below.
 
 if [[ "${BASH_SOURCE[0]}" != "$0" ]]; then
 	echo "Error: This script must be executed, not sourced." >&2
@@ -15,6 +16,7 @@ SCRIPT_DIR_PARENT=$(dirname "$SCRIPT_DIR")
 
 ARGS=()
 USER_SET_EFFORT=0
+USER_SET_PERMISSION_MODE=0
 while [[ $# -gt 0 ]]; do
 	case "$1" in
 		-u|--update|update)
@@ -24,6 +26,11 @@ while [[ $# -gt 0 ]]; do
 
 		--effort|--effort=*)
 			USER_SET_EFFORT=1
+			ARGS+=("$1")
+			;;
+
+		--permission-mode|--permission-mode=*)
+			USER_SET_PERMISSION_MODE=1
 			ARGS+=("$1")
 			;;
 
@@ -50,4 +57,8 @@ if [[ "$USER_SET_EFFORT" -eq 0 && -n "${DEVORA_CCC_EFFORT:-}" ]]; then
 	ARGS+=(--effort "$DEVORA_CCC_EFFORT")
 fi
 
-claude --permission-mode plan "${ARGS[@]}"
+if [[ "$USER_SET_PERMISSION_MODE" -eq 0 && -n "${DEVORA_CCC_PERMISSION_MODE:-}" ]]; then
+	ARGS+=(--permission-mode "$DEVORA_CCC_PERMISSION_MODE")
+fi
+
+claude "${ARGS[@]}"

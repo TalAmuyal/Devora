@@ -621,11 +621,11 @@ pub fn get_git_shortcuts_enabled(profile_path: Option<&str>) -> bool {
     }
 }
 
-// ── Claude Code launch configuration (model tiers + effort) ──
+// ── Claude Code launch configuration (default model, model tiers, etc.) ──
 //
-// `ccc` launches Claude Code with a per-tier model mapping and an effort level.
+// `ccc` launches Claude Code with various configurations.
 // Each is resolved per key with the precedence profile → user → Devora default, where a level may hold an explicit string (a value), JSON `null` (= "None": impose nothing, so Claude Code falls back to its own default), or omit the key (fall through to the next level).
-// The resolved values are injected as environment variables by the PTY layer (see commands.rs).
+// The resolved values are injected as environment variables by the PTY layer (see commands.rs): the `ANTHROPIC_*` vars are read by Claude Code natively, while `DEVORA_CCC_*` vars are turned into CLI flags by `ccc.sh`.
 
 /// One configurable Claude launch setting: its kebab-case config key (under the top-level `claude` object), the environment variable the PTY exports, and the Devora default value.
 struct ClaudeSettingSpec {
@@ -634,7 +634,7 @@ struct ClaudeSettingSpec {
     default: &'static str,
 }
 
-const CLAUDE_SETTINGS: [ClaudeSettingSpec; 4] = [
+const CLAUDE_SETTINGS: [ClaudeSettingSpec; 6] = [
     ClaudeSettingSpec {
         key: "opus-model",
         env_var: "ANTHROPIC_DEFAULT_OPUS_MODEL",
@@ -655,6 +655,16 @@ const CLAUDE_SETTINGS: [ClaudeSettingSpec; 4] = [
         env_var: "DEVORA_CCC_EFFORT",
         default: "xhigh",
     },
+    ClaudeSettingSpec {
+        key: "default-model",
+        env_var: "ANTHROPIC_MODEL",
+        default: "opusplan",
+    },
+    ClaudeSettingSpec {
+        key: "permission-mode",
+        env_var: "DEVORA_CCC_PERMISSION_MODE",
+        default: "plan",
+    },
 ];
 
 /// Valid Claude Code effort levels (low → max).
@@ -674,7 +684,7 @@ pub struct ClaudeSettingsResponse {
     /// Per key: the raw stored value at this scope — a string, JSON `null`, or the key is
     /// omitted entirely (meaning "Default" / not set at this scope).
     stored: serde_json::Map<String, Value>,
-    /// Per key (all four always present): the effective resolved value — a string, or JSON
+    /// Per key (all settings always present): the effective resolved value — a string, or JSON
     /// `null` meaning None (no override; Claude Code uses its own default).
     resolved: serde_json::Map<String, Value>,
 }
@@ -1667,6 +1677,8 @@ mod tests {
         let sonnet = "ANTHROPIC_DEFAULT_SONNET_MODEL";
         let haiku = "ANTHROPIC_DEFAULT_HAIKU_MODEL";
         let effort = "DEVORA_CCC_EFFORT";
+        let default_model = "ANTHROPIC_MODEL";
+        let permission_mode = "DEVORA_CCC_PERMISSION_MODE";
         let get = |env: &HashMap<String, String>, k: &str| env.get(k).cloned();
 
         // 1. No config anywhere -> all Devora defaults are set.
@@ -1675,6 +1687,18 @@ mod tests {
         assert_eq!(get(&env, sonnet).as_deref(), Some("claude-opus-4-8"));
         assert_eq!(get(&env, haiku).as_deref(), Some("claude-sonnet-5"));
         assert_eq!(get(&env, effort).as_deref(), Some("xhigh"));
+        assert_eq!(get(&env, default_model).as_deref(), Some("opusplan"));
+        assert_eq!(get(&env, permission_mode).as_deref(), Some("plan"));
+
+        // 1b. The default model (None -> omitted) and permission mode (any free-text value, unvalidated) resolve like the other keys.
+        fs::write(
+            &global_config,
+            r#"{"claude":{"default-model":null,"permission-mode":"acceptEdits"}}"#,
+        )
+        .unwrap();
+        let env = claude_launch_env(None);
+        assert!(!env.contains_key(default_model)); // null -> None -> omitted
+        assert_eq!(get(&env, permission_mode).as_deref(), Some("acceptEdits"));
 
         // 2. User-level: a value wins; null = None (env var omitted); absent = default.
         fs::write(
@@ -1756,6 +1780,18 @@ mod tests {
         assert!(write_claude_setting(None, "effort", "value", Some("turbo")).is_err());
         assert!(write_claude_setting(None, "effort", "value", Some("max")).is_ok());
         assert!(write_claude_setting(None, "unknown-key", "value", Some("x")).is_err());
+
+        // 8. Permission mode and default model are free-text (only effort is a closed set): any non-blank value is accepted, and `none` round-trips.
+        write_claude_setting(None, "permission-mode", "value", Some("bypassPermissions")).unwrap();
+        assert_eq!(
+            read_json_file(&global_config).unwrap()["claude"]["permission-mode"],
+            Value::String("bypassPermissions".into())
+        );
+        write_claude_setting(None, "default-model", "none", None).unwrap();
+        assert_eq!(
+            read_json_file(&global_config).unwrap()["claude"]["default-model"],
+            Value::Null
+        );
 
         match original {
             Some(v) => std::env::set_var("DEVORA_CONFIG_PATH", v),

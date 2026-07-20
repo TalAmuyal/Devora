@@ -31,7 +31,7 @@ pub fn create_pty(
     let ipc_port = ipc_state.port;
     let git_shortcuts_enabled = workspace::get_git_shortcuts_enabled(profile_path.as_deref());
 
-    // Inject the resolved Claude model/effort env vars (profile → user → Devora default).
+    // Inject the resolved Claude launch env vars (profile → user → Devora default).
     // An explicit frontend-supplied `env` still wins on key collision.
     let mut session_env = workspace::claude_launch_env(profile_path.as_deref());
     // Expose the session's profile to debi so a command typed in the terminal (e.g. `debi health`) resolves the same profile as the in-app UI.

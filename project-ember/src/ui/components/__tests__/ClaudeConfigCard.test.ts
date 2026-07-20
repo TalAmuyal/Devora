@@ -14,6 +14,8 @@ const SETTINGS = {
     'sonnet-model': 'claude-opus-4-8',
     'haiku-model': null,
     effort: 'xhigh',
+    'default-model': 'opusplan',
+    'permission-mode': 'plan',
   },
 };
 
@@ -47,6 +49,14 @@ function row(card: HTMLElement, index: number): HTMLElement {
   return card.querySelectorAll<HTMLElement>('.config-row')[index];
 }
 
+function rowByLabel(card: HTMLElement, label: string): HTMLElement {
+  const found = Array.from(card.querySelectorAll<HTMLElement>('.config-row')).find(
+    (r) => r.querySelector('.config-row-name')?.textContent === label,
+  );
+  if (!found) throw new Error(`row not found: ${label}`);
+  return found;
+}
+
 function activeSegment(rowEl: HTMLElement): string {
   return rowEl.querySelector('.segmented-control-active')?.textContent ?? '';
 }
@@ -66,7 +76,7 @@ function lastSetCall(): Record<string, unknown> | undefined {
 describe('createClaudeConfigCard', () => {
   it('renders one row per setting and loads from get_claude_settings', async () => {
     const card = await mountCard();
-    expect(card.querySelectorAll('.config-row').length).toBe(4);
+    expect(card.querySelectorAll('.config-row').length).toBe(6);
     expect(invokeMock).toHaveBeenCalledWith('get_claude_settings', { profilePath: null });
   });
 
@@ -231,6 +241,70 @@ describe('createClaudeConfigCard', () => {
       key: 'effort',
       state: 'default',
       value: null,
+    });
+  });
+
+  it('renders the Default model as an On/Off toggle, On when resolved to opusplan', async () => {
+    const card = await mountCard();
+    const toggle = rowByLabel(card, 'Default model');
+    const labels = Array.from(
+      toggle.querySelectorAll<HTMLButtonElement>('.segmented-control-btn'),
+    ).map((b) => b.textContent);
+    expect(labels).toEqual(['On', 'Off']);
+    expect(activeSegment(toggle)).toBe('On');
+  });
+
+  it('persists the Default model toggle as opusplan (On) or none (Off)', async () => {
+    const card = await mountCard();
+
+    clickSegment(rowByLabel(card, 'Default model'), 'Off');
+    await flush();
+    expect(lastSetCall()).toEqual({
+      profilePath: null,
+      key: 'default-model',
+      state: 'none',
+      value: null,
+    });
+
+    clickSegment(rowByLabel(card, 'Default model'), 'On');
+    await flush();
+    expect(lastSetCall()).toEqual({
+      profilePath: null,
+      key: 'default-model',
+      state: 'value',
+      value: 'opusplan',
+    });
+  });
+
+  it('renders the Permission mode as a Custom/Default/None combo resolving to plan', async () => {
+    const card = await mountCard();
+    const pm = rowByLabel(card, 'Permission mode');
+    const labels = Array.from(
+      pm.querySelectorAll<HTMLButtonElement>('.segmented-control-btn'),
+    ).map((b) => b.textContent);
+    expect(labels).toEqual(['Custom', 'Default', 'None']);
+    expect(activeSegment(pm)).toBe('Default'); // absent at this scope
+    expect(pm.querySelector('.config-hint')!.textContent).toContain('plan'); // resolved default
+  });
+
+  it('commits a Permission mode suggestion chip', async () => {
+    const card = await mountCard();
+    clickSegment(rowByLabel(card, 'Permission mode'), 'Custom'); // reveals the chips
+    const pm = rowByLabel(card, 'Permission mode');
+    const chipLabels = Array.from(pm.querySelectorAll<HTMLButtonElement>('.config-chip')).map(
+      (c) => c.textContent,
+    );
+    expect(chipLabels).toEqual(['plan', 'acceptEdits', 'auto']);
+    const chip = Array.from(pm.querySelectorAll<HTMLButtonElement>('.config-chip')).find(
+      (c) => c.textContent === 'auto',
+    )!;
+    chip.click();
+    await flush();
+    expect(lastSetCall()).toEqual({
+      profilePath: null,
+      key: 'permission-mode',
+      state: 'value',
+      value: 'auto',
     });
   });
 

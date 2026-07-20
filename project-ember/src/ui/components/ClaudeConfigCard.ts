@@ -1,11 +1,11 @@
 /**
- * Claude Models & Effort config card: edits the Opus/Sonnet/Haiku model tiers and the effort level for one scope (a profile, or `null` for user-level/global defaults).
+ * Claude launch settings card: edits the default model, the Opus/Sonnet/Haiku model tiers, the effort level, and the permission mode for one scope (a profile, or `null` for user-level/global defaults).
  *
- * The three model rows are a tri-state control (`Custom | Default | None`): a concrete value, "Default" (unset here → falls through profile → user → Devora default), or "None" (impose nothing, so Claude Code uses its own default).
- * Custom models are free text (decoupled from Devora releases) with suggestion chips.
+ * Most rows are a tri-state "combo" control (`Custom | Default | None`): a concrete value, "Default" (unset here → falls through profile → user → Devora default), or "None" (impose nothing, so Claude Code uses its own default). Custom values are free text (decoupled from Devora releases) with suggestion chips — used by the model tiers and the permission mode.
  * The Effort row is a single segmented control listing every choice at once — "Default", the supported levels (highest → lowest), and "None" — since effort is a closed set rather than free text.
+ * The Default model row is a 2-state On/Off toggle: On imposes `opusplan` (via ANTHROPIC_MODEL); Off omits the var so Claude Code picks its own model.
  *
- * The local-first read/write/re-read/focus mechanics live in the shared `settingsEditor`; this file owns only the tri-state model, the effort control, and rendering.
+ * The local-first read/write/re-read/focus mechanics live in the shared `settingsEditor`; this file owns only the per-row control shapes and rendering.
  * DOM: `div.settings-card` (shared chrome) containing `div.config-row`s.
  */
 
@@ -26,21 +26,37 @@ const MODEL_SUGGESTIONS = [
   'claude-sonnet-5',
 ];
 
-type SettingKey = 'opus-model' | 'sonnet-model' | 'haiku-model' | 'effort';
+/** Suggestions only — any permission mode can be typed. Omits `bypassPermissions`/`dontAsk` (still typeable) and `default` (the "None" segment already yields Claude Code's built-in default). */
+const PERMISSION_MODE_SUGGESTIONS = ['plan', 'acceptEdits', 'auto'];
+
+/** The model alias imposed while the Default model toggle is On. Mirrors the `default-model` default in workspace.rs. */
+const DEFAULT_MODEL_ALIAS = 'opusplan';
+
+type SettingKey =
+  | 'opus-model'
+  | 'sonnet-model'
+  | 'haiku-model'
+  | 'effort'
+  | 'default-model'
+  | 'permission-mode';
 type Mode = 'custom' | 'default' | 'none';
 
 interface RowSpec {
   key: SettingKey;
   label: string;
   hint: string; // the env var / flag it drives, shown muted
-  kind: 'model' | 'effort';
+  kind: 'combo' | 'effort' | 'toggle';
+  suggestions?: string[]; // combo only: the chips shown under a Custom value
+  placeholder?: string; // combo only: the free-text input placeholder
 }
 
 const ROWS: RowSpec[] = [
-  { key: 'opus-model', label: 'Opus tier', hint: 'ANTHROPIC_DEFAULT_OPUS_MODEL', kind: 'model' },
-  { key: 'sonnet-model', label: 'Sonnet tier', hint: 'ANTHROPIC_DEFAULT_SONNET_MODEL', kind: 'model' },
-  { key: 'haiku-model', label: 'Haiku tier', hint: 'ANTHROPIC_DEFAULT_HAIKU_MODEL', kind: 'model' },
+  { key: 'opus-model', label: 'Opus tier', hint: 'ANTHROPIC_DEFAULT_OPUS_MODEL', kind: 'combo', suggestions: MODEL_SUGGESTIONS, placeholder: 'model id, then Enter' },
+  { key: 'sonnet-model', label: 'Sonnet tier', hint: 'ANTHROPIC_DEFAULT_SONNET_MODEL', kind: 'combo', suggestions: MODEL_SUGGESTIONS, placeholder: 'model id, then Enter' },
+  { key: 'haiku-model', label: 'Haiku tier', hint: 'ANTHROPIC_DEFAULT_HAIKU_MODEL', kind: 'combo', suggestions: MODEL_SUGGESTIONS, placeholder: 'model id, then Enter' },
   { key: 'effort', label: 'Effort', hint: '--effort', kind: 'effort' },
+  { key: 'default-model', label: 'Default model', hint: 'ANTHROPIC_MODEL', kind: 'toggle' },
+  { key: 'permission-mode', label: 'Permission mode', hint: '--permission-mode', kind: 'combo', suggestions: PERMISSION_MODE_SUGGESTIONS, placeholder: 'permission mode, then Enter' },
 ];
 
 interface ClaudeSettings {
@@ -56,7 +72,7 @@ export interface ClaudeConfigCardOptions {
 }
 
 export function createClaudeConfigCard(options: ClaudeConfigCardOptions): HTMLElement {
-  const card = createSettingsCard('Claude Models & Effort');
+  const card = createSettingsCard('Claude Launch Settings');
 
   const editor = createSettingsEditor<ClaudeSettings>({
     getCommand: 'get_claude_settings',
@@ -94,8 +110,14 @@ export function createClaudeConfigCard(options: ClaudeConfigCardOptions): HTMLEl
     const rowEl = document.createElement('div');
     rowEl.className = 'config-row';
     rowEl.appendChild(renderLabel(row));
-    rowEl.appendChild(row.kind === 'effort' ? renderEffortControl() : renderModelControl(row));
+    rowEl.appendChild(renderControlFor(row));
     return rowEl;
+  };
+
+  const renderControlFor = (row: RowSpec): HTMLElement => {
+    if (row.kind === 'effort') return renderEffortControl();
+    if (row.kind === 'toggle') return renderToggleControl(row);
+    return renderComboControl(row);
   };
 
   const renderLabel = (row: RowSpec): HTMLElement => {
@@ -125,7 +147,7 @@ export function createClaudeConfigCard(options: ClaudeConfigCardOptions): HTMLEl
     return controlEl;
   };
 
-  const renderModelControl = (row: RowSpec): HTMLElement => {
+  const renderComboControl = (row: RowSpec): HTMLElement => {
     const mode = displayMode(row.key);
     const segmented = createSegmentedControl<Mode>({
       items: [
@@ -136,8 +158,26 @@ export function createClaudeConfigCard(options: ClaudeConfigCardOptions): HTMLEl
       activeKey: mode,
       onSelect: (next) => onModeSelect(row, next),
     });
-    const value = mode === 'custom' ? renderModelInput(row) : overrideHint(row.key, mode);
+    const value = mode === 'custom' ? renderComboInput(row) : overrideHint(row.key, mode);
     return renderControl(segmented, value);
+  };
+
+  // The Default model toggle projects the tri-state config onto two states: On ⇒ impose the alias (env var set), Off ⇒ None (env var omitted).
+  // On writes the alias explicitly (not "Default") so a profile On overrides a user-scope Off; the displayed state follows the resolved value so an inheriting scope reads correctly.
+  const renderToggleControl = (row: RowSpec): HTMLElement => {
+    const on = (editor.settings.resolved[row.key] ?? null) !== null;
+    const segmented = createSegmentedControl<'on' | 'off'>({
+      items: [
+        { key: 'on', label: 'On' },
+        { key: 'off', label: 'Off' },
+      ],
+      activeKey: on ? 'on' : 'off',
+      onSelect: (next) => {
+        if (next === 'on') editor.persist(row.key, 'value', DEFAULT_MODEL_ALIAS);
+        else editor.persist(row.key, 'none');
+      },
+    });
+    return renderControl(segmented, mutedHint(on ? `→ ${DEFAULT_MODEL_ALIAS}` : '→ not set'));
   };
 
   const renderEffortControl = (): HTMLElement => {
@@ -173,14 +213,14 @@ export function createClaudeConfigCard(options: ClaudeConfigCardOptions): HTMLEl
     return mutedHint(resolved === null ? '→ Claude Code default' : `→ ${resolved}`);
   };
 
-  const renderModelInput = (row: RowSpec): HTMLElement => {
+  const renderComboInput = (row: RowSpec): HTMLElement => {
     const wrap = document.createElement('div');
     wrap.className = 'config-combo';
 
     const stored = editor.settings.stored[row.key];
     const savedValue = typeof stored === 'string' ? stored : '';
     const commitInput = createCommitInput({
-      placeholder: 'model id, then Enter',
+      placeholder: row.placeholder ?? '',
       value: editor.getDraft(row.key) ?? '',
       savedValue,
       onCommit: (raw) => editor.commit(row.key, raw),
@@ -189,7 +229,7 @@ export function createClaudeConfigCard(options: ClaudeConfigCardOptions): HTMLEl
 
     const chips = document.createElement('div');
     chips.className = 'config-chips';
-    for (const suggestion of MODEL_SUGGESTIONS) {
+    for (const suggestion of row.suggestions ?? []) {
       const chip = document.createElement('button');
       chip.className = 'config-chip';
       chip.textContent = suggestion;
