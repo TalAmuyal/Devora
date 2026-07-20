@@ -38,6 +38,14 @@ Feature: Workspace Hub
     When the user filters workspaces by "Task 2"
     Then the Workspace Hub should show 1 workspace items
 
+  Scenario: Filter the New Task form repo list
+    Given a profile "Work" with repos "repo-alpha, repo-beta, repo-gamma"
+    And the Workspace Hub is open
+    When the user opens the New Task form
+    Then the New Task form should show 3 repos
+    When the user filters the New Task form repo list by "beta"
+    Then the New Task form should show 1 repo
+
   Scenario: Switch category tabs
     Given a profile "Work" with 2 active and 1 inactive workspaces
     And the Workspace Hub is open

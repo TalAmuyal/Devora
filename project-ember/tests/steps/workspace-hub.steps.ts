@@ -42,6 +42,34 @@ Given(
 );
 
 Given(
+  'a profile {string} with repos {string}',
+  function (this: EmberWorld, name: string, repoList: string) {
+    this.fixtureRoot = createTestFixtureRoot();
+    const profilePath = createTestProfile(this.fixtureRoot, name);
+    for (const repoName of repoList.split(',').map((r) => r.trim()).filter(Boolean)) {
+      createTestRepo(profilePath, repoName);
+    }
+    writeTestConfig(this.testConfigPath!, [profilePath]);
+  },
+);
+
+When(
+  'the user filters the New Task form repo list by {string}',
+  async function (this: EmberWorld, text: string) {
+    const ui = new UIDriver(this.driver);
+    await ui.typeIntoInput('.ws-new-form .search-input-field', text);
+  },
+);
+
+Then(
+  'the New Task form should show {int} repo(s)',
+  async function (this: EmberWorld, count: number) {
+    const ui = new UIDriver(this.driver);
+    await ui.waitForVisibleElementCount('.ws-new-form .repo-list-item', count, 5_000);
+  },
+);
+
+Given(
   'the Workspace Hub is open',
   async function (this: EmberWorld) {
     await reloadWsHub(this.driver);

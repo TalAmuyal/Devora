@@ -114,7 +114,9 @@ describe('createRepoList', () => {
     expect(filterField(handle)).not.toBeNull();
   });
 
-  it('filters by name (case-insensitive substring), hiding non-matching rows', () => {
+  // Asserts the `hidden` attribute is set on the right rows (the match logic).
+  // Whether those rows actually disappear visually depends on CSS and is covered by the acceptance tests — happy-dom does not resolve the author-vs-UA cascade.
+  it('marks non-matching rows hidden by name (case-insensitive substring)', () => {
     const handle = mount('multi', manyRepos);
     typeFilter(handle, 'mm'); // only gamma
     expect(visibleNames(handle)).toEqual(['gamma']);

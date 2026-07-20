@@ -692,6 +692,10 @@
   background: var(--color-surface1);
 }
 
+.repo-list-item[hidden] {
+  display: none; /* The UA `[hidden] { display: none }` rule is overridden by the author `.repo-list-item { display: flex }` above, so the filter's `row.item.hidden` has no visual effect without this (mirrors `.config-save[hidden]`) */
+}
+
 /* AddRepoDialog */
 
 .add-repo-dialog-backdrop {

@@ -58,7 +58,7 @@ Then(
   'the add-repo list should show {int} repo(s)',
   async function (this: EmberWorld, count: number) {
     const ui = new UIDriver(this.driver);
-    await ui.waitForElementCount('.add-repo-dialog .repo-list-item:not([hidden])', count, 5_000);
+    await ui.waitForVisibleElementCount('.add-repo-dialog .repo-list-item', count, 5_000);
   },
 );
 
