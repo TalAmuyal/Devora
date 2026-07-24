@@ -1,9 +1,10 @@
 /**
- * The shared primitive for modal dialogs (ADR-003): mounts `element` as a `modal` layer on the LayerStack and routes its keys and backdrop click.
+ * The shared primitive for modal dialogs: mounts `element` as a `modal` layer on the LayerStack and routes its keys and backdrop click.
  * The stack owns the wrapper (class `layer-modal ${name}-backdrop`, over a backdrop on `document.body`), the Tab focus trap, and focus restoration to the layer beneath on close.
  *
- * Per ADR-003 "Correction A", a modal owns Escape and Enter here — `onKey` runs before the central editable guard, so a single press cancels/confirms regardless of what holds focus.
+ * A modal owns Escape and Enter here — `onKey` runs before the central editable guard, so a single press cancels/confirms regardless of what holds focus.
  * `q` is intentionally left to the guard: it types inside a focused input and dismisses only when a non-editable element (e.g. a button) holds focus.
+ * See `../layers/CLAUDE.md` ("Modals and pages treat Escape oppositely") for why pages take the opposite approach.
  */
 
 import { getLayerStack } from '../layers/stack';

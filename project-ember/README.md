@@ -110,25 +110,18 @@ When Claude Code's behavior changes or new `@real-claude` scenarios are added:
 | `session/SessionTab.ts` | Session tab: holds a terminal pane and optional panel overlay |
 | `session/SessionManager.ts` | Manages ordered list of session tabs: create, close, switch, reorder |
 | `ui/TabBar.ts` | Bottom tab bar showing all session tabs |
-| `ui/layers/LayerStack.ts` | Layer system (ADR-003): single keydown dispatcher and focus-by-stack-position for pages, modals, popups, and session panels |
-| `ui/KeyboardShortcuts.ts` | Window-level keyboard shortcut handling |
+| `ui/layers/LayerStack.ts` | Layer system: single keydown dispatcher and focus-by-stack-position for pages, modals, popups, and session panels (see `ui/layers/CLAUDE.md`) |
+| `ui/KeyboardShortcuts.ts` | App-wide keyboard shortcut policy, driven by the LayerStack |
 | `workspace/WorkspaceHub.ts` | Workspace Hub (tab-covering overlay): list, filter, create, open workspaces |
 | `webview/WebContentOverlay.ts` | Web content rendering in panel overlays (URLs via iframe, markdown via `marked`) |
 | `styles/theme.css` | Centralized CSS custom properties (Catppuccin Macchiato defaults, overridden at runtime from theme file) |
 
 ### Layer System
 
-Stacked UI surfaces are managed by a single `LayerStack` (`src/ui/layers/`, see [ADR-003](../docs/adrs/ADR-003-ember-layer-system.md)) that owns the only `window`-capture keydown listener and resolves focus from stack position. Each surface is a layer of one kind:
-
-| Kind | Covers tab bar? | Modality | Examples |
-|------|----------------|----------|----------|
-| `page` | Yes | Opaque barrier | Workspace / Settings / Health Hub, User Guide, Command Palette |
-| `modal` | Yes (backdrop) | Opaque barrier + Tab trap | Confirmation, text input, add-repo, clone-repo |
-| `popup` | No (anchored) | Transparent to unhandled keys | Dropdown menus |
-| `panel` | No | Transparent, pinned to the bottom | Crit review, task-creation progress |
-
-A layer releases its own `window` listeners and state in its `onCleanup` hook, which the stack runs exactly once when the layer is removed.
+Stacked UI surfaces (pages, modals, popups, and per-session panels) are managed by a single `LayerStack` (`src/ui/layers/`) that owns the only `window`-capture keydown listener and resolves focus from stack position.
 Dismissing a page (`Escape`, `q`, or `Ctrl+S`) restores focus to the revealed layer, or to the active terminal when the stack empties.
+
+See [`src/ui/layers/CLAUDE.md`](src/ui/layers/CLAUDE.md) for the layer kinds, modality barriers, and focus behavior, and [ADR-003](../docs/adrs/ADR-003-ember-layer-system.md) for why the system exists.
 
 ## Keyboard Shortcuts
 

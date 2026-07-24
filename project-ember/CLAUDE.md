@@ -66,17 +66,9 @@ Cassettes are stored as gzip-compressed JSON at `tests/support/fixtures/cassette
 
 ### Layer system
 
-Stacked UI surfaces are managed by a single `LayerStack` (`src/ui/layers/`), which owns the only `window`-capture keydown listener and resolves focus from stack position — see [ADR-003](../docs/adrs/ADR-003-ember-layer-system.md) for more information and types of layers and their properties (key barriers, focus behavior, etc.).
+Every stacked UI surface (page, modal, popup, session panel) must be pushed as a layer on the single `LayerStack` (`src/ui/layers/`) — never given its own global key listener or ad-hoc focus handling.
 
-A layer declares its behavior through its spec (`src/ui/layers/types.ts`):
-- `onKey`: layer-specific keys, tried first.
-- `onUserDismissRequest`: the response to `q`/`Escape`, plus `Ctrl+S` for pages — `close`, `handled`, or `veto`.
-- `onReveal`: re-run when a covering page pops.
-- `resolveFocus`: the focus target on push and reveal.
-A surface's own `window` listeners or other state are released in `onCleanup`, which the stack runs exactly once when the layer is popped, removed, or replaced.
-
-App-wide shortcuts live in `KeyboardShortcuts` and run when a key reaches the empty stack or falls through the layers layers.
-Shift-Shift (open the Command Palette) is tracked separately on `keyup`, outside the dispatcher.
+Read [`src/ui/layers/CLAUDE.md`](src/ui/layers/CLAUDE.md) before changing keyboard routing, focus, or modality; it is the reference for barriers, layer kinds, and when a sub-view needs to be its own layer.
 
 ## Error Handling
 
