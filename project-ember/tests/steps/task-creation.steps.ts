@@ -119,7 +119,7 @@ When(
     const ui = new UIDriver(this.driver);
     await ui.waitForElement('.ws-new-btn');
     await ui.click('.ws-new-btn');
-    await this.driver.pollFor(`return document.querySelector('.ws-new-form') !== null`, true, 5_000);
+    await this.driver.pollFor(`return document.querySelector('.new-task-dialog') !== null`, true, 5_000);
 
     await ui.typeIntoInput('.ws-new-form-input', title);
 

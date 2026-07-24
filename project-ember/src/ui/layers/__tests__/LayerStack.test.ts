@@ -452,40 +452,41 @@ describe('LayerStack — key dispatch', () => {
     expect(globalHandler).not.toHaveBeenCalled();
   });
 
-  it('a page barrier admits F1 and font combos to the global handler, and blocks everything else', () => {
+  it('a page barrier consults pageBarrierAdmits: admits what it allows and blocks the rest', () => {
+    const globalHandler = vi.fn(() => true);
+    const { stack } = makeStack();
+    stack.setGlobalHandler(globalHandler);
+    // The concrete admit-list (F1 + font sizing) is owned and tested by KeyboardShortcuts; here we only prove delegation.
+    stack.setPageBarrierAdmits((e) => e.key === 'F1');
+    stack.push(spec('ws-hub', 'page'));
+
+    dispatch({ key: 'F1', code: 'F1' });
+    expect(globalHandler).toHaveBeenCalledOnce();
+
+    globalHandler.mockClear();
+    dispatch({ key: 'ArrowRight', code: 'ArrowRight', ctrlKey: true });
+    expect(globalHandler).not.toHaveBeenCalled();
+  });
+
+  it('a page barrier blocks the global handler when no admit predicate is wired', () => {
     const globalHandler = vi.fn(() => true);
     const { stack } = makeStack();
     stack.setGlobalHandler(globalHandler);
     stack.push(spec('ws-hub', 'page'));
 
     dispatch({ key: 'F1', code: 'F1' });
-    dispatch({ key: '1', code: 'Digit1', ctrlKey: true });
-    expect(globalHandler).toHaveBeenCalledTimes(2);
-
-    globalHandler.mockClear();
-    dispatch({ key: 'S', code: 'KeyS', ctrlKey: true, shiftKey: true }); // new session
-    dispatch({ key: 'ArrowRight', code: 'ArrowRight', ctrlKey: true }); // tab switch
     expect(globalHandler).not.toHaveBeenCalled();
   });
 
-  it('admits every font-size combo through a page barrier (parity with KeyboardShortcuts)', () => {
+  it('a modal barrier blocks even keys the admit predicate would allow', () => {
     const globalHandler = vi.fn(() => true);
     const { stack } = makeStack();
     stack.setGlobalHandler(globalHandler);
-    stack.push(spec('ws-hub', 'page'));
+    stack.setPageBarrierAdmits(() => true);
+    stack.push(spec('confirm', 'modal'));
 
-    const fontCombos: KeyboardEventInit[] = [
-      { key: '+', code: 'Equal', ctrlKey: true, shiftKey: true },
-      { key: '+', code: 'NumpadAdd', ctrlKey: true, shiftKey: true },
-      { key: '_', code: 'Minus', ctrlKey: true, shiftKey: true },
-      { key: '_', code: 'NumpadSubtract', ctrlKey: true, shiftKey: true },
-      { key: '=', code: 'Equal', ctrlKey: true },
-      { key: '1', code: 'Digit1', ctrlKey: true },
-      { key: '2', code: 'Digit2', ctrlKey: true },
-      { key: '3', code: 'Digit3', ctrlKey: true },
-    ];
-    for (const combo of fontCombos) dispatch(combo);
-    expect(globalHandler).toHaveBeenCalledTimes(fontCombos.length);
+    dispatch({ key: 'F1', code: 'F1' });
+    expect(globalHandler).not.toHaveBeenCalled();
   });
 
   it('lets keys fall through a panel to the global handler', () => {

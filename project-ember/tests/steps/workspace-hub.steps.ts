@@ -57,7 +57,7 @@ When(
   'the user filters the New Task form repo list by {string}',
   async function (this: EmberWorld, text: string) {
     const ui = new UIDriver(this.driver);
-    await ui.typeIntoInput('.ws-new-form .search-input-field', text);
+    await ui.typeIntoInput('.new-task-dialog .search-input-field', text);
   },
 );
 
@@ -65,7 +65,7 @@ Then(
   'the New Task form should show {int} repo(s)',
   async function (this: EmberWorld, count: number) {
     const ui = new UIDriver(this.driver);
-    await ui.waitForVisibleElementCount('.ws-new-form .repo-list-item', count, 5_000);
+    await ui.waitForVisibleElementCount('.new-task-dialog .repo-list-item', count, 5_000);
   },
 );
 
@@ -206,16 +206,12 @@ Then(
   async function (this: EmberWorld) {
     const json = await this.driver.eval(`
       const wrap = ${CHEATSHEET_SCROLLER};
-      const hub = document.querySelector('.ws-hub');
       return JSON.stringify({
         overflows: !!wrap && wrap.scrollHeight > wrap.clientHeight,
-        // The hub carries the page background; it must span the whole scroll area, else its base color is revealed past the viewport when scrolling.
-        hubCoversScroll: !!hub && hub.classList.contains('ws-hub-cheatsheet') && hub.offsetHeight >= wrap.scrollHeight - 2,
       });
     `);
-    const { overflows, hubCoversScroll } = JSON.parse(json);
+    const { overflows } = JSON.parse(json);
     assert.strictEqual(overflows, true, 'expected the cheatsheet to be taller than its viewport (so scrolling is observable)');
-    assert.strictEqual(hubCoversScroll, true, 'expected the hub background to span the full scroll height');
   },
 );
 
@@ -693,7 +689,7 @@ Given(
     await ui.waitForElement('.ws-new-btn');
     await ui.click('.ws-new-btn');
     await this.driver.pollFor(
-      `return document.querySelector('.ws-new-form') !== null`,
+      `return document.querySelector('.new-task-dialog') !== null`,
       true,
       5_000,
     );
@@ -712,10 +708,19 @@ Then(
   'the New Task form should still be visible',
   async function (this: EmberWorld) {
     await this.driver.pollFor(
-      `return document.querySelector('.ws-new-form') !== null`,
+      `return document.querySelector('.new-task-dialog') !== null`,
       true,
       3_000,
     );
+  },
+);
+
+Then(
+  'the New Task dialog should not be open',
+  async function (this: EmberWorld) {
+    const ui = new UIDriver(this.driver);
+    const open = await ui.hasElement('.new-task-dialog');
+    assert.strictEqual(open, false, 'the New Task dialog should not be open');
   },
 );
 

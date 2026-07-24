@@ -11,7 +11,7 @@ import { showTextInputDialog } from './ui/components/TextInputDialog';
 import { showAddRepoDialog } from './ui/components/AddRepoDialog';
 import { showCloneRepoDialog } from './ui/components/CloneRepoDialog';
 import { TaskCreationProgressHandle } from './ui/components/TaskCreationProgress';
-import { WorkspaceHub } from './workspace/WorkspaceHub';
+import { WorkspaceHub, createWsHubCheatsheet } from './workspace/WorkspaceHub';
 import { TaskCreationController } from './workspace/TaskCreationController';
 import { CreationEvent, RepoInfo } from './workspace/types';
 import { SettingsHub, SettingsHubView } from './workspace/SettingsHub';
@@ -271,6 +271,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     (view) => openSettingsHub(view),
     cloneRepoIntoProfile,
     () => openHealthHub(),
+    () => openWsHubCheatsheet(),
   );
 
   const wsHubSpec = (): LayerSpec => ({
@@ -314,7 +315,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     layers.push(settingsHubSpec());
   };
 
-  // Duplicate the active session into a new workspace: open the Hub's New Task form pre-filled with this session's repos (pinned to their current commits) and its title.
+  // Duplicate the active session into a new workspace: open the Hub's New Task dialog pre-filled with this session's repos (pinned to their current commits) and its title.
   const duplicateCurrentSession = () => {
     const session = sessionManager.getActiveSession();
     if (!session?.workspacePath || !session.profilePath) {
@@ -390,7 +391,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       {
         id: 'duplicate-session',
         title: 'Duplicate Current Session',
-        description: 'Open the New Task form pre-filled to copy the current workspace',
+        description: 'Open the New Task dialog pre-filled to copy the current workspace',
         icon: '⧉',
         shortcut: [],
         run: closePaletteThen(() => duplicateCurrentSession()),
@@ -470,6 +471,26 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   };
 
+  const openWsHubCheatsheet = () => {
+    if (layers.find('ws-cheatsheet')) return;
+    const content = createWsHubCheatsheet();
+    const vimScroll = createVimScroll();
+    const handle = layers.push({
+      name: 'ws-cheatsheet',
+      kind: 'page',
+      element: content,
+      onKey: (e) => {
+        // `?` toggles the cheatsheet closed (q/Esc dismiss via the stack default); everything else scrolls.
+        if (e.key === '?') {
+          layers.remove(handle);
+          return true;
+        }
+        const container = content.parentElement;
+        return container ? vimScroll.handleKey(e, container) : false;
+      },
+    });
+  };
+
   const openUserGuide = async () => {
     if (layers.find('user-guide')) return;
     try {
@@ -513,6 +534,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   );
   layers.setKeyObserver((e) => shortcuts.observeKey(e));
   layers.setGlobalHandler((e) => shortcuts.handleGlobal(e));
+  layers.setPageBarrierAdmits((e) => shortcuts.allowedThroughPageBarrier(e));
 
   // Crit panel overlay integration: listen for backend events requesting a Crit review overlay, and wire overlay dismissal back to the backend.
   await listen<{ ptyId: number; url: string }>('crit-open-overlay', (event) => {

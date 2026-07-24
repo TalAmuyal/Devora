@@ -167,6 +167,22 @@ describe('createRepoList', () => {
     expect(handle.getSelectedPaths()).toEqual([]);
   });
 
+  it('toggleActive() toggles the active row checkbox in multi mode', () => {
+    const handle = mount('multi', manyRepos);
+    pressKey(handle, 'ArrowDown'); // active = beta
+    handle.toggleActive();
+    expect(handle.getSelectedPaths()).toEqual(['/src/beta']);
+    handle.toggleActive();
+    expect(handle.getSelectedPaths()).toEqual([]);
+  });
+
+  it('toggleActive() is a no-op in single mode', () => {
+    const handle = mount('single', manyRepos);
+    expect(handle.getSelectedPaths()).toEqual(['/src/alpha']); // first is selected by default
+    handle.toggleActive();
+    expect(handle.getSelectedPaths()).toEqual(['/src/alpha']);
+  });
+
   it('single mode moves the checked radio with the active row', () => {
     const handle = mount('single', manyRepos);
     expect(handle.getSelectedPaths()).toEqual(['/src/alpha']);

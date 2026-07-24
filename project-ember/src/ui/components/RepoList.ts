@@ -1,5 +1,5 @@
 /**
- * A selectable, filterable list of repos, shared by the New Task form (multi-select) and the Add Repo dialog (single-select).
+ * A selectable, filterable list of repos, shared by the New Task dialog (multi-select) and the Add Repo dialog (single-select).
  * A name filter with keyboard navigation lives here so both consumers share it.
  *
  * DOM: `div.repo-list > div.search-input + div.repo-list-items`, where `.repo-list-items` holds `label.repo-list-item > input + span.repo-list-item-name` rows plus a hidden `div.empty-state`.
@@ -29,6 +29,8 @@ export interface RepoListHandle {
   getSelectedPaths(): string[];
   /** Move keyboard focus into the filter input. */
   focus(): void;
+  /** Toggle the active row's checkbox (Enter's action in `multi` mode; no-op in `single`). Exposed so a host modal that intercepts Enter can still drive the list. */
+  toggleActive(): void;
 }
 
 /** Distinct radio-group name per `single`-mode instance, so two lists on the page don't share a group. */
@@ -92,6 +94,12 @@ export function createRepoList(options: RepoListOptions): RepoListHandle {
         : undefined,
   });
 
+  function toggleActive(): void {
+    if (options.mode !== 'multi') return;
+    const input = cursor.active()?.querySelector<HTMLInputElement>('input');
+    if (input) input.checked = !input.checked;
+  }
+
   function applyFilter(value: string): void {
     const needle = value.trim().toLowerCase();
     for (const row of rows) {
@@ -109,12 +117,7 @@ export function createRepoList(options: RepoListOptions): RepoListHandle {
     onEscape: () => {},
     onArrowDown: () => cursor.move(1),
     onArrowUp: () => cursor.move(-1),
-    onEnter: () => {
-      if (options.mode === 'multi') {
-        const input = cursor.active()?.querySelector<HTMLInputElement>('input');
-        if (input) input.checked = !input.checked;
-      }
-    },
+    onEnter: () => toggleActive(),
   });
 
   // Clicking a row moves the keyboard cursor onto it (its native input toggle still fires).
@@ -138,5 +141,6 @@ export function createRepoList(options: RepoListOptions): RepoListHandle {
         (input) => input.value,
       ),
     focus: () => search.focus(),
+    toggleActive,
   };
 }
