@@ -49,7 +49,7 @@ export class LayerStack {
     this.keyObserver = fn;
   }
 
-  /** The base global shortcuts, consulted when a key reaches the base (empty stack) or passes a page barrier. Returning `true` consumes. */
+  /** The app-wide shortcuts, consulted when a key reaches the base (empty stack or passes all surfuce barriers). Returning `true` consumes. */
   setGlobalHandler(fn: (e: KeyboardEvent) => boolean): void {
     this.globalHandler = fn;
   }
@@ -210,7 +210,7 @@ export class LayerStack {
   }
 
   /**
-   * Which base shortcuts reach the global handler through a barrier: under a `modal`, nothing; under a `page`, whatever KeyboardShortcuts admits (F1 + font sizing).
+   * Which keys reach the global handler through a barrier: under a `modal`, nothing; under a `page`, whatever KeyboardShortcuts admits (F1 + font sizing).
    * The page admit-list lives in KeyboardShortcuts (via setPageBarrierAdmits), so the barrier and the shortcuts it gates can never drift.
    */
   private allowedThroughBarrier(e: KeyboardEvent, kind: 'page' | 'modal'): boolean {

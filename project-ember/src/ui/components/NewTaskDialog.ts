@@ -1,8 +1,8 @@
 /**
  * Modal for creating (or duplicating) a task/workspace: a title input plus a multi-select repo list with an inline "Clone Repo" action.
- * Opened from the Workspace Hub (n / "+ New Task" / Duplicate). Pure UI — the caller wires task creation, repo cloning, and repo reloading.
+ * Pure UI — the caller wires task creation, repo cloning, and repo reloading.
  *
- * A `modal` layer (ADR-003): Escape/`q` cancel; Enter creates the task from the title but toggles the active repo when the filter is focused (so the list keeps its keyboard nav). Focus opens on the title input.
+ * A `modal` layer (ADR-003): Escape/`q` cancel; Enter creates the task from the title but toggles the active repo when the filter is focused (so the list keeps its keyboard nav).
  * On create the dialog closes first, then hands off — the caller tears the Hub down, so the modal must be gone before that happens.
  * DOM: `div.new-task-dialog-backdrop > div.new-task-dialog`.
  */

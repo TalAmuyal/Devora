@@ -123,7 +123,6 @@ export class WorkspaceHub {
     onDone: (repo: { path: string; name: string }) => void,
   ) => void;
   private onOpenHealth: () => void;
-  // Open the hub's keyboard cheatsheet as a stacked page (owned by main.ts, which pushes the layer).
   private onOpenCheatsheet: () => void;
 
   private profiles: ProfileInfo[] = [];

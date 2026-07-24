@@ -22,7 +22,7 @@ function matchFontSizeShortcut(e: KeyboardEvent): FontSizeAction | null {
 }
 
 /**
- * The base (empty-stack / through-a-page-barrier) global shortcuts, driven by the LayerStack (ADR-003).
+ * The app-wide shortcuts, driven by the LayerStack (ADR-003).
  *
  * This owns no `window`-capture keydown listener of its own: `observeKey` is registered as the stack's key observer (Shift-Shift tracking; never consumes) and `handleGlobal` as the stack's global handler (returns `true` when it consumes).
  * Only the keyup listener for the Shift-Shift double-tap stays here.
@@ -68,7 +68,7 @@ export class KeyboardShortcuts {
     }
   }
 
-  /** The LayerStack's global handler for base shortcuts. Returns `true` when it consumes the key. */
+  /** Returns `true` when it consumes the key. */
   handleGlobal(e: KeyboardEvent): boolean {
     // Use e.code (physical key) for matching, because macOS WKWebView transforms e.key into control characters when Ctrl is held
     const code = e.code;

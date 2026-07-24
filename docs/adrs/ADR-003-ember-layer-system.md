@@ -49,20 +49,30 @@ Routing walks the stack from the top down, and focus is resolved at each transit
 
 ### Layer kinds
 
-A layer declares one of four kinds, which fixes its stacking and modality behavior:
+A layer declares one of the following kinds, which fixes its stacking and modality behavior:
 
-- **`page`** — a full-screen surface (the hubs, User Guide, Command Palette). Opaque modality barrier.
-- **`modal`** — a dialog over a backdrop. Opaque barrier; gets a Tab focus trap.
-- **`popup`** — an anchored, light-dismiss surface (dropdown menus, future popovers). Stays where the caller placed it in the DOM, never moves focus, and is **transparent** to keys it does not handle.
-- **`panel`** — a per-session region overlaying the terminal (Crit, task-creation). Inserted at the **bottom** of the stack (it represents session content and must never intercept a page/modal above it) and **transparent** to unhandled keys.
+- **`page`** — a full-window surface (the hubs, Command Palette, etc.).
+	- Opaque barrier - admits only app-wide shortcuts (`KeyboardShortcuts.allowedThroughPageBarrier`).
+	- Covering the tab bar
+	- Stacks over or replaces other pages.
+- **`modal`** — a dialog over a backdrop (confirmation, text input, add-repo, etc.).
+	- Opaque barrier: admits no keys to the underlying surface.
+	- Tab focus trap.
+- **`panel`** — a per-session region over the terminal (Crit, task-creation progress, etc.)
+	- Transparent to keys it does not handle.
+	- Tab bar still visible.
+	- Sits below other surfaces in the stack - represents session content and must never intercept a page/modal above it.
+- **`popup`** — an anchored, light-dismiss surface (dropdown menus).
+	- Never takes focus.
+	- Transparent to keys it does not handle.
 
-`popup` and `panel` transparency is what makes non-modal surfaces work: unhandled keys fall through to lower layers and ultimately to the base global shortcuts.
-
-Kind is a classification of *behavior* — modality, focus ownership, and key routing — not of visual size. The Command Palette is a `page` even though it renders as a floating box over a transparent backdrop: it owns keyboard focus, is mutually exclusive with the other pages, and is opaque to keys (the terminal below it is inert). A `popup`, by contrast, never takes focus and is transparent to keys it does not handle. The palette's see-through backdrop is cosmetic; its wrapper still covers the window and its semantics are page semantics.
+Unhandled keys fall through to lower layers and ultimately to the base, where app-wide shortcuts are handled.
 
 ### When a sub-view is its own layer
 
-Because routing and focus follow stack position, a sub-view that **fully covers** the surface beneath it and **owns its keys** must be pushed as its own layer rather than swapped in behind the host's single `handleKey` — otherwise the host keeps routing keys to the now-hidden view (a within-surface leak). Use a **`modal`** when the surface below should stay as visible context (a form/dialog — e.g. the Workspace Hub's New Task dialog, alongside Add-Repo/Clone-Repo) and a **`page`** when it is a full-window replacement (e.g. the hub's keyboard cheatsheet). A *mode with nothing behind it* (the zero-profile welcome) or a *master/detail split where both panes stay live* (Settings Hub) is not a covering layer and correctly stays part of its host, guarded only by its own state.
+Because routing and focus follow stack position, a sub-view that **fully covers** the surface beneath it and **owns its keys** must be pushed as its own layer rather than swapped in behind the host's single `handleKey` — otherwise the host keeps routing keys to the now-hidden view (a within-surface leak).
+Use a **`modal`** when the surface below should stay as visible context (a form/dialog — e.g. the Workspace Hub's "New Task" dialog, alongside "Add-Repo" and "Clone-Repo") and a **`page`** when it is a full-window replacement (e.g. the hub's keyboard cheatsheet).
+A *mode with nothing behind it* (the zero-profile welcome) or a *master/detail split where both panes stay live* (Settings Hub) is not a covering layer and correctly stays part of its host, guarded only by its own state.
 
 ### Layer contract
 
@@ -111,15 +121,15 @@ editableFocusedWithin(layer):
   isEditableElementFocused() and layer.wrapper.contains(document.activeElement)
 ```
 
-Global shortcuts (`Ctrl+S`, `F1`, `Ctrl+Shift+S`, `Ctrl+←/→`, `Ctrl+Shift+←/→`, font sizing) sit at the **base** of this dispatcher, consulted only when a layer lets a key through its barrier.
+App-wide shortcuts (font sizing, etc.) sit at the **base** of this dispatcher, consulted only when all layer lets a key through its barrier.
 Shift-Shift (open Command Palette) fires on keyup, outside the dispatcher; a non-consuming `keyObserver` sees every keydown to track the lone-Shift state.
 
 The Command Palette's "type-first" behavior needs no special case: its search field is focused on open, so `q` hits `editableFocusedWithin` and types, while Escape passes through to the field's own keydown handler, which blurs and requests close.
 
 ### Modality-barrier matrix
 
-The page admit-list is owned by `KeyboardShortcuts.allowedThroughPageBarrier` — the single source of truth for "app-wide" keys — and consulted by the stack's `allowedThroughBarrier` (which additionally blocks everything under a `modal`). Keeping the admit test in `KeyboardShortcuts` means the barrier can never drift from the shortcuts it gates (both derive the font-size set from one `matchFontSizeShortcut`).
-Under a `page`, only `F1` and the font-size combos reach the base; under a `modal`, nothing does.
+The page admit-list is owned by `KeyboardShortcuts.allowedThroughPageBarrier` — the single source of truth for "app-wide" keys — and consulted by the stack's `allowedThroughBarrier` (which additionally blocks everything under a `modal`).
+Under a `page`, only app-wide combos reach the base; under a `modal`, nothing does.
 `popup`/`panel` are transparent.
 
 | Shortcut | base (empty) | under panel/popup only | under page | under modal |
