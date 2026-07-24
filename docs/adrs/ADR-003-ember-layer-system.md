@@ -60,6 +60,10 @@ A layer declares one of four kinds, which fixes its stacking and modality behavi
 
 Kind is a classification of *behavior* — modality, focus ownership, and key routing — not of visual size. The Command Palette is a `page` even though it renders as a floating box over a transparent backdrop: it owns keyboard focus, is mutually exclusive with the other pages, and is opaque to keys (the terminal below it is inert). A `popup`, by contrast, never takes focus and is transparent to keys it does not handle. The palette's see-through backdrop is cosmetic; its wrapper still covers the window and its semantics are page semantics.
 
+### When a sub-view is its own layer
+
+Because routing and focus follow stack position, a sub-view that **fully covers** the surface beneath it and **owns its keys** must be pushed as its own layer rather than swapped in behind the host's single `handleKey` — otherwise the host keeps routing keys to the now-hidden view (a within-surface leak). Use a **`modal`** when the surface below should stay as visible context (a form/dialog — e.g. the Workspace Hub's New Task dialog, alongside Add-Repo/Clone-Repo) and a **`page`** when it is a full-window replacement (e.g. the hub's keyboard cheatsheet). A *mode with nothing behind it* (the zero-profile welcome) or a *master/detail split where both panes stay live* (Settings Hub) is not a covering layer and correctly stays part of its host, guarded only by its own state.
+
 ### Layer contract
 
 A layer is pushed with a spec (`src/ui/layers/types.ts`):
@@ -114,7 +118,7 @@ The Command Palette's "type-first" behavior needs no special case: its search fi
 
 ### Modality-barrier matrix
 
-`allowedThroughBarrier` is one explicit function.
+The page admit-list is owned by `KeyboardShortcuts.allowedThroughPageBarrier` — the single source of truth for "app-wide" keys — and consulted by the stack's `allowedThroughBarrier` (which additionally blocks everything under a `modal`). Keeping the admit test in `KeyboardShortcuts` means the barrier can never drift from the shortcuts it gates (both derive the font-size set from one `matchFontSizeShortcut`).
 Under a `page`, only `F1` and the font-size combos reach the base; under a `modal`, nothing does.
 `popup`/`panel` are transparent.
 

@@ -29,6 +29,7 @@ export class LayerStack {
   private readonly layers: LayerEntry[] = [];
   private keyObserver: ((e: KeyboardEvent) => void) | null = null;
   private globalHandler: ((e: KeyboardEvent) => boolean) | null = null;
+  private pageBarrierAdmits: ((e: KeyboardEvent) => boolean) | null = null;
 
   constructor(deps: LayerStackDeps) {
     this.deps = deps;
@@ -51,6 +52,11 @@ export class LayerStack {
   /** The base global shortcuts, consulted when a key reaches the base (empty stack) or passes a page barrier. Returning `true` consumes. */
   setGlobalHandler(fn: (e: KeyboardEvent) => boolean): void {
     this.globalHandler = fn;
+  }
+
+  /** The predicate for which base shortcuts survive a `page` barrier — owned by KeyboardShortcuts (the single source of truth for app-wide keys). */
+  setPageBarrierAdmits(fn: (e: KeyboardEvent) => boolean): void {
+    this.pageBarrierAdmits = fn;
   }
 
   /** Push a layer: `panel` inserts at the bottom (it must never intercept a page/modal above it), every other kind goes on top. */
@@ -204,13 +210,12 @@ export class LayerStack {
   }
 
   /**
-   * Which base shortcuts reach the global handler through a barrier: under a `page`, only F1 and the font-size combos; under a `modal`, nothing.
-   * Everything else (new session, tab switch/move) is blocked.
+   * Which base shortcuts reach the global handler through a barrier: under a `modal`, nothing; under a `page`, whatever KeyboardShortcuts admits (F1 + font sizing).
+   * The page admit-list lives in KeyboardShortcuts (via setPageBarrierAdmits), so the barrier and the shortcuts it gates can never drift.
    */
   private allowedThroughBarrier(e: KeyboardEvent, kind: 'page' | 'modal'): boolean {
     if (kind === 'modal') return false;
-    if (e.key === 'F1') return true;
-    return isFontSizeCombo(e);
+    return this.pageBarrierAdmits?.(e) ?? false;
   }
 
   private editableFocusedWithin(layer: LayerEntry): boolean {
@@ -314,16 +319,4 @@ export class LayerStack {
 
 function makeHandle(spec: LayerSpec, wrapper: HTMLElement): LayerHandle {
   return { name: spec.name, kind: spec.kind, element: spec.element, wrapper };
-}
-
-/** The font-size base shortcuts (Ctrl+1/2/3, Ctrl±, Ctrl+Shift±), which stay live over a page. */
-function isFontSizeCombo(e: KeyboardEvent): boolean {
-  if (!e.ctrlKey) return false;
-  const { shiftKey: shift, code } = e;
-  if (shift && (code === 'Equal' || code === 'NumpadAdd')) return true;
-  if (shift && (code === 'Minus' || code === 'NumpadSubtract')) return true;
-  if (!shift && (code === 'Equal' || code === 'Digit1' || code === 'Digit2' || code === 'Digit3')) {
-    return true;
-  }
-  return false;
 }

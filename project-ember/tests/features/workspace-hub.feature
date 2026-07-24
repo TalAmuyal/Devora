@@ -65,6 +65,15 @@ Feature: Workspace Hub
     When the user presses "?"
     Then the cheatsheet should not be visible
 
+  Scenario: Hub keys are inert while the cheatsheet is open
+    Given a profile "Work" with 1 active workspaces
+    And the Workspace Hub is open
+    When the user presses "?"
+    Then the cheatsheet should be visible
+    When the user presses "n"
+    Then the cheatsheet should be visible
+    And the New Task dialog should not be open
+
   Scenario: Scroll the cheatsheet with Vim keys
     Given a profile "Work" with 1 active workspaces
     And the Workspace Hub is open

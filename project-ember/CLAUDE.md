@@ -70,14 +70,14 @@ Stacked UI surfaces are managed by a single `LayerStack` (`src/ui/layers/`), whi
 
 Each surface is pushed as a layer of one kind:
 
-- **`page`** — full-window surface covering the tab bar (Workspace/Settings/Health Hub, User Guide, Command Palette). Opaque modality barrier; stacks over or replaces other pages.
-- **`modal`** — dialog over a backdrop (confirmation, text input, add-repo, clone-repo). Opaque barrier with a Tab focus trap.
+- **`page`** — full-window surface covering the tab bar (Workspace/Settings/Health Hub, User Guide, Command Palette, hub cheatsheet). Opaque modality barrier; stacks over or replaces other pages.
+- **`modal`** — dialog over a backdrop (confirmation, text input, add-repo, clone-repo, new-task). Opaque barrier with a Tab focus trap.
 - **`popup`** — anchored, light-dismiss surface (dropdown menus). Never takes focus and is transparent to keys it does not handle.
 - **`panel`** — per-session region over the terminal, tab bar still visible (Crit, task-creation progress). Sits at the bottom of the stack and is transparent to unhandled keys.
 
 A layer declares its behavior through its spec (`src/ui/layers/types.ts`): `onKey` (layer-specific keys, tried first), `onUserDismissRequest` (the response to `q`/`Escape`, plus `Ctrl+S` for pages — `close`, `handled`, or `veto`), `onReveal` (re-run when a covering page pops), and `resolveFocus` (the focus target on push and reveal). A surface's own `window` listeners or other state are released in `onCleanup`, which the stack runs exactly once when the layer is popped, removed, or replaced.
 
-Base global shortcuts (open the hub via `Ctrl+S`, new session, tab switch/move, font sizing, `F1`) live in `KeyboardShortcuts` and run when a key reaches the empty stack or falls through transparent `popup`/`panel` layers. A `page` barrier admits only `F1` and font sizing — `Ctrl+S` instead becomes the page's dismiss key — and a `modal` admits none; see the barrier matrix in ADR-003. Shift-Shift (open the Command Palette) is tracked separately on `keyup`, outside the dispatcher.
+Base global shortcuts (open the hub via `Ctrl+S`, new session, tab switch/move, font sizing, `F1`) live in `KeyboardShortcuts` and run when a key reaches the empty stack or falls through transparent `popup`/`panel` layers. A `page` barrier admits only `F1` and font sizing — `Ctrl+S` instead becomes the page's dismiss key — and a `modal` admits none; the admit-list is `KeyboardShortcuts.allowedThroughPageBarrier` (the single source of truth for app-wide keys), consulted by the stack. See the barrier matrix in ADR-003. Shift-Shift (open the Command Palette) is tracked separately on `keyup`, outside the dispatcher.
 
 ## Error Handling
 

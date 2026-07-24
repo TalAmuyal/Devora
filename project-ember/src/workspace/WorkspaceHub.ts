@@ -9,10 +9,9 @@ import { createKeyboardHintBar } from '../ui/components/KeyboardHintBar';
 import { showConfirmationDialog } from '../ui/components/ConfirmationDialog';
 import { createToast, ToastHandle } from '../ui/components/Toast';
 import { createDropdownMenu, DropdownItem, DropdownMenuHandle } from '../ui/components/DropdownMenu';
-import { createRepoList, RepoListHandle } from '../ui/components/RepoList';
+import { showNewTaskDialog } from '../ui/components/NewTaskDialog';
 import { createTableShell } from '../ui/components/TableShell';
-import { isEditableElementFocused, blurOnEscape } from '../ui/focus';
-import { createVimScroll } from '../ui/vimScroll';
+import { isEditableElementFocused } from '../ui/focus';
 import { DismissDecision } from '../ui/layers/types';
 import { pluralize } from '../ui/format';
 import { createProfileForm } from './ProfileForm';
@@ -118,12 +117,14 @@ export class WorkspaceHub {
     sourceWorkspacePath: string | null,
   ) => void;
   private onOpenSettingsHub: (view: 'list' | 'new') => void;
-  // Clone a repo into the given profile; `onDone` receives the cloned repo so the New Task form can refresh and pre-select it.
+  // Clone a repo into the given profile; `onDone` receives the cloned repo so the New Task dialog can refresh and pre-select it.
   private onCloneRepo: (
     profilePath: string,
     onDone: (repo: { path: string; name: string }) => void,
   ) => void;
   private onOpenHealth: () => void;
+  // Open the hub's keyboard cheatsheet as a stacked page (owned by main.ts, which pushes the layer).
+  private onOpenCheatsheet: () => void;
 
   private profiles: ProfileInfo[] = [];
   private activeProfilePath: string | null = null;
@@ -136,21 +137,13 @@ export class WorkspaceHub {
   private statusCache: Map<string, RepoStatus[]> = new Map();
   private statusErrors: Map<string, string> = new Map();
 
-  private showNewForm = false;
-  // Set while the New Task form is in "duplicate" mode: the source workspace whose commits and CLAUDE.md the new workspace should mirror (null for a plain new task).
-  private duplicationSource: string | null = null;
-  // Title pre-filled into the New Task form's Title field: the source task title when duplicating, or the typed title preserved across a clone-triggered re-render.
-  private newFormTitle = '';
-  // Registered-repo paths pre-checked in the duplicate form (the source workspace's repos).
-  private preselectedRepoPaths: string[] = [];
   // A duplication requested from outside (command palette) before the hub finished loading; the source repos/title are resolved from the loaded workspace list at the end of load().
   private pendingDuplication: string | null = null;
+  // Guards the async window between triggering a New Task open (which fetches repos) and pushing the modal, so a held/double `n` can't stack dialogs.
+  private newTaskDialogOpening = false;
   private refreshToast: ToastHandle | null = null;
   private refreshSeq = 0;
-  private availableRepos: RepoInfo[] = [];
   private focusedCardIndex = -1;
-  private showCheatsheet = false;
-  private cheatsheetScroll = createVimScroll();
   private profilesLoaded = false;
   private workspacesLoaded = false;
 
@@ -176,12 +169,14 @@ export class WorkspaceHub {
       onDone: (repo: { path: string; name: string }) => void,
     ) => void,
     onOpenHealth: () => void,
+    onOpenCheatsheet: () => void,
   ) {
     this.onOpenWorkspace = onOpenWorkspace;
     this.onStartTaskCreation = onStartTaskCreation;
     this.onOpenSettingsHub = onOpenSettingsHub;
     this.onCloneRepo = onCloneRepo;
     this.onOpenHealth = onOpenHealth;
+    this.onOpenCheatsheet = onOpenCheatsheet;
     this.containerEl = document.createElement('div');
     this.containerEl.className = 'ws-hub';
   }
@@ -209,13 +204,8 @@ export class WorkspaceHub {
     return this.zeroProfiles;
   }
 
-  /** The page layer's dismissal decision (q/Esc/Ctrl+S): close the cheatsheet if open ('handled'), refuse while zero-profile locked ('veto'), otherwise let the stack pop the hub ('close'). */
+  /** The page layer's dismissal decision (q/Esc/Ctrl+S): refuse while zero-profile locked ('veto'), otherwise let the stack pop the hub ('close'). */
   handleUserDismiss(): DismissDecision {
-    if (this.showCheatsheet) {
-      this.showCheatsheet = false;
-      this.render();
-      return 'handled';
-    }
     if (this.isZeroProfileLocked()) {
       return 'veto';
     }
@@ -548,12 +538,9 @@ export class WorkspaceHub {
     this.searchFilter = '';
     this.categoryFilter = 'active';
     this.focusedCardIndex = -1;
-    this.showNewForm = false;
-    this.resetDuplicationState();
     this.pendingDuplication = null;
     this.refreshSeq++;
     this.removeAllToasts();
-    this.showCheatsheet = false;
     this.profilesLoaded = false;
     this.workspacesLoaded = false;
     this.statusCache.clear();
@@ -580,16 +567,8 @@ export class WorkspaceHub {
     }
 
     if (e.key === '?') {
-      this.showCheatsheet = !this.showCheatsheet;
-      if (this.showCheatsheet) this.cheatsheetScroll.reset();
-      this.render();
+      this.onOpenCheatsheet();
       return true;
-    }
-
-    // While the cheatsheet covers the hub, keys drive its scrolling only; every other hub key is inert (the master list beneath it is hidden). The layer wrapper (.overlay-tab-covering) is the cheatsheet's scroll container.
-    if (this.showCheatsheet) {
-      const container = this.containerEl.parentElement;
-      return container ? this.cheatsheetScroll.handleKey(e, container) : false;
     }
 
     const filtered = this.filteredWorkspaces();
@@ -634,7 +613,7 @@ export class WorkspaceHub {
         }
         return true;
       case 'n':
-        this.toggleNewForm();
+        void this.openNewTaskDialog();
         return true;
       case 'R':
         void this.refresh();
@@ -756,14 +735,6 @@ export class WorkspaceHub {
     this.masterListEl = null;
     this.containerEl.innerHTML = '';
 
-    // In cheatsheet mode the hub grows to its (overflowing) content so its background covers the whole scroll area, instead of the layer wrapper's base color showing through past the viewport.
-    this.containerEl.classList.toggle('ws-hub-cheatsheet', this.showCheatsheet);
-
-    if (this.showCheatsheet) {
-      this.containerEl.appendChild(this.renderCheatsheet());
-      return;
-    }
-
     this.containerEl.appendChild(this.renderHeader());
 
     if (this.profilesLoaded && this.profiles.length === 0) {
@@ -777,11 +748,7 @@ export class WorkspaceHub {
       return;
     }
 
-    if (this.showNewForm) {
-      this.containerEl.appendChild(this.renderNewForm());
-    } else {
-      this.containerEl.appendChild(this.renderSplitPanel());
-    }
+    this.containerEl.appendChild(this.renderSplitPanel());
 
     this.containerEl.appendChild(createKeyboardHintBar({
       hints: [
@@ -1443,182 +1410,76 @@ export class WorkspaceHub {
   }
 
   /**
-   * Open the New Task form pre-filled to copy a source workspace: its repos pre-checked and its title pre-filled, remembering the source so submission pins each shared repo to the source's commit and copies its CLAUDE.md.
+   * Open the New Task dialog pre-filled to copy a source workspace: its repos pre-checked and its title pre-filled, remembering the source so submission pins each shared repo to the source's commit and copies its CLAUDE.md.
    */
   private async startDuplication(
     sourceWorkspacePath: string,
     sourceRepoNames: string[],
     title: string,
   ): Promise<void> {
-    if (!this.activeProfilePath) return;
+    if (!this.activeProfilePath || this.newTaskDialogOpening) return;
+    this.newTaskDialogOpening = true;
     try {
-      this.availableRepos = await invoke<RepoInfo[]>('get_registered_repos', {
+      const repos = await this.loadRegisteredRepos();
+      const preselected = repos.filter((r) => sourceRepoNames.includes(r.name)).map((r) => r.path);
+      this.presentNewTaskDialog(repos, title, preselected, sourceWorkspacePath);
+    } finally {
+      this.newTaskDialogOpening = false;
+    }
+  }
+
+  /** Open the New Task dialog for a plain (non-duplicating) task. */
+  private async openNewTaskDialog(): Promise<void> {
+    if (!this.activeProfilePath || this.newTaskDialogOpening) return;
+    this.newTaskDialogOpening = true;
+    try {
+      const repos = await this.loadRegisteredRepos();
+      this.presentNewTaskDialog(repos, '', [], null);
+    } finally {
+      this.newTaskDialogOpening = false;
+    }
+  }
+
+  private async loadRegisteredRepos(): Promise<RepoInfo[]> {
+    if (!this.activeProfilePath) return [];
+    try {
+      return await invoke<RepoInfo[]>('get_registered_repos', {
         profilePath: this.activeProfilePath,
       });
     } catch (_) {
       // invoke already surfaced the error
-      this.availableRepos = [];
+      return [];
     }
-    this.duplicationSource = sourceWorkspacePath;
-    this.newFormTitle = title;
-    this.preselectedRepoPaths = this.availableRepos
-      .filter((r) => sourceRepoNames.includes(r.name))
-      .map((r) => r.path);
-    this.showNewForm = true;
-    this.render();
   }
 
-  private async toggleNewForm(): Promise<void> {
-    this.showNewForm = !this.showNewForm;
-    // A plain new task carries no duplication source/preselection.
-    this.resetDuplicationState();
-    if (this.showNewForm && this.activeProfilePath) {
-      try {
-        this.availableRepos = await invoke<RepoInfo[]>('get_registered_repos', {
-          profilePath: this.activeProfilePath,
-        });
-      } catch (_) {
-        // invoke already surfaced the error
-        this.availableRepos = [];
-      }
-    }
-    this.render();
-  }
-
-  private resetDuplicationState(): void {
-    this.duplicationSource = null;
-    this.newFormTitle = '';
-    this.preselectedRepoPaths = [];
+  private presentNewTaskDialog(
+    availableRepos: RepoInfo[],
+    initialTitle: string,
+    preselectedRepoPaths: string[],
+    duplicationSource: string | null,
+  ): void {
+    const profilePath = this.activeProfilePath;
+    // loadRegisteredRepos above is async; if the hub was dismissed meanwhile its wrapper is detached — don't strand a modal over the terminal.
+    if (!profilePath || !this.containerEl.isConnected) return;
+    showNewTaskDialog({
+      profilePath,
+      availableRepos,
+      initialTitle,
+      preselectedRepoPaths,
+      isDuplicating: duplicationSource !== null,
+      onCreate: (taskName, repoPaths) =>
+        this.onStartTaskCreation(taskName, repoPaths, duplicationSource),
+      onCloneRepo: (p, onDone) => this.onCloneRepo(p, onDone),
+      reloadRepos: () => this.loadRegisteredRepos(),
+    });
   }
 
   private renderNewButton(): HTMLElement {
     const btn = document.createElement('button');
     btn.className = 'ws-new-btn';
     btn.textContent = '+ New Task';
-    btn.addEventListener('click', () => this.toggleNewForm());
+    btn.addEventListener('click', () => void this.openNewTaskDialog());
     return btn;
-  }
-
-  private renderNewForm(): HTMLElement {
-    const form = document.createElement('div');
-    form.className = 'ws-new-form';
-
-    // Task name input
-    const nameLabel = document.createElement('label');
-    nameLabel.className = 'ws-new-form-label';
-    nameLabel.textContent = 'Title';
-    form.appendChild(nameLabel);
-
-    const nameInput = document.createElement('input');
-    nameInput.type = 'text';
-    nameInput.className = 'ws-new-form-input';
-    nameInput.placeholder = 'e.g. Fix login bug';
-    nameInput.value = this.newFormTitle;
-    blurOnEscape(nameInput);
-    form.appendChild(nameInput);
-
-    const isDuplicating = this.duplicationSource !== null;
-    let repoListHandle: RepoListHandle | null = null;
-
-    // Repo selection — the header (label + Clone Repo) is always shown so a repo can be added even when the profile has none yet.
-    const repoHeader = document.createElement('div');
-    repoHeader.className = 'ws-new-form-repo-header';
-    const repoLabel = document.createElement('label');
-    repoLabel.className = 'ws-new-form-label';
-    repoLabel.textContent = 'Repositories';
-    repoHeader.appendChild(repoLabel);
-    const cloneBtn = document.createElement('button');
-    cloneBtn.className = 'ws-new-form-clone';
-    cloneBtn.textContent = '+ Clone Repo';
-    cloneBtn.addEventListener('click', () => {
-      if (!this.activeProfilePath) return;
-      // Capture the in-progress title/selection so the clone-triggered re-render restores them.
-      const typedTitle = nameInput.value;
-      const selected = repoListHandle?.getSelectedPaths() ?? [];
-      this.onCloneRepo(this.activeProfilePath, (repo) => {
-        void this.refreshNewFormAfterClone(typedTitle, selected, repo.path);
-      });
-    });
-    repoHeader.appendChild(cloneBtn);
-    form.appendChild(repoHeader);
-
-    if (isDuplicating) {
-      const hint = document.createElement('p');
-      hint.className = 'ws-new-form-hint';
-      hint.textContent =
-        'Pre-selected repos are duplicated at their current commit; added repos use the latest commit.';
-      form.appendChild(hint);
-    }
-
-    if (this.availableRepos.length > 0) {
-      repoListHandle = createRepoList({
-        repos: this.availableRepos,
-        mode: 'multi',
-        preselectedPaths: this.preselectedRepoPaths,
-      });
-      form.appendChild(repoListHandle.element);
-    } else {
-      const empty = document.createElement('p');
-      empty.className = 'ws-new-form-hint';
-      empty.textContent = 'No repos in this profile yet — clone one to add it.';
-      form.appendChild(empty);
-    }
-
-    // Action buttons
-    const actions = document.createElement('div');
-    actions.className = 'ws-new-form-actions';
-
-    const createBtn = document.createElement('button');
-    createBtn.className = 'ws-new-form-create';
-    createBtn.textContent = 'Create';
-    createBtn.addEventListener('click', () => {
-      const taskName = nameInput.value.trim();
-      if (!taskName || !this.activeProfilePath) return;
-
-      const repoPaths = repoListHandle?.getSelectedPaths() ?? [];
-      const sourceWorkspacePath = this.duplicationSource;
-
-      // Hand off immediately: the controller closes the Hub, opens a tab, and streams progress.
-      // Creation no longer blocks here, so the window never freezes.
-      this.showNewForm = false;
-      this.resetDuplicationState();
-      this.onStartTaskCreation(taskName, repoPaths, sourceWorkspacePath);
-    });
-
-    const cancelBtn = document.createElement('button');
-    cancelBtn.className = 'ws-new-form-cancel';
-    cancelBtn.textContent = 'Cancel';
-    cancelBtn.addEventListener('click', () => {
-      this.showNewForm = false;
-      this.resetDuplicationState();
-      this.render();
-    });
-
-    actions.appendChild(createBtn);
-    actions.appendChild(cancelBtn);
-    form.appendChild(actions);
-
-    return form;
-  }
-
-  /** After a repo is cloned from the New Task form, re-fetch the repo list, pre-select the new repo, and re-render preserving the typed title and prior selections. */
-  private async refreshNewFormAfterClone(
-    title: string,
-    selectedPaths: string[],
-    newRepoPath: string,
-  ): Promise<void> {
-    if (!this.activeProfilePath) return;
-    try {
-      this.availableRepos = await invoke<RepoInfo[]>('get_registered_repos', {
-        profilePath: this.activeProfilePath,
-      });
-    } catch (_) {
-      // invoke already surfaced the error
-      this.availableRepos = [];
-    }
-    this.newFormTitle = title;
-    this.preselectedRepoPaths = [...new Set([...selectedPaths, newRepoPath])];
-    this.render();
   }
 
   /** Write the last load's profiling report to disk and confirm with a toast (the burger-menu "Save loading latencies" action). */
@@ -1636,80 +1497,85 @@ export class WorkspaceHub {
     }
   }
 
-  private renderCheatsheet(): HTMLElement {
-    const sheet = document.createElement('div');
-    sheet.className = 'ws-cheatsheet';
+}
 
-    const title = document.createElement('h2');
-    title.className = 'ws-cheatsheet-title';
-    title.textContent = 'Keyboard Shortcuts';
-    sheet.appendChild(title);
+/**
+ * The Workspace Hub keyboard cheatsheet content, pushed as its own `page` layer (main.ts `openWsHubCheatsheet`).
+ * Static content — a two-section shortcuts table; the hosting page owns scrolling (`?`/Esc/`q` dismiss).
+ */
+export function createWsHubCheatsheet(): HTMLElement {
+  const sheet = document.createElement('div');
+  sheet.className = 'ws-cheatsheet';
 
-    const sections: { heading: string; keys: [string, string][] }[] = [
-      {
-        heading: 'Workspace Hub',
-        keys: [
-          ['j / ↓', 'Move selection down'],
-          ['k / ↑', 'Move selection up'],
-          ['Enter', 'Open selected workspace'],
-          ['f', 'Focus filter input'],
-          ['Esc', 'Unfocus filter / close cheatsheet'],
-          ['1', 'Show active workspaces'],
-          ['2', 'Show inactive workspaces'],
-          ['3', 'Show all workspaces'],
-          ['n', 'New task'],
-          ['P', 'Manage Profiles'],
-          ['H', 'Open Health Hub'],
-          ['R', 'Refresh hub'],
-          ['q', 'Close hub'],
-          ['?', 'Toggle this cheatsheet'],
-        ],
-      },
-      {
-        heading: 'Global',
-        keys: [
-          ['Ctrl+S', 'Toggle Workspace Hub'],
-          ['Shift Shift', 'Open Command Palette (double-tap)'],
-          ['Ctrl+Shift+S', 'New shell tab'],
-          ['Ctrl+←/→', 'Switch tabs'],
-          ['Ctrl+Shift+←/→', 'Reorder tabs'],
-          ['Ctrl+Shift++', 'Increase UI size'],
-          ['Ctrl+Shift+-', 'Decrease UI size'],
-          ['Ctrl+=', 'Reset UI size'],
-          ['Ctrl+1/2/3', 'Set UI size (small/medium/large)'],
-          ['Esc', 'Dismiss overlay'],
-        ],
-      },
-    ];
+  const title = document.createElement('h2');
+  title.className = 'ws-cheatsheet-title';
+  title.textContent = 'Keyboard Shortcuts';
+  sheet.appendChild(title);
 
-    for (const section of sections) {
-      const h3 = document.createElement('h3');
-      h3.className = 'ws-cheatsheet-heading';
-      h3.textContent = section.heading;
-      sheet.appendChild(h3);
+  const sections: { heading: string; keys: [string, string][] }[] = [
+    {
+      heading: 'Workspace Hub',
+      keys: [
+        ['j / ↓', 'Move selection down'],
+        ['k / ↑', 'Move selection up'],
+        ['Enter', 'Open selected workspace'],
+        ['f', 'Focus filter input'],
+        ['Esc', 'Unfocus filter / close cheatsheet'],
+        ['1', 'Show active workspaces'],
+        ['2', 'Show inactive workspaces'],
+        ['3', 'Show all workspaces'],
+        ['n', 'New task'],
+        ['P', 'Manage Profiles'],
+        ['H', 'Open Health Hub'],
+        ['R', 'Refresh hub'],
+        ['q', 'Close hub'],
+        ['?', 'Toggle this cheatsheet'],
+      ],
+    },
+    {
+      heading: 'Global',
+      keys: [
+        ['Ctrl+S', 'Toggle Workspace Hub'],
+        ['Shift Shift', 'Open Command Palette (double-tap)'],
+        ['Ctrl+Shift+S', 'New shell tab'],
+        ['Ctrl+←/→', 'Switch tabs'],
+        ['Ctrl+Shift+←/→', 'Reorder tabs'],
+        ['Ctrl+Shift++', 'Increase UI size'],
+        ['Ctrl+Shift+-', 'Decrease UI size'],
+        ['Ctrl+=', 'Reset UI size'],
+        ['Ctrl+1/2/3', 'Set UI size (small/medium/large)'],
+        ['Esc', 'Dismiss overlay'],
+      ],
+    },
+  ];
 
-      const table = document.createElement('table');
-      table.className = 'ws-cheatsheet-table';
-      for (const [key, desc] of section.keys) {
-        const row = document.createElement('tr');
-        const keyCell = document.createElement('td');
-        keyCell.className = 'ws-cheatsheet-key';
-        keyCell.innerHTML = `<kbd>${key}</kbd>`;
-        const descCell = document.createElement('td');
-        descCell.className = 'ws-cheatsheet-desc';
-        descCell.textContent = desc;
-        row.appendChild(keyCell);
-        row.appendChild(descCell);
-        table.appendChild(row);
-      }
-      sheet.appendChild(table);
+  for (const section of sections) {
+    const h3 = document.createElement('h3');
+    h3.className = 'ws-cheatsheet-heading';
+    h3.textContent = section.heading;
+    sheet.appendChild(h3);
+
+    const table = document.createElement('table');
+    table.className = 'ws-cheatsheet-table';
+    for (const [key, desc] of section.keys) {
+      const row = document.createElement('tr');
+      const keyCell = document.createElement('td');
+      keyCell.className = 'ws-cheatsheet-key';
+      keyCell.innerHTML = `<kbd>${key}</kbd>`;
+      const descCell = document.createElement('td');
+      descCell.className = 'ws-cheatsheet-desc';
+      descCell.textContent = desc;
+      row.appendChild(keyCell);
+      row.appendChild(descCell);
+      table.appendChild(row);
     }
-
-    const hint = document.createElement('div');
-    hint.className = 'ws-cheatsheet-hint';
-    hint.textContent = 'Scroll: j/k · Ctrl+D/U · gg/G      Press ? or Esc or q to go back';
-    sheet.appendChild(hint);
-
-    return sheet;
+    sheet.appendChild(table);
   }
+
+  const hint = document.createElement('div');
+  hint.className = 'ws-cheatsheet-hint';
+  hint.textContent = 'Scroll: j/k · Ctrl+D/U · gg/G      Press ? or Esc or q to go back';
+  sheet.appendChild(hint);
+
+  return sheet;
 }

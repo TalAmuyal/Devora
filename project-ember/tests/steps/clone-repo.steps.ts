@@ -39,7 +39,7 @@ Given('a bare repo {string} available to clone', function (this: EmberWorld, rep
 When('the user opens the New Task form', async function (this: EmberWorld) {
   const ui = new UIDriver(this.driver);
   await ui.click('.ws-new-btn');
-  await ui.waitForElement('.ws-new-form', 5_000);
+  await ui.waitForElement('.new-task-dialog', 5_000);
 });
 
 When(
@@ -79,7 +79,7 @@ Then(
   'the New Task form repo list should include {string}',
   async function (this: EmberWorld, repoName: string) {
     await this.driver.pollFor(
-      `return Array.from(document.querySelectorAll('.ws-new-form .repo-list-item'))
+      `return Array.from(document.querySelectorAll('.new-task-dialog .repo-list-item'))
         .some((i) => (i.textContent || '').trim() === ${JSON.stringify(repoName)})`,
       true,
       5_000,

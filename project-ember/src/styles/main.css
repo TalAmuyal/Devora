@@ -226,12 +226,6 @@ body {
     var(--color-mantle);
 }
 
-/* Cheatsheet mode: let the hub grow past the viewport so its background paints the full scrollable height (the normal hub stays height:100% for its master-list internal scroll). */
-.ws-hub.ws-hub-cheatsheet {
-  height: auto;
-  min-height: 100%;
-}
-
 /* Header */
 
 .page-header {
@@ -321,18 +315,7 @@ body {
   outline-offset: -0.133rem;
 }
 
-/* New workspace form */
-
-.ws-new-form {
-  background: var(--color-bg-secondary);
-  border: 1px solid var(--color-border);
-  border-radius: var(--tab-border-radius);
-  padding: var(--space-lg) var(--space-xl);
-  margin-bottom: var(--space-md);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-sm);
-}
+/* New Task dialog form controls (hosted by NewTaskDialog's modal) */
 
 .ws-new-form-label {
   font-size: var(--font-size-sm);

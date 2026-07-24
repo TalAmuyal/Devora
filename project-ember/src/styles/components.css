@@ -792,6 +792,46 @@
   opacity: 0.85;
 }
 
+/* New Task dialog (NewTaskDialog) — the modal form for creating/duplicating a task */
+.new-task-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(24, 25, 38, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.new-task-dialog {
+  background: var(--color-bg-overlay);
+  border: 1px solid var(--color-border);
+  border-radius: var(--tab-border-radius);
+  width: 480px;
+  max-width: 90vw;
+  max-height: 85vh;
+  overflow-y: auto;
+  padding: var(--space-xl);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.new-task-dialog-title {
+  font-family: var(--font-ui);
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  color: var(--color-fg);
+  margin-bottom: var(--space-xs);
+}
+
+.new-task-dialog-repos {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
 /* Clone Repo dialog (CloneRepoDialog) */
 .clone-repo-dialog-backdrop {
   position: fixed;

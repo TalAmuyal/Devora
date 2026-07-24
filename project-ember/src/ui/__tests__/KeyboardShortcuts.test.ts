@@ -98,6 +98,76 @@ describe('KeyboardShortcuts — global handler', () => {
   });
 });
 
+describe('KeyboardShortcuts — font sizing', () => {
+  let h: Harness;
+
+  beforeEach(() => {
+    h = makeHarness();
+    document.documentElement.style.fontSize = '';
+  });
+
+  it('Ctrl+1/2/3 set absolute UI sizes', () => {
+    expect(global(h.shortcuts, { key: '1', code: 'Digit1', ctrlKey: true })).toBe(true);
+    expect(document.documentElement.style.fontSize).toBe('12px');
+    global(h.shortcuts, { key: '2', code: 'Digit2', ctrlKey: true });
+    expect(document.documentElement.style.fontSize).toBe('15px');
+    global(h.shortcuts, { key: '3', code: 'Digit3', ctrlKey: true });
+    expect(document.documentElement.style.fontSize).toBe('26px');
+  });
+
+  it('Ctrl+= resets UI size to the default', () => {
+    document.documentElement.style.fontSize = '99px';
+    expect(global(h.shortcuts, { key: '=', code: 'Equal', ctrlKey: true })).toBe(true);
+    expect(document.documentElement.style.fontSize).toBe('15px');
+  });
+
+  it('Ctrl+Shift+± consume even with no active session to resize', () => {
+    expect(
+      global(h.shortcuts, { key: '+', code: 'Equal', ctrlKey: true, shiftKey: true }),
+    ).toBe(true);
+    expect(
+      global(h.shortcuts, { key: '_', code: 'Minus', ctrlKey: true, shiftKey: true }),
+    ).toBe(true);
+  });
+});
+
+describe('KeyboardShortcuts — page-barrier admit list', () => {
+  let h: Harness;
+
+  beforeEach(() => {
+    h = makeHarness();
+  });
+
+  const admits = (init: KeyboardEventInit): boolean =>
+    h.shortcuts.allowedThroughPageBarrier(new KeyboardEvent('keydown', init));
+
+  it('admits F1 and the font-size combos through a page', () => {
+    expect(admits({ key: 'F1', code: 'F1' })).toBe(true);
+    expect(admits({ key: '1', code: 'Digit1', ctrlKey: true })).toBe(true);
+    expect(admits({ key: '2', code: 'Digit2', ctrlKey: true })).toBe(true);
+    expect(admits({ key: '3', code: 'Digit3', ctrlKey: true })).toBe(true);
+    expect(admits({ key: '=', code: 'Equal', ctrlKey: true })).toBe(true);
+    expect(admits({ key: '+', code: 'Equal', ctrlKey: true, shiftKey: true })).toBe(true);
+    expect(admits({ key: '_', code: 'Minus', ctrlKey: true, shiftKey: true })).toBe(true);
+  });
+
+  it('blocks new session and tab nav through a page (deliberate — ADR-003)', () => {
+    expect(admits({ key: 'S', code: 'KeyS', ctrlKey: true, shiftKey: true })).toBe(false);
+    expect(admits({ key: 'ArrowLeft', code: 'ArrowLeft', ctrlKey: true })).toBe(false);
+    expect(admits({ key: 'ArrowRight', code: 'ArrowRight', ctrlKey: true })).toBe(false);
+    expect(admits({ key: 'ArrowLeft', code: 'ArrowLeft', ctrlKey: true, shiftKey: true })).toBe(
+      false,
+    );
+    // Ctrl+S is the page's dismiss key, not a base shortcut admitted through the barrier.
+    expect(admits({ key: 's', code: 'KeyS', ctrlKey: true })).toBe(false);
+  });
+
+  it('blocks plain hub keys through a page', () => {
+    expect(admits({ key: 'a', code: 'KeyA' })).toBe(false);
+    expect(admits({ key: 'n', code: 'KeyN' })).toBe(false);
+  });
+});
+
 describe('KeyboardShortcuts — Shift-Shift double-tap', () => {
   let h: Harness;
 

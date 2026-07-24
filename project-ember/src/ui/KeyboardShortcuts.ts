@@ -2,6 +2,25 @@ import { SessionManager } from '../session/SessionManager';
 
 const SHIFT_SHIFT_THRESHOLD_MS = 500;
 
+type FontSizeAction = { kind: 'set'; px: number } | { kind: 'delta'; px: number };
+
+/**
+ * The font-size base shortcuts (Ctrl+1/2/3, Ctrl+=, Ctrl+Shift+±) mapped to their size change, or null.
+ * The single source of truth for "this is a font shortcut": `handleGlobal` acts on it and `allowedThroughPageBarrier` admits it, so the two can never drift.
+ * Matches on `e.code` (physical key) because macOS WKWebView transforms `e.key` into control characters when Ctrl is held.
+ */
+function matchFontSizeShortcut(e: KeyboardEvent): FontSizeAction | null {
+  if (!e.ctrlKey) return null;
+  const { shiftKey: shift, code } = e;
+  if (shift && (code === 'Equal' || code === 'NumpadAdd')) return { kind: 'delta', px: 2 };
+  if (shift && (code === 'Minus' || code === 'NumpadSubtract')) return { kind: 'delta', px: -2 };
+  if (shift) return null;
+  if (code === 'Equal' || code === 'Digit2') return { kind: 'set', px: 15 };
+  if (code === 'Digit1') return { kind: 'set', px: 12 };
+  if (code === 'Digit3') return { kind: 'set', px: 26 };
+  return null;
+}
+
 /**
  * The base (empty-stack / through-a-page-barrier) global shortcuts, driven by the LayerStack (ADR-003).
  *
@@ -84,31 +103,21 @@ export class KeyboardShortcuts {
       this.sessionManager.moveTabForward();
       return true;
     }
-    if (ctrl && shift && (code === 'Equal' || code === 'NumpadAdd')) {
-      this.changeFontSize(2);
-      return true;
-    }
-    if (ctrl && !shift && code === 'Equal') {
-      this.setFontSize(15);
-      return true;
-    }
-    if (ctrl && shift && (code === 'Minus' || code === 'NumpadSubtract')) {
-      this.changeFontSize(-2);
-      return true;
-    }
-    if (ctrl && !shift && code === 'Digit1') {
-      this.setFontSize(12);
-      return true;
-    }
-    if (ctrl && !shift && code === 'Digit2') {
-      this.setFontSize(15);
-      return true;
-    }
-    if (ctrl && !shift && code === 'Digit3') {
-      this.setFontSize(26);
+    const font = matchFontSizeShortcut(e);
+    if (font) {
+      if (font.kind === 'set') this.setFontSize(font.px);
+      else this.changeFontSize(font.px);
       return true;
     }
     return false;
+  }
+
+  /**
+   * Which base shortcuts stay live through a `page` barrier (ADR-003): F1 (User Guide) and font sizing.
+   * New session (Ctrl+Shift+S) and tab switch/move are intentionally blocked under a page — they would act on the hidden tab bar/terminals.
+   */
+  allowedThroughPageBarrier(e: KeyboardEvent): boolean {
+    return e.key === 'F1' || matchFontSizeShortcut(e) !== null;
   }
 
   private handleKeyUp(e: KeyboardEvent): void {
@@ -134,14 +143,10 @@ export class KeyboardShortcuts {
     if (!session) return;
     const current = session.terminalPane.getFontSize();
     const newSize = Math.max(8, Math.min(40, current + delta));
-    this.applySize(newSize);
+    this.setFontSize(newSize);
   }
 
   private setFontSize(size: number): void {
-    this.applySize(size);
-  }
-
-  private applySize(size: number): void {
     document.documentElement.style.fontSize = `${size}px`;
     for (const session of this.sessionManager.getSessions()) {
       session.terminalPane.setFontSize(size);

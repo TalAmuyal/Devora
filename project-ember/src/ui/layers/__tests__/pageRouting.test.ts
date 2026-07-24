@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { LayerStack, LayerStackDeps } from '../LayerStack';
 import type { DismissDecision, LayerHandle, LayerSpec } from '../types';
+import { KeyboardShortcuts } from '../../KeyboardShortcuts';
+import type { SessionManager } from '../../../session/SessionManager';
 
 /**
  * Integration tests for the page layer contracts that `main.ts` wires (ADR-003): the hub/Settings/palette dismissal semantics, cheatsheet single-fire, the zero-profile veto, and the modality barrier over base shortcuts.
@@ -177,5 +179,37 @@ describe('page routing — modality barrier over base shortcuts', () => {
     const e = dispatch({ key: 'ArrowRight', code: 'ArrowRight', ctrlKey: true });
     expect(globalHandler).toHaveBeenCalledOnce();
     expect(e.defaultPrevented).toBe(true);
+  });
+
+  it('wired to KeyboardShortcuts like main.ts, a page admits F1 + font but blocks new session and tab nav', () => {
+    const createSession = vi.fn();
+    const activateNext = vi.fn();
+    const onOpenUserGuide = vi.fn();
+    const sessionManager = {
+      createSession,
+      activateNext,
+      activatePrevious: vi.fn(),
+      moveTabForward: vi.fn(),
+      moveTabBackward: vi.fn(),
+      getActiveSession: () => null,
+      getSessions: () => [],
+    } as unknown as SessionManager;
+    const shortcuts = new KeyboardShortcuts(sessionManager, vi.fn(), vi.fn(), onOpenUserGuide);
+
+    const stack = makeStack();
+    stack.setGlobalHandler((e) => shortcuts.handleGlobal(e));
+    stack.setPageBarrierAdmits((e) => shortcuts.allowedThroughPageBarrier(e));
+    stack.push(hubSpec());
+
+    document.documentElement.style.fontSize = '';
+    dispatch({ key: 'F1', code: 'F1' });
+    expect(onOpenUserGuide).toHaveBeenCalledOnce();
+    dispatch({ key: '1', code: 'Digit1', ctrlKey: true });
+    expect(document.documentElement.style.fontSize).toBe('12px');
+
+    dispatch({ key: 'S', code: 'KeyS', ctrlKey: true, shiftKey: true });
+    dispatch({ key: 'ArrowRight', code: 'ArrowRight', ctrlKey: true });
+    expect(createSession).not.toHaveBeenCalled();
+    expect(activateNext).not.toHaveBeenCalled();
   });
 });

@@ -26,10 +26,12 @@ Types of changes:
 
 - Devora now defaults the Claude model to `opusplan`; toggle it off from the Settings Hub
 - Renamed the Settings Hub's "Claude Models & Effort" card to "Claude Launch Settings"
+- Workspace Hub: the New Task form is now a modal dialog and the keyboard cheatsheet is a stacked page, so each isolates its own keys structurally (matching the Add-Repo/Clone-Repo dialogs and the User Guide)
 
 ### Fixed
 
 - Workspace Hub: while the cheatsheet was open, hub keys (`n`/`R`/`1`/`2`/`3`/`f`/`Enter`/`j`/`k`) still operated the hidden hub beneath it
+- Workspace Hub: opening the New Task form no longer lets hub keys (`Enter`/`j`/`k`/`1`/`2`/`3`/`R`/`P`/`H`) operate the hidden workspace list behind it; the form opens as a focused dialog with the title field ready to type
 - "New Task" and "Add Repo" repo filters now hide non-matching rows as you type
 - `ccc` no longer passes a duplicate `--effort` to Claude Code when the user supplies `--effort` explicitly
 
