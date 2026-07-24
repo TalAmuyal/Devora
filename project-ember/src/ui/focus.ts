@@ -16,7 +16,7 @@ export function isEditableElementFocused(): boolean {
 }
 
 /**
- * Make a text field unfocus on Escape — the Ember convention that a first Escape blurs the input and a second Escape then dismisses the page (ADR-003 routes Escape through to a focused editable inside a page, so the field itself must blur).
+ * Make a text field unfocus on Escape — the Ember convention that a first Escape blurs the input and a second Escape then dismisses the page (a page routes Escape through to a focused editable, so the field itself must blur — see `layers/CLAUDE.md`).
  * Matches the inline handling in SearchInput and ProfileForm.
  */
 export function blurOnEscape(input: HTMLElement): void {

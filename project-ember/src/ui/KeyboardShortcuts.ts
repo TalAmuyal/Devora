@@ -22,7 +22,7 @@ function matchFontSizeShortcut(e: KeyboardEvent): FontSizeAction | null {
 }
 
 /**
- * The app-wide shortcuts, driven by the LayerStack (ADR-003).
+ * The app-wide shortcut *policy*, driven by the LayerStack mechanism — see `layers/CLAUDE.md` for the barrier matrix and why the two stay separate.
  *
  * This owns no `window`-capture keydown listener of its own: `observeKey` is registered as the stack's key observer (Shift-Shift tracking; never consumes) and `handleGlobal` as the stack's global handler (returns `true` when it consumes).
  * Only the keyup listener for the Shift-Shift double-tap stays here.
@@ -113,7 +113,7 @@ export class KeyboardShortcuts {
   }
 
   /**
-   * Which base shortcuts stay live through a `page` barrier (ADR-003): F1 (User Guide) and font sizing.
+   * Which base shortcuts stay live through a `page` barrier: F1 (User Guide) and font sizing.
    * New session (Ctrl+Shift+S) and tab switch/move are intentionally blocked under a page — they would act on the hidden tab bar/terminals.
    */
   allowedThroughPageBarrier(e: KeyboardEvent): boolean {

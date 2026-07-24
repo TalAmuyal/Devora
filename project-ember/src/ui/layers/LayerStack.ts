@@ -18,10 +18,11 @@ interface LayerEntry {
 }
 
 /**
- * The single owner of layer keyboard routing and focus (ADR-003).
+ * The single owner of layer keyboard routing and focus — see `./CLAUDE.md` for the cross-file reference (barrier matrix, authoring rules).
  *
  * One `window`-capture keydown listener walks the stack top-to-bottom; `page` and `modal` layers are opaque barriers while `popup` and `panel` layers pass unhandled keys through.
  * Focus is resolved from stack position at every transition, never from a value captured earlier.
+ * This is a domain-free mechanism: the app-wide shortcut policy is injected via the setters below.
  */
 export class LayerStack {
   private readonly deps: LayerStackDeps;
@@ -49,12 +50,12 @@ export class LayerStack {
     this.keyObserver = fn;
   }
 
-  /** The app-wide shortcuts, consulted when a key reaches the base (empty stack or passes all surfuce barriers). Returning `true` consumes. */
+  /** The app-wide shortcuts, consulted when a key reaches the base (empty stack, or it passed every surface barrier). Returning `true` consumes. */
   setGlobalHandler(fn: (e: KeyboardEvent) => boolean): void {
     this.globalHandler = fn;
   }
 
-  /** The predicate for which base shortcuts survive a `page` barrier — owned by KeyboardShortcuts (the single source of truth for app-wide keys). */
+  /** The predicate for which base shortcuts survive a `page` barrier — owned by `KeyboardShortcuts` (the single source of truth for app-wide keys). */
   setPageBarrierAdmits(fn: (e: KeyboardEvent) => boolean): void {
     this.pageBarrierAdmits = fn;
   }

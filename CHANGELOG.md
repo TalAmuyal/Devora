@@ -26,6 +26,7 @@ Types of changes:
 
 - Devora now defaults the Claude model to `opusplan`; toggle it off from the Settings Hub
 - Renamed the Settings Hub's "Claude Models & Effort" card to "Claude Launch Settings"
+- Layer system documentation now has one home per topic: the cross-file reference moved to a new `project-ember/src/ui/layers/CLAUDE.md`, ADR-003 was trimmed to the decision and its history, and the duplicated restatements elsewhere became pointers
 
 ### Fixed
 
