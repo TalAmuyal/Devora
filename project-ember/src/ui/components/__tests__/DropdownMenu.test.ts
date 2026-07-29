@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createDropdownMenu, DropdownItem } from '../DropdownMenu';
-import { getLayerStack } from '../../layers/stack';
+import { pageLayer } from '../../layers/presets';
+import { getWindowLayerStack } from '../../layers/stack';
 import { installModalStack, teardownModalStack, pressKey } from './modalTestHarness';
 import type { LayerHandle } from '../../layers/types';
 
@@ -31,7 +32,7 @@ function hostDropdownInPage(
   const page = document.createElement('div');
   page.className = 'host-page';
   page.appendChild(element);
-  return getLayerStack().push({ name: 'host-page', kind: 'page', element: page, onKey });
+  return getWindowLayerStack().push(pageLayer({ name: 'host-page', element: page, onKey }));
 }
 
 function makeRect(rect: Partial<DOMRect>): DOMRect {
@@ -83,8 +84,8 @@ describe('createDropdownMenu', () => {
 
     openDropdown(handle.element);
 
-    const top = getLayerStack().top();
-    expect(top?.kind).toBe('popup');
+    const top = getWindowLayerStack().top();
+    expect(top?.name).toBe('dropdown-menu');
     expect(top?.element).toBe(handle.element.querySelector('.dropdown-popup'));
   });
 
@@ -121,7 +122,7 @@ describe('createDropdownMenu', () => {
 
     expect(onNew).toHaveBeenCalledOnce();
     expect(handle.element.querySelector('.dropdown-popup')).toBeNull();
-    expect(getLayerStack().isEmpty()).toBe(true);
+    expect(getWindowLayerStack().isEmpty()).toBe(true);
   });
 
   it('closes on outside click without firing any onSelect', () => {
@@ -146,7 +147,7 @@ describe('createDropdownMenu', () => {
     openDropdown(handle.element);
 
     expect(handle.element.querySelector('.dropdown-popup')).toBeNull();
-    expect(getLayerStack().isEmpty()).toBe(true);
+    expect(getWindowLayerStack().isEmpty()).toBe(true);
   });
 
   it('closes only the dropdown on Escape and does not consult the host page', () => {
@@ -158,7 +159,7 @@ describe('createDropdownMenu', () => {
     const e = pressKey({ key: 'Escape', code: 'Escape' });
 
     expect(handle.element.querySelector('.dropdown-popup')).toBeNull();
-    expect(getLayerStack().top()).toBe(page);
+    expect(getWindowLayerStack().top()).toBe(page);
     expect(pageOnKey).not.toHaveBeenCalled();
     expect(e.defaultPrevented).toBe(true);
   });
@@ -181,7 +182,7 @@ describe('createDropdownMenu', () => {
     openDropdown(handle.element);
     const outsideClick = capturedClickListener(addSpy);
 
-    getLayerStack().remove(page);
+    getWindowLayerStack().remove(page);
 
     expect(handle.element.querySelector('.dropdown-popup')).toBeNull();
     expect(handle.element.classList.contains('dropdown-open')).toBe(false);
@@ -228,7 +229,7 @@ describe('createDropdownMenu', () => {
     const popup = handle.element.querySelector('.dropdown-popup')!;
     expect(popup.querySelectorAll('.dropdown-item')).toHaveLength(1);
     expect(popup.textContent).toContain('Only');
-    expect(getLayerStack().depth()).toBe(1);
+    expect(getWindowLayerStack().depth()).toBe(1);
   });
 
   it('setTriggerLabel updates the trigger text', () => {
@@ -245,7 +246,7 @@ describe('createDropdownMenu', () => {
     document.body.appendChild(handle.element);
 
     expect(() => handle.close()).not.toThrow();
-    expect(getLayerStack().isEmpty()).toBe(true);
+    expect(getWindowLayerStack().isEmpty()).toBe(true);
   });
 
   it('renders custom trigger content instead of a label span', () => {

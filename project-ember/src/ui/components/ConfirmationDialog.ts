@@ -12,10 +12,10 @@ export interface ConfirmationDialogOptions {
 }
 
 /**
- * Show a confirmation dialog and return a promise that resolves to `true`
- * (confirmed) or `false` (cancelled/dismissed).
+ * Show a confirmation dialog and return a promise that resolves to `true` (confirmed) or `false` (cancelled/dismissed).
  *
- * The dialog is a `modal` layer (ADR-003): Escape, `q` (on a non-editable focus), and a backdrop click resolve `false`; Enter and the confirm button resolve `true`. Focus lands on the confirm button and is restored to the layer beneath on close.
+ * The dialog is a `modalLayer` (see `./ModalDialog`): Escape, `q` (on a non-editable focus), and a backdrop click resolve `false`; Enter and the confirm button resolve `true`.
+ * Focus lands on the confirm button and is restored to the layer beneath on close.
  */
 export function showConfirmationDialog(options: ConfirmationDialogOptions): Promise<boolean> {
   return new Promise((resolve) => {

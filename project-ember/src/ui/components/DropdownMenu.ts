@@ -1,12 +1,13 @@
 /** Custom dropdown: a trigger button opening a popup of selectable options and action rows (with separators).
- * The open popup is a `popup` layer on the LayerStack (ADR-003), so Escape/q close only the dropdown (central dismissal) and it auto-closes when its host page is removed.
+ * The open popup is a `popupLayer` on the window stack (see `../layers/CLAUDE.md`), so Escape/q close only the dropdown (central dismissal) and it auto-closes when its host surface is removed.
  * The popup is position:fixed so ancestor overflow clipping cannot hide it, and flips above the trigger when there is no room below.
  * It also closes on select, outside click, ancestor scroll, and window resize.
  * Returns a handle for imperative control.
  * DOM: `div.dropdown-menu`.
  */
 
-import { getLayerStack } from '../layers/stack';
+import { popupLayer } from '../layers/presets';
+import { getWindowLayerStack } from '../layers/stack';
 import type { LayerHandle } from '../layers/types';
 
 export type DropdownItem =
@@ -108,7 +109,7 @@ export function createDropdownMenu(options: DropdownMenuOptions): DropdownMenuHa
   function close(): void {
     // The layer's onCleanup performs the teardown (below), so every close path funnels through one removal.
     if (layerHandle) {
-      getLayerStack().remove(layerHandle);
+      getWindowLayerStack().remove(layerHandle);
     }
   }
 
@@ -177,20 +178,21 @@ export function createDropdownMenu(options: DropdownMenuOptions): DropdownMenuHa
     window.addEventListener('scroll', onAncestorScroll, true);
     window.addEventListener('resize', close);
 
-    // A `popup` layer stays where it is in the DOM and is transparent to keys it does not handle; Escape/q hit the stack's default dismissal, which pops it.
-    layerHandle = getLayerStack().push({
-      name: 'dropdown-menu',
-      kind: 'popup',
-      element: popup,
-      onCleanup: () => {
-        popup = null;
-        layerHandle = null;
-        container.classList.remove('dropdown-open');
-        document.removeEventListener('click', onOutsideClick, true);
-        window.removeEventListener('scroll', onAncestorScroll, true);
-        window.removeEventListener('resize', close);
-      },
-    });
+    // A popup layer stays where it is in the DOM and is transparent to keys it does not handle; Escape/q hit the stack's default dismissal, which pops it.
+    layerHandle = getWindowLayerStack().push(
+      popupLayer({
+        name: 'dropdown-menu',
+        element: popup,
+        onCleanup: () => {
+          popup = null;
+          layerHandle = null;
+          container.classList.remove('dropdown-open');
+          document.removeEventListener('click', onOutsideClick, true);
+          window.removeEventListener('scroll', onAncestorScroll, true);
+          window.removeEventListener('resize', close);
+        },
+      }),
+    );
   }
 
   trigger.addEventListener('click', () => {

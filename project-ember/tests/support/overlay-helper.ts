@@ -43,9 +43,7 @@ export async function assertActivePanelOverlay(
   timeoutMs = 5_000,
 ): Promise<void> {
   const has = await driver.pollFor(
-    `return window.__test.sessionPanels.has(
-       window.__test.sessionManager.getActiveSessionId()
-     )`,
+    `return window.__test.sessionManager.getActiveSession()?.hasSurface() ?? false`,
     expected,
     timeoutMs,
   );
@@ -59,21 +57,24 @@ export async function assertSessionPanelOverlay(
   timeoutMs = 5_000,
 ): Promise<void> {
   const has = await driver.pollFor(
-    `return window.__test.sessionPanels.has(
-       window.__test.sessionManager.getSessions()[${sessionIndex}]?.id
-     )`,
+    `return window.__test.sessionManager.getSessions()[${sessionIndex}]?.hasSurface() ?? false`,
     expected,
     timeoutMs,
   );
   assert.strictEqual(has, expected);
 }
 
+/**
+ * Whether a session-scoped surface is actually on screen.
+ * Asked of the DOM rather than of app state: a tab's surface is hidden by hiding the tab, and this is the assertion that would notice if that ever stopped being true.
+ */
 export async function assertPanelOverlayVisible(
   driver: AppDriver,
   expected: boolean,
 ): Promise<void> {
   const visible = await driver.eval(
-    'return window.__test.sessionPanels.hasAnyVisible()',
+    `return Array.from(document.querySelectorAll('.session-content .layer-page'))
+       .some((el) => el.getClientRects().length > 0)`,
   );
   assert.strictEqual(
     visible,

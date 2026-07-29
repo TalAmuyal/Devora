@@ -1,5 +1,5 @@
 /**
- * Progress UI for an in-flight worktree operation (task creation or add-repo), shown as a panel overlay on a session tab or hosted inside a modal.
+ * Progress UI for an in-flight worktree operation (task creation or add-repo), shown as a surface on a session tab's own layer stack or hosted inside a modal.
  * The caller passes the full `title` text.
  * Renders the high-level steps (with per-step state) plus an expandable live log of subprocess output, and a footer action that cancels while running or closes after a failure.
  *

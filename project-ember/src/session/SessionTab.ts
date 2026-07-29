@@ -1,4 +1,6 @@
 import { TerminalPane } from '../terminal/TerminalPane';
+import { LayerStack } from '../ui/layers/LayerStack';
+import { terminalLayer } from '../ui/layers/presets';
 import { createPreviewPane, PreviewPaneHandle } from '../ui/components/PreviewPane';
 import { createPreviewDivider, PreviewDividerHandle } from '../ui/components/PreviewDivider';
 
@@ -16,7 +18,13 @@ export class SessionTab {
   readonly containerEl: HTMLElement;
   readonly terminalPane: TerminalPane;
 
-  // The terminal and any preview panes share a horizontal flex row inside containerEl.
+  /**
+   * Its surfaces (layers) covers only this session and disappears with the tab, because the stack is hosted inside `containerEl`.
+   * Hiding the tab hides its whole stack, so a live `<iframe>` survives a tab switch untouched.
+   */
+  readonly layers: LayerStack;
+
+  // The terminal and any preview panes share a horizontal flex row, which is the content of the bottom (terminal) layer.
   private readonly splitEl: HTMLElement;
   private readonly terminalWrapperEl: HTMLElement;
   private previews: PreviewEntry[] = [];
@@ -44,13 +52,21 @@ export class SessionTab {
     // Horizontal split: terminal (elastic) on the left, preview panes to the right.
     this.splitEl = document.createElement('div');
     this.splitEl.className = 'session-split';
-    this.containerEl.appendChild(this.splitEl);
 
     this.terminalWrapperEl = document.createElement('div');
     this.terminalWrapperEl.className = 'terminal-pane-wrapper';
     this.splitEl.appendChild(this.terminalWrapperEl);
 
     this.terminalPane = new TerminalPane(this.terminalWrapperEl);
+
+    this.layers = new LayerStack({ host: this.containerEl });
+    this.layers.push(
+      terminalLayer({
+        name: 'terminal',
+        element: this.splitEl,
+        resolveFocus: () => this.terminalPane,
+      }),
+    );
     // Test hook: terminal-helper.ts and session.steps.ts read the session's xterm instance via containerEl.
     // The terminal mounts into terminalWrapperEl, so re-expose the handle on containerEl to keep that access point stable.
     (this.containerEl as { __xtermTerminal?: unknown }).__xtermTerminal =
@@ -112,6 +128,19 @@ export class SessionTab {
     return this.previews.length;
   }
 
+  /** Whether a surface is stacked over another (drives the tab bar's indicator dot). */
+  hasSurface(): boolean {
+    return this.layers.depth() > 1;
+  }
+
+  getFontSize(): number {
+    return this.terminalPane.getFontSize();
+  }
+
+  setFontSize(size: number): void {
+    this.terminalPane.setFontSize(size);
+  }
+
   private addPreview(path: string): void {
     const handle = createPreviewPane({
       path,
@@ -158,7 +187,7 @@ export class SessionTab {
     this.containerEl.style.display = 'block';
     // Now that the pane has a layout box again, snap it to the current size — covers a window resize that happened while this tab was hidden.
     this.terminalPane.fit();
-    this.terminalPane.focus();
+    this.layers.focusTop();
   }
 
   hide(): void {
@@ -167,6 +196,8 @@ export class SessionTab {
 
   dispose(): void {
     this.closeAllPreviews();
+    // Tear the tab's surfaces down first so each runs its cleanup (a Crit review notifying its process, a creation dialog settling).
+    this.layers.clear();
     this.terminalPane.dispose();
     this.containerEl.remove();
   }

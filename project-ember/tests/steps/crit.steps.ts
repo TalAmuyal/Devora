@@ -173,7 +173,7 @@ Given(
     // Wait for the Workspace Hub to close (create_workspace fetches from
     // git remote and creates worktrees, which takes time)
     await this.driver.pollFor(
-      `return window.__test.layers.topOf('page') !== null`,
+      `return window.__test.layers.hasOpaqueLayer()`,
       false,
       90_000,
     );
@@ -357,7 +357,7 @@ When(
       'return window.__test.sessionManager.getActiveSessionId()',
     );
     const closedNaturally = await this.driver.pollFor(
-      `return !window.__test.sessionPanels.has(${JSON.stringify(sessionId)})`,
+      `return !(window.__test.sessionManager.getSession(${JSON.stringify(sessionId)})?.hasSurface() ?? false)`,
       true,
       10_000,
     ).then(() => true, () => false);

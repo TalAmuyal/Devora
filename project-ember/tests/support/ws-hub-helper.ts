@@ -4,7 +4,7 @@ import { UIDriver } from './ui-driver';
 export async function ensureWsHubOpen(driver: AppDriver): Promise<void> {
   // Open through the same entry point production uses (main.ts openWsHub), so tests exercise the real page-layer wiring.
   await driver.eval(`
-    if (window.__test.layers.topOf('page') === null) {
+    if (!window.__test.layers.hasOpaqueLayer()) {
       window.__test.openWsHub();
     }
   `);

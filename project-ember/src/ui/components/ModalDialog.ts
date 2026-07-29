@@ -1,13 +1,14 @@
 /**
- * The shared primitive for modal dialogs: mounts `element` as a `modal` layer on the LayerStack and routes its keys and backdrop click.
- * The stack owns the wrapper (class `layer-modal ${name}-backdrop`, over a backdrop on `document.body`), the Tab focus trap, and focus restoration to the layer beneath on close.
+ * The shared primitive for modal dialogs: mounts `element` as a modal layer on the window stack and routes its keys and backdrop click.
+ * The stack owns the wrapper (class `layer-modal ${name}-backdrop`), the Tab focus trap, and focus restoration to the layer beneath on close.
  *
  * A modal owns Escape and Enter here — `onKey` runs before the central editable guard, so a single press cancels/confirms regardless of what holds focus.
  * `q` is intentionally left to the guard: it types inside a focused input and dismisses only when a non-editable element (e.g. a button) holds focus.
  * See `../layers/CLAUDE.md` ("Modals and pages treat Escape oppositely") for why pages take the opposite approach.
  */
 
-import { getLayerStack } from '../layers/stack';
+import { modalLayer } from '../layers/presets';
+import { getWindowLayerStack } from '../layers/stack';
 import type { Focusable } from '../layers/types';
 
 export interface ModalDialogSpec {
@@ -33,30 +34,31 @@ export interface ModalDialogHandle {
 }
 
 export function showModalDialog(spec: ModalDialogSpec): ModalDialogHandle {
-  const layers = getLayerStack();
-  const handle = layers.push({
-    name: spec.name,
-    kind: 'modal',
-    element: spec.element,
-    onKey: (e) => {
-      if (e.key === 'Escape') {
+  const layers = getWindowLayerStack();
+  const handle = layers.push(
+    modalLayer({
+      name: spec.name,
+      element: spec.element,
+      onKey: (e) => {
+        if (e.key === 'Escape') {
+          spec.onDismiss();
+          return true;
+        }
+        if (e.key === 'Enter') {
+          spec.onConfirm?.();
+          return true;
+        }
+        return false;
+      },
+      // `q` on a non-editable focus reaches here (Escape is already handled in onKey): dismiss.
+      onUserDismissRequest: () => {
         spec.onDismiss();
-        return true;
-      }
-      if (e.key === 'Enter') {
-        spec.onConfirm?.();
-        return true;
-      }
-      return false;
-    },
-    // `q` on a non-editable focus reaches here (Escape is already handled in onKey): dismiss.
-    onUserDismissRequest: () => {
-      spec.onDismiss();
-      return 'handled';
-    },
-    onCleanup: spec.onCleanup,
-    resolveFocus: spec.resolveFocus,
-  });
+        return 'handled';
+      },
+      onCleanup: spec.onCleanup,
+      resolveFocus: spec.resolveFocus,
+    }),
+  );
 
   const onBackdrop = spec.onBackdropClick ?? spec.onDismiss;
   handle.wrapper.addEventListener('click', (e) => {

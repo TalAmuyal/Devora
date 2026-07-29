@@ -1,22 +1,24 @@
 /**
  * Orchestrates non-blocking task creation.
- * Clicking "Create" in the Workspace Hub hands off here: a new session tab opens immediately with a creation-progress panel overlay, the backend `create_workspace` command streams progress over a channel, and on completion the overlay is dismissed and the terminal connects in the workspace.
- * Cancelling (button or Esc/q) tears the tab and overlay down; the backend cleans up the partial/reused workspace.
+ * Clicking "Create" in the Workspace Hub hands off here: a new session tab opens immediately with a creation-progress surface on its own layer stack, the backend `create_workspace` command streams progress over a channel, and on completion the surface is removed and the terminal connects in the workspace.
+ * Cancelling (button or Esc/q) tears the tab and its surface down; the backend cleans up the partial/reused workspace.
  */
 
 import { invoke, invokeLogOnly, Channel } from '../invoke';
 import { showError } from '../errors';
 import { SessionManager } from '../session/SessionManager';
-import { SessionPanels } from '../ui/SessionPanels';
+import { pageLayer } from '../ui/layers/presets';
 import {
   createTaskCreationProgress,
   TaskCreationProgressHandle,
 } from '../ui/components/TaskCreationProgress';
-import { DismissDecision } from '../ui/layers/types';
+import { DismissDecision, LayerHandle } from '../ui/layers/types';
 import { CreationEvent } from './types';
 
 interface InFlightCreation {
   progress: TaskCreationProgressHandle;
+  /** The progress surface on the session's own stack; removed when creation finishes, fails-and-closes, or is cancelled. */
+  layer: LayerHandle;
   repoNames: string[];
   profilePath: string;
   /** Backend creation id, set once `create_workspace` returns; null until then. */
@@ -29,7 +31,6 @@ interface InFlightCreation {
 
 export interface TaskCreationControllerDeps {
   sessionManager: SessionManager;
-  sessionPanels: SessionPanels;
   /** Resolve the per-profile terminal app command (mirrors opening an existing workspace). */
   resolveAppCommand: (profilePath: string | null) => Promise<string | undefined>;
   /** Re-render the tab bar after tabs/overlays change. */
@@ -42,7 +43,7 @@ export class TaskCreationController {
   constructor(private deps: TaskCreationControllerDeps) {}
 
   /**
-   * Begin creating a task: open the pending tab + progress overlay and drive the backend channel.
+   * Begin creating a task: open the pending tab + progress surface and drive the backend channel.
    * `sourceWorkspacePath` is set when duplicating a session, so the backend pins each shared repo to the source worktree's commit and copies its CLAUDE.md; pass `null` for a plain new task.
    */
   async start(
@@ -55,8 +56,18 @@ export class TaskCreationController {
     const session = this.deps.sessionManager.createPendingSession(taskName, profilePath);
     const progress = createTaskCreationProgress(`Creating: ${taskName}`);
 
+    // The progress surface owns its own dismissal (Esc/q cancels or closes); the controller tears it down once that resolves.
+    const layer = session.layers.push(
+      pageLayer({
+        name: 'task-creation-progress',
+        element: progress.element,
+        onUserDismissRequest: () => this.handleDismiss(session.id),
+      }),
+    );
+
     const creation: InFlightCreation = {
       progress,
+      layer,
       repoNames,
       profilePath,
       creationId: null,
@@ -67,9 +78,6 @@ export class TaskCreationController {
 
     progress.onCancel(() => this.cancel(session.id));
     progress.onClose(() => this.close(session.id));
-
-    // The progress panel owns its own dismissal (Esc/q cancels or closes); the controller tears it down once that resolves.
-    this.deps.sessionPanels.show(session.id, progress.element, () => this.handleDismiss(session.id));
     this.deps.onChange();
 
     const onEvent = new Channel<CreationEvent>();
@@ -125,10 +133,10 @@ export class TaskCreationController {
   ): Promise<void> {
     const creation = this.creations.get(sessionId);
     if (!creation) return;
-    const session = this.deps.sessionManager.getSessions().find((s) => s.id === sessionId);
+    const session = this.deps.sessionManager.getSession(sessionId);
 
     this.creations.delete(sessionId);
-    this.deps.sessionPanels.dismiss(sessionId);
+    session?.layers.remove(creation.layer);
 
     if (!session) return;
     session.setWorkspacePath(workspace.path);
@@ -165,17 +173,20 @@ export class TaskCreationController {
     invokeLogOnly('cancel_workspace_creation', { id: creationId }).catch(() => {});
   }
 
-  /** Remove the overlay and close the tab (used on cancellation completion and after a failure). */
+  /** Remove the surface and close the tab (used on cancellation completion and after a failure). */
   private close(sessionId: number): void {
+    const creation = this.creations.get(sessionId);
     this.creations.delete(sessionId);
-    this.deps.sessionPanels.dismiss(sessionId);
+    if (creation) {
+      this.deps.sessionManager.getSession(sessionId)?.layers.remove(creation.layer);
+    }
     this.deps.sessionManager.closeSession(sessionId);
     this.deps.onChange();
   }
 
   /**
-   * Esc/q dismissal of a creation overlay: cancel while running, close after a failure.
-   * Returns `handled` so the layer stack leaves the panel in place — teardown happens here (close), or later when the backend confirms the cancel.
+   * Esc/q dismissal of a creation surface: cancel while running, close after a failure.
+   * Returns `handled` so the stack leaves the surface in place — teardown happens here (close), or later when the backend confirms the cancel.
    */
   handleDismiss(sessionId: number): DismissDecision {
     const creation = this.creations.get(sessionId);

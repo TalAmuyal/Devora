@@ -202,7 +202,7 @@
   border-radius: 10px;
   box-shadow: 0 12px 36px rgba(0, 0, 0, 0.5);
   padding: 6px;
-  z-index: 110; /* above the tab-covering overlay wrapper (100) */
+  z-index: 110; /* above the sibling content of the surface this popup is anchored in */
   display: flex;
   flex-direction: column;
 }
@@ -273,16 +273,16 @@
   margin: 6px 4px;
 }
 
-/* ConfirmationDialog */
-
-.confirmation-dialog-backdrop {
-  position: fixed;
-  inset: 0;
+/*
+ * Modal layer wrapper (see layers/presets.ts).
+ * Position and stacking come from `.layer-wrapper`; this is only the look: a dim backdrop with the dialog centred on it.
+ * The per-dialog `${name}-backdrop` class the stack also applies carries no style — it is the identity hook tests and callers use to find a specific dialog.
+ */
+.layer-modal {
   background: rgba(24, 25, 38, 0.6);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 9999;
 }
 
 .confirmation-dialog {
@@ -353,16 +353,6 @@
 }
 
 /* TextInputDialog */
-
-.text-input-dialog-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(24, 25, 38, 0.6);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 9999;
-}
 
 .text-input-dialog {
   background: var(--color-bg-overlay);
@@ -487,7 +477,7 @@
   top: 0;
   left: 0;
   right: 0;
-  z-index: 10000; /* above confirmation-dialog backdrop (9999), toast (200), overlays (100/50) */
+  z-index: 10000; /* above the toast (200); any positive z-index already clears every layer wrapper */
   display: flex;
   flex-direction: column;
   gap: var(--space-xs);
@@ -698,16 +688,6 @@
 
 /* AddRepoDialog */
 
-.add-repo-dialog-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(24, 25, 38, 0.6);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 9999;
-}
-
 .add-repo-dialog {
   background: var(--color-bg-overlay);
   border: 1px solid var(--color-border);
@@ -793,16 +773,6 @@
 }
 
 /* New Task dialog (NewTaskDialog) — the modal form for creating/duplicating a task */
-.new-task-dialog-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(24, 25, 38, 0.6);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 9999;
-}
-
 .new-task-dialog {
   background: var(--color-bg-overlay);
   border: 1px solid var(--color-border);
@@ -833,16 +803,6 @@
 }
 
 /* Clone Repo dialog (CloneRepoDialog) */
-.clone-repo-dialog-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(24, 25, 38, 0.6);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 9999;
-}
-
 .clone-repo-dialog {
   background: var(--color-bg-overlay);
   border: 1px solid var(--color-border);

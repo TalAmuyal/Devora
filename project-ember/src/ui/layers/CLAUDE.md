@@ -1,54 +1,102 @@
 # Layer System — current reference
 
-Stacked UI surfaces (pages, modals, popups, session panels) are routed and focused by **their position in the `LayerStack`**, never by listener-registration order or by whatever happens to hold focus.
+Stacked UI surfaces are routed and focused by **their position in a stack**, and their extent comes from **which stack they are in**.
 
 This file is the cross-cutting reference for behavior that spans several files.
 Knowledge that one file owns is documented in that file — see [Where things live](#where-things-live).
-For the history of *why* this system exists, see [ADR-003](../../../../docs/adrs/ADR-003-ember-layer-system.md).
+For *why* the system looks like this — what it replaced, and what was considered and rejected — see [ADR-003](../../../../docs/adrs/ADR-003-ember-layer-system.md).
+This file is the current contract; the ADR deliberately does not restate it.
+
+## Topology: n + 1 stacks
+
+- **The window stack** (`stack.ts`, hosted on `#app`) holds surfaces that cover the app: hubs, the User Guide, the Command Palette, etc.
+- **One stack per tab**, owned by its `SessionTab` and hosted on that tab's container.
+
+A surface is app-covering **iff** it is in the window stack.
+Nothing else declares extent, and the same `pageLayer` preset produces a full-window hub or a session-sized Crit review depending only on where it is pushed.
+
+Two consequences worth knowing: hiding a tab hides its whole stack (a live `<iframe>` survives a tab switch untouched), and closing a tab tears its surfaces down with it.
+
+Only the window stack has a singleton accessor (`getWindowLayerStack()`), because deep call sites like `showModalDialog` cannot be threaded an instance.
+A tab stack is always passed explicitly.
+That is also why **modals and dropdowns are window-level**: every dialog today is raised over a hub, and every dropdown is anchored inside one. <- This line should be challenged at some point - could a dropdown or a dialog be tab-level? If so, the system would need to be extended to support that.
 
 ## Mechanism vs. policy (seam)
 
-- **`LayerStack.ts` is the mechanism** — stack ordering, wrapper mounting, focus resolution, the single `window`-capture keydown dispatcher, and barrier semantics. It is **domain-free**: it imports only `./types`, `./tabTrap`, and `../focus`.
-- **`../KeyboardShortcuts.ts` is the policy** — the concrete app-wide shortcut set (F1, `Ctrl+S`, Shift-Shift, etc.). It depends on `SessionManager`.
+- **`LayerStack.ts` is the mechanism** — ordering, mounting, focus resolution, dismissal, and what a key walk reports. Domain-free: it imports only `./types`, `./tabTrap`, and `../focus`.
+- **`LayerRouter.ts` is the wiring** — the single `window`-capture keydown listener and the three-stage routing order. It knows about stacks, but not about surfaces.
+- **`../KeyboardShortcuts.ts` is the policy** — the concrete app-wide shortcut set and each shortcut's precondition.
 
-They are wired together at the composition root (`src/main.ts`) via `setKeyObserver`, `setGlobalHandler`, and `setPageBarrierAdmits`.
-`LayerStack` never imports `KeyboardShortcuts`.
-
-The seam keeps domain code out of the generic mechanism and lets `LayerStack` be unit-tested with a fake admit-list (see `__tests__/LayerStack.test.ts`) while the shortcut policy is tested standalone.
+`main.ts` wires them via `setKeyObserver` and `setShortcutHandler`.
+Neither `LayerStack` nor `LayerRouter` imports `KeyboardShortcuts`.
 
 ## Key dispatch, in brief
 
-One `window`-capture keydown listener walks the stack top-down.
-Each layer gets `onKey` first, then the dismiss-key check; `page` and `modal` are opaque barriers that **end the walk**, while `popup` and `panel` pass unhandled keys down.
-Keys that reach the base go to the app-wide shortcut handler.
-Consuming a key uses `stopImmediatePropagation` (not `stopPropagation`) so no sibling window listener can also act on it.
+One listener runs three stages in order:
 
-`LayerStack.handleKeydown` is the canonical definition — read it if more detail is needed.
+1. **App-wide shortcuts**, run *first*, so no surface can shadow them by accident and no surface decides which of them survive it.
+2. **The window stack**, walked top-down.
+3. **The active tab's stack**, reached only if the window stack passed the key on.
 
-## Modality-barrier matrix
+A stack walk reports one of three things, which is the whole routing contract:
 
-Which keys survive each barrier.
-The page admit-list is owned by `KeyboardShortcuts.allowedThroughPageBarrier` (the single source of truth for "app-wide" keys) and consulted by `LayerStack.allowedThroughBarrier`, which additionally blocks everything under a `modal`.
+| Result | Meaning | Event |
+|---|---|---|
+| `consumed` | a layer acted on it | `preventDefault` + `stopImmediatePropagation` |
+| `blocked` | an opaque layer ended the walk without acting | **left alone**, so it reaches the focused element |
+| `passed` | nothing claimed it | routing continues to the next stack |
 
-| Shortcut | base (empty) | under panel/popup only | under page | under modal |
-|---|---|---|---|---|
-| `q` / Escape | → focused element | dismiss top layer | route via `onUserDismissRequest` | dismiss (cancel) via the modal's `onKey` |
-| `Ctrl+S` (Workspace Hub) | open hub | open hub | **dismiss key** (hub: close; Settings: pop to whatever's beneath; palette: no-op via its `onKey`) | blocked |
-| `F1` (User Guide) | open guide | open guide | **allowed** — pushes the guide over the page | blocked |
-| `Ctrl+Shift+S` (new session) | allowed | allowed | **blocked** | blocked |
-| `Ctrl+←/→` (switch tab) | allowed | **allowed** | **blocked** | blocked |
-| `Ctrl+Shift+←/→` (move tab) | allowed | allowed | blocked | blocked |
-| Font size (`Ctrl+1/2/3`, `Ctrl±`) | allowed | allowed | **allowed** | blocked |
-| Shift-Shift (palette) | allowed | allowed | blocked (guard: no page/modal on stack) | blocked |
+`blocked`-without-consuming is what makes a terminal layer work: it is an opaque barrier, but typing still reaches xterm's hidden textarea.
 
-The blocked cells under a page are deliberate, the reasoning lives with the admit-list in `KeyboardShortcuts.allowedThroughPageBarrier`.
+`LayerStack.route` and `LayerRouter.handleKeydown` are the canonical definitions — read them if more detail is needed.
+
+## Shortcut availability
+
+Every app-wide shortcut states its own precondition in `KeyboardShortcuts`.
+
+| Shortcut | Available |
+|---|---|
+| Font size (`Ctrl+1/2/3`, `Ctrl±`) | Always — a display preference no surface has a reason to disable |
+| `F1` (User Guide) | Always, except when the guide is already open |
+| `Ctrl+S` (Workspace Hub) | When no opaque layer is in the window stack |
+| `Ctrl+Shift+S` (new session) | When no opaque layer is in the window stack |
+| `Ctrl+←/→` (switch tab), `Ctrl+Shift+←/→` (move tab) | When no opaque layer is in the window stack |
+| Shift-Shift (Command Palette) | When no opaque layer is in the window stack |
+
+A shortcut whose precondition fails is still **consumed**, as a deliberate no-op — `Ctrl+S` with the hub open must not fall through to the hub's own key handling, and none of these keys should ever reach a terminal.
+
+Shift-Shift is the one exception to "shortcuts run in the keydown router": its second tap resolves on **keyup**, on a listener `KeyboardShortcuts` owns directly, so its precondition is checked there.
+
+## Paint order
+
+Wrappers are appended to their stack's single host in stack order, so **paint order is DOM order** and no layer carries a z-index.
+Each wrapper is `isolation: isolate`, so z-indexes used *inside* one surface cannot escape and outrank the surface above it.
+A tab's host sits inside `#main-panel` (also isolated) and therefore below every window layer.
+
+The invariant this buys: **a surface cannot be raised visually without being raised in its stack.**
+
+Toasts and error banners stay outside the system on `document.body`; their positive z-indexes are what keep them above every layer, and that stays true at any stack depth.
+
+## Presets, and when to reach past them
+
+`presets.ts` bundles the behavioral flags into the four combinations in use.
+Use these over the raw flags whenever possible.
+
+| Preset | Use for | What is special |
+|---|---|---|
+| `pageLayer` | hubs, the guide, the palette, a Crit review | dismissing it refreshes what it covered (navigation) |
+| `modalLayer` | dialogs | traps Tab; dismissing it does *not* refresh the caller |
+| `popupLayer` | anchored dropdowns | takes no focus, caller-mounted, transparent to keys, auto-closes with its host |
+| `terminalLayer` | the bottom of a tab stack | opaque, **not** dismissible, consumes nothing |
+
+The flags exist for combinations that have no preset yet — the clearest being a **non-modal floating panel** (a find bar over a live terminal), which is `opaque: false` on something that is not a popup.
 
 ## When a sub-view is its own layer
 
-Because routing and focus follow stack position, a sub-view that **fully covers** the surface beneath it and **owns its keys** must be pushed as its own layer — otherwise the host keeps routing keys to the now-hidden view (a within-surface leak).
+Because routing and focus follow stack position, a sub-view that **covers** the surface beneath it and **owns its keys** must be pushed as its own layer — otherwise the host keeps routing keys to the now-hidden view (a within-surface leak).
 
-- Use a **`modal`** when the surface below stays as visible context (e.g. the hub's "New Task" form, Add-Repo, etc.).
-- Use a **`page`** when it is a full-window replacement (e.g. the hub's keyboard cheatsheet).
+- Use a **`modalLayer`** when the surface below stays as visible context (the hub's "New Task" form, Add-Repo).
+- Use a **`pageLayer`** when it is a full replacement of its stack's region (the hub's keyboard cheatsheet).
 - A *mode with nothing behind it* (the zero-profile welcome) or a *master/detail split where both panes stay live* (Settings Hub) is **not** a covering layer: it stays part of its host, guarded by its own state.
 
 ## Modals and pages treat Escape oppositely
@@ -66,21 +114,29 @@ This is also why the Command Palette needs no special case: its search field is 
 
 ### Toasts and error banners
 
-These are passive elements on `document.body` above everything; they take no focus and never participate in routing.
+Passive elements on `document.body` above everything; they take no focus and never participate in routing.
+
+### Preview panes
+
+A *horizontal split*, not a stack — the terminal stays live and focused beside them.
+Modelling a split as a stack would be a category error.
 
 ### Crit panel's `<iframe>`
 
-Once the user clicks *into* it, keydown events fire in the iframe's document and never reach the host window, so layer routing (and every global shortcut) is inert until focus returns to host chrome.
-This is a browser constraint the layer system cannot change; the panel takes focus on activation so `q`/Esc works until the user deliberately clicks inside the iframe.
+Once the user clicks *into* it, keydown events fire in the iframe's cross-origin document and never reach the host window, so routing (and every global shortcut) is inert until focus returns to host chrome.
+This is a browser constraint the layer system cannot change, and per-tab stacks do not affect it; the review takes focus on activation so `q`/Esc works until the user deliberately clicks inside the iframe.
 
 ## Where things live
 
 | Knowledge | Canonical home |
 |---|---|
-| Layer kinds, the `LayerSpec` contract (`onKey`, `onUserDismissRequest`, etc.), dismiss decisions | `types.ts` |
-| Dispatch algorithm, focus lifecycle (push/pop/reveal/replaceTop), barrier evaluation | `LayerStack.ts` |
+| The `LayerSpec` contract, the behavioral flags and their defaults, dismiss decisions, `RouteResult` | `types.ts` |
+| Stack ordering, mounting, focus lifecycle (push/pop/reveal/replaceTop), the key walk | `LayerStack.ts` |
+| The single keydown listener and the three-stage routing order | `LayerRouter.ts` |
+| The four authoring presets and why each flag is set | `presets.ts` |
+| Window-stack singleton accessor | `stack.ts` |
 | Tab focus trap | `tabTrap.ts` |
-| Process-wide singleton accessor | `stack.ts` |
-| App-wide shortcut policy + the page admit-list | `../KeyboardShortcuts.ts` |
+| App-wide shortcut policy and each shortcut's precondition | `../KeyboardShortcuts.ts` |
+| A tab's own stack and its terminal layer | `../../session/SessionTab.ts` |
 | How a modal handles Escape/Enter, backdrop routing, the Tab trap | `../components/ModalDialog.ts` |
-| Why this system replaced the previous overlay handling | [ADR-003](../../../../docs/adrs/ADR-003-ember-layer-system.md) |
+| Why the system exists, and the alternatives rejected | [ADR-003](../../../../docs/adrs/ADR-003-ember-layer-system.md) |

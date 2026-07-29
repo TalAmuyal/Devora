@@ -8,8 +8,6 @@ export class SessionManager {
 
   // Callback for external UI (tab bar) to listen to
   private onChangeCallback?: () => void;
-  // Callback fired whenever the active session changes (session panels track visibility/focus by it)
-  private onActivateCallback?: () => void;
 
   constructor(mainPanelEl: HTMLElement) {
     this.mainPanelEl = mainPanelEl;
@@ -17,11 +15,6 @@ export class SessionManager {
 
   onChange(callback: () => void): void {
     this.onChangeCallback = callback;
-  }
-
-  /** Subscribe to active-session changes (activation and the "no session left" transition). */
-  onActivate(callback: () => void): void {
-    this.onActivateCallback = callback;
   }
 
   async createSession(
@@ -85,7 +78,6 @@ export class SessionManager {
       this.activateSession(this.sessions[newIndex].id);
     } else if (this.sessions.length === 0) {
       this.activeSessionId = null;
-      this.onActivateCallback?.();
     }
 
     this.onChangeCallback?.();
@@ -101,7 +93,6 @@ export class SessionManager {
       }
     }
     this.onChangeCallback?.();
-    this.onActivateCallback?.();
   }
 
   getActiveSession(): SessionTab | null {
@@ -110,6 +101,14 @@ export class SessionManager {
 
   getSessions(): ReadonlyArray<SessionTab> {
     return this.sessions;
+  }
+
+  getSession(id: number): SessionTab | null {
+    return this.sessions.find((s) => s.id === id) ?? null;
+  }
+
+  getSessionByPtyId(ptyId: number): SessionTab | null {
+    return this.sessions.find((s) => s.getPtyId() === ptyId) ?? null;
   }
 
   getActiveSessionId(): number | null {

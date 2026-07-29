@@ -1,26 +1,22 @@
 import { describe, it, expect } from 'vitest';
-import { initLayerStack, getLayerStack } from '../stack';
+import { initWindowLayerStack, getWindowLayerStack } from '../stack';
 import { LayerStack } from '../LayerStack';
 
 function deps() {
-  return {
-    pageHost: document.createElement('div'),
-    modalHost: document.body,
-    resolveBaseFocus: () => null,
-  };
+  return { host: document.createElement('div') };
 }
 
-describe('layer stack accessor', () => {
-  it('initLayerStack creates a LayerStack and getLayerStack returns the same instance', () => {
-    const created = initLayerStack(deps());
+describe('window layer stack accessor', () => {
+  it('initWindowLayerStack creates a LayerStack and getWindowLayerStack returns the same instance', () => {
+    const created = initWindowLayerStack(deps());
     expect(created).toBeInstanceOf(LayerStack);
-    expect(getLayerStack()).toBe(created);
+    expect(getWindowLayerStack()).toBe(created);
   });
 
-  it('initLayerStack replaces the singleton on a fresh init', () => {
-    const first = initLayerStack(deps());
-    const second = initLayerStack(deps());
+  it('initWindowLayerStack replaces the singleton on a fresh init', () => {
+    const first = initWindowLayerStack(deps());
+    const second = initWindowLayerStack(deps());
     expect(second).not.toBe(first);
-    expect(getLayerStack()).toBe(second);
+    expect(getWindowLayerStack()).toBe(second);
   });
 });
