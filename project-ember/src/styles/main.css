@@ -12,20 +12,26 @@ body {
   background: var(--color-bg);
 }
 
+/* Also hosts the window layer stack: its wrappers are appended here, after the panel and tab bar, so they paint above both. */
 #app {
   display: flex;
   flex-direction: column;
+  position: relative;
   width: 100%;
   height: 100%;
 }
 
+/* `isolation` confines everything a session paints — including its own layer stack — below every window layer. */
 #main-panel {
   flex: 1;
-  position: relative;  /* for panel overlays */
+  position: relative;
+  isolation: isolate;
   overflow: hidden;
 }
 
+/* Hosts this session's layer stack (terminal at the bottom, any review/progress surface above it). */
 .session-content {
+  position: relative;
   width: 100%;
   height: 100%;
 }
@@ -45,40 +51,35 @@ body {
   height: 100%;
 }
 
-/* Tab-covering overlay — covers entire window including tab bar */
-.overlay-tab-covering {
-  position: fixed;
+/*
+ * Layer wrappers (see src/ui/layers/CLAUDE.md).
+ *
+ * Every stack-owned surface is appended to its stack's host in stack order, so paint order follows DOM order and no layer carries a z-index: a surface pushed later is simply later in the DOM.
+ * How far a surface extends comes from the host it is in — the window host (#app) covers the app, a session's container covers only that session.
+ * `isolation` keeps z-indexes used inside one surface from escaping and outranking the surface above it.
+ *
+ * Toasts and error banners deliberately stay outside the system; their positive z-indexes are what keep them above every layer, and that stays true no matter how deep a stack gets.
+ */
+.layer-wrapper {
+  position: absolute;
   inset: 0;
-  z-index: 100;
+  isolation: isolate;
+}
+
+/* The wrapper takes keyboard focus when shown (see LayerStack); hide the focus ring since it is a container, not an interactive control. */
+.layer-wrapper:focus {
+  outline: none;
+}
+
+/* A full surface replacing its stack's region: a hub, the User Guide, a Crit review. */
+.layer-page {
   background: var(--color-bg);
   overflow-y: auto;
 }
 
-/* Transparent wrapper variant: lets the overlay content paint its own dim backdrop so the terminal shows through (used by the Command Palette). */
-.overlay-tab-covering.overlay-passthrough {
+/* Transparent variant: lets the surface paint its own dim backdrop so what is beneath shows through (used by the Command Palette). */
+.layer-page.layer-transparent {
   background: transparent;
-}
-
-/* The wrapper takes keyboard focus when shown (see LayerStack); hide the focus ring since it is a full-window container, not an interactive control. */
-.overlay-tab-covering:focus {
-  outline: none;
-}
-
-/* Panel overlay — covers main panel area only, tab bar visible */
-.overlay-panel {
-  position: absolute;
-  inset: 0;
-  z-index: 50;
-  background: var(--color-bg);
-  overflow-y: auto;
-}
-
-/* Invisible focus/keyboard-routing holder for the active session's panel (SessionPanels); the visible surface is the .overlay-panel it represents. */
-.session-panel-sentinel {
-  position: absolute;
-  width: 0;
-  height: 0;
-  outline: none;
 }
 
 /* ── Tab bar ── */

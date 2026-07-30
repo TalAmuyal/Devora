@@ -66,9 +66,11 @@ Cassettes are stored as gzip-compressed JSON at `tests/support/fixtures/cassette
 
 ### Layer system
 
-Every stacked UI surface (page, modal, popup, session panel) must be pushed as a layer on the single `LayerStack` (`src/ui/layers/`) — never given its own global key listener or ad-hoc focus handling.
+Every stacked UI surface must be pushed as a layer, using one of the presets in `src/ui/layers/presets.ts` — never given its own global key listener or ad-hoc focus handling, and never a hand-picked `z-index`.
 
-Read [`src/ui/layers/CLAUDE.md`](src/ui/layers/CLAUDE.md) before changing keyboard routing, focus, or modality; it is the reference for barriers, layer kinds, and when a sub-view needs to be its own layer.
+Push it onto the **window stack** (`getWindowLayerStack()`) when it covers the app, or onto a **session's own stack** (`session.layers`) when it belongs to one tab. That choice is what decides the surface's extent.
+
+Read [`src/ui/layers/CLAUDE.md`](src/ui/layers/CLAUDE.md) before changing keyboard routing, focus, modality, or stacking; it is the reference for the topology, the routing order, shortcut availability, and when a sub-view needs to be its own layer.
 
 ## Error Handling
 

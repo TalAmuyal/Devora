@@ -1,76 +1,58 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { LayerStack, LayerStackDeps } from '../LayerStack';
-import type { Focusable, LayerKind, LayerSpec } from '../types';
+import { modalLayer, pageLayer, popupLayer, terminalLayer } from '../presets';
+import type { Focusable, LayerSpec } from '../types';
 
-const liveStacks: LayerStack[] = [];
-const windowSpies: Array<(e: KeyboardEvent) => void> = [];
+/**
+ * The stack mechanism in isolation: mounting, focus, reveal, and what `route` reports.
+ * The stack owns no keyboard listener — `LayerRouter.test.ts` covers the listener and event consumption,
+ * and `pageRouting.test.ts` covers the concrete surfaces `main.ts` wires.
+ */
 
 interface Built {
   stack: LayerStack;
-  pageHost: HTMLElement;
+  host: HTMLElement;
 }
 
 function makeStack(deps: Partial<LayerStackDeps> = {}): Built {
-  const pageHost = document.createElement('div');
-  pageHost.className = 'page-host';
-  document.body.appendChild(pageHost);
-  const stack = new LayerStack({
-    pageHost,
-    modalHost: document.body,
-    resolveBaseFocus: () => null,
-    ...deps,
-  });
-  stack.install();
-  liveStacks.push(stack);
-  return { stack, pageHost };
+  const host = document.createElement('div');
+  host.className = 'layer-host';
+  document.body.appendChild(host);
+  const stack = new LayerStack({ host, ...deps });
+  return { stack, host };
 }
 
-/** A layer spec with a fresh content element. `place` mounts the element for popup/panel kinds, which the caller owns. */
-function spec(name: string, kind: LayerKind, over: Partial<LayerSpec> = {}, place?: HTMLElement): LayerSpec {
-  const element = document.createElement('div');
-  element.className = `${name}-content`;
-  if (place) place.appendChild(element);
-  return { name, kind, element, ...over };
+function content(name: string, place?: HTMLElement): HTMLElement {
+  const el = document.createElement('div');
+  el.className = `${name}-content`;
+  if (place) place.appendChild(el);
+  return el;
 }
 
-function dispatch(init: KeyboardEventInit): KeyboardEvent {
-  const e = new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init });
-  window.dispatchEvent(e);
-  return e;
-}
-
-/** A window-capture listener registered *after* the stack, so it only runs on keys the stack did not consume. */
-function listenerAfterStack(): ReturnType<typeof vi.fn> {
-  const spy = vi.fn();
-  window.addEventListener('keydown', spy, true);
-  windowSpies.push(spy);
-  return spy;
+function keydown(init: KeyboardEventInit): KeyboardEvent {
+  return new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init });
 }
 
 function focusableSpy(): Focusable & { focus: ReturnType<typeof vi.fn> } {
   return { focus: vi.fn() };
 }
 
+/** A bare layer with every default in force — the baseline the presets vary from. */
+function bare(name: string, over: Partial<LayerSpec> = {}): LayerSpec {
+  return { name, element: content(name), ...over };
+}
+
 afterEach(() => {
-  for (const s of liveStacks) {
-    s.clear();
-    s.uninstall();
-  }
-  liveStacks.length = 0;
-  for (const spy of windowSpies) {
-    window.removeEventListener('keydown', spy, true);
-  }
-  windowSpies.length = 0;
   document.body.innerHTML = '';
 });
 
 describe('LayerStack — stack operations', () => {
-  it('pushes onto the top and reports depth/top/isEmpty', () => {
+  it('pushes onto the top and reports depth/top/isEmpty/find', () => {
     const { stack } = makeStack();
     expect(stack.isEmpty()).toBe(true);
 
-    const a = stack.push(spec('a', 'page'));
-    const b = stack.push(spec('b', 'page'));
+    const a = stack.push(pageLayer({ name: 'a', element: content('a') }));
+    const b = stack.push(pageLayer({ name: 'b', element: content('b') }));
 
     expect(stack.depth()).toBe(2);
     expect(stack.isEmpty()).toBe(false);
@@ -78,41 +60,45 @@ describe('LayerStack — stack operations', () => {
     expect(stack.find('a')).toBe(a);
   });
 
-  it('mounts a page wrapper under the page host and a modal wrapper under the modal host', () => {
-    const { stack, pageHost } = makeStack();
-    const page = stack.push(spec('ws-hub', 'page'));
-    const modal = stack.push(spec('confirm', 'modal'));
+  it('appends every stack-owned wrapper to the one host, in stack order', () => {
+    const { stack, host } = makeStack();
+    const page = stack.push(pageLayer({ name: 'ws-hub', element: content('ws-hub') }));
+    const modal = stack.push(modalLayer({ name: 'confirm', element: content('confirm') }));
 
-    expect(page.wrapper.parentElement).toBe(pageHost);
-    expect(page.wrapper.classList.contains('overlay-tab-covering')).toBe(true);
+    // Paint order is DOM order, so the later push must be the later child — this is the whole z-index story.
+    expect(Array.from(host.children)).toEqual([page.wrapper, modal.wrapper]);
+    expect(page.wrapper.classList.contains('layer-wrapper')).toBe(true);
     expect(page.wrapper.classList.contains('layer-page')).toBe(true);
     expect(page.wrapper.contains(page.element)).toBe(true);
-
-    expect(modal.wrapper.parentElement).toBe(document.body);
     expect(modal.wrapper.classList.contains('layer-modal')).toBe(true);
     expect(modal.wrapper.classList.contains('confirm-backdrop')).toBe(true);
   });
 
-  it('uses the caller-placed element as its own wrapper for popup and panel kinds', () => {
-    const { stack } = makeStack();
-    const host = document.createElement('div');
-    document.body.appendChild(host);
+  it('leaves a caller-mounted layer where the caller put it', () => {
+    const { stack, host } = makeStack();
+    const anchor = document.createElement('div');
+    document.body.appendChild(anchor);
 
-    const popup = stack.push(spec('menu', 'popup', {}, host));
+    const popup = stack.push(popupLayer({ name: 'menu', element: content('menu', anchor) }));
+
     expect(popup.wrapper).toBe(popup.element);
-    expect(popup.wrapper.parentElement).toBe(host);
+    expect(popup.wrapper.parentElement).toBe(anchor);
+    expect(host.children.length).toBe(0);
   });
 
-  it('applies wrapperClass to the wrapper', () => {
+  it('adds wrapperClass alongside the preset classes', () => {
     const { stack } = makeStack();
-    const page = stack.push(spec('palette', 'page', { wrapperClass: 'overlay-passthrough' }));
-    expect(page.wrapper.classList.contains('overlay-passthrough')).toBe(true);
+    const page = stack.push(
+      pageLayer({ name: 'palette', element: content('palette'), wrapperClass: 'layer-transparent' }),
+    );
+    expect(page.wrapper.classList.contains('layer-page')).toBe(true);
+    expect(page.wrapper.classList.contains('layer-transparent')).toBe(true);
   });
 
   it('pops the top and detaches its wrapper', () => {
     const { stack } = makeStack();
-    const a = stack.push(spec('a', 'page'));
-    stack.push(spec('b', 'page'));
+    const a = stack.push(pageLayer({ name: 'a', element: content('a') }));
+    stack.push(pageLayer({ name: 'b', element: content('b') }));
 
     stack.pop();
     expect(stack.depth()).toBe(1);
@@ -120,55 +106,64 @@ describe('LayerStack — stack operations', () => {
     expect(stack.find('b')).toBeNull();
   });
 
-  it('inserts a panel at the bottom, never intercepting the page above it', () => {
-    const { stack } = makeStack();
-    const page = stack.push(spec('ws-hub', 'page'));
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-    const panel = stack.push(spec('crit', 'panel', {}, host));
-
-    expect(stack.depth()).toBe(2);
-    expect(stack.top()).toBe(page);
-    expect(stack.topOf('panel')).toBe(panel);
-  });
-
   it('removing a non-top layer detaches it without revealing or refocusing', () => {
-    const base = focusableSpy();
-    const { stack } = makeStack({ resolveBaseFocus: () => base });
-    const a = stack.push(spec('a', 'page', { onReveal: vi.fn() }));
-    const b = stack.push(spec('b', 'page'));
+    const onEmptied = vi.fn();
+    const { stack } = makeStack({ onEmptied });
+    const a = stack.push(pageLayer({ name: 'a', element: content('a'), onReveal: vi.fn() }));
+    const b = stack.push(pageLayer({ name: 'b', element: content('b') }));
 
     stack.remove(a);
 
     expect(stack.depth()).toBe(1);
     expect(stack.top()).toBe(b);
     expect(a.wrapper.parentElement).toBeNull();
-    expect(base.focus).not.toHaveBeenCalled();
+    expect(onEmptied).not.toHaveBeenCalled();
   });
 
-  it('removing a page auto-removes a popup anchored inside it and restores base focus', () => {
-    const base = focusableSpy();
-    const { stack } = makeStack({ resolveBaseFocus: () => base });
-    const page = stack.push(spec('ws-hub', 'page'));
+  it('removing a page auto-removes a popup anchored inside it and reports the stack empty', () => {
+    const onEmptied = vi.fn();
+    const { stack } = makeStack({ onEmptied });
+    const page = stack.push(pageLayer({ name: 'ws-hub', element: content('ws-hub') }));
     const popupCleanup = vi.fn();
     // The dropdown lives inside the page content, so it is DOM-contained in the page wrapper.
-    const popup = stack.push(spec('dropdown', 'popup', { onCleanup: popupCleanup }, page.element));
+    const popup = stack.push(
+      popupLayer({
+        name: 'dropdown',
+        element: content('dropdown', page.element),
+        onCleanup: popupCleanup,
+      }),
+    );
 
     stack.remove(page);
 
     expect(stack.isEmpty()).toBe(true);
     expect(popupCleanup).toHaveBeenCalledOnce();
     expect(popup.wrapper.parentElement).toBeNull();
-    expect(base.focus).toHaveBeenCalledOnce();
+    expect(onEmptied).toHaveBeenCalledOnce();
+  });
+
+  it('reports whether any layer owns the keyboard', () => {
+    const { stack } = makeStack();
+    expect(stack.hasOpaqueLayer()).toBe(false);
+
+    const anchor = document.createElement('div');
+    document.body.appendChild(anchor);
+    const popup = stack.push(popupLayer({ name: 'menu', element: content('menu', anchor) }));
+    // A dropdown does not own the keyboard, so it must not gate the shortcuts that check this.
+    expect(stack.hasOpaqueLayer()).toBe(false);
+
+    stack.push(pageLayer({ name: 'ws-hub', element: content('ws-hub') }));
+    expect(stack.hasOpaqueLayer()).toBe(true);
+    void popup;
   });
 });
 
 describe('LayerStack — reveal & cleanup', () => {
-  it('runs onReveal on the revealed layer when a cover pops', () => {
+  it('runs onReveal on the revealed layer when a page pops', () => {
     const onReveal = vi.fn();
     const { stack } = makeStack();
-    stack.push(spec('a', 'page', { onReveal }));
-    stack.push(spec('b', 'page'));
+    stack.push(pageLayer({ name: 'a', element: content('a'), onReveal }));
+    stack.push(pageLayer({ name: 'b', element: content('b') }));
 
     stack.pop();
     expect(onReveal).toHaveBeenCalledOnce();
@@ -178,8 +173,8 @@ describe('LayerStack — reveal & cleanup', () => {
     const onReveal = vi.fn();
     const focus = focusableSpy();
     const { stack } = makeStack();
-    stack.push(spec('page', 'page', { onReveal, resolveFocus: () => focus }));
-    stack.push(spec('confirm', 'modal'));
+    stack.push(pageLayer({ name: 'page', element: content('page'), onReveal, resolveFocus: () => focus }));
+    stack.push(modalLayer({ name: 'confirm', element: content('confirm') }));
 
     const before = focus.focus.mock.calls.length;
     stack.pop();
@@ -193,10 +188,10 @@ describe('LayerStack — reveal & cleanup', () => {
     const onRevealA = vi.fn();
     const cleanupB = vi.fn();
     const { stack } = makeStack();
-    stack.push(spec('a', 'page', { onReveal: onRevealA }));
-    stack.push(spec('b', 'page', { onCleanup: cleanupB }));
+    stack.push(pageLayer({ name: 'a', element: content('a'), onReveal: onRevealA }));
+    stack.push(pageLayer({ name: 'b', element: content('b'), onCleanup: cleanupB }));
 
-    const c = stack.replaceTop(spec('c', 'page'));
+    const c = stack.replaceTop(pageLayer({ name: 'c', element: content('c') }));
 
     expect(cleanupB).toHaveBeenCalledOnce();
     expect(onRevealA).not.toHaveBeenCalled();
@@ -208,11 +203,11 @@ describe('LayerStack — reveal & cleanup', () => {
   it('closing a popup over a page leaves the page undisturbed (no onReveal, no focus move)', () => {
     const onReveal = vi.fn();
     const { stack } = makeStack();
-    const page = stack.push(spec('ws-hub', 'page', { onReveal }));
+    const page = stack.push(pageLayer({ name: 'ws-hub', element: content('ws-hub'), onReveal }));
     const focusedInPage = document.createElement('button');
     page.element.appendChild(focusedInPage);
     focusedInPage.focus();
-    const popup = stack.push(spec('dropdown', 'popup', {}, page.element));
+    const popup = stack.push(popupLayer({ name: 'dropdown', element: content('dropdown', page.element) }));
 
     stack.remove(popup);
 
@@ -224,7 +219,7 @@ describe('LayerStack — reveal & cleanup', () => {
   it('runs cleanup exactly once across pop', () => {
     const onCleanup = vi.fn();
     const { stack } = makeStack();
-    stack.push(spec('a', 'page', { onCleanup }));
+    stack.push(pageLayer({ name: 'a', element: content('a'), onCleanup }));
 
     stack.pop();
     stack.pop(); // no-op: nothing left
@@ -235,8 +230,8 @@ describe('LayerStack — reveal & cleanup', () => {
     const cleanupA = vi.fn();
     const cleanupB = vi.fn();
     const { stack } = makeStack();
-    stack.push(spec('a', 'page', { onCleanup: cleanupA }));
-    stack.push(spec('b', 'modal', { onCleanup: cleanupB }));
+    stack.push(pageLayer({ name: 'a', element: content('a'), onCleanup: cleanupA }));
+    stack.push(modalLayer({ name: 'b', element: content('b'), onCleanup: cleanupB }));
 
     stack.clear();
 
@@ -250,13 +245,13 @@ describe('LayerStack — focus', () => {
   it('focuses resolveFocus on push', () => {
     const { stack } = makeStack();
     const target = focusableSpy();
-    stack.push(spec('a', 'page', { resolveFocus: () => target }));
+    stack.push(pageLayer({ name: 'a', element: content('a'), resolveFocus: () => target }));
     expect(target.focus).toHaveBeenCalledOnce();
   });
 
   it('focuses the wrapper on push when resolveFocus is absent', () => {
     const { stack } = makeStack();
-    const a = stack.push(spec('a', 'page'));
+    const a = stack.push(pageLayer({ name: 'a', element: content('a') }));
     expect(document.activeElement).toBe(a.wrapper);
   });
 
@@ -266,282 +261,176 @@ describe('LayerStack — focus', () => {
     document.body.appendChild(sentinel);
     sentinel.focus();
 
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-    stack.push(spec('menu', 'popup', {}, host));
+    const anchor = document.createElement('div');
+    document.body.appendChild(anchor);
+    stack.push(popupLayer({ name: 'menu', element: content('menu', anchor) }));
 
     expect(document.activeElement).toBe(sentinel);
   });
 
   it('focuses the revealed layer when the top pops', () => {
     const { stack } = makeStack();
-    const a = stack.push(spec('a', 'page'));
-    stack.push(spec('b', 'page'));
+    const a = stack.push(pageLayer({ name: 'a', element: content('a') }));
+    stack.push(pageLayer({ name: 'b', element: content('b') }));
 
     stack.pop();
     expect(document.activeElement).toBe(a.wrapper);
   });
 
-  it('focuses a panel pushed onto an empty stack', () => {
+  it('focusTop re-focuses the current top (tab activation)', () => {
     const { stack } = makeStack();
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-    const panel = stack.push(spec('crit', 'panel', {}, host));
-    expect(document.activeElement).toBe(panel.wrapper);
+    const target = focusableSpy();
+    stack.push(pageLayer({ name: 'a', element: content('a'), resolveFocus: () => target }));
+    target.focus.mockClear();
+
+    stack.focusTop();
+    expect(target.focus).toHaveBeenCalledOnce();
   });
 
-  it('does not steal focus when a panel is inserted under an existing page', () => {
-    const { stack } = makeStack();
-    const page = stack.push(spec('ws-hub', 'page'));
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-    stack.push(spec('crit', 'panel', {}, host));
-    expect(document.activeElement).toBe(page.wrapper);
-  });
-
-  it('focuses the revealed panel when the page above it pops', () => {
-    const { stack } = makeStack();
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-    const panel = stack.push(spec('crit', 'panel', {}, host));
-    stack.push(spec('ws-hub', 'page'));
+  it('reports emptiness at pop time, so a late-changing owner still gets focus', () => {
+    let notified = 0;
+    const { stack } = makeStack({ onEmptied: () => (notified += 1) });
+    stack.push(pageLayer({ name: 'a', element: content('a') }));
 
     stack.pop();
-    expect(document.activeElement).toBe(panel.wrapper);
-  });
-
-  it('focuses resolveBaseFocus resolved at pop time when the stack empties', () => {
-    let base: Focusable = focusableSpy();
-    const { stack } = makeStack({ resolveBaseFocus: () => base });
-    stack.push(spec('a', 'page'));
-
-    // The active session changes while the layer is up; the base is re-resolved at pop time.
-    const later = focusableSpy();
-    base = later;
-    stack.pop();
-
-    expect(later.focus).toHaveBeenCalledOnce();
+    expect(notified).toBe(1);
   });
 });
 
-describe('LayerStack — key dispatch', () => {
-  it('lets the top layer onKey win and consumes the key', () => {
+describe('LayerStack — route', () => {
+  it('lets the top layer onKey win', () => {
     const { stack } = makeStack();
     const lowerKey = vi.fn(() => false);
     const topKey = vi.fn(() => true);
-    stack.push(spec('a', 'page', { onKey: lowerKey }));
-    stack.push(spec('b', 'page', { onKey: topKey }));
+    stack.push(pageLayer({ name: 'a', element: content('a'), onKey: lowerKey }));
+    stack.push(pageLayer({ name: 'b', element: content('b'), onKey: topKey }));
 
-    const e = dispatch({ key: 'x', code: 'KeyX' });
+    expect(stack.route(keydown({ key: 'x', code: 'KeyX' }))).toBe('consumed');
     expect(topKey).toHaveBeenCalledOnce();
     expect(lowerKey).not.toHaveBeenCalled();
-    expect(e.defaultPrevented).toBe(true);
   });
 
-  it('traps Tab within a modal on top', () => {
+  it('passes when the stack is empty', () => {
     const { stack } = makeStack();
-    const modal = spec('confirm', 'modal');
+    expect(stack.route(keydown({ key: 'x', code: 'KeyX' }))).toBe('passed');
+  });
+
+  it('traps Tab within a layer that asks for it', () => {
+    const { stack } = makeStack();
+    const element = content('confirm');
     const first = document.createElement('button');
     const second = document.createElement('button');
     first.id = 'first';
     second.id = 'second';
-    modal.element.append(first, second);
-    stack.push(modal);
+    element.append(first, second);
+    stack.push(modalLayer({ name: 'confirm', element }));
     first.focus();
 
-    const e = dispatch({ key: 'Tab', code: 'Tab' });
+    expect(stack.route(keydown({ key: 'Tab', code: 'Tab' }))).toBe('consumed');
     expect(document.activeElement?.id).toBe('second');
-    expect(e.defaultPrevented).toBe(true);
   });
 
-  it('does not trap Tab when the top is a page', () => {
-    const globalHandler = vi.fn(() => true);
+  it('does not trap Tab for a layer that does not ask for it', () => {
     const { stack } = makeStack();
-    stack.setGlobalHandler(globalHandler);
-    const page = spec('ws-hub', 'page');
+    const element = content('ws-hub');
     const button = document.createElement('button');
-    page.element.appendChild(button);
-    stack.push(page);
+    element.appendChild(button);
+    stack.push(pageLayer({ name: 'ws-hub', element }));
     button.focus();
 
-    const e = dispatch({ key: 'Tab', code: 'Tab' });
-    // Tab is not a dismiss key, the hub has no onKey, and Tab is not allowed through the page barrier.
+    expect(stack.route(keydown({ key: 'Tab', code: 'Tab' }))).toBe('blocked');
     expect(document.activeElement).toBe(button);
-    expect(e.defaultPrevented).toBe(false);
-    expect(globalHandler).not.toHaveBeenCalled();
   });
 
-  it('Escape pops the top when the dismissal decision is close', () => {
+  it('Escape and q dismiss the top, popping it on the default decision', () => {
     const { stack } = makeStack();
-    stack.push(spec('a', 'page'));
-    const b = stack.push(spec('b', 'page', { onUserDismissRequest: () => 'close' }));
+    stack.push(pageLayer({ name: 'a', element: content('a') }));
+    stack.push(pageLayer({ name: 'b', element: content('b') }));
 
-    const e = dispatch({ key: 'Escape', code: 'Escape' });
+    expect(stack.route(keydown({ key: 'Escape', code: 'Escape' }))).toBe('consumed');
     expect(stack.find('b')).toBeNull();
-    expect(stack.depth()).toBe(1);
-    expect(e.defaultPrevented).toBe(true);
-    void b;
-  });
 
-  it('q pops the top by default (no onUserDismissRequest)', () => {
-    const { stack } = makeStack();
-    stack.push(spec('a', 'page'));
-
-    dispatch({ key: 'q', code: 'KeyQ' });
+    expect(stack.route(keydown({ key: 'q', code: 'KeyQ' }))).toBe('consumed');
     expect(stack.isEmpty()).toBe(true);
   });
 
-  it("'handled' consumes without popping", () => {
-    const onDismiss = vi.fn(() => 'handled' as const);
+  it("'handled' and 'veto' consume without popping", () => {
     const { stack } = makeStack();
-    stack.push(spec('a', 'page', { onUserDismissRequest: onDismiss }));
+    const handled = vi.fn(() => 'handled' as const);
+    stack.push(pageLayer({ name: 'a', element: content('a'), onUserDismissRequest: handled }));
 
-    const e = dispatch({ key: 'Escape', code: 'Escape' });
-    expect(onDismiss).toHaveBeenCalledOnce();
+    expect(stack.route(keydown({ key: 'Escape', code: 'Escape' }))).toBe('consumed');
+    expect(handled).toHaveBeenCalledOnce();
     expect(stack.depth()).toBe(1);
-    expect(e.defaultPrevented).toBe(true);
+
+    stack.push(pageLayer({ name: 'b', element: content('b'), onUserDismissRequest: () => 'veto' }));
+    expect(stack.route(keydown({ key: 'q', code: 'KeyQ' }))).toBe('consumed');
+    expect(stack.depth()).toBe(2);
   });
 
-  it("'veto' consumes without popping", () => {
-    const { stack } = makeStack();
-    stack.push(spec('a', 'page', { onUserDismissRequest: () => 'veto' }));
-
-    const e = dispatch({ key: 'q', code: 'KeyQ' });
-    expect(stack.depth()).toBe(1);
-    expect(e.defaultPrevented).toBe(true);
-  });
-
-  it('passes the key through unconsumed when an editable element inside the top is focused', () => {
+  it('blocks without dismissing when an editable element inside the top is focused', () => {
     const onDismiss = vi.fn(() => 'close' as const);
     const { stack } = makeStack();
+    const element = content('a');
     const input = document.createElement('input');
-    const page = stack.push(spec('a', 'page', { onUserDismissRequest: onDismiss }));
-    page.element.appendChild(input);
+    element.appendChild(input);
+    stack.push(pageLayer({ name: 'a', element, onUserDismissRequest: onDismiss }));
     input.focus();
-    const after = listenerAfterStack();
 
-    const e = dispatch({ key: 'q', code: 'KeyQ' });
+    expect(stack.route(keydown({ key: 'q', code: 'KeyQ' }))).toBe('blocked');
     expect(onDismiss).not.toHaveBeenCalled();
-    expect(e.defaultPrevented).toBe(false);
-    expect(after).toHaveBeenCalledOnce();
   });
 
   it('does not let an editable element in a lower layer shield the top', () => {
     const onDismiss = vi.fn(() => 'close' as const);
     const { stack } = makeStack();
-    const lower = stack.push(spec('a', 'page'));
+    const lower = stack.push(pageLayer({ name: 'a', element: content('a') }));
     const input = document.createElement('input');
     lower.element.appendChild(input);
-    stack.push(spec('b', 'page', { onUserDismissRequest: onDismiss }));
+    stack.push(pageLayer({ name: 'b', element: content('b'), onUserDismissRequest: onDismiss }));
 
     // Focus escapes to an input owned by the lower page while the top page is up.
     input.focus();
-    dispatch({ key: 'Escape', code: 'Escape' });
-
+    expect(stack.route(keydown({ key: 'Escape', code: 'Escape' }))).toBe('consumed');
     expect(onDismiss).toHaveBeenCalledOnce();
     expect(stack.find('b')).toBeNull();
   });
 
-  it('a modal barrier blocks the global handler', () => {
-    const globalHandler = vi.fn(() => true);
+  it('an opaque layer ends the walk without consuming', () => {
+    const lowerKey = vi.fn(() => true);
     const { stack } = makeStack();
-    stack.setGlobalHandler(globalHandler);
-    stack.push(spec('confirm', 'modal'));
+    stack.push(pageLayer({ name: 'a', element: content('a'), onKey: lowerKey }));
+    stack.push(bare('opaque'));
 
-    dispatch({ key: 'a', code: 'KeyA' });
-    expect(globalHandler).not.toHaveBeenCalled();
+    expect(stack.route(keydown({ key: 'x', code: 'KeyX' }))).toBe('blocked');
+    expect(lowerKey).not.toHaveBeenCalled();
   });
 
-  it('a page barrier consults pageBarrierAdmits: admits what it allows and blocks the rest', () => {
-    const globalHandler = vi.fn(() => true);
+  it('a transparent layer passes unhandled keys down and then out of the stack', () => {
     const { stack } = makeStack();
-    stack.setGlobalHandler(globalHandler);
-    // The concrete admit-list (F1 + font sizing) is owned and tested by KeyboardShortcuts; here we only prove delegation.
-    stack.setPageBarrierAdmits((e) => e.key === 'F1');
-    stack.push(spec('ws-hub', 'page'));
+    const anchor = document.createElement('div');
+    document.body.appendChild(anchor);
+    stack.push(popupLayer({ name: 'menu', element: content('menu', anchor) }));
 
-    dispatch({ key: 'F1', code: 'F1' });
-    expect(globalHandler).toHaveBeenCalledOnce();
-
-    globalHandler.mockClear();
-    dispatch({ key: 'ArrowRight', code: 'ArrowRight', ctrlKey: true });
-    expect(globalHandler).not.toHaveBeenCalled();
+    expect(stack.route(keydown({ key: 'ArrowRight', code: 'ArrowRight', ctrlKey: true }))).toBe('passed');
   });
 
-  it('a page barrier blocks the global handler when no admit predicate is wired', () => {
-    const globalHandler = vi.fn(() => true);
+  it('a non-dismissible layer blocks q and Escape instead of closing on them', () => {
     const { stack } = makeStack();
-    stack.setGlobalHandler(globalHandler);
-    stack.push(spec('ws-hub', 'page'));
+    const terminal = stack.push(terminalLayer({ name: 'terminal', element: content('terminal') }));
 
-    dispatch({ key: 'F1', code: 'F1' });
-    expect(globalHandler).not.toHaveBeenCalled();
+    // A terminal must stay put and let the key reach xterm — closing on `q` is the trap this guards.
+    expect(stack.route(keydown({ key: 'q', code: 'KeyQ' }))).toBe('blocked');
+    expect(stack.route(keydown({ key: 'Escape', code: 'Escape' }))).toBe('blocked');
+    expect(stack.top()).toBe(terminal);
   });
 
-  it('a modal barrier blocks even keys the admit predicate would allow', () => {
-    const globalHandler = vi.fn(() => true);
+  it('treats a modified q or Escape as a shortcut, never a dismissal', () => {
     const { stack } = makeStack();
-    stack.setGlobalHandler(globalHandler);
-    stack.setPageBarrierAdmits(() => true);
-    stack.push(spec('confirm', 'modal'));
+    stack.push(pageLayer({ name: 'a', element: content('a') }));
 
-    dispatch({ key: 'F1', code: 'F1' });
-    expect(globalHandler).not.toHaveBeenCalled();
-  });
-
-  it('lets keys fall through a panel to the global handler', () => {
-    const globalHandler = vi.fn(() => true);
-    const { stack } = makeStack();
-    stack.setGlobalHandler(globalHandler);
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-    stack.push(spec('crit', 'panel', {}, host));
-
-    const e = dispatch({ key: 'ArrowRight', code: 'ArrowRight', ctrlKey: true });
-    expect(globalHandler).toHaveBeenCalledOnce();
-    expect(e.defaultPrevented).toBe(true);
-  });
-
-  it('Ctrl+S is a dismiss key for a page but not for a modal', () => {
-    const pageDismiss = vi.fn(() => 'close' as const);
-    const { stack } = makeStack();
-    stack.push(spec('ws-hub', 'page', { onUserDismissRequest: pageDismiss }));
-    dispatch({ key: 's', code: 'KeyS', ctrlKey: true });
-    expect(pageDismiss).toHaveBeenCalledOnce();
-
-    const modalDismiss = vi.fn(() => 'close' as const);
-    stack.push(spec('confirm', 'modal', { onUserDismissRequest: modalDismiss }));
-    dispatch({ key: 's', code: 'KeyS', ctrlKey: true });
-    expect(modalDismiss).not.toHaveBeenCalled();
-  });
-
-  it('stops immediate propagation on consumed keys', () => {
-    const { stack } = makeStack();
-    stack.push(spec('a', 'page', { onUserDismissRequest: () => 'close' }));
-    const after = listenerAfterStack();
-
-    dispatch({ key: 'Escape', code: 'Escape' });
-    expect(after).not.toHaveBeenCalled();
-  });
-
-  it('routes to the global handler when the stack is empty', () => {
-    const globalHandler = vi.fn(() => true);
-    const { stack } = makeStack();
-    stack.setGlobalHandler(globalHandler);
-
-    const e = dispatch({ key: 's', code: 'KeyS', ctrlKey: true });
-    expect(globalHandler).toHaveBeenCalledOnce();
-    expect(e.defaultPrevented).toBe(true);
-  });
-
-  it('always runs the key observer, even on consumed keys', () => {
-    const observer = vi.fn();
-    const { stack } = makeStack();
-    stack.setKeyObserver(observer);
-    stack.push(spec('a', 'page', { onUserDismissRequest: () => 'close' }));
-
-    dispatch({ key: 'Escape', code: 'Escape' });
-    expect(observer).toHaveBeenCalledOnce();
+    expect(stack.route(keydown({ key: 'q', code: 'KeyQ', ctrlKey: true }))).toBe('blocked');
+    expect(stack.depth()).toBe(1);
   });
 });
 
@@ -554,16 +443,16 @@ describe('LayerStack — requestUserDismiss', () => {
   it('routes through the top layer onUserDismissRequest and pops on close', () => {
     const onDismiss = vi.fn(() => 'close' as const);
     const { stack } = makeStack();
-    stack.push(spec('a', 'page', { onUserDismissRequest: onDismiss }));
+    stack.push(pageLayer({ name: 'a', element: content('a'), onUserDismissRequest: onDismiss }));
 
     expect(stack.requestUserDismiss()).toBe(true);
     expect(onDismiss).toHaveBeenCalledOnce();
     expect(stack.isEmpty()).toBe(true);
   });
 
-  it('consumes without popping when the top vetoes', () => {
+  it('reports handled without popping when the top vetoes', () => {
     const { stack } = makeStack();
-    stack.push(spec('a', 'page', { onUserDismissRequest: () => 'veto' }));
+    stack.push(pageLayer({ name: 'a', element: content('a'), onUserDismissRequest: () => 'veto' }));
 
     expect(stack.requestUserDismiss()).toBe(true);
     expect(stack.depth()).toBe(1);

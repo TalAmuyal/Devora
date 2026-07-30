@@ -10,6 +10,8 @@ interface Harness {
   onOpenWsHub: ReturnType<typeof vi.fn>;
   onOpenCommandPalette: ReturnType<typeof vi.fn>;
   onOpenUserGuide: ReturnType<typeof vi.fn>;
+  /** Stand-in for "an opaque layer occupies the window stack"; flip it to test a shortcut's precondition. */
+  windowSurface: { open: boolean };
 }
 
 function makeHarness(): Harness {
@@ -19,6 +21,7 @@ function makeHarness(): Harness {
   const onOpenWsHub = vi.fn();
   const onOpenCommandPalette = vi.fn();
   const onOpenUserGuide = vi.fn();
+  const windowSurface = { open: false };
 
   const sessionManager = {
     createSession,
@@ -28,12 +31,13 @@ function makeHarness(): Harness {
     getSessions: () => [],
   } as unknown as SessionManager;
 
-  const shortcuts = new KeyboardShortcuts(
+  const shortcuts = new KeyboardShortcuts({
     sessionManager,
     onOpenWsHub,
     onOpenCommandPalette,
     onOpenUserGuide,
-  );
+    hasWindowSurface: () => windowSurface.open,
+  });
 
   return {
     shortcuts,
@@ -43,15 +47,16 @@ function makeHarness(): Harness {
     onOpenWsHub,
     onOpenCommandPalette,
     onOpenUserGuide,
+    windowSurface,
   };
 }
 
-/** Drive the global handler the way the LayerStack would when a key reaches the base. Returns whether it consumed the key. */
+/** Drive the shortcut handler the way the router does, before any layer sees the key. Returns whether it consumed. */
 function global(shortcuts: KeyboardShortcuts, init: KeyboardEventInit): boolean {
-  return shortcuts.handleGlobal(new KeyboardEvent('keydown', init));
+  return shortcuts.handleShortcut(new KeyboardEvent('keydown', init));
 }
 
-/** Feed a keydown to the key observer (the LayerStack calls this on every keydown; it never consumes). */
+/** Feed a keydown to the key observer (the router calls this on every keydown; it never consumes). */
 function observe(shortcuts: KeyboardShortcuts, init: KeyboardEventInit): void {
   shortcuts.observeKey(new KeyboardEvent('keydown', init));
 }
@@ -61,7 +66,7 @@ function keyup(init: KeyboardEventInit): void {
   window.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, cancelable: true, ...init }));
 }
 
-describe('KeyboardShortcuts — global handler', () => {
+describe('KeyboardShortcuts — shortcut handler', () => {
   let h: Harness;
 
   beforeEach(() => {
@@ -131,40 +136,40 @@ describe('KeyboardShortcuts — font sizing', () => {
   });
 });
 
-describe('KeyboardShortcuts — page-barrier admit list', () => {
+describe('KeyboardShortcuts — preconditions under a window surface', () => {
   let h: Harness;
 
   beforeEach(() => {
     h = makeHarness();
+    h.windowSurface.open = true;
+    document.documentElement.style.fontSize = '';
   });
 
-  const admits = (init: KeyboardEventInit): boolean =>
-    h.shortcuts.allowedThroughPageBarrier(new KeyboardEvent('keydown', init));
-
-  it('admits F1 and the font-size combos through a page', () => {
-    expect(admits({ key: 'F1', code: 'F1' })).toBe(true);
-    expect(admits({ key: '1', code: 'Digit1', ctrlKey: true })).toBe(true);
-    expect(admits({ key: '2', code: 'Digit2', ctrlKey: true })).toBe(true);
-    expect(admits({ key: '3', code: 'Digit3', ctrlKey: true })).toBe(true);
-    expect(admits({ key: '=', code: 'Equal', ctrlKey: true })).toBe(true);
-    expect(admits({ key: '+', code: 'Equal', ctrlKey: true, shiftKey: true })).toBe(true);
-    expect(admits({ key: '_', code: 'Minus', ctrlKey: true, shiftKey: true })).toBe(true);
+  it('font sizing and F1 stay live — a display preference and help are never unavailable', () => {
+    expect(global(h.shortcuts, { key: '1', code: 'Digit1', ctrlKey: true })).toBe(true);
+    expect(document.documentElement.style.fontSize).toBe('12px');
+    expect(global(h.shortcuts, { key: 'F1', code: 'F1' })).toBe(true);
+    expect(h.onOpenUserGuide).toHaveBeenCalledOnce();
   });
 
-  it('blocks new session and tab nav through a page (deliberate — ADR-003)', () => {
-    expect(admits({ key: 'S', code: 'KeyS', ctrlKey: true, shiftKey: true })).toBe(false);
-    expect(admits({ key: 'ArrowLeft', code: 'ArrowLeft', ctrlKey: true })).toBe(false);
-    expect(admits({ key: 'ArrowRight', code: 'ArrowRight', ctrlKey: true })).toBe(false);
-    expect(admits({ key: 'ArrowLeft', code: 'ArrowLeft', ctrlKey: true, shiftKey: true })).toBe(
-      false,
-    );
-    // Ctrl+S is the page's dismiss key, not a base shortcut admitted through the barrier.
-    expect(admits({ key: 's', code: 'KeyS', ctrlKey: true })).toBe(false);
+  it('consumes the surface shortcuts as no-ops rather than letting them fall through', () => {
+    // Consuming matters: Ctrl+S must not reach the hub's own key handling, and none of these may reach a terminal.
+    expect(global(h.shortcuts, { key: 's', code: 'KeyS', ctrlKey: true })).toBe(true);
+    expect(global(h.shortcuts, { key: 'S', code: 'KeyS', ctrlKey: true, shiftKey: true })).toBe(true);
+    expect(global(h.shortcuts, { key: 'ArrowLeft', code: 'ArrowLeft', ctrlKey: true })).toBe(true);
+    expect(global(h.shortcuts, { key: 'ArrowRight', code: 'ArrowRight', ctrlKey: true })).toBe(true);
+    expect(global(h.shortcuts, { key: 'ArrowLeft', code: 'ArrowLeft', ctrlKey: true, shiftKey: true })).toBe(true);
+    expect(global(h.shortcuts, { key: 'ArrowRight', code: 'ArrowRight', ctrlKey: true, shiftKey: true })).toBe(true);
+
+    expect(h.onOpenWsHub).not.toHaveBeenCalled();
+    expect(h.createSession).not.toHaveBeenCalled();
+    expect(h.activateNext).not.toHaveBeenCalled();
+    expect(h.activatePrevious).not.toHaveBeenCalled();
   });
 
-  it('blocks plain hub keys through a page', () => {
-    expect(admits({ key: 'a', code: 'KeyA' })).toBe(false);
-    expect(admits({ key: 'n', code: 'KeyN' })).toBe(false);
+  it('leaves keys it does not claim alone, so the surface can handle them', () => {
+    expect(global(h.shortcuts, { key: 'n', code: 'KeyN' })).toBe(false);
+    expect(global(h.shortcuts, { key: 'j', code: 'KeyJ' })).toBe(false);
   });
 });
 
@@ -213,6 +218,12 @@ describe('KeyboardShortcuts — Shift-Shift double-tap', () => {
 
     doubleTap(h.shortcuts);
     expect(h.onOpenCommandPalette).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not open the palette while a window surface is up', () => {
+    h.windowSurface.open = true;
+    doubleTap(h.shortcuts);
+    expect(h.onOpenCommandPalette).not.toHaveBeenCalled();
   });
 
   it('a non-Shift key between Shift taps cancels the double-tap', () => {

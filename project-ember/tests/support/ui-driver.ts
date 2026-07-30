@@ -39,12 +39,18 @@ export class UIDriver {
    * Dispatch a key on window WITHOUT blurring the focused element first (unlike pressKey).
    * This faithfully exercises the real focus state, so a key handler that depends on what currently holds focus (e.g. global q/Escape, which bails when an editable element is focused) is genuinely tested.
    */
-  async pressKeyRaw(key: string, code?: string): Promise<void> {
-    const resolvedCode = code ?? deriveCode(key);
+  async pressKeyRaw(
+    key: string,
+    codeOrOptions?: string | { ctrlKey?: boolean; shiftKey?: boolean; code?: string },
+  ): Promise<void> {
+    const options = typeof codeOrOptions === 'string' ? { code: codeOrOptions } : (codeOrOptions ?? {});
+    const resolvedCode = options.code ?? deriveCode(key);
     await this.driver.eval(`
       window.dispatchEvent(new KeyboardEvent('keydown', {
         key: ${JSON.stringify(key)},
         code: ${JSON.stringify(resolvedCode)},
+        ctrlKey: ${options.ctrlKey ?? false},
+        shiftKey: ${options.shiftKey ?? false},
         bubbles: true,
         cancelable: true,
       }));

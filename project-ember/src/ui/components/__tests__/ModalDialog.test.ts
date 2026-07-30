@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { showModalDialog } from '../ModalDialog';
-import { getLayerStack } from '../../layers/stack';
+import { pageLayer } from '../../layers/presets';
+import { getWindowLayerStack } from '../../layers/stack';
 import { installModalStack, teardownModalStack, pressKey } from './modalTestHarness';
 
 function content(...children: HTMLElement[]): HTMLElement {
@@ -32,7 +33,7 @@ describe('showModalDialog', () => {
     expect(w).not.toBeNull();
     expect(w.classList.contains('layer-modal')).toBe(true);
     expect(w.contains(el)).toBe(true);
-    expect(getLayerStack().topOf('modal')).not.toBeNull();
+    expect(getWindowLayerStack().find('test-dialog')).not.toBeNull();
   });
 
   it('Enter confirms', () => {
@@ -132,19 +133,16 @@ describe('showModalDialog', () => {
 
   it('close() restores focus to the revealed page beneath', () => {
     const revealedFocus = { focus: vi.fn() };
-    getLayerStack().push({
-      name: 'page-beneath',
-      kind: 'page',
-      element: content(),
-      resolveFocus: () => revealedFocus,
-    });
+    getWindowLayerStack().push(
+      pageLayer({ name: 'page-beneath', element: content(), resolveFocus: () => revealedFocus }),
+    );
     const handle = showModalDialog({ name: 'test-dialog', element: content(), onDismiss: vi.fn() });
 
     const before = revealedFocus.focus.mock.calls.length;
     handle.close();
 
     expect(revealedFocus.focus.mock.calls.length).toBeGreaterThan(before);
-    expect(getLayerStack().topOf('modal')).toBeNull();
+    expect(getWindowLayerStack().find('test-dialog')).toBeNull();
   });
 
   it('runs onCleanup exactly once when the modal is removed', () => {

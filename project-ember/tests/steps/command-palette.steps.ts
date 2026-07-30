@@ -15,7 +15,7 @@ import {
 Given('no overlay is open', async function (this: EmberWorld) {
   await ensureWsHubClosed(this.driver);
   await this.driver.pollFor(
-    `return window.__test.layers.topOf('page') !== null`,
+    `return window.__test.layers.hasOpaqueLayer()`,
     false,
     3_000,
   );

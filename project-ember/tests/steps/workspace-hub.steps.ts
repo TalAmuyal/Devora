@@ -150,7 +150,7 @@ Then(
   'the Workspace Hub should be visible',
   async function (this: EmberWorld) {
     const visible = await this.driver.eval(
-      `return window.__test.layers.topOf('page') !== null`,
+      `return window.__test.layers.find('ws-hub') !== null`,
     );
     assert.strictEqual(visible, true);
   },
@@ -160,7 +160,7 @@ Then(
   'the Workspace Hub should not be visible',
   async function (this: EmberWorld) {
     await this.driver.pollFor(
-      `return window.__test.layers.topOf('page') !== null`,
+      `return window.__test.layers.find('ws-hub') !== null`,
       false,
       3_000,
     );
@@ -193,8 +193,8 @@ Then(
   },
 );
 
-// The cheatsheet's scroll container is the layer wrapper it lives inside (.overlay-tab-covering).
-const CHEATSHEET_SCROLLER = "document.querySelector('.ws-cheatsheet')?.closest('.overlay-tab-covering')";
+// The cheatsheet's scroll container is the layer wrapper it lives inside, which is where `.layer-page` puts the overflow.
+const CHEATSHEET_SCROLLER = "document.querySelector('.ws-cheatsheet')?.closest('.layer-wrapper')";
 
 When('the user presses Ctrl+D', async function (this: EmberWorld) {
   const ui = new UIDriver(this.driver);
@@ -215,11 +215,20 @@ Then(
   },
 );
 
-// The relative motions scroll smoothly (animated), so poll rather than read once.
+// The relative motions scroll smoothly (animated).
+// Wait for the offset to be non-zero *and* to stop changing, so a following edge jump (gg/G) is measured from a settled position rather than racing the animation.
 Then(
   'the cheatsheet scroll offset should be greater than 0',
   async function (this: EmberWorld) {
     await this.driver.pollFor(`return (${CHEATSHEET_SCROLLER}?.scrollTop ?? 0) > 0`, true, 2000);
+    let previous = -1;
+    for (let i = 0; i < 20; i++) {
+      const current: number = await this.driver.eval(`return ${CHEATSHEET_SCROLLER}?.scrollTop ?? 0`);
+      if (current === previous) return;
+      previous = current;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    throw new Error('the cheatsheet never stopped scrolling');
   },
 );
 

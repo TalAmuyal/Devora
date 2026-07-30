@@ -3,7 +3,7 @@
  * One backdrop, two phases: a form (single-select repo + optional name postfix) and a progress view (a hosted {@link createTaskCreationProgress}).
  * Pure UI — the caller wires the form submission and the returned progress handle to the backend.
  *
- * A `modal` layer (ADR-003): Escape/`q` cancel during the form phase and route to the progress footer action during creation; a backdrop click cancels only during the form phase.
+ * A `modalLayer` (see `./ModalDialog`): Escape/`q` cancel during the form phase and route to the progress footer action during creation; a backdrop click cancels only during the form phase.
  * DOM: `div.add-repo-dialog-backdrop > div.add-repo-dialog`.
  */
 

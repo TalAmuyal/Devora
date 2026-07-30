@@ -1,14 +1,13 @@
 import { isEditableElementFocused } from '../focus';
 import { cycleFocus } from './tabTrap';
-import type { Focusable, LayerHandle, LayerKind, LayerSpec } from './types';
+import { isDismissible, isOpaque, takesFocus } from './types';
+import type { LayerHandle, LayerSpec, RouteResult } from './types';
 
 export interface LayerStackDeps {
-  /** Host for `page` wrappers (production: `#app`). */
-  pageHost: HTMLElement;
-  /** Host for `modal` wrappers (production: `document.body`). */
-  modalHost: HTMLElement;
-  /** Focus target when the stack empties, resolved at that moment (production: the active session's terminal pane). */
-  resolveBaseFocus: () => Focusable | null;
+  /** The single element every stack-owned wrapper mounts into. Paint order follows append order, so it must be one host per stack. */
+  host: HTMLElement;
+  /** Runs when the last layer is removed — the window stack uses it to hand focus back to the active tab. */
+  onEmptied?: () => void;
 }
 
 interface LayerEntry {
@@ -18,65 +17,32 @@ interface LayerEntry {
 }
 
 /**
- * The single owner of layer keyboard routing and focus — see `./CLAUDE.md` for the cross-file reference (barrier matrix, authoring rules).
+ * An ordered stack of UI surfaces that owns their mounting, focus, and key routing — see `./CLAUDE.md` for the cross-file reference.
  *
- * One `window`-capture keydown listener walks the stack top-to-bottom; `page` and `modal` layers are opaque barriers while `popup` and `panel` layers pass unhandled keys through.
- * Focus is resolved from stack position at every transition, never from a value captured earlier.
- * This is a domain-free mechanism: the app-wide shortcut policy is injected via the setters below.
+ * The stack is a mechanism with no domain knowledge and no keyboard listener of its own: `LayerRouter` owns the single listener and calls `route`.
+ * There is one stack per tab plus one for the window, which is what decides how far a surface extends.
  */
 export class LayerStack {
   private readonly deps: LayerStackDeps;
   /** Bottom-to-top; `layers[length - 1]` is the top. */
   private readonly layers: LayerEntry[] = [];
-  private keyObserver: ((e: KeyboardEvent) => void) | null = null;
-  private globalHandler: ((e: KeyboardEvent) => boolean) | null = null;
-  private pageBarrierAdmits: ((e: KeyboardEvent) => boolean) | null = null;
 
   constructor(deps: LayerStackDeps) {
     this.deps = deps;
   }
 
-  /** Register THE window-capture keydown listener. Call once, before any other keydown handler. Idempotent per instance. */
-  install(): void {
-    window.addEventListener('keydown', this.boundHandleKeydown, true);
-  }
-
-  uninstall(): void {
-    window.removeEventListener('keydown', this.boundHandleKeydown, true);
-  }
-
-  /** A non-consuming observer that sees every keydown (Shift-Shift tracking). */
-  setKeyObserver(fn: (e: KeyboardEvent) => void): void {
-    this.keyObserver = fn;
-  }
-
-  /** The app-wide shortcuts, consulted when a key reaches the base (empty stack, or it passed every surface barrier). Returning `true` consumes. */
-  setGlobalHandler(fn: (e: KeyboardEvent) => boolean): void {
-    this.globalHandler = fn;
-  }
-
-  /** The predicate for which base shortcuts survive a `page` barrier — owned by `KeyboardShortcuts` (the single source of truth for app-wide keys). */
-  setPageBarrierAdmits(fn: (e: KeyboardEvent) => boolean): void {
-    this.pageBarrierAdmits = fn;
-  }
-
-  /** Push a layer: `panel` inserts at the bottom (it must never intercept a page/modal above it), every other kind goes on top. */
+  /** Push a layer on top, mounting it and giving it focus unless it declines. */
   push(spec: LayerSpec): LayerHandle {
     const wrapper = this.mountWrapper(spec);
     const entry: LayerEntry = { spec, wrapper, handle: makeHandle(spec, wrapper) };
-    if (spec.kind === 'panel') {
-      this.layers.unshift(entry);
-    } else {
-      this.layers.push(entry);
-    }
-    // Focus the layer only when it landed on top; `popup` never moves focus.
-    if (this.topEntry() === entry && spec.kind !== 'popup') {
+    this.layers.push(entry);
+    if (takesFocus(spec)) {
       this.focusLayer(entry);
     }
     return entry.handle;
   }
 
-  /** Pop the top layer, revealing and focusing whatever is beneath (or the base when the stack empties). */
+  /** Pop the top layer, revealing and focusing whatever is beneath. */
   pop(): void {
     const top = this.topEntry();
     if (top) {
@@ -86,18 +52,18 @@ export class LayerStack {
 
   /**
    * Remove a layer at any position.
-   * First removes any `popup` anchored inside it (a dropdown auto-closes when its host page goes away).
+   * First removes any caller-mounted layer anchored inside it (a dropdown auto-closes when its host page goes away).
    * Reveals and refocuses only when the removed layer was the top.
    */
   remove(handle: LayerHandle): void {
     const entry = this.entryOf(handle);
     if (!entry) return;
-    this.removeContainedPopups(entry);
+    this.removeContainedLayers(entry);
     const wasTop = this.topEntry() === entry;
-    const removedKind = entry.spec.kind;
+    const removedSpec = entry.spec;
     this.detach(entry);
     if (wasTop) {
-      this.revealAfterTopRemoval(removedKind);
+      this.revealAfterTopRemoval(removedSpec);
     }
   }
 
@@ -125,6 +91,12 @@ export class LayerStack {
     }
   }
 
+  /** Focus the top layer (tab activation re-focuses whatever that tab was showing). */
+  focusTop(): void {
+    const top = this.topEntry();
+    if (top) this.focusLayer(top);
+  }
+
   isEmpty(): boolean {
     return this.layers.length === 0;
   }
@@ -141,92 +113,42 @@ export class LayerStack {
     return this.layers.find((l) => l.spec.name === name)?.handle ?? null;
   }
 
-  topOf(kind: LayerKind): LayerHandle | null {
-    for (let i = this.layers.length - 1; i >= 0; i--) {
-      if (this.layers[i].spec.kind === kind) return this.layers[i].handle;
-    }
-    return null;
+  /**
+   * Whether any layer here owns the keyboard.
+   * This is the precondition for the app-wide shortcuts that open or switch surfaces — see `../KeyboardShortcuts.ts`.
+   */
+  hasOpaqueLayer(): boolean {
+    return this.layers.some((l) => isOpaque(l.spec));
   }
 
-  // --- Key dispatch ---
+  // --- Key routing ---
 
-  private readonly boundHandleKeydown = (e: KeyboardEvent): void => this.handleKeydown(e);
+  /** Walk the stack top-down and report what happened. Never touches the event; `LayerRouter` consumes on `consumed`. */
+  route(e: KeyboardEvent): RouteResult {
+    const top = this.topEntry();
+    if (!top) return 'passed';
 
-  private handleKeydown(e: KeyboardEvent): void {
-    this.keyObserver?.(e);
-
-    if (this.layers.length === 0) {
-      if (this.globalHandler?.(e)) this.consume(e);
-      return;
-    }
-
-    const top = this.topEntry()!;
-    if (e.key === 'Tab' && top.spec.kind === 'modal') {
+    if (e.key === 'Tab' && top.spec.trapsTab === true) {
       cycleFocus(top.wrapper, e.shiftKey);
-      this.consume(e);
-      return;
+      return 'consumed';
     }
 
     for (let i = this.layers.length - 1; i >= 0; i--) {
       const layer = this.layers[i];
       if (layer.spec.onKey?.(e) === true) {
-        this.consume(e);
-        return;
+        return 'consumed';
       }
-      if (this.isDismissKey(e, layer)) {
+      if (isDismissible(layer.spec) && isDismissKey(e)) {
         // A focused input inside this layer keeps the key: `q` types, Escape reaches the input's own handler.
-        if (this.editableFocusedWithin(layer)) return;
+        if (this.editableFocusedWithin(layer)) return 'blocked';
         this.dismissLayer(layer);
-        this.consume(e);
-        return;
+        return 'consumed';
       }
-      if (layer.spec.kind === 'page' || layer.spec.kind === 'modal') {
-        if (this.allowedThroughBarrier(e, layer.spec.kind) && this.globalHandler?.(e)) {
-          this.consume(e);
-        }
-        return; // the barrier ends the walk
+      if (isOpaque(layer.spec)) {
+        return 'blocked';
       }
-      // `popup` and `panel` are transparent to unhandled keys — fall through to the layer below.
     }
-
-    // Only popups/panels were present and none handled the key.
-    if (this.globalHandler?.(e)) this.consume(e);
-  }
-
-  private isDismissKey(e: KeyboardEvent, layer: LayerEntry): boolean {
-    const bareModifier = !e.ctrlKey && !e.metaKey && !e.altKey;
-    if (bareModifier && (e.key === 'Escape' || e.key === 'q')) return true;
-    // Ctrl+S toggles a page closed, mirroring the pre-layer Workspace Hub shortcut.
-    if (
-      layer.spec.kind === 'page' &&
-      e.ctrlKey &&
-      !e.shiftKey &&
-      !e.metaKey &&
-      !e.altKey &&
-      e.code === 'KeyS'
-    ) {
-      return true;
-    }
-    return false;
-  }
-
-  /**
-   * Which keys reach the global handler through a barrier: under a `modal`, nothing; under a `page`, whatever KeyboardShortcuts admits (F1 + font sizing).
-   * The page admit-list lives in KeyboardShortcuts (via setPageBarrierAdmits), so the barrier and the shortcuts it gates can never drift.
-   */
-  private allowedThroughBarrier(e: KeyboardEvent, kind: 'page' | 'modal'): boolean {
-    if (kind === 'modal') return false;
-    return this.pageBarrierAdmits?.(e) ?? false;
-  }
-
-  private editableFocusedWithin(layer: LayerEntry): boolean {
-    return isEditableElementFocused() && layer.wrapper.contains(document.activeElement);
-  }
-
-  private consume(e: KeyboardEvent): void {
-    e.preventDefault();
-    // stopImmediatePropagation (not stopPropagation) so no sibling window-capture listener can act on a consumed key.
-    e.stopImmediatePropagation();
+    return 'passed';
   }
 
   // --- Internals ---
@@ -239,24 +161,22 @@ export class LayerStack {
     return this.layers.find((l) => l.handle === handle);
   }
 
+  /**
+   * Mount the layer and return the element the stack treats as its wrapper.
+   * Stack-owned wrappers are appended to the one host, so DOM order matches stack order and paint order follows it without any z-index.
+   */
   private mountWrapper(spec: LayerSpec): HTMLElement {
     let wrapper: HTMLElement;
-    if (spec.kind === 'popup' || spec.kind === 'panel') {
-      // The caller already placed these in the DOM; the element is its own wrapper.
+    if (spec.callerMounted) {
       wrapper = spec.element;
-    } else if (spec.kind === 'page') {
-      wrapper = document.createElement('div');
-      wrapper.className = 'overlay-tab-covering layer-page';
-      wrapper.appendChild(spec.element);
-      this.deps.pageHost.appendChild(wrapper);
     } else {
       wrapper = document.createElement('div');
-      wrapper.className = `layer-modal ${spec.name}-backdrop`;
+      wrapper.className = 'layer-wrapper';
+      if (spec.wrapperClass) {
+        wrapper.classList.add(...spec.wrapperClass.split(' '));
+      }
       wrapper.appendChild(spec.element);
-      this.deps.modalHost.appendChild(wrapper);
-    }
-    if (spec.wrapperClass) {
-      wrapper.classList.add(spec.wrapperClass);
+      this.deps.host.appendChild(wrapper);
     }
     // Focusable out of the tab order so the wrapper can hold keyboard focus as a fallback target.
     wrapper.tabIndex = -1;
@@ -267,13 +187,13 @@ export class LayerStack {
     (entry.spec.resolveFocus?.() ?? entry.wrapper).focus();
   }
 
-  /** Remove any `popup` layers whose element is DOM-contained in `entry`; cleanup and detach only, no reveal. */
-  private removeContainedPopups(entry: LayerEntry): void {
+  /** Remove any caller-mounted layer whose element is DOM-contained in `entry`; cleanup and detach only, no reveal. */
+  private removeContainedLayers(entry: LayerEntry): void {
     const contained = this.layers.filter(
-      (l) => l !== entry && l.spec.kind === 'popup' && entry.wrapper.contains(l.wrapper),
+      (l) => l !== entry && l.spec.callerMounted === true && entry.wrapper.contains(l.wrapper),
     );
-    for (const popup of contained) {
-      this.detach(popup);
+    for (const layer of contained) {
+      this.detach(layer);
     }
   }
 
@@ -291,20 +211,18 @@ export class LayerStack {
   }
 
   /**
-   * After removing the top layer: focus the base when the stack emptied, otherwise refocus the newly exposed layer — but only when a *covering* layer (page/modal) was removed.
-   * A transparent popup/panel never took focus or hid the layer beneath, so closing it leaves that layer undisturbed.
-   * `onReveal` fires only when a *page* cover is removed — it is a navigation refresh (returning from Settings/Health/the User Guide).
-   * A modal is a transient sub-interaction: on confirm the caller refreshes, on cancel nothing changed, so re-running the revealed page's `onReveal` would be redundant and could race its own reload.
-   * Focus is still restored for a modal.
+   * After removing the top layer: hand focus on when the removed layer had it, otherwise leave the UI untouched.
+   * A layer that never took focus (an anchored popup) also never covered anything, so closing it must not move focus or refresh anyone.
+   * `onReveal` fires only for a layer that declared itself a navigation step: returning from Settings reloads the hub, while cancelling a dialog must not re-run a reload that could race the caller's own.
    */
-  private revealAfterTopRemoval(removedKind: LayerKind): void {
+  private revealAfterTopRemoval(removedSpec: LayerSpec): void {
+    if (!takesFocus(removedSpec)) return;
     const revealed = this.topEntry();
     if (!revealed) {
-      this.deps.resolveBaseFocus()?.focus();
+      this.deps.onEmptied?.();
       return;
     }
-    if (removedKind !== 'page' && removedKind !== 'modal') return;
-    if (removedKind === 'page') {
+    if (removedSpec.refreshesRevealedLayer === true) {
       revealed.spec.onReveal?.();
     }
     this.focusLayer(revealed);
@@ -316,8 +234,18 @@ export class LayerStack {
       this.remove(entry.handle);
     }
   }
+
+  private editableFocusedWithin(layer: LayerEntry): boolean {
+    return isEditableElementFocused() && layer.wrapper.contains(document.activeElement);
+  }
+}
+
+/** `q` and Escape, the vim-style dismissal pair. Modifier combinations are shortcuts, never dismissals. */
+function isDismissKey(e: KeyboardEvent): boolean {
+  if (e.ctrlKey || e.metaKey || e.altKey) return false;
+  return e.key === 'Escape' || e.key === 'q';
 }
 
 function makeHandle(spec: LayerSpec, wrapper: HTMLElement): LayerHandle {
-  return { name: spec.name, kind: spec.kind, element: spec.element, wrapper };
+  return { name: spec.name, element: spec.element, wrapper };
 }

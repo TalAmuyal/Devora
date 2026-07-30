@@ -3,7 +3,6 @@ import { listen } from '@tauri-apps/api/event';
 import { invoke, invokeLogOnly, Channel } from './invoke';
 import { SessionManager } from './session/SessionManager';
 import { TabBar } from './ui/TabBar';
-import { SessionPanels } from './ui/SessionPanels';
 import { KeyboardShortcuts } from './ui/KeyboardShortcuts';
 import { CommandPalette } from './ui/CommandPalette';
 import { HealthHub } from './ui/HealthHub';
@@ -15,7 +14,9 @@ import { WorkspaceHub, createWsHubCheatsheet } from './workspace/WorkspaceHub';
 import { TaskCreationController } from './workspace/TaskCreationController';
 import { CreationEvent, RepoInfo } from './workspace/types';
 import { SettingsHub, SettingsHubView } from './workspace/SettingsHub';
-import { initLayerStack } from './ui/layers/stack';
+import { initWindowLayerStack } from './ui/layers/stack';
+import { LayerRouter } from './ui/layers/LayerRouter';
+import { pageLayer } from './ui/layers/presets';
 import type { LayerHandle, LayerSpec } from './ui/layers/types';
 import { WebContentOverlay } from './webview/WebContentOverlay';
 import { createVimScroll } from './ui/vimScroll';
@@ -54,24 +55,21 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   const sessionManager = new SessionManager(mainPanelEl);
 
-  // The single owner of layer keyboard routing and focus (ADR-003). Install it first, before any other keydown handler.
-  const layers = initLayerStack({
-    pageHost: appEl,
-    modalHost: document.body,
-    resolveBaseFocus: () => sessionManager.getActiveSession()?.terminalPane ?? null,
+  // The app-covering stack. Tab stacks are owned by their SessionTab; this one holds hubs, the palette, etc.
+  const layers = initWindowLayerStack({
+    host: appEl,
+    // Nothing covers the window any more: hand focus back to whatever the active tab is showing.
+    onEmptied: () => sessionManager.getActiveSession()?.layers.focusTop(),
   });
-  layers.install();
 
-  let tabBar: TabBar;
-  const sessionPanels = new SessionPanels({
-    layers,
-    mainPanelEl,
-    getActiveSessionId: () => sessionManager.getActiveSessionId(),
-    onChange: () => tabBar.render(),
+  // The single owner of keyboard routing (see `ui/layers/CLAUDE.md`). Install it first, before any other keydown handler.
+  const router = new LayerRouter({
+    windowStack: layers,
+    resolveTabStack: () => sessionManager.getActiveSession()?.layers ?? null,
   });
-  sessionManager.onActivate(() => sessionPanels.syncActive());
+  router.install();
 
-  tabBar = new TabBar(tabBarEl, sessionManager, sessionPanels);
+  const tabBar = new TabBar(tabBarEl, sessionManager);
 
   // Programmatic close (opening a workspace / starting a task): pop the hub layer directly, bypassing the user-dismiss decision.
   const dismissWsHub = () => {
@@ -107,7 +105,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   const taskCreationController = new TaskCreationController({
     sessionManager,
-    sessionPanels,
     resolveAppCommand,
     onChange: () => tabBar.render(),
   });
@@ -274,16 +271,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     () => openWsHubCheatsheet(),
   );
 
-  const wsHubSpec = (): LayerSpec => ({
-    name: 'ws-hub',
-    kind: 'page',
-    element: wsHub.getElement(),
-    onKey: (e) => wsHub.handleKey(e),
-    // User dismissal (q/Esc/Ctrl+S) routes through the hub so it can close its cheatsheet first and refuse while zero-profile locked.
-    onUserDismissRequest: () => wsHub.handleUserDismiss(),
-    onReveal: () => void wsHub.reloadData(),
-    onCleanup: () => wsHub.unload(),
-  });
+  const wsHubSpec = (): LayerSpec =>
+    pageLayer({
+      name: 'ws-hub',
+      element: wsHub.getElement(),
+      onKey: (e) => wsHub.handleKey(e),
+      // User dismissal (q/Esc) routes through the hub so it can close its cheatsheet first and refuse while zero-profile locked.
+      onUserDismissRequest: () => wsHub.handleUserDismiss(),
+      onReveal: () => void wsHub.reloadData(),
+      onCleanup: () => wsHub.unload(),
+    });
 
   const openWsHub = () => {
     wsHub.load();
@@ -302,13 +299,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     onCloneRepo: (profilePath, onDone) => cloneRepoIntoProfile(profilePath, onDone),
   });
 
-  const settingsHubSpec = (): LayerSpec => ({
-    name: 'settings-hub',
-    kind: 'page',
-    element: settingsHub.getElement(),
-    onKey: (e) => settingsHub.handleKey(e),
-    onCleanup: () => settingsHub.unload(),
-  });
+  const settingsHubSpec = (): LayerSpec =>
+    pageLayer({
+      name: 'settings-hub',
+      element: settingsHub.getElement(),
+      onKey: (e) => settingsHub.handleKey(e),
+      onCleanup: () => settingsHub.unload(),
+    });
 
   const openSettingsHub = (view: SettingsHubView = 'list') => {
     void settingsHub.load(view);
@@ -452,43 +449,45 @@ document.addEventListener('DOMContentLoaded', async () => {
     },
   });
 
+  // Mutual exclusion with the hub, Settings, the guide, and any dialog is the Shift-Shift precondition's job (KeyboardShortcuts); only re-entrancy is handled here.
   const openCommandPalette = () => {
-    // Mutually exclusive with the pages (hub, Settings, guide) and any modal.
-    if (layers.topOf('page') !== null || layers.topOf('modal') !== null) return;
+    if (paletteHandle) return;
     commandPalette.load();
-    paletteHandle = layers.push({
-      name: 'command-palette',
-      kind: 'page',
-      element: commandPalette.getElement(),
-      onKey: (e) => commandPalette.handleKey(e),
-      // The search field is focused on open (resolved at push) so the user can type a filter immediately.
-      resolveFocus: () => ({ focus: () => commandPalette.focusSearch() }),
-      onCleanup: () => {
-        commandPalette.unload();
-        paletteHandle = null;
-      },
-      wrapperClass: 'overlay-passthrough',
-    });
+    paletteHandle = layers.push(
+      pageLayer({
+        name: 'command-palette',
+        element: commandPalette.getElement(),
+        onKey: (e) => commandPalette.handleKey(e),
+        // The search field is focused on open (resolved at push) so the user can type a filter immediately.
+        resolveFocus: () => ({ focus: () => commandPalette.focusSearch() }),
+        onCleanup: () => {
+          commandPalette.unload();
+          paletteHandle = null;
+        },
+        wrapperClass: 'layer-transparent',
+      }),
+    );
   };
 
   const openWsHubCheatsheet = () => {
     if (layers.find('ws-cheatsheet')) return;
     const content = createWsHubCheatsheet();
     const vimScroll = createVimScroll();
-    const handle = layers.push({
-      name: 'ws-cheatsheet',
-      kind: 'page',
-      element: content,
-      onKey: (e) => {
-        // `?` toggles the cheatsheet closed (q/Esc dismiss via the stack default); everything else scrolls.
-        if (e.key === '?') {
-          layers.remove(handle);
-          return true;
-        }
-        const container = content.parentElement;
-        return container ? vimScroll.handleKey(e, container) : false;
-      },
-    });
+    const handle = layers.push(
+      pageLayer({
+        name: 'ws-cheatsheet',
+        element: content,
+        onKey: (e) => {
+          // `?` toggles the cheatsheet closed (q/Esc dismiss via the stack default); everything else scrolls.
+          if (e.key === '?') {
+            layers.remove(handle);
+            return true;
+          }
+          const container = content.parentElement;
+          return container ? vimScroll.handleKey(e, container) : false;
+        },
+      }),
+    );
   };
 
   const openUserGuide = async () => {
@@ -497,15 +496,16 @@ document.addEventListener('DOMContentLoaded', async () => {
       const guidePath = await invoke<string>('get_user_guide_path');
       const content = await WebContentOverlay.createMarkdownContent(guidePath, 'User Guide');
       const vimScroll = createVimScroll();
-      layers.push({
-        name: 'user-guide',
-        kind: 'page',
-        element: content,
-        onKey: (e) => {
-          const body = content.querySelector<HTMLElement>('.web-content-body');
-          return body ? vimScroll.handleKey(e, body) : false;
-        },
-      });
+      layers.push(
+        pageLayer({
+          name: 'user-guide',
+          element: content,
+          onKey: (e) => {
+            const body = content.querySelector<HTMLElement>('.web-content-body');
+            return body ? vimScroll.handleKey(e, body) : false;
+          },
+        }),
+      );
     } catch (_) {
       // invoke already surfaced the error
     }
@@ -517,49 +517,62 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   const openHealthHub = () => {
     healthHub.load();
-    layers.push({
-      name: 'health-hub',
-      kind: 'page',
-      element: healthHub.getElement(),
-      onKey: (e) => healthHub.handleKey(e),
-      onCleanup: () => healthHub.unload(),
-    });
+    layers.push(
+      pageLayer({
+        name: 'health-hub',
+        element: healthHub.getElement(),
+        onKey: (e) => healthHub.handleKey(e),
+        onCleanup: () => healthHub.unload(),
+      }),
+    );
   };
 
-  const shortcuts = new KeyboardShortcuts(
+  const shortcuts = new KeyboardShortcuts({
     sessionManager,
-    openWsHub,
-    openCommandPalette,
-    openUserGuide,
-  );
-  layers.setKeyObserver((e) => shortcuts.observeKey(e));
-  layers.setGlobalHandler((e) => shortcuts.handleGlobal(e));
-  layers.setPageBarrierAdmits((e) => shortcuts.allowedThroughPageBarrier(e));
+    onOpenWsHub: openWsHub,
+    onOpenCommandPalette: openCommandPalette,
+    onOpenUserGuide: openUserGuide,
+    hasWindowSurface: () => layers.hasOpaqueLayer(),
+  });
+  router.setKeyObserver((e) => shortcuts.observeKey(e));
+  router.setShortcutHandler((e) => shortcuts.handleShortcut(e));
 
-  // Crit panel overlay integration: listen for backend events requesting a Crit review overlay, and wire overlay dismissal back to the backend.
+  // Crit review integration: listen for backend events requesting a review surface, and wire its dismissal back to the backend.
+  // The review is tab-bound, so it lives on that session's own stack — it covers only its session and never blocks a window shortcut.
   await listen<{ ptyId: number; url: string }>('crit-open-overlay', (event) => {
     const { ptyId, url } = event.payload;
 
-    const session = sessionManager.getSessions().find(s => s.getPtyId() === ptyId);
+    const session = sessionManager.getSessionByPtyId(ptyId);
     if (!session) {
       logToFile('WARN', `crit-open-overlay: no session found for ptyId ${ptyId}`);
       return;
     }
-    const content = WebContentOverlay.createUrlContent(url, 'Crit Review');
-    // Notify the backend on user dismissal (q/Esc) so the crit process can exit.
-    sessionPanels.show(session.id, content, () => {
-      const pid = session.getPtyId();
-      if (pid !== null) {
-        invokeLogOnly('crit_overlay_dismissed', { ptyId: pid }).catch(() => {});
-      }
-      return 'close';
-    });
+    const existing = session.layers.find('crit-review');
+    if (existing) session.layers.remove(existing);
+
+    session.layers.push(
+      pageLayer({
+        name: 'crit-review',
+        element: WebContentOverlay.createUrlContent(url, 'Crit Review'),
+        // Notify the backend on user dismissal (q/Esc) so the crit process can exit.
+        onUserDismissRequest: () => {
+          const pid = session.getPtyId();
+          if (pid !== null) {
+            invokeLogOnly('crit_overlay_dismissed', { ptyId: pid }).catch(() => {});
+          }
+          return 'close';
+        },
+        // Covers every teardown path — user dismissal, the backend closing it, and the tab going away.
+        onCleanup: () => tabBar.render(),
+      }),
+    );
+    tabBar.render();
   });
 
   // Preview pane integration: an external tool (debi preview) asks Ember to render a file beside the terminal of a specific PTY session.
   await listen<{ ptyId: number; path: string; stack: boolean }>('preview-open', (event) => {
     const { ptyId, path, stack } = event.payload;
-    const session = sessionManager.getSessions().find(s => s.getPtyId() === ptyId);
+    const session = sessionManager.getSessionByPtyId(ptyId);
     if (!session) {
       logToFile('WARN', `preview-open: no session found for ptyId ${ptyId}`);
       return;
@@ -569,10 +582,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Backend-initiated close (crit process exited): tear the panel down without notifying it back.
   await listen<{ ptyId: number }>('crit-close-overlay', (event) => {
-    const { ptyId } = event.payload;
-    const session = sessionManager.getSessions().find(s => s.getPtyId() === ptyId);
-    if (session) {
-      sessionPanels.dismiss(session.id);
+    const session = sessionManager.getSessionByPtyId(event.payload.ptyId);
+    const review = session?.layers.find('crit-review');
+    if (session && review) {
+      session.layers.remove(review);
     }
   });
 
@@ -582,7 +595,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   (window as any).__test = {
     sessionManager,
-    sessionPanels,
     tabBar,
     wsHub,
     settingsHub,

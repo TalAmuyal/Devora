@@ -15,7 +15,7 @@ export interface TextInputDialogOptions {
  * The input is pre-filled with `initialValue` and fully selected, so typing replaces it.
  * Confirming an empty (all-whitespace) value is a no-op — the dialog stays open.
  *
- * The dialog is a `modal` layer (ADR-003): Escape and a backdrop click resolve `null`; Enter and the confirm button resolve the value; `q` types into the focused input.
+ * The dialog is a `modalLayer` (see `./ModalDialog`): Escape and a backdrop click resolve `null`; Enter and the confirm button resolve the value; `q` types into the focused input.
  */
 export function showTextInputDialog(options: TextInputDialogOptions): Promise<string | null> {
   return new Promise((resolve) => {

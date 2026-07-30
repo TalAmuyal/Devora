@@ -32,7 +32,7 @@ Given(
 
     // Opening a workspace dismisses the Hub and starts an (unawaited) session creation; block until the PTY is connected so later steps see a settled state.
     await this.driver.pollFor(
-      `return window.__test.layers.topOf('page') !== null`,
+      `return window.__test.layers.hasOpaqueLayer()`,
       false,
       5_000,
     );

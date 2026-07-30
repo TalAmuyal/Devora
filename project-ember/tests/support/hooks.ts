@@ -221,9 +221,8 @@ After({ tags: '@real-claude' }, async function (this: EmberWorld) {
 
   try {
     await this.driver.eval(`
-      const sessions = window.__test.sessionManager.getSessions();
-      for (const s of [...sessions]) {
-        window.__test.sessionPanels.dismiss(s.id);
+      for (const s of [...window.__test.sessionManager.getSessions()]) {
+        while (s.layers.depth() > 1) s.layers.pop();
       }
     `);
   } catch {
@@ -265,14 +264,17 @@ After(async function (this: EmberWorld) {
 
   try {
     await this.driver.eval(`
-      const sessions = window.__test.sessionManager.getSessions();
-      for (const s of [...sessions]) {
-        window.__test.sessionPanels.dismiss(s.id);
-      }
-      for (const s of [...sessions]) {
+      for (const s of [...window.__test.sessionManager.getSessions()]) {
         window.__test.sessionManager.closeSession(s.id);
       }
     `);
+  } catch {
+    // app may not have fully loaded
+  }
+
+  // Font size is app-global and persists across scenarios, so a scenario that changes it would silently resize every later one's UI — enough to flip assertions about content overflowing its viewport.
+  try {
+    await this.driver.eval(`document.documentElement.style.fontSize = ''`);
   } catch {
     // app may not have fully loaded
   }

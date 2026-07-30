@@ -22,7 +22,6 @@ Below are terms that have a specific meaning in the context of Devora:
 - **Settings Hub**: The Devora-Ember tab-covering overlay for managing profiles and editing settings — User Defaults, per-profile Claude models/effort, and registered repos. Reached from the Workspace Hub via `P`, the profile dropdown's "Manage Profiles…", or the burger menu's "Settings"
 - **Terminal Pane** (Ember): An xterm.js terminal instance within a session
 - **Tab Bar** (Ember): The strip at the bottom of the window showing open sessions
-- **Overlay** (Ember): A UI layer rendered on top of main content — either covering just the main panel area and tied to a session (a panel overlay) or the whole window including the tab bar (a tab-covering overlay). Its stacking, key-routing, and focus behavior come from its layer kind in the LayerStack (see `project-ember/src/ui/layers/CLAUDE.md`)
 - **Judge**: A Claude Code plugin that auto-manages permission requests to reduce permission fatigue (`./project-judge/`)
 - **Code-Cleanup**: A Claude Code plugin that defines and directs the post-task cleanup process (`./project-code-cleanup/`)
 - **Debi**: Devora's CLI for workspace management and utilities (`./project-debi/`)
@@ -51,7 +50,7 @@ Reference those homes rather than restating them.
 
 - [ADR-001: Ember Acceptance Testing Framework](docs/adrs/ADR-001-ember-bdd-testing-framework.md) — Eval bridge + Gherkin acceptance tests + Fake Claude API for testing the Tauri app
 - [ADR-002: Ember Centralized Error Reporting](docs/adrs/ADR-002-ember-centralized-error-reporting.md) — Single showError/report_error path, invoke wrapper with surfaced-by-default errors, ACL completeness test
-- [ADR-003: Ember Layer System (Stacked Pages & Pop-ups)](docs/adrs/ADR-003-ember-layer-system.md) — Single LayerStack owns key routing + focus by stack position; surface kinds; Current behavior is documented in [`project-ember/src/ui/layers/CLAUDE.md`](project-ember/src/ui/layers/CLAUDE.md)
+- [ADR-003: Ember Layer System (Stacked Surfaces)](docs/adrs/ADR-003-ember-layer-system.md) — Surfaces routed and focused by stack position, with extent from which stack (one per tab, plus one for the window); shortcuts routed before any surface; paint order from DOM order. Current behavior is documented in [`project-ember/src/ui/layers/CLAUDE.md`](project-ember/src/ui/layers/CLAUDE.md)
 - [ADR-004: Ember Vim-Inspired Navigation](docs/adrs/ADR-004-ember-vim-inspired-navigation.md) — Vim/Neovim as the explicit keyboard-navigation model; reusable primitives (`createVimScroll` for viewport scroll: j/k, Ctrl+D/U, gg/G; `createListCursor` for list selection)
 
 ## Vision

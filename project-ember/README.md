@@ -7,7 +7,7 @@ Devora-Ember (internally "Ember") is the Devora app: a native desktop build usin
 - **Tauri WebView app window**: the app is a native desktop window embedding a WebView
 - **Native web content**: Crit UI, User Guide, etc. render natively in the WebView via the layer system
 - **Native workspace management UI**: the Workspace Hub is a web UI overlay
-- **Layer system**: tab-covering pages (Workspace Hub, User Guide) and per-session panels (Crit), stacked and keyboard-routed by a single `LayerStack` (ADR-003)
+- **Layer system**: stacked surfaces routed and focused by stack position, with extent decided by which stack they are in — one per session tab, plus one for the window (ADR-003)
 
 ## Supported Platform
 
@@ -121,7 +121,7 @@ When Claude Code's behavior changes or new `@real-claude` scenarios are added:
 Stacked UI surfaces (pages, modals, popups, and per-session panels) are managed by a single `LayerStack` (`src/ui/layers/`) that owns the only `window`-capture keydown listener and resolves focus from stack position.
 Dismissing a page (`Escape`, `q`, or `Ctrl+S`) restores focus to the revealed layer, or to the active terminal when the stack empties.
 
-See [`src/ui/layers/CLAUDE.md`](src/ui/layers/CLAUDE.md) for the layer kinds, modality barriers, and focus behavior, and [ADR-003](../docs/adrs/ADR-003-ember-layer-system.md) for why the system exists.
+See [`src/ui/layers/CLAUDE.md`](src/ui/layers/CLAUDE.md) for the routing order, shortcut availability, presets, and focus behavior, and [ADR-003](../docs/adrs/ADR-003-ember-layer-system.md) for why the system exists.
 
 ## Keyboard Shortcuts
 

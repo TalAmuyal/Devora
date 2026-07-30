@@ -21,3 +21,9 @@ Feature: Crit overlay integration
     And the active session's terminal holds focus
     When the user presses "q" without first taking focus
     Then the active session should not have a panel overlay
+
+  Scenario: A Crit review covers its session without freezing the tab bar
+    Given a new session is created
+    And the active session has a crit overlay
+    When the user presses Ctrl+Right
+    Then the first session should be active
