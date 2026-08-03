@@ -14,27 +14,24 @@ Types of changes:
 
 ## Unreleased
 
+## 2026-08-03.0
+
 ### Added
 
-- Vim-style keyboard scrolling (`j`/`k`, `Ctrl+D`/`Ctrl+U`, `gg`/`G`) in the cheatsheet, the User Guide, and the Health Hub, via a shared `createVimScroll` primitive
-- [ADR-004: Ember Vim-Inspired Navigation](docs/adrs/ADR-004-ember-vim-inspired-navigation.md)
-- Settings Hub:
-	- Claude Code's start-up permission mode is now configurable, Devora's default remains `plan`
-	- An On/Off toggle (on by default) to start Claude Code in "opusplan mode" (Opus-class plans, Sonnet-class implements)
+- Vim-style keyboard scrolling (`j`/`k`, `Ctrl+D`/`Ctrl+U`, `gg`/`G`) in the cheatsheet, the User Guide, and the Health Hub
+- Settings Hub: Claude Code's start-up permission mode is now configurable (Devora's default remains `plan`)
 
 ### Changed
 
-- Refactored to the UI-layers system, including an update to [ADR-003](docs/adrs/ADR-003-ember-layer-system.md)
-- Devora now defaults the Claude model to `opusplan`; toggle it off from the Settings Hub
+- Devora now starts Claude Code in "opusplan mode" by default; toggle it off from the Settings Hub's new On/Off control
 - Renamed the Settings Hub's "Claude Models & Effort" card to "Claude Launch Settings"
-- Layer system documentation now has one home per topic: the cross-file reference moved to a new `project-ember/src/ui/layers/CLAUDE.md`, ADR-003 was trimmed to the decision and its history, and the duplicated restatements elsewhere became pointers
 
 ### Fixed
 
-- Workspace Hub: opening the New Task form or the cheatsheet view no longer leaks keystrokes to the hidden hub beneath it
-- "New Task" and "Add Repo" repo filters now hide non-matching rows as you type
+- UI layers no longer leak keystrokes to the hidden layers beneath it
+- Keyboard shortcuts (font size, `F1`, `ctrl + s`, `ctrl + shift + s`) no longer get swallowed in various edge cases
+- "New Task" and "Add Repo" repo filters now hide non-matching rows as you type, instead of just focusing the first match
 - `ccc` no longer passes a duplicate `--effort` to Claude Code when the user supplies `--effort` explicitly
-- Keyboard shortcuts being swallowed in various edge-cases: font size (`ctrl + 1/2/3`, `ctrl + shift + minus/plus`), `F1`, `ctrl + s`, `ctrl + shift + s`
 
 ## 2026-07-06.0
 
