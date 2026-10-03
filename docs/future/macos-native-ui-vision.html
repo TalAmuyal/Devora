@@ -1,0 +1,794 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Devora, natively — a macOS-native UI thought experiment</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --mauve: #C6A0F6; --lavender: #B7BDF8; --blue: #8AADF4; --sapphire: #7DC4E4; --teal: #8BD5CA;
+    --green: #A6DA95; --yellow: #EED49F; --peach: #F5A97F; --red: #ED8796; --pink: #F5BDE6;
+    --rosewater: #F4DBD6;
+    --crust: #181926; --mantle: #1E2030; --base: #24273A; --surface0: #363A4F; --surface1: #494D64;
+    --overlay0: #6E738D; --subtext0: #A5ADCB; --text: #CAD3F5;
+
+    --page-bg: #0f1016;
+    --page-fg: #d9dce8;
+    --page-muted: #9095a8;
+    --card: #171925;
+    --line: rgba(255,255,255,.08);
+
+    --sys: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Inter, sans-serif;
+    --mono: "SF Mono", ui-monospace, Menlo, "JetBrains Mono", monospace;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: var(--page-bg); color: var(--page-fg); font: 15px/1.6 var(--sys); }
+  a { color: var(--lavender); }
+  code { font-family: var(--mono); font-size: .88em; background: rgba(255,255,255,.06); padding: 1px 5px; border-radius: 4px; }
+
+  /* ---------- page chrome ---------- */
+  .page { max-width: 1280px; margin: 0 auto; padding: 0 28px 120px; }
+  header.hero { padding: 72px 0 36px; }
+  .eyebrow { color: var(--mauve); font-weight: 600; letter-spacing: .08em; text-transform: uppercase; font-size: 12px; }
+  h1 { font-size: 46px; line-height: 1.1; margin: 10px 0 18px; letter-spacing: -.02em; font-weight: 700; }
+  h1 em { font-style: normal; background: linear-gradient(90deg, var(--mauve), var(--blue)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .lede { font-size: 19px; color: #c3c7d6; max-width: 860px; }
+  .tldr { margin-top: 26px; border: 1px solid var(--line); background: var(--card); border-radius: 14px; padding: 18px 22px; max-width: 920px; }
+  .tldr b { color: var(--mauve); }
+  nav.toc { position: sticky; top: 0; z-index: 50; background: rgba(15,16,22,.86); backdrop-filter: blur(12px); border-bottom: 1px solid var(--line); margin: 0 -28px; padding: 10px 28px; display: flex; gap: 22px; font-size: 13px; }
+  nav.toc a { color: var(--page-muted); text-decoration: none; }
+  nav.toc a:hover { color: var(--page-fg); }
+  section { padding-top: 64px; }
+  h2 { font-size: 30px; letter-spacing: -.01em; margin: 0 0 6px; }
+  h2 + .sub { color: var(--page-muted); margin: 0 0 28px; max-width: 900px; }
+  h3 { font-size: 18px; margin: 28px 0 8px; }
+  p { max-width: 900px; }
+  .muted { color: var(--page-muted); }
+
+  /* ---------- desktop mockup ---------- */
+  .stage-controls { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 14px; }
+  .stage-controls button {
+    font: 500 13px var(--sys); color: var(--page-fg); background: #1b1d2a; border: 1px solid var(--line);
+    padding: 7px 13px; border-radius: 999px; cursor: pointer;
+  }
+  .stage-controls button[aria-pressed="true"] { background: var(--mauve); color: var(--crust); border-color: var(--mauve); }
+  .stage-scroller { overflow-x: auto; border-radius: 16px; }
+  .desktop {
+    position: relative; width: 1224px; height: 790px; border-radius: 16px; overflow: hidden;
+    background:
+      radial-gradient(900px 500px at 15% 10%, #5b3f8c 0%, transparent 60%),
+      radial-gradient(700px 600px at 90% 90%, #1f4f7a 0%, transparent 60%),
+      radial-gradient(600px 400px at 70% 20%, #7a3b5c 0%, transparent 60%),
+      #151527;
+    font-family: var(--sys); color: #e6e6ea; user-select: none;
+  }
+  /* macOS menu bar */
+  .menubar { position: absolute; inset: 0 0 auto 0; height: 26px; display: flex; align-items: center; gap: 18px; padding: 0 14px;
+    background: rgba(20,20,30,.35); backdrop-filter: blur(20px) saturate(160%); font-size: 13px; }
+  .menubar .apple { font-size: 15px; }
+  .menubar b { font-weight: 700; }
+  .menubar .right { margin-left: auto; display: flex; gap: 16px; align-items: center; }
+  .judge-item { display: flex; align-items: center; gap: 5px; padding: 1px 7px; border-radius: 5px; }
+  .judge-item .count { font-weight: 600; font-size: 12px; }
+  .desktop[data-view="menubar"] .judge-item { background: rgba(255,255,255,.18); }
+
+  /* window */
+  .win { position: absolute; left: 22px; top: 42px; width: 1180px; height: 728px; border-radius: 12px; overflow: hidden;
+    display: flex; box-shadow: 0 30px 80px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.12) inset, 0 0 0 .5px rgba(0,0,0,.8);
+    background: #1d1e26; }
+  .sidebar { width: 252px; flex: none; background: rgba(38,38,52,.78); backdrop-filter: blur(30px) saturate(180%);
+    border-right: 1px solid rgba(0,0,0,.45); display: flex; flex-direction: column; font-size: 13px; }
+  .traffic { display: flex; gap: 8px; padding: 18px 16px 10px; }
+  .traffic i { width: 12px; height: 12px; border-radius: 50%; display: block; }
+  .traffic i:nth-child(1) { background: #ff5f57; } .traffic i:nth-child(2) { background: #febc2e; } .traffic i:nth-child(3) { background: #28c840; }
+  .sb-search { margin: 6px 12px 10px; background: rgba(255,255,255,.07); border-radius: 7px; padding: 5px 9px; color: #8e8e98; font-size: 12.5px; display: flex; justify-content: space-between; }
+  .sb-search kbd { font: 11px var(--sys); color: #8e8e98; }
+  .sb-section { padding: 10px 18px 4px; color: #8a8a96; font-size: 11px; font-weight: 600; display: flex; justify-content: space-between; }
+  .sb-row { margin: 1px 8px; padding: 6px 10px; border-radius: 7px; display: grid; grid-template-columns: 16px 1fr auto; gap: 9px; align-items: start; }
+  .sb-row.sel { background: rgba(198,160,246,.28); }
+  .sb-row .ttl { color: #ececf1; font-weight: 500; line-height: 1.3; }
+  .sb-row .meta { color: #9a9aa6; font-size: 11.5px; line-height: 1.3; margin-top: 1px; }
+  .sb-row .kbd { color: #7b7b88; font-size: 11px; padding-top: 1px; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; margin-top: 4px; }
+  .dot.needs { background: var(--peach); box-shadow: 0 0 0 3px rgba(245,169,127,.25); }
+  .dot.work { border: 2px solid var(--blue); border-right-color: transparent; animation: spin 1.1s linear infinite; }
+  .dot.plan { background: var(--sapphire); }
+  .dot.idle { background: transparent; border: 1.5px solid #7d7d8a; }
+  .dot.inactive { background: #55556a; }
+  .badge { display: inline-block; font-size: 10.5px; font-weight: 600; padding: 0 6px; border-radius: 999px; line-height: 16px; }
+  .badge.needs { background: rgba(245,169,127,.2); color: var(--peach); }
+  .badge.plan { background: rgba(125,196,228,.18); color: var(--sapphire); }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .sb-footer { margin-top: auto; border-top: 1px solid rgba(255,255,255,.06); padding: 10px 14px; display: flex; align-items: center; gap: 10px; font-size: 12.5px; }
+  .avatar { width: 24px; height: 24px; border-radius: 6px; background: linear-gradient(135deg, var(--mauve), var(--blue)); color: var(--crust); font-weight: 800; display: grid; place-items: center; font-size: 12px; }
+  .health { margin-left: auto; white-space: nowrap; color: var(--green); font-size: 11.5px; }
+
+  .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .toolbar { height: 52px; flex: none; display: flex; align-items: center; gap: 12px; padding: 0 14px 0 16px; background: #22232d; border-bottom: 1px solid rgba(0,0,0,.5); }
+  .tb-title { line-height: 1.15; }
+  .tb-title .t { font-weight: 700; font-size: 14px; }
+  .tb-title .s { font-size: 11.5px; color: #9a9aa6; }
+  .tb-spacer { flex: 1; }
+  .tb-btn { width: 30px; height: 26px; border-radius: 6px; display: grid; place-items: center; color: #c9c9d2; }
+  .tb-btn:hover { background: rgba(255,255,255,.08); }
+  .tb-btn svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.6; }
+  .seg { display: flex; background: rgba(255,255,255,.07); border-radius: 7px; padding: 2px; font-size: 12px; }
+  .seg span { padding: 3px 11px; border-radius: 5px; color: #b9b9c4; }
+  .seg span.on { background: rgba(255,255,255,.14); color: #fff; }
+  .pill { font-size: 11.5px; padding: 3px 9px; border-radius: 999px; background: rgba(245,169,127,.16); color: var(--peach); font-weight: 600; display: flex; gap: 6px; align-items: center; }
+
+  .body { flex: 1; display: flex; min-height: 0; }
+  .term { flex: 1; background: var(--base); color: var(--text); font: 12.5px/1.55 var(--mono); padding: 14px 18px; overflow: hidden; white-space: pre; min-width: 0; }
+  .term .p { color: var(--mauve); } .term .g { color: var(--green); } .term .b { color: var(--blue); } .term .y { color: var(--yellow); }
+  .term .dim { color: var(--overlay0); } .term .o { color: var(--peach); } .term .sel { color: var(--crust); background: var(--peach); }
+  .term .box { color: var(--surface1); }
+  .cursor { display: inline-block; width: 7px; height: 14px; background: var(--rosewater); vertical-align: -2px; animation: blink 1.1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  .inspector { width: 312px; flex: none; background: #1c1d26; border-left: 1px solid rgba(0,0,0,.5); padding: 12px 14px; font-size: 12.5px; overflow: hidden; }
+  .ins-h { font-size: 11px; font-weight: 600; color: #8a8a96; margin: 14px 0 7px; display: flex; justify-content: space-between; }
+  .ins-h:first-child { margin-top: 2px; }
+  .wt { background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.06); border-radius: 9px; padding: 9px 11px; margin-bottom: 8px; }
+  .wt .r1 { display: flex; justify-content: space-between; font-weight: 600; }
+  .wt .r2 { color: #9a9aa6; font-family: var(--mono); font-size: 11.5px; margin-top: 3px; }
+  .wt .chips { display: flex; gap: 5px; margin-top: 7px; flex-wrap: wrap; }
+  .chip { font-size: 10.5px; padding: 1px 7px; border-radius: 999px; background: rgba(255,255,255,.07); color: #c7c7d2; }
+  .chip.ok { background: rgba(166,218,149,.15); color: var(--green); }
+  .chip.warn { background: rgba(238,212,159,.15); color: var(--yellow); }
+  .jl { display: grid; grid-template-columns: 52px 1fr; gap: 3px 8px; font-size: 11.5px; }
+  .jl .d { font-weight: 700; font-size: 10.5px; }
+  .jl .a { color: var(--green); } .jl .f { color: var(--peach); } .jl .n { color: var(--red); }
+  .jl .c { font-family: var(--mono); color: #c9c9d2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ins-btn { margin-top: 10px; display: block; text-align: center; background: rgba(198,160,246,.16); color: var(--mauve); border-radius: 7px; padding: 6px; font-weight: 600; }
+
+  /* annotations */
+  .ann { position: absolute; width: 22px; height: 22px; border-radius: 50%; background: #fff; color: #111; font: 700 12px var(--sys);
+    display: grid; place-items: center; box-shadow: 0 0 0 4px rgba(255,255,255,.25), 0 4px 10px rgba(0,0,0,.4); z-index: 40; }
+  .desktop:not([data-view="main"]) .ann { display: none; }
+
+  /* overlays (hidden by default) */
+  .ov { display: none; }
+  .desktop[data-view="palette"] .ov.palette,
+  .desktop[data-view="newtask"] .ov.newtask,
+  .desktop[data-view="settings"] .ov.settings,
+  .desktop[data-view="menubar"] .ov.menubar-drop,
+  .desktop[data-view="menubar"] .ov.notif,
+  .desktop[data-view="hub"] .ov.hub { display: block; }
+  .desktop[data-view="newtask"] .win .main::after,
+  .desktop[data-view="palette"] .win::after { content: ""; position: absolute; inset: 0; background: rgba(0,0,0,.18); }
+  .desktop[data-view="settings"] .win { filter: brightness(.75); }
+
+  /* command palette — floating NSPanel */
+  .palette { position: absolute; left: 50%; top: 130px; transform: translateX(-50%); width: 640px; z-index: 30;
+    background: rgba(44,44,58,.95); backdrop-filter: blur(40px) saturate(180%); border-radius: 14px;
+    box-shadow: 0 30px 80px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.12) inset; overflow: hidden; }
+  .pal-in { display: flex; align-items: center; gap: 12px; padding: 14px 18px; font-size: 20px; border-bottom: 1px solid rgba(255,255,255,.08); }
+  .pal-in .q { color: #fff; } .pal-in .caret { width: 2px; height: 22px; background: var(--mauve); animation: blink 1.1s steps(1) infinite; }
+  .pal-in .hint { margin-left: auto; font-size: 11.5px; color: #8a8a96; }
+  .pal-group { padding: 8px 18px 2px; font-size: 11px; color: #8a8a96; font-weight: 600; }
+  .pal-row { margin: 0 8px; padding: 8px 10px; border-radius: 8px; display: grid; grid-template-columns: 26px 1fr auto; gap: 10px; align-items: center; font-size: 13.5px; }
+  .pal-row.sel { background: rgba(198,160,246,.32); }
+  .pal-row .ic { width: 26px; height: 26px; border-radius: 7px; display: grid; place-items: center; background: rgba(255,255,255,.08); font-size: 13px; }
+  .pal-row .sc { color: #a7a7b3; font-size: 12px; letter-spacing: .06em; }
+  .pal-row small { color: #9a9aa6; display: block; font-size: 11.5px; }
+  .pal-foot { white-space: nowrap; padding: 9px 18px; font-size: 11.5px; color: #8a8a96; border-top: 1px solid rgba(255,255,255,.08); display: flex; gap: 18px; margin-top: 6px; }
+
+  /* new task sheet */
+  .newtask { position: absolute; left: calc(22px + 252px + (1180px - 252px)/2); top: 94px; transform: translateX(-50%); width: 620px; z-index: 30;
+    background: #2a2b37; border-radius: 0 0 12px 12px; box-shadow: 0 24px 60px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.1) inset; padding: 20px 22px 18px; font-size: 13px; }
+  .newtask h4 { margin: 0 0 14px; font-size: 15px; }
+  .field { display: grid; grid-template-columns: 82px 1fr; gap: 10px; align-items: center; margin-bottom: 11px; }
+  .field label { text-align: right; color: #b3b3be; }
+  .input { background: #1d1e27; border: 1px solid rgba(255,255,255,.12); border-radius: 6px; padding: 6px 9px; min-height: 30px; }
+  .input.focus { box-shadow: 0 0 0 3px rgba(198,160,246,.45); border-color: var(--mauve); }
+  .token { display: inline-flex; align-items: center; gap: 5px; background: rgba(198,160,246,.22); color: #eadcff; border-radius: 5px; padding: 1px 7px; margin-right: 5px; font-size: 12px; }
+  .nvim { background: var(--base); border-radius: 6px; border: 1px solid var(--mauve); box-shadow: 0 0 0 3px rgba(198,160,246,.3);
+    font: 12px/1.6 var(--mono); color: var(--text); padding: 8px 10px; position: relative; height: 170px; white-space: pre; }
+  .nvim .ln { color: var(--surface1); display: inline-block; width: 18px; }
+  .nvim .mode { position: absolute; left: 0; right: 0; bottom: 0; padding: 2px 10px; background: var(--mantle); color: var(--green); font-size: 11px; display: flex; justify-content: space-between; border-radius: 0 0 6px 6px; }
+  .nvim .tok { color: var(--mauve); } .nvim .tok2 { color: var(--teal); }
+  .complete { position: absolute; left: 150px; top: 76px; width: 250px; background: #31323f; border: 1px solid rgba(255,255,255,.12); border-radius: 7px; box-shadow: 0 10px 30px rgba(0,0,0,.5); font: 12px var(--sys); padding: 4px; }
+  .complete div { padding: 4px 8px; border-radius: 5px; display: flex; justify-content: space-between; }
+  .complete div.sel { background: var(--mauve); color: var(--crust); }
+  .complete span { color: #8a8a96; font-size: 11px; } .complete .sel span { color: rgba(24,25,38,.7); }
+  .sheet-foot { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
+  .sheet-foot .note { color: #8a8a96; font-size: 11.5px; margin-right: auto; }
+  .btn { padding: 5px 14px; border-radius: 6px; background: rgba(255,255,255,.1); font-weight: 500; }
+  .btn.primary { background: var(--mauve); color: var(--crust); font-weight: 600; }
+
+  /* settings window */
+  .settings { position: absolute; left: 240px; top: 60px; width: 740px; height: 712px; z-index: 30; border-radius: 12px; overflow: hidden;
+    background: #24252f; box-shadow: 0 30px 80px rgba(0,0,0,.65), 0 0 0 1px rgba(255,255,255,.12) inset; font-size: 13px; }
+  .set-tb { background: #2b2c37; border-bottom: 1px solid rgba(0,0,0,.5); padding: 10px 14px 6px; }
+  .set-tb .traffic { padding: 0 0 6px; }
+  .set-title { text-align: center; font-weight: 700; margin-top: -20px; margin-bottom: 8px; }
+  .set-tabs { display: flex; justify-content: center; gap: 4px; }
+  .set-tabs div { width: 82px; text-align: center; padding: 5px 0 4px; border-radius: 7px; font-size: 11.5px; color: #b9b9c4; }
+  .set-tabs div.on { background: rgba(255,255,255,.1); color: var(--mauve); }
+  .set-tabs .i { font-size: 19px; display: block; line-height: 1.3; }
+  .set-body { padding: 18px 26px; }
+  .scope { display: flex; justify-content: center; margin-bottom: 18px; }
+  .group { background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.07); border-radius: 10px; margin-bottom: 14px; }
+  .group .row { display: flex; align-items: center; padding: 10px 14px; border-top: 1px solid rgba(255,255,255,.06); gap: 10px; }
+  .group .row:first-child { border-top: 0; }
+  .group .row .l { flex: 1; } .group .row .l small { display: block; color: #8a8a96; font-size: 11.5px; }
+  .popup { background: rgba(255,255,255,.1); border-radius: 6px; padding: 3px 10px; min-width: 150px; display: flex; justify-content: space-between; gap: 10px; }
+  .popup::after { content: "⌃⌄"; font-size: 9px; color: #9a9aa6; letter-spacing: -2px; writing-mode: vertical-lr; }
+  .inh { font-size: 10.5px; color: #8a8a96; border: 1px dashed rgba(255,255,255,.2); border-radius: 999px; padding: 0 7px; }
+  .ovr { font-size: 10.5px; color: var(--mauve); background: rgba(198,160,246,.15); border-radius: 999px; padding: 0 7px; }
+  .toggle { width: 34px; height: 20px; border-radius: 999px; background: var(--mauve); position: relative; }
+  .toggle::after { content: ""; position: absolute; right: 2px; top: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; }
+  .toggle.offt { background: rgba(255,255,255,.18); } .toggle.offt::after { right: auto; left: 2px; }
+
+  /* menubar dropdown + notification */
+  .menubar-drop { position: absolute; right: 168px; top: 28px; width: 380px; z-index: 60; background: rgba(42,42,56,.97); backdrop-filter: blur(40px) saturate(180%);
+    border-radius: 11px; box-shadow: 0 20px 60px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.14) inset; padding: 6px; font-size: 13px; }
+  .md-h { padding: 6px 10px 4px; font-size: 11px; color: #8a8a96; font-weight: 600; display: flex; justify-content: space-between; }
+  .md-row { padding: 6px 10px; border-radius: 6px; display: grid; grid-template-columns: 58px 1fr; gap: 2px 8px; }
+  .md-row.sel { background: rgba(198,160,246,.3); }
+  .md-row .d { font-size: 10.5px; font-weight: 700; padding-top: 2px; }
+  .md-row .c { font-family: var(--mono); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .md-row .s { grid-column: 2; font-size: 11px; color: #9a9aa6; }
+  .md-sep { height: 1px; background: rgba(255,255,255,.08); margin: 5px 8px; }
+  .md-item { padding: 5px 10px; border-radius: 6px; display: flex; justify-content: space-between; }
+  .md-item span { color: #8a8a96; }
+  .notif { position: absolute; right: 14px; top: 36px; width: 360px; z-index: 55; background: rgba(50,50,64,.96); backdrop-filter: blur(40px) saturate(180%);
+    border-radius: 16px; box-shadow: 0 16px 40px rgba(0,0,0,.5), 0 0 0 1px rgba(255,255,255,.12) inset; padding: 12px 14px; font-size: 13px;
+    display: grid; grid-template-columns: 38px 1fr; gap: 0 11px; }
+  .desktop[data-view="menubar"] .notif { top: auto; bottom: 40px; }
+  .notif .appic { width: 38px; height: 38px; border-radius: 9px; background: linear-gradient(135deg, #2a2340, #463070); display: grid; place-items: center; font-size: 19px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.15); }
+  .notif .h { font-weight: 700; display: flex; justify-content: space-between; }
+  .notif .h span { color: #9a9aa6; font-weight: 400; font-size: 11.5px; }
+  .notif .c { font-family: var(--mono); font-size: 12px; color: #dcdce4; }
+  .notif .acts { grid-column: 1 / 3; display: flex; gap: 6px; margin-top: 10px; }
+  .notif .acts div { flex: 1; text-align: center; padding: 5px; border-radius: 8px; background: rgba(255,255,255,.1); font-weight: 500; }
+
+  /* workspace hub as a sidebar mode */
+  .hub { position: absolute; left: calc(22px + 252px); top: calc(42px + 52px); width: calc(1180px - 252px); height: calc(728px - 52px); z-index: 25; background: #1f2029; padding: 18px 22px; font-size: 13px; }
+  .hub-h { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+  .hub-h h5 { margin: 0; font-size: 18px; }
+  table.hubt { width: 100%; border-collapse: collapse; }
+  table.hubt th { text-align: left; font-size: 11px; color: #8a8a96; font-weight: 600; padding: 5px 10px; border-bottom: 1px solid rgba(255,255,255,.08); }
+  table.hubt td { padding: 8px 10px; border-bottom: 1px solid rgba(255,255,255,.05); vertical-align: middle; }
+  table.hubt tr.sel td { background: rgba(198,160,246,.22); }
+  table.hubt tr.sel td:first-child { border-radius: 7px 0 0 7px; } table.hubt tr.sel td:last-child { border-radius: 0 7px 7px 0; }
+  .hub-legend { position: absolute; bottom: 14px; left: 22px; right: 22px; color: #8a8a96; font-size: 11.5px; display: flex; gap: 18px; }
+  .hub-legend kbd, .legend kbd { font: 600 11px var(--mono); background: rgba(255,255,255,.08); border-radius: 4px; padding: 1px 5px; color: #d7d7e0; }
+
+  .caption { margin-top: 14px; color: var(--page-muted); font-size: 13.5px; min-height: 44px; max-width: 1224px; }
+
+  /* annotation legend */
+  .annlist { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 28px; margin-top: 26px; }
+  .annlist .it { display: grid; grid-template-columns: 26px 1fr; gap: 10px; }
+  .annlist .n { width: 22px; height: 22px; border-radius: 50%; background: #fff; color: #111; font: 700 12px var(--sys); display: grid; place-items: center; margin-top: 2px; }
+  .annlist b { color: #fff; }
+
+  /* architecture diagram */
+  .arch { display: grid; gap: 10px; margin-top: 10px; }
+  .tier { border-radius: 14px; padding: 14px 16px; border: 1px solid var(--line); background: var(--card); display: grid; grid-template-columns: 170px 1fr; gap: 16px; align-items: center; }
+  .tier .lbl { font-weight: 700; }
+  .tier .lbl small { display: block; font-weight: 400; color: var(--page-muted); font-size: 12px; }
+  .boxes { display: flex; flex-wrap: wrap; gap: 8px; }
+  .bx { border-radius: 9px; padding: 7px 11px; font-size: 13px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.08); }
+  .bx small { display: block; color: var(--page-muted); font-size: 11.5px; }
+  .tier.swift { border-color: rgba(245,169,127,.35); } .tier.swift .bx { border-color: rgba(245,169,127,.25); }
+  .tier.term { border-color: rgba(198,160,246,.4); } .tier.term .bx { border-color: rgba(198,160,246,.3); }
+  .tier.rust { border-color: rgba(237,135,150,.35); } .tier.rust .bx { border-color: rgba(237,135,150,.25); }
+  .tier.ext { border-color: rgba(166,218,149,.3); } .tier.ext .bx { border-color: rgba(166,218,149,.22); }
+  .bx.keep { position: relative; } .bx.keep::after { content: "kept"; position: absolute; top: -8px; right: -6px; font-size: 9.5px; font-weight: 700; background: var(--green); color: var(--crust); border-radius: 999px; padding: 0 5px; }
+  .bx.new { position: relative; } .bx.new::after { content: "new"; position: absolute; top: -8px; right: -6px; font-size: 9.5px; font-weight: 700; background: var(--peach); color: var(--crust); border-radius: 999px; padding: 0 5px; }
+  .arrow { text-align: center; color: var(--page-muted); font-size: 12px; }
+
+  /* tables */
+  table.cmp { width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 8px; }
+  table.cmp th { text-align: left; font-size: 12px; color: var(--page-muted); text-transform: uppercase; letter-spacing: .05em; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+  table.cmp td { padding: 11px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  table.cmp td:first-child { font-weight: 600; white-space: nowrap; }
+  table.cmp td.tauri { color: var(--page-muted); font-size: 13px; }
+  .yes { color: var(--green); font-weight: 600; } .no { color: var(--red); font-weight: 600; } .part { color: var(--yellow); font-weight: 600; }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 14px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; }
+  .card h4 { margin: 0 0 6px; font-size: 15px; }
+  .card p { margin: 0; color: #bfc3d1; font-size: 14px; }
+  .card.risk { border-color: rgba(237,135,150,.3); }
+  .card.risk h4 { color: var(--red); }
+  .card .sev { float: right; font-size: 11px; font-weight: 700; border-radius: 999px; padding: 1px 8px; }
+  .sev.hi { background: rgba(237,135,150,.18); color: var(--red); } .sev.md { background: rgba(238,212,159,.15); color: var(--yellow); }
+
+  .phases { counter-reset: ph; display: grid; gap: 10px; }
+  .phase { display: grid; grid-template-columns: 54px 1fr; gap: 14px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; }
+  .phase .num { font: 800 26px var(--sys); color: var(--mauve); }
+  .phase h4 { margin: 0 0 4px; font-size: 15px; }
+  .phase p { margin: 0; color: #bfc3d1; font-size: 14px; }
+  .phase .gate { margin-top: 6px; font-size: 12.5px; color: var(--teal); }
+
+  .verdict { border: 1px solid rgba(198,160,246,.45); background: linear-gradient(180deg, rgba(198,160,246,.08), transparent); border-radius: 16px; padding: 22px 24px; }
+  .verdict h3 { margin-top: 0; }
+  .keys { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 8px 22px; font-size: 14px; }
+  .keys div { display: flex; justify-content: space-between; border-bottom: 1px dashed var(--line); padding: 5px 0; }
+  .keys .old { color: var(--page-muted); font-family: var(--mono); font-size: 12.5px; }
+  .keys .new { font-family: var(--mono); font-size: 12.5px; color: var(--lavender); }
+</style>
+</head>
+<body>
+<div class="page">
+
+<header class="hero">
+  <div class="eyebrow">Thought experiment · not a plan of record</div>
+  <h1>Devora, <em>natively</em>.</h1>
+  <p class="lede">
+    Suppose time and cost don't matter, and we rebuild Devora's UI as a real Mac app: Swift and AppKit/SwiftUI on the outside, a GPU-rendered native terminal in the middle, and the Rust core we already have underneath.
+    This page shows what that app would look like, what it would be built with, what would change from Ember, and what it would honestly cost us.
+  </p>
+  <div class="tldr">
+    <b>TL;DR</b>: Swift 6 + AppKit-hosted SwiftUI, <b>libghostty</b> for terminals, the existing Rust workspace logic extracted into a <b>devora-core</b> crate called through <b>UniFFI</b>, and <b>WKWebView</b> kept only where the content really is web (Crit, Mermaid).
+    The biggest UX change isn't how it looks. It's that <b>Devora starts telling you what Claude is doing</b>: per-session state in a sidebar, notifications for pending permission requests, a Judge menu-bar extra, and Dock badges.
+    The biggest cost isn't the code. It means <b>giving up the Linux plan for the UI</b> and starting a third UI generation.
+  </div>
+</header>
+
+<nav class="toc">
+  <a href="#look">The look</a>
+  <a href="#stack">Tech stack</a>
+  <a href="#changes">What changes</a>
+  <a href="#keys">Shortcuts</a>
+  <a href="#kept">What's kept</a>
+  <a href="#costs">Costs &amp; risks</a>
+  <a href="#path">Path</a>
+  <a href="#verdict">Verdict</a>
+</nav>
+
+<!-- ======================================================= LOOK -->
+<section id="look">
+  <h2>The look</h2>
+  <p class="sub">An interactive mockup. Use the buttons to switch views. In the main window, the numbered markers are explained below the mockup.</p>
+
+  <div class="stage-controls" role="toolbar">
+    <button data-v="main" aria-pressed="true">Main window</button>
+    <button data-v="hub">Workspace Hub</button>
+    <button data-v="newtask">New Task sheet (⌘N)</button>
+    <button data-v="palette">Command palette (⇧⇧)</button>
+    <button data-v="settings">Settings (⌘,)</button>
+    <button data-v="menubar">Menu bar + notification</button>
+  </div>
+
+  <div class="stage-scroller">
+  <div class="desktop" id="desktop" data-view="main">
+
+    <!-- macOS menu bar -->
+    <div class="menubar">
+      <span class="apple"></span>
+      <b>Devora</b><span>File</span><span>Edit</span><span>Session</span><span>Workspace</span><span>View</span><span>Window</span><span>Help</span>
+      <div class="right">
+        <span class="judge-item" title="Judge">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8"><path d="M12 3v18M5 7h14M5 7l-3 7a3 3 0 006 0zM19 7l-3 7a3 3 0 006 0zM8 21h8"/></svg>
+          <span class="count">1⏸</span>
+        </span>
+        <span>⌁ 87%</span><span>Wi-Fi</span><span>Sat 3 Oct 14:12</span>
+      </div>
+    </div>
+    <span class="ann" style="left: 1004px; top: 2px">5</span>
+
+    <!-- notification (shown on main + menubar views) -->
+    <div class="notif">
+      <div class="appic">⚖︎</div>
+      <div>
+        <div class="h">Claude needs you · login bug <span>now</span></div>
+        <div class="c">Bash: git push origin HEAD</div>
+        <div style="color:#9a9aa6;font-size:11.5px">Judge deferred: no approved detector</div>
+      </div>
+      <div class="acts"><div>Allow once</div><div>Deny</div><div>Open session</div></div>
+    </div>
+
+    <!-- main window -->
+    <div class="win">
+      <aside class="sidebar">
+        <div class="traffic"><i></i><i></i><i></i></div>
+        <div class="sb-search"><span>⌕ Filter sessions &amp; workspaces</span><kbd>⌘F</kbd></div>
+
+        <div class="sb-section"><span>SESSIONS</span><span>4</span></div>
+        <div class="sb-row sel">
+          <span class="dot needs"></span>
+          <div><div class="ttl">login bug</div><div class="meta"><span class="badge needs">Needs you</span> git push</div></div>
+          <span class="kbd">⌘1</span>
+        </div>
+        <div class="sb-row">
+          <span class="dot work"></span>
+          <div><div class="ttl">refactor auth</div><div class="meta">Working · 4m · Edit(api/auth/token.go)</div></div>
+          <span class="kbd">⌘2</span>
+        </div>
+        <div class="sb-row">
+          <span class="dot plan"></span>
+          <div><div class="ttl">docs sweep</div><div class="meta"><span class="badge plan">Plan ready</span> review in Crit</div></div>
+          <span class="kbd">⌘3</span>
+        </div>
+        <div class="sb-row">
+          <span class="dot idle"></span>
+          <div><div class="ttl">Shell</div><div class="meta">~/devora/work · zsh</div></div>
+          <span class="kbd">⌘4</span>
+        </div>
+
+        <div class="sb-section" style="margin-top:8px"><span>ACTIVE WORKSPACES</span><span>⌘O</span></div>
+        <div class="sb-row">
+          <span class="dot inactive"></span>
+          <div><div class="ttl">billing webhooks</div><div class="meta">ws-7 · billing-api, web</div></div><span></span>
+        </div>
+        <div class="sb-row">
+          <span class="dot inactive"></span>
+          <div><div class="ttl">ER</div><div class="meta">ws-2 · ember-rewrite</div></div><span></span>
+        </div>
+        <div class="sb-section" style="margin-top:8px"><span>INACTIVE · 6</span><span>›</span></div>
+
+        <div class="sb-footer">
+          <div class="avatar">W</div>
+          <div><div style="font-weight:600">Work</div><div style="color:#8a8a96;font-size:11px">~/devora/work · 9 repos</div></div>
+          <div class="health">● Healthy</div>
+        </div>
+      </aside>
+
+      <div class="main" style="position:relative">
+        <div class="toolbar">
+          <div class="tb-btn"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16"/></svg></div>
+          <div class="tb-title"><div class="t">login bug</div><div class="s">Work · ws-4 · web, api</div></div>
+          <div class="tb-spacer"></div>
+          <div class="pill">● Claude · waiting for permission</div>
+          <div class="seg"><span class="on">Terminal</span><span>Review</span><span>Preview</span></div>
+          <div class="tb-btn" title="New Task ⌘N"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></div>
+          <div class="tb-btn" title="Inspector ⌥⌘I"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M15 4v16"/></svg></div>
+        </div>
+        <div class="body">
+<div class="term"><span class="p">~/devora/work/workspaces/ws-4</span> <span class="g">❯</span> ccc
+<span class="box">╭───</span> <span class="o">✻</span> Claude Code  <span class="dim">opusplan · effort xhigh · Judge on</span>
+<span class="box">╰───</span> <span class="dim">~/devora/work/workspaces/ws-4</span>
+
+<span class="dim">&gt;</span> Fix the login redirect loop described in TASK.md
+
+<span class="g">●</span> Read(<span class="b">TASK.md</span>)
+<span class="g">●</span> Grep(<span class="y">"redirectTo"</span>, path: <span class="b">web/src</span>)
+  <span class="dim">⎿  Found 4 files</span>
+<span class="g">●</span> Update(<span class="b">web/src/auth/session.ts</span>)
+  <span class="dim">⎿  Updated with</span> <span class="g">6 additions</span> <span class="dim">and</span> <span class="o">2 removals</span>
+<span class="g">●</span> Bash(<span class="y">cd api &amp;&amp; go test ./auth/...</span>)
+  <span class="dim">⎿  ok    api/auth   0.412s</span>
+<span class="g">●</span> All tests pass. Pushing the branch so CI can run.
+
+<span class="box">╭───</span>
+<span class="box">│</span> <span class="o">Bash command</span>
+<span class="box">│</span>   git push origin HEAD
+<span class="box">│</span>
+<span class="box">│</span> Do you want to proceed?
+<span class="box">│</span> <span class="sel">❯ 1. Yes                                           </span>
+<span class="box">│</span>   2. Yes, and don't ask again for git push
+<span class="box">│</span>   3. No, and tell Claude what to do differently
+<span class="box">╰───</span>
+<span class="cursor"></span></div>
+          <aside class="inspector">
+            <div class="ins-h"><span>WORKTREES</span><span>⟳ gsum</span></div>
+            <div class="wt">
+              <div class="r1"><span>web</span><span class="chip warn">2 modified</span></div>
+              <div class="r2">tal/fix-login-loop</div>
+              <div class="chips"><span class="chip ok">PR #412 · checks ✓</span><span class="chip">0 behind</span></div>
+            </div>
+            <div class="wt">
+              <div class="r1"><span>api</span><span class="chip ok">clean</span></div>
+              <div class="r2">HEAD (detached)</div>
+              <div class="chips"><span class="chip">3 behind origin/main</span></div>
+            </div>
+            <div class="ins-h"><span>JUDGE · THIS SESSION</span><span>12</span></div>
+            <div class="jl">
+              <span class="d f">DEFER</span><span class="c">git push origin HEAD</span>
+              <span class="d a">ALLOW</span><span class="c">go test ./auth/...</span>
+              <span class="d a">ALLOW</span><span class="c">Read web/src/auth/session.ts</span>
+              <span class="d n">DENY</span><span class="c">rm -rf node_modules/.cache</span>
+              <span class="d a">ALLOW</span><span class="c">git diff --stat</span>
+            </div>
+            <div class="ins-h"><span>TASK</span><span>CLAUDE.md</span></div>
+            <div style="color:#c3c3cd;font-size:12px;line-height:1.5">Login redirect loops when the session cookie expires mid-flow. <b>web</b>: auth guard. <b>api</b>: token refresh endpoint.</div>
+            <span class="ins-btn">Open plan review (Crit) ⌘R</span>
+          </aside>
+        </div>
+
+        <!-- New Task sheet -->
+        <div class="ov newtask" style="position:absolute;left:50%;top:52px;">
+          <h4>New Task</h4>
+          <div class="field"><label>Title</label><div class="input">login bug</div></div>
+          <div class="field"><label>Repos</label><div class="input"><span class="token">web ✕</span><span class="token">api ✕</span><span style="color:#777">add repo…</span></div></div>
+          <div class="field" style="align-items:start"><label style="padding-top:6px">Prompt</label>
+            <div class="nvim"><span class="ln">1</span><span class="tok">{{skill:debug-systematically}}</span>
+<span class="ln">2</span>
+<span class="ln">3</span>The login page loops back to /login when the
+<span class="ln">4</span>session cookie expires mid-flow. Start from <span class="tok2">@web/src/au</span>▏
+<span class="ln">5</span>
+<div class="complete"><div class="sel">web/src/auth/ <span>dir</span></div><div>web/src/audit/ <span>dir</span></div><div>web/src/auth.config.ts <span>file</span></div></div><div class="mode"><span>-- INSERT --</span><span>embedded nvim · ext_popupmenu</span></div></div>
+          </div>
+          <div class="sheet-foot"><span class="note">Reuses cached ws-4 (same repo set) · prepare: <code>mise install</code></span><span class="btn">Cancel</span><span class="btn primary">Create Task ⌘↩</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Workspace hub (main area mode) -->
+    <div class="ov hub">
+      <div class="hub-h">
+        <h5>Workspaces</h5>
+        <div class="seg"><span class="on">Active 5</span><span>Inactive 6</span><span>All 11</span></div>
+        <div class="tb-spacer" style="flex:1"></div>
+        <div class="sb-search" style="margin:0;width:240px"><span>⌕ Filter</span><kbd>/</kbd></div>
+      </div>
+      <table class="hubt">
+        <tr><th></th><th>TASK</th><th>WORKSPACE</th><th>REPOS</th><th>STATE</th><th>LAST ACTIVITY</th></tr>
+        <tr class="sel"><td><span class="dot needs" style="display:inline-block"></span></td><td><b>login bug</b></td><td>ws-4</td><td>web, api</td><td><span class="badge needs">Needs you</span></td><td>now</td></tr>
+        <tr><td><span class="dot work" style="display:inline-block"></span></td><td><b>refactor auth</b></td><td>ws-1</td><td>api</td><td>Working</td><td>now</td></tr>
+        <tr><td><span class="dot plan" style="display:inline-block"></span></td><td><b>docs sweep</b></td><td>ws-3</td><td>web, docs</td><td><span class="badge plan">Plan ready</span></td><td>2m ago</td></tr>
+        <tr><td><span class="dot inactive" style="display:inline-block"></span></td><td><b>billing webhooks</b></td><td>ws-7</td><td>billing-api, web</td><td style="color:#9a9aa6">Not open · PR #398 merged</td><td>yesterday</td></tr>
+        <tr><td><span class="dot inactive" style="display:inline-block"></span></td><td><b>ER</b></td><td>ws-2</td><td>ember-rewrite</td><td style="color:#9a9aa6">Not open · 1 dirty worktree</td><td>3d ago</td></tr>
+      </table>
+      <div class="hub-legend">
+        <span><kbd>j</kbd>/<kbd>k</kbd> move</span><span><kbd>↩</kbd> open</span><span><kbd>n</kbd> new task</span><span><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> filter</span><span><kbd>R</kbd> refresh</span><span><kbd>q</kbd>/<kbd>esc</kbd> back</span><span style="margin-left:auto">ADR-004 vim navigation stays: native ≠ mouse-first</span>
+      </div>
+    </div>
+
+    <!-- Command palette -->
+    <div class="ov palette">
+      <div class="pal-in"><span style="color:#8a8a96">⌕</span><span class="q">reb</span><span class="caret"></span><span class="hint">⇧⇧ or ⌘K</span></div>
+      <div class="pal-group">COMMANDS</div>
+      <div class="pal-row sel"><span class="ic">⟲</span><div>Rebase all worktrees on latest<small>debi git rebase-latest · ws-4 (web, api)</small></div><span class="sc">⌥⌘L</span></div>
+      <div class="pal-row"><span class="ic">✎</span><div>Repurpose current session…<small>New title &amp; uid, keep worktrees</small></div><span class="sc"></span></div>
+      <div class="pal-group">SESSIONS &amp; WORKSPACES</div>
+      <div class="pal-row"><span class="ic">▤</span><div>refactor auth<small>ws-1 · api · Working</small></div><span class="sc">⌘2</span></div>
+      <div class="pal-group">SETTINGS</div>
+      <div class="pal-row"><span class="ic">⚙︎</span><div>Claude › Permission mode<small>Work profile: plan (inherited)</small></div><span class="sc">⌘,</span></div>
+      <div class="pal-foot"><span>↩ run</span><span>⌘↩ run in new session</span><span>esc close</span><span style="margin-left:auto">Also in Help ▸ Search &amp; Spotlight</span></div>
+    </div>
+
+    <!-- Settings window -->
+    <div class="ov settings">
+      <div class="set-tb">
+        <div class="traffic"><i></i><i></i><i></i></div>
+        <div class="set-title">Claude</div>
+        <div class="set-tabs">
+          <div><span class="i">⚙︎</span>General</div>
+          <div class="on"><span class="i">✻</span>Claude</div>
+          <div><span class="i">⌨︎</span>Terminal</div>
+          <div><span class="i">⇅</span>Pull Requests</div>
+          <div><span class="i">☑︎</span>Tracker</div>
+          <div><span class="i">◫</span>Profiles</div>
+        </div>
+      </div>
+      <div class="set-body">
+        <div class="scope"><div class="seg"><span>User Defaults</span><span class="on">Profile: Work</span><span>Profile: OSS</span></div></div>
+        <div class="group">
+          <div class="row"><div class="l">Default model<small>opusplan uses Opus while planning and Sonnet while executing</small></div><span class="inh">inherited</span><div class="popup">opusplan</div></div>
+          <div class="row"><div class="l">Use Devora's default model<small>Off lets Claude Code pick its own</small></div><span class="inh">inherited</span><div class="toggle"></div></div>
+          <div class="row"><div class="l">Effort</div><span class="ovr">overridden</span><div class="popup">high</div></div>
+          <div class="row"><div class="l">Permission mode</div><span class="inh">inherited</span><div class="popup">plan</div></div>
+        </div>
+        <div class="group">
+          <div class="row"><div class="l">Sonnet tier → </div><span class="inh">inherited</span><div class="popup">Opus 5.5</div></div>
+          <div class="row"><div class="l">Haiku tier → </div><span class="inh">inherited</span><div class="popup">Sonnet 5.5</div></div>
+        </div>
+        <div class="group">
+          <div class="row"><div class="l">Judge<small>Auto-resolve permission requests · audit log ~/.claude/cc-judge-audit.jsonl</small></div><div class="toggle"></div></div>
+          <div class="row"><div class="l">Notify on deferred permission<small>Banner + Dock badge when a background session is blocked</small></div><div class="toggle"></div></div>
+          <div class="row"><div class="l">Notify when a plan is ready for review</div><div class="toggle offt"></div></div>
+        </div>
+        <div class="muted" style="font-size:12px">A standard <code>Settings</code> scene: ⌘, opens it, every pane is reachable from the Command Palette, and the profile → User Defaults → built-in inheritance is shown on every row.</div>
+      </div>
+    </div>
+
+    <!-- Menu bar dropdown -->
+    <div class="ov menubar-drop">
+      <div class="md-h"><span>JUDGE · LAST HOUR</span><span>41 allow · 3 deny · 1 defer</span></div>
+      <div class="md-row sel"><span class="d" style="color:var(--peach)">⏸ DEFER</span><span class="c">git push origin HEAD</span><span class="s">login bug · Bash · 0:12 ago · click to focus</span></div>
+      <div class="md-row"><span class="d" style="color:var(--green)">ALLOW</span><span class="c">go test ./auth/...</span><span class="s">login bug · Bash</span></div>
+      <div class="md-row"><span class="d" style="color:var(--red)">DENY</span><span class="c">rm -rf node_modules/.cache</span><span class="s">refactor auth · Bash · destructive</span></div>
+      <div class="md-row"><span class="d" style="color:#9a9aa6">ABSTAIN</span><span class="c">WebFetch docs.stripe.com</span><span class="s">docs sweep · deferred to Claude Code</span></div>
+      <div class="md-sep"></div>
+      <div class="md-item">Open audit log… <span>⌘L</span></div>
+      <div class="md-item">Pause Judge for 15 minutes</div>
+      <div class="md-item">Report unsupported cases…</div>
+    </div>
+
+  </div>
+  </div>
+  <div class="caption" id="caption"></div>
+
+  <div class="annlist">
+    <div class="it"><span class="n">1</span><div><b>Sidebar instead of a bottom tab bar.</b> Sessions are a source list with a live <i>Claude state</i> per row (Working / Needs you / Plan ready / Idle), driven by Claude Code hooks posting to the IPC server. Today you can't tell a blocked tab from a busy one without switching to it. That's the single most valuable UX change here. ⌘1…9 switch sessions, and you drag rows to reorder.</div></div>
+    <div class="it"><span class="n">2</span><div><b>Unified toolbar.</b> Title = task title, subtitle = profile · workspace · repos (the window title also serves Mission Control and ⌘`). The Terminal / Review / Preview segmented control replaces the per-tab overlay layers from ADR-003.</div></div>
+    <div class="it"><span class="n">3</span><div><b>The terminal is a Metal surface, not a DOM.</b> libghostty draws it, and it handles IME, ligatures, font fallback, and the macOS text-input system. App shortcuts use <b>⌘</b>, which terminals never use, so <code>Ctrl+S</code>, <code>Ctrl+←/→</code>, and friends go back to the shell/Neovim instead of being swallowed by Devora.</div></div>
+    <div class="it"><span class="n">4</span><div><b>Inspector (⌥⌘I).</b> Native per-worktree status (what <code>gsum</code> prints, as live views), the Judge decisions for <i>this</i> session, and the task's CLAUDE.md summary. Crit and previews open as a WKWebView in the Review/Preview modes.</div></div>
+    <div class="it"><span class="n">5</span><div><b>Judge menu-bar extra.</b> The design already in <code>docs/future/judge-ember-menu-bar-integration.md</code>, as a <code>MenuBarExtra</code> with full SwiftUI views (not a rebuilt-on-every-event <code>NSMenu</code>). Pending defers show as <code>N⏸</code> next to the icon.</div></div>
+    <div class="it"><span class="n">6</span><div><b>Actionable notifications</b> (see the “Menu bar + notification” view). A deferred permission in a background session posts a <code>UNUserNotification</code> with Allow / Deny / Open buttons and badges the Dock icon. You can leave Devora in the background without forgetting a blocked agent.</div></div>
+    <div class="it"><span class="n">7</span><div><b>Profile + health in the sidebar footer.</b> Switching profiles is a menu, not a hub. The health dot turns amber/red when <code>debi health</code> would fail, and clicking it opens the Health view.</div></div>
+    <div class="it"><span class="n">·</span><div><b>System design language for free.</b> Vibrancy, sheets, focus rings, Liquid Glass, light/dark, accent color, reduced-motion, and VoiceOver all follow the OS. The Catppuccin theme stays where it belongs, <i>inside</i> the terminal, and becomes the app's accent tint.</div></div>
+  </div>
+</section>
+
+<!-- ======================================================= STACK -->
+<section id="stack">
+  <h2>The tech stack</h2>
+  <p class="sub">Read top-down: the native shell talks to the Rust core through generated bindings and hosts native terminals. The external tools keep the same contract they have today.</p>
+
+  <div class="arch">
+    <div class="tier swift">
+      <div class="lbl">App shell<small>Swift 6 · strict concurrency</small></div>
+      <div class="boxes">
+        <div class="bx new">AppKit window + NSToolbar<small>NSWindowController, key routing, restoration</small></div>
+        <div class="bx new">SwiftUI views<small>sidebar, hub, sheets, Settings scene, inspector</small></div>
+        <div class="bx new">@Observable models<small>Session, Workspace, Profile, ClaudeState</small></div>
+        <div class="bx new">MenuBarExtra · UNNotifications · NSDockTile<small>Judge, deferred permissions, badges</small></div>
+        <div class="bx new">App Intents + Core Spotlight<small>“New Devora task”, find tasks from Spotlight</small></div>
+        <div class="bx new">PromptEditor<small><code>nvim --embed</code>, msgpack-RPC, ext_linegrid/ext_popupmenu drawn natively</small></div>
+        <div class="bx">WKWebView<small>Crit (it is a web app) + Mermaid previews only</small></div>
+      </div>
+    </div>
+    <div class="arrow">▲ AsyncStream of events · async calls ▼</div>
+    <div class="tier term">
+      <div class="lbl">Terminal<small>the heart of the app</small></div>
+      <div class="boxes">
+        <div class="bx new">libghostty (GhosttyKit.xcframework)<small>Metal renderer, VT parser, PTY, IME, the same core Ghostty.app is built on</small></div>
+        <div class="bx">Fallback: SwiftTerm<small>pure Swift, stable API, slower renderer</small></div>
+      </div>
+    </div>
+    <div class="arrow">▲ UniFFI-generated Swift bindings ▼</div>
+    <div class="tier rust">
+      <div class="lbl">devora-core<small>Rust crate, extracted from src-tauri</small></div>
+      <div class="boxes">
+        <div class="bx keep">profile.rs<small>profiles, config, inheritance</small></div>
+        <div class="bx keep">workspace.rs<small>discovery, task.json, repurpose</small></div>
+        <div class="bx keep">workspace_creation.rs<small>worktrees, prepare cmd, CreationEvent stream</small></div>
+        <div class="bx keep">repo_clone · credentials · health</div>
+        <div class="bx">ipc_server → Unix socket<small>same JSON routes: /crit/*, /preview/open, /judge/decision, + /claude/state</small></div>
+      </div>
+    </div>
+    <div class="arrow">▲ env vars (DEVORA_IPC_*, DEVORA_PTY_ID) · files on disk ▼</div>
+    <div class="tier ext">
+      <div class="lbl">Outside the app<small>unchanged</small></div>
+      <div class="boxes">
+        <div class="bx keep">ccc + Claude Code</div><div class="bx keep">Judge</div><div class="bx keep">Code-Cleanup</div>
+        <div class="bx keep">debi (Go)</div><div class="bx keep">Crit</div><div class="bx keep">CC Status Line</div><div class="bx keep">profile dirs / config.json</div>
+      </div>
+    </div>
+  </div>
+
+  <h3>Why each choice, and what lost to it</h3>
+  <table class="cmp">
+    <tr><th>Concern</th><th>Choice</th><th>Why</th><th>Rejected</th></tr>
+    <tr><td>UI framework</td><td>AppKit window/toolbar/key handling hosting SwiftUI content</td><td>SwiftUI is great for lists, forms, settings, and sheets. AppKit is still the only reliable way to own first-responder, key equivalents, and a terminal NSView in a keyboard-first app.</td><td>Pure SwiftUI: focus and key routing are too coarse for vim-style lists plus a terminal. Catalyst: the worst of both.</td></tr>
+    <tr><td>Terminal</td><td>libghostty</td><td>The best macOS terminal engine available: GPU rendering, correctness, and input handling built for exactly this purpose. Ghostty's own Mac app is Swift on top of it.</td><td>SwiftTerm (good, but a weaker renderer). xterm.js in WKWebView (that's just Ember again).</td></tr>
+    <tr><td>Business logic</td><td>Keep Rust, expose it via UniFFI</td><td>~5.2k of the 6.8k Rust lines aren't UI and are already tested. UniFFI generates async Swift APIs and callback interfaces, so <code>CreationEvent</code> streams map cleanly to <code>AsyncStream</code>.</td><td>Rewriting in Swift means re-earning trust in worktree and config code with no UX gain.</td></tr>
+    <tr><td>IPC</td><td>Unix domain socket (0600), same JSON routes</td><td>Judge, Crit, and <code>debi preview</code> keep working. A socket file isn't reachable by other users or by browsers the way a localhost TCP port is.</td><td>XPC (great for Apple-signed helpers, awkward for Python/Go callers).</td></tr>
+    <tr><td>Rich text / prompt editor</td><td><code>nvim --embed</code> drawn natively</td><td>Delivers <code>docs/vision/rich-text-editor.md</code> properly: real Neovim, with its popup menu drawn as a native completion list for <code>@paths</code> and <code>/skills</code> (prior art: VimR, Neovide).</td><td>NSTextView with vim emulation: always uncanny. Monaco in a web view: not native.</td></tr>
+    <tr><td>Distribution</td><td>Developer ID + notarization + Sparkle 2</td><td>Removes the <code>xattr -dr com.apple.quarantine</code> step and gives in-app updates with release notes.</td><td>(Tauri can do this too; it isn't a reason to go native by itself.)</td></tr>
+    <tr><td>Build</td><td>Tuist or XcodeGen + <code>xcodebuild</code> behind mise tasks</td><td>No hand-edited <code>.pbxproj</code> in diffs, and agents keep running <code>mise build</code> / <code>mise test</code>.</td><td>Checked-in Xcode project.</td></tr>
+    <tr><td>Tests</td><td>Swift Testing + Rust tests + the same <code>.feature</code> files on a new driver</td><td>The 119 Gherkin scenarios are product specs, so keep them. Replace the DOM eval bridge with a debug-only harness on the IPC socket that exposes view-model state, plus XCUITest for real input.</td><td>Throwing away ADR-001's suite.</td></tr>
+  </table>
+</section>
+
+<!-- ======================================================= CHANGES -->
+<section id="changes">
+  <h2>What changes</h2>
+  <p class="sub">Concept by concept, Ember today versus the native app. The last column is the honest check: could we have that in Tauri anyway?</p>
+  <table class="cmp">
+    <tr><th>Concept</th><th>Ember today</th><th>Native</th><th>Possible in Tauri?</th></tr>
+    <tr><td>Session switching</td><td>Bottom Tab Bar, Ctrl+←/→</td><td>Sidebar with live Claude state, ⌘1…9, drag to reorder, tear a session off into its own window</td><td class="tauri"><span class="part">Partly</span>: sidebar yes, but multi-window tear-off is a lot of work</td></tr>
+    <tr><td>Workspace Hub</td><td>Window-covering layer</td><td>Sidebar section + a full main-area table mode (⌘O), same vim keys</td><td class="tauri"><span class="yes">Yes</span></td></tr>
+    <tr><td>Settings Hub</td><td>Window-covering layer</td><td>Standard Settings scene (⌘,) with a scope switcher and inherited/overridden markers</td><td class="tauri"><span class="part">Partly</span>: looks like a page, not like macOS</td></tr>
+    <tr><td>Layer system (ADR-003)</td><td>Custom stacks, router, presets, isolation for paint order</td><td>Mostly <b>deleted</b>: menu key equivalents → key window → responder chain is the same three-stage routing, built in. Sheets, panels, and popovers replace the presets.</td><td class="tauri"><span class="no">No</span>: you need the layer system in a web view</td></tr>
+    <tr><td>Crit review</td><td>Per-tab overlay iframe</td><td>Review mode of the session (WKWebView), with a toolbar badge when a plan is waiting</td><td class="tauri"><span class="yes">Yes</span></td></tr>
+    <tr><td>Claude visibility</td><td>None outside the active tab</td><td>Per-session state, notifications, Dock badge, Judge menu-bar extra</td><td class="tauri"><span class="yes">Mostly</span>: tray + notification plugins exist</td></tr>
+    <tr><td>Terminal</td><td>xterm.js + WebGL in a WKWebView; PTY bytes cross IPC as JSON</td><td>GPU-native surface in-process, no IPC hop, native IME/dictation/services</td><td class="tauri"><span class="no">No</span>: this is the native-only gain</td></tr>
+    <tr><td>Errors (ADR-002)</td><td><code>invoke</code> wrapper → persistent banner</td><td>Typed UniFFI errors → one <code>ErrorPresenter</code> → window-attached banner. Same one-path rule.</td><td class="tauri">n/a</td></tr>
+    <tr><td>Session restore</td><td>None</td><td>NSWindow restoration: relaunch reopens sessions in the same workspaces</td><td class="tauri"><span class="part">Possible</span>, all custom</td></tr>
+    <tr><td>System reach</td><td>None</td><td>Spotlight finds tasks, Shortcuts can create them, Services menu, drag files into the terminal</td><td class="tauri"><span class="no">Mostly no</span></td></tr>
+    <tr><td>Install</td><td>DMG + quarantine strip</td><td>Notarized DMG + Sparkle updates</td><td class="tauri"><span class="yes">Yes</span></td></tr>
+  </table>
+</section>
+
+<!-- ======================================================= KEYS -->
+<section id="keys">
+  <h2>Shortcuts: give Ctrl back to the terminal</h2>
+  <p class="sub">Ember has to claim Ctrl-combos (and “consume” them as no-ops so they never reach the terminal). A Mac app owns ⌘, which no terminal program uses. Every command also appears in the menu bar, so Help ▸ Search finds it.</p>
+  <div class="keys">
+    <div><span>Workspace Hub</span><span><span class="old">ctrl+s</span> → <span class="new">⌘O</span></span></div>
+    <div><span>New Task</span><span><span class="old">n (in hub)</span> → <span class="new">⌘N</span></span></div>
+    <div><span>New shell session</span><span><span class="old">ctrl+shift+s</span> → <span class="new">⌘T</span></span></div>
+    <div><span>Switch session</span><span><span class="old">ctrl+←/→</span> → <span class="new">⌘1…9 · ⌘⇧[ ]</span></span></div>
+    <div><span>Command palette</span><span><span class="old">⇧⇧</span> → <span class="new">⇧⇧ · ⌘K</span></span></div>
+    <div><span>Settings</span><span><span class="old">P (in hub)</span> → <span class="new">⌘,</span></span></div>
+    <div><span>Font size</span><span><span class="old">ctrl+1/2/3, ctrl±</span> → <span class="new">⌘+ ⌘− ⌘0</span></span></div>
+    <div><span>User Guide</span><span><span class="old">F1</span> → <span class="new">⌘? (Help menu)</span></span></div>
+    <div><span>Close session</span><span><span class="old">—</span> → <span class="new">⌘W</span></span></div>
+    <div><span>Review plan</span><span><span class="old">—</span> → <span class="new">⌘R</span></span></div>
+    <div><span>Inspector</span><span><span class="old">—</span> → <span class="new">⌥⌘I</span></span></div>
+    <div><span>Lists (hub, settings)</span><span><span class="new">j k gg G q esc</span> unchanged</span></div>
+  </div>
+</section>
+
+<!-- ======================================================= KEPT -->
+<section id="kept">
+  <h2>What's kept</h2>
+  <p class="sub">The rewrite covers the UI, not the product. Most of what makes Devora <i>Devora</i> lives outside the window.</p>
+  <div class="cards">
+    <div class="card"><h4>The Rust core (~5.2k lines)</h4><p>Profiles, workspaces, task creation, cloning, credentials, health. Extracted into <code>devora-core</code>, which helps Ember right away too.</p></div>
+    <div class="card"><h4>The domain model</h4><p>Profile, Workspace, Active Workspace, Session, Repo, Worktree, and Prepare Command keep their meanings. Only "Tab Bar" and "Terminal Pane (xterm.js)" go away.</p></div>
+    <div class="card"><h4>The external contract</h4><p><code>DEVORA_PTY_ID</code> / IPC env vars and the JSON routes Judge, Crit, and <code>debi preview</code> already use. None of those tools need changes.</p></div>
+    <div class="card"><h4>Keyboard-first, vim-flavoured (ADR-004)</h4><p>Native doesn't mean mouse-first. <code>createVimScroll</code> / <code>createListCursor</code> become a SwiftUI modifier and an NSResponder mixin.</p></div>
+    <div class="card"><h4>The acceptance specs</h4><p>20 feature files and 119 scenarios become the parity checklist. When they all pass on the native driver, Ember can retire.</p></div>
+    <div class="card"><h4>ccc, Judge, Code-Cleanup, debi, Status Line</h4><p>Untouched. They are the parts with the most product value, and none of them have a UI of their own.</p></div>
+  </div>
+</section>
+
+<!-- ======================================================= COSTS -->
+<section id="costs">
+  <h2>Costs &amp; risks</h2>
+  <p class="sub">"No time or cost constraints" doesn't make these go away, because some of them are strategic, not budgetary.</p>
+  <div class="cards">
+    <div class="card risk"><span class="sev hi">STRATEGIC</span><h4>It closes the Linux door</h4><p>The README promises Linux support "in the future". A native macOS UI means either a second native UI for Linux (GTK/Qt), or keeping Ember alive for Linux, which is two UIs forever. This is the real decision. Everything else is execution.</p></div>
+    <div class="card risk"><span class="sev hi">STRATEGIC</span><h4>Third UI generation</h4><p>Devora OG (Kitty + Glimpse-TTY) → Ember (Tauri) → Native. Ember just landed a whole layer-system redesign (#187, #188). Until parity, every feature is built twice or frozen.</p></div>
+    <div class="card risk"><span class="sev hi">HIGH</span><h4>The agent dev loop gets slower</h4><p>Devora is built largely by Claude. TS + Vite + happy-dom gives fast, headless, assertable feedback. Swift builds are slower, SwiftUI behaviour is harder to check without a running app, and visual checks need screenshots/XCUITest. Expect a lower development pace unless we invest in the test harness early.</p></div>
+    <div class="card risk"><span class="sev md">MEDIUM</span><h4>libghostty is not a stable public API</h4><p>Its main embedder is Ghostty's own app. It needs the Zig toolchain in the build, a pinned commit, and a thin Swift wrapper so SwiftTerm can be swapped in if upstream churns. Licensing (MIT) is fine.</p></div>
+    <div class="card risk"><span class="sev md">MEDIUM</span><h4>Two UI frameworks to master</h4><p>SwiftUI on macOS still needs AppKit escape hatches for focus, key handling, table performance, and text input. Contributors need both, and the boundary needs discipline (an ADR of its own).</p></div>
+    <div class="card risk"><span class="sev md">MEDIUM</span><h4>A lot of the visible wins don't need native</h4><p>Notifications, tray/menu-bar, Dock badge, native menus, notarization, and auto-update all exist in Tauri 2. The native-<i>only</i> wins are terminal quality, true macOS chrome/feel, multi-window, accessibility, and system reach (Spotlight/Shortcuts/Services).</p></div>
+  </div>
+</section>
+
+<!-- ======================================================= PATH -->
+<section id="path">
+  <h2>If we did it: the path</h2>
+  <p class="sub">Ember stays the shipping product the whole way. Each phase has a gate, and the first one pays off even if we stop there.</p>
+  <div class="phases">
+    <div class="phase"><div class="num">0</div><div><h4>Extract <code>devora-core</code></h4><p>Move profile/workspace/creation/clone/credentials/health out of <code>src-tauri</code> into a plain crate. Ember depends on it unchanged. Write the IPC routes down as a versioned spec.</p><div class="gate">Gate: Ember's Rust + e2e suites are green. Worth doing regardless of this decision.</div></div></div>
+    <div class="phase"><div class="num">1</div><div><h4>Terminal spike</h4><p>A bare window running <code>ccc</code> on libghostty and on SwiftTerm. Measure input latency, IME, resize, scrollback, ligatures, and Neovim inside it.</p><div class="gate">Gate: a clear winner, and a Swift wrapper API that hides which one.</div></div></div>
+    <div class="phase"><div class="num">2</div><div><h4>Daily-drivable shell</h4><p>Sidebar + sessions + terminal + IPC socket + Crit in WKWebView + Claude-state hooks. Add the test harness <i>now</i>, not later.</p><div class="gate">Gate: you can work a full day in it. session-management, crit-overlay, preview, and claude-hook-integration features pass.</div></div></div>
+    <div class="phase"><div class="num">3</div><div><h4>Hub, New Task, Settings, Health</h4><p>The rest of Ember's surface area, ported feature file by feature file.</p><div class="gate">Gate: all 119 scenarios pass on the native driver. Ember retires.</div></div></div>
+    <div class="phase"><div class="num">4</div><div><h4>Native-only wins</h4><p>Notifications with actions, Judge MenuBarExtra, Dock badge, restoration, App Intents, Spotlight, multi-window.</p></div></div>
+    <div class="phase"><div class="num">5</div><div><h4>The vision docs</h4><p>PromptEditor on embedded Neovim with native <code>@</code>/<code>/</code> completion and <code>{{snippet:…}}</code> templates, used in the New Task sheet and for commit messages.</p></div></div>
+  </div>
+</section>
+
+<!-- ======================================================= VERDICT -->
+<section id="verdict">
+  <div class="verdict">
+    <h3>My honest verdict</h3>
+    <p>As a product, the native version is clearly better. The terminal alone (no IPC hop, real input handling, ⌘ freeing up Ctrl) is something Ember can't match, and the macOS chrome stops it feeling like "a web page with a terminal in it."</p>
+    <p>But I'd only do it if you're ready to say <b>"Devora's UI is macOS-only, for good."</b> If Linux is a real goal, this doubles the UI work forever. If it isn't, then say so explicitly, update the README, and this becomes a reasonable long-term bet.</p>
+    <p>Either way, two things are worth doing <b>now, in Ember</b>: phase 0 (extracting <code>devora-core</code>, see <a href="extract-devora-core.md">the ticket</a>) and the <b>Claude-state-per-session</b> feature (see <a href="claude-session-state.md">the ticket</a>) (hooks → IPC → tab status + notifications). That feature is the biggest UX win on this page, and it doesn't depend on the framework at all. Shipping it first also tells us how much of the remaining itch is really about "native".</p>
+  </div>
+</section>
+
+</div>
+
+<script>
+  const captions = {
+    main: 'The everyday view. The session is blocked on a permission request that Judge deferred: the sidebar marks it orange and the toolbar pill repeats it. If it were in the background, a notification would offer to resolve it (see “Menu bar + notification”).',
+    hub: 'The Workspace Hub is no longer a covering overlay. It is a mode of the main area (⌘O), reached from the sidebar, with the same vim keys, and it shows Claude state and PR/dirty status per workspace.',
+    newtask: 'New Task is a sheet attached to the window. Repos are tokens. The prompt field is an embedded Neovim whose completion popup is drawn natively, so @paths and {{skill:…}} templates are first-class (docs/vision/task-creation.md).',
+    palette: 'The Command Palette is a floating panel over the window. It searches commands, sessions, workspaces, and individual settings. Every command also lives in the menu bar, so Help ▸ Search and Spotlight find it too.',
+    settings: 'Settings is a standard macOS Settings window. A scope switcher replaces navigating between User Defaults and each profile, and every row says whether it is inherited or overridden.',
+    menubar: 'The Judge menu-bar extra from docs/future/judge-ember-menu-bar-integration.md: decisions from every session, with defers pinned on top, and clicking one focuses that session. Below it, the actionable notification posted when a background session is blocked.'
+  };
+  const desk = document.getElementById('desktop');
+  const cap = document.getElementById('caption');
+  const btns = document.querySelectorAll('.stage-controls button');
+  function show(v) {
+    desk.dataset.view = v;
+    btns.forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === v)));
+    cap.textContent = captions[v];
+    desk.querySelector('.notif').style.display = v === 'menubar' ? 'grid' : 'none';
+  }
+  btns.forEach(b => b.addEventListener('click', () => show(b.dataset.v)));
+
+  // Annotation markers on the main window (positions relative to the desktop).
+  [[1, 12, 150], [2, 300, 86], [3, 700, 330], [4, 1040, 112], [7, 250, 740]].forEach(([n, x, y]) => {
+    const el = document.createElement('span');
+    el.className = 'ann'; el.textContent = n;
+    el.style.left = x + 'px'; el.style.top = y + 'px';
+    desk.appendChild(el);
+  });
+  show('main');
+</script>
+</body>
+</html>
