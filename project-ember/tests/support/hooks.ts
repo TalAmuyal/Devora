@@ -13,7 +13,7 @@ import {
 } from '../../scripts/app-bundle';
 import { AppDriver } from './app-driver';
 import { FakeClaudeServer, STRUCTURED_LOG_BASE_DIR } from './fake-claude-server';
-import { cleanupWorkspace, stopClaudeCode } from './claude-helper';
+import { CLAUDE_CONFIG_PATH, cleanupWorkspace, stopClaudeCode } from './claude-helper';
 import { assertOriginalCritAvailable } from './crit-helper';
 import { cleanupFixtures, writeTestConfig } from './fixture-helper';
 import { EmberWorld } from './world';
@@ -24,7 +24,6 @@ let ipcPort: number | null = null;
 let fakeClaudeServer: FakeClaudeServer | null = null;
 let testConfigPath: string | null = null;
 let testConfigDir: string | null = null;
-const CLAUDE_CONFIG_PATH = '/tmp/ember-bdd-claude';
 
 /*
  * Resolve the app binary to test, refusing artifacts that would make the run meaningless: a bundle whose BUILD_FINGERPRINT does not match the working tree (tests would silently exercise stale code), an incomplete bundle, or a raw binary (no bundled-apps/, so Claude/Crit scenarios fail confusingly).

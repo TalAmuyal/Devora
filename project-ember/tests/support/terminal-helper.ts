@@ -2,6 +2,7 @@ import { AppDriver } from './app-driver';
 
 export const KEY_CR = [0x0d] as const;
 export const KEY_ARROW_UP = [0x1b, 0x5b, 0x41] as const;
+export const KEY_ARROW_DOWN = [0x1b, 0x5b, 0x42] as const;
 
 export async function getTerminalContent(driver: AppDriver): Promise<string> {
   return driver.eval(`

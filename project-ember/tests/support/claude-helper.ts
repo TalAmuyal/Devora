@@ -9,14 +9,18 @@ import {
   writeBytesToTerminal,
   KEY_CR,
   KEY_ARROW_UP,
+  KEY_ARROW_DOWN,
 } from './terminal-helper';
 
 export type ClaudeHookType = 'PostToolUse' | 'PermissionRequest';
+
+export const CLAUDE_CONFIG_PATH = '/tmp/ember-bdd-claude';
 
 export function createTestWorkspace(): string {
   const workspacePath = fs.mkdtempSync(path.join(os.tmpdir(), 'ember-bdd-'));
 
   execSync('git init', { cwd: workspacePath, stdio: 'ignore' });
+  trustWorkspace(workspacePath);
 
   fs.writeFileSync(
     path.join(workspacePath, 'main.py'),
@@ -24,6 +28,19 @@ export function createTestWorkspace(): string {
   );
 
   return workspacePath;
+}
+
+/**
+ * Pre-accept Claude Code's folder-trust dialog for `workspacePath`, so the tests don't depend on how that dialog is drawn or which option it defaults.
+ */
+function trustWorkspace(workspacePath: string): void {
+  const configFile = path.join(CLAUDE_CONFIG_PATH, '.claude.json');
+  const config = fs.existsSync(configFile) ? JSON.parse(fs.readFileSync(configFile, 'utf-8')) : {};
+  config.projects ??= {};
+  for (const key of new Set([workspacePath, fs.realpathSync(workspacePath)])) {
+    config.projects[key] = { ...config.projects[key], hasTrustDialogAccepted: true };
+  }
+  fs.writeFileSync(configFile, JSON.stringify(config, null, 2));
 }
 
 export function setupClaudeHook(
@@ -91,8 +108,33 @@ const ONBOARDING_STEPS = [
   { id: 'theme', needle: 'Choose the text style', keys: [KEY_CR] },
   { id: 'apikey', needle: 'Do you want to use this API key', keys: [KEY_ARROW_UP, KEY_CR], delayMs: 100 },
   { id: 'security', needle: 'Press Enter to continue', keys: [KEY_CR] },
-  { id: 'trust', needle: 'Yes, I trust this folder', keys: [KEY_CR] },
 ] as const;
+
+/**
+ * Options to choose in option-list dialogs, which Enter alone could answer wrongly (their default option varies between Claude Code versions).
+ * Keeping plan mode preserves the plan-mode permission prompts the tests rely on.
+ */
+const DIALOG_OPTIONS = ['No, keep plan mode'];
+
+/** The last non-blank lines of the terminal, where a live dialog is drawn; answered dialogs can linger above. */
+const LIVE_LINES = 20;
+
+/**
+ * One step toward choosing `option`: confirm when the `❯` cursor is on it, otherwise move the cursor one line toward it.
+ * Single steps let the dialog re-render between keys, which a burst of keys would outrun.
+ */
+async function stepTowardOption(driver: AppDriver, content: string, option: string): Promise<void> {
+  const lines = content.split('\n');
+  const optionIndex = lines.findIndex(l => l.includes(option));
+  const cursorIndex = lines.findIndex(l => /^\s*❯\s+\S/.test(l));
+  if (optionIndex === -1 || cursorIndex === -1) return;
+  if (optionIndex === cursorIndex) {
+    await writeBytesToTerminal(driver, KEY_CR);
+    await new Promise(r => setTimeout(r, 500));
+  } else {
+    await writeBytesToTerminal(driver, optionIndex > cursorIndex ? KEY_ARROW_DOWN : KEY_ARROW_UP);
+  }
+}
 
 /**
  * Dismiss Claude Code onboarding screens (theme picker, API key
@@ -106,6 +148,13 @@ async function dismissOnboardingIfNeeded(
   content: string,
   dismissed: Set<string>,
 ): Promise<boolean> {
+  const live = content.trimEnd().split('\n').slice(-LIVE_LINES).join('\n');
+  const option = DIALOG_OPTIONS.find(o => live.includes(o));
+  if (option) {
+    await stepTowardOption(driver, live, option);
+    return true;
+  }
+
   for (const step of ONBOARDING_STEPS) {
     if (dismissed.has(step.id)) continue;
     if (!content.includes(step.needle)) continue;
