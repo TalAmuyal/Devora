@@ -107,16 +107,14 @@ BeforeAll(async function () {
     path.join(CLAUDE_CONFIG_PATH, 'settings.json'),
     JSON.stringify({ permissions: { defaultMode: 'plan' }, theme: 'dark' }, null, 2),
   );
-  // Claude Code shows one-time nudge dialogs (e.g. "Make auto mode your default permission mode?") depending on
-  // remote cohorts; one appearing mid-test swallows the keys meant for the prompt, so mark them as already seen.
+  // Claude Code shows one-time nudge dialogs (e.g. "Make auto mode your default permission mode?") depending on remote cohorts; one appearing mid-test swallows the keys meant for the prompt, so mark them as already seen.
   fs.writeFileSync(
     path.join(CLAUDE_CONFIG_PATH, '.claude.json'),
     JSON.stringify({ hasSeenAutoDefaultNudge: true, hasSeenEffortMediumNudge: true }, null, 2),
   );
   // Note: We intentionally do NOT copy .credentials.json here.
-  // Tests use ANTHROPIC_API_KEY (pointed at the fake server) instead of
-  // OAuth tokens.  Copying credentials would cause an "auth conflict"
-  // warning in Claude Code.
+  // Tests use ANTHROPIC_API_KEY (pointed at the fake server) instead of OAuth tokens.
+  // Copying credentials would cause an "auth conflict" warning in Claude Code.
 
   const binary = findAppBinary();
 
@@ -245,8 +243,7 @@ Before({ tags: '@real-crit' }, async function (this: EmberWorld) {
 });
 
 After(async function (this: EmberWorld) {
-  // A scenario can end while the app is still loading (e.g. a hub fetching settings); deleting the fixtures under
-  // a command in flight fails it and reports a backend error, so let the app settle first.
+  // A scenario can end while the app is still loading (e.g. a hub fetching settings); deleting the fixtures under a command in flight fails it and reports a backend error, so let the app settle first.
   await this.driver.pollFor(`return window.__test.invokesInFlight()`, 0, 5_000);
   if (this.fixtureRoot) {
     cleanupFixtures(this.fixtureRoot);
