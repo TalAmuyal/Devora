@@ -16,6 +16,12 @@ Never reimplement the hash — invoke the script (see `scripts/app-bundle.ts`).
 The harness (`tests/support/hooks.ts`) independently refuses stale/incomplete bundles and raw binaries, so even direct `_cucumber` runs are protected.
 `EMBER_E2E_PREBUILT=1` skips all of this and tests exactly the artifact that exists (raw binaries allowed; bundle-dependent scenarios will fail).
 
+### Failure captures
+
+When a step fails, `tests/support/failure-capture.ts` saves a screenshot of the screen and the active terminal's text to `test-results/failures/`, at the moment of failure.
+In CI they are uploaded as the `e2e-failure-captures` artifact of the failed run (`gh run download <run-id> -n e2e-failure-captures`): look there before trying to reproduce a CI-only failure.
+Screenshots need macOS Screen Recording permission for the process running the tests; without it locally, only the terminal text is saved and the `@screen-capture` scenario is skipped (it always runs in CI).
+
 ### Cassette recording
 
 To record new cassettes for `@real-claude` tests:

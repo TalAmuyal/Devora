@@ -1,4 +1,4 @@
-import { Before, After, BeforeAll, AfterAll } from '@cucumber/cucumber';
+import { Before, After, AfterStep, BeforeAll, AfterAll, Status } from '@cucumber/cucumber';
 import { spawn, ChildProcess } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -15,6 +15,7 @@ import { AppDriver } from './app-driver';
 import { FakeClaudeServer, STRUCTURED_LOG_BASE_DIR } from './fake-claude-server';
 import { CLAUDE_CONFIG_PATH, cleanupWorkspace, stopClaudeCode } from './claude-helper';
 import { assertOriginalCritAvailable } from './crit-helper';
+import { FAILURE_CAPTURE_DIR, canCaptureScreen, captureFailure } from './failure-capture';
 import { cleanupFixtures, writeTestConfig } from './fixture-helper';
 import { EmberWorld } from './world';
 
@@ -93,6 +94,7 @@ async function waitForReady(port: number, timeoutMs: number): Promise<void> {
 
 BeforeAll(async function () {
   fs.rmSync(STRUCTURED_LOG_BASE_DIR, { recursive: true, force: true });
+  fs.rmSync(FAILURE_CAPTURE_DIR, { recursive: true, force: true });
 
   fakeClaudeServer = new FakeClaudeServer();
   await fakeClaudeServer.start();
@@ -200,6 +202,11 @@ BeforeAll(async function () {
   await driver.pollFor("return typeof window.__test !== 'undefined'", true, 30_000);
 });
 
+AfterStep(async function (this: EmberWorld, { result, pickle, pickleStep }) {
+  if (result.status !== Status.FAILED) return;
+  await captureFailure(this.driver, `${pickle.name}--${pickleStep.text}`);
+});
+
 Before(async function (this: EmberWorld) {
   this.driver = new AppDriver(testHarnessPort!, ipcPort!);
   this.testConfigPath = testConfigPath!;
@@ -236,6 +243,11 @@ After({ tags: '@real-claude' }, async function (this: EmberWorld) {
 
   await fakeClaudeServer!.saveCassette();
   fakeClaudeServer!.reset();
+});
+
+// Locally, the terminal running the tests may lack macOS Screen Recording permission; CI must always run these.
+Before({ tags: '@screen-capture' }, function () {
+  if (!process.env.CI && !canCaptureScreen()) return 'skipped';
 });
 
 Before({ tags: '@real-crit' }, async function (this: EmberWorld) {
