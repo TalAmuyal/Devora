@@ -45,8 +45,7 @@ export async function isSearchFieldFocused(driver: AppDriver): Promise<boolean> 
  */
 export async function pressEscapeInSearchField(driver: AppDriver): Promise<void> {
   await driver.eval(`
-    const input = document.querySelector('.search-input-field');
-    if (!input) throw new Error('Command Palette search field not found');
+    const input = need(document.querySelector('.search-input-field'), 'the Command Palette search field');
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
   `);
 }

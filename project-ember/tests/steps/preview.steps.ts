@@ -71,9 +71,7 @@ When('a Markdown file is previewed for an unknown session', async function (this
 
 When('the preview pane close button is clicked', async function (this: EmberWorld) {
   await this.driver.eval(`
-    const btn = document.querySelector('.preview-pane .tab-close');
-    if (!btn) throw new Error('no preview close button found');
-    btn.click();
+    need(document.querySelector('.preview-pane .tab-close'), 'the preview close button').click();
   `);
 });
 

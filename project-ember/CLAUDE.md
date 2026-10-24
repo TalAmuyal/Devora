@@ -34,8 +34,12 @@ Cassettes are stored as gzip-compressed JSON at `tests/support/fixtures/cassette
 - Use `window.__test.*` for accessing app internals via the eval bridge
 - Use `waitForTerminalContent()` for terminal output assertions (polling with timeout)
 - Use `driver.pollFor()` for async state assertions
+- Inside `driver.eval()` scripts, look up UI elements with `need(value, what)` (for example, instead of `if (!x) throw`): the UI renders asynchronously, and `need` makes `eval` re-run the script until the element exists (or times out with "waiting for <what>").
+	Call `need` before any side effect, since a re-run repeats everything before it.
+	`UIDriver.click`/`typeIntoInput`/`dispatchKeyToFocused` already wait this way.
 - Use `driver.ipcPost()` to simulate external tool communication
-- Steps that change application state and are followed by another step that depends on that state (to further change it or to assert it) must block until the state mutation is complete. For example, a step that clicks a button to start a procedure must await that procedure's completion and verify it succeeded before returning control to the next step.
+- Steps that change application state and are followed by another step that depends on that state (to further change it or to assert it) must block until the state mutation is complete.
+	For example, a step that clicks a button to start a procedure must await that procedure's completion and verify it succeeded before returning control to the next step.
 
 ### UI interaction conventions
 
@@ -51,7 +55,8 @@ Cassettes are stored as gzip-compressed JSON at `tests/support/fixtures/cassette
 - `createTestWorkspaces()` creates workspaces (`ws-1`..`ws-N`) with optional active/inactive split
 - `writeTestConfig()` writes a config file pointing at the test profile paths
 - Set `DEVORA_CONFIG_PATH` env var to point the Rust backend at the fixture config file instead of the real one
-- All fixture setup steps (profile creation, workspace creation, repo state modifications) must come **before** the `And the Workspace Hub is open` step. This step triggers a fresh load from the backend, so placing it after all setup ensures the Hub renders correct, up-to-date data.
+- All fixture setup steps (profile creation, workspace creation, repo state modifications) must come **before** the `And the Workspace Hub is open` step.
+	This step triggers a fresh load from the backend, so placing it after all setup ensures the Hub renders correct, up-to-date data.
 - `createSingleActiveWorkspace()` adds a single active workspace with an explicit id/title (real worktree) alongside existing ones — for tests that add a workspace out-of-band (e.g. verifying refresh)
 - `createInvalidWorkspaces()` creates `initialized` workspaces with no repo subdirs; the hub renders these as invalid
 

@@ -152,18 +152,10 @@ Given(
     // Check the checkbox for each requested repo
     for (const repoName of repoNames) {
       await this.driver.eval(`
-        const items = document.querySelectorAll('.repo-list-item');
-        let found = false;
-        for (const item of items) {
-          const span = item.querySelector('span');
-          if (span && span.textContent === ${JSON.stringify(repoName)}) {
-            const checkbox = item.querySelector('input[type="checkbox"]');
-            if (checkbox && !checkbox.checked) checkbox.click();
-            found = true;
-            break;
-          }
-        }
-        if (!found) throw new Error('Repo checkbox not found: ' + ${JSON.stringify(repoName)});
+        const item = Array.from(document.querySelectorAll('.repo-list-item'))
+          .find((i) => i.querySelector('span')?.textContent === ${JSON.stringify(repoName)});
+        const checkbox = need(item, 'repo checkbox ' + ${JSON.stringify(repoName)}).querySelector('input[type="checkbox"]');
+        if (checkbox && !checkbox.checked) checkbox.click();
       `);
     }
 

@@ -131,9 +131,7 @@ When(
     await this.driver.eval(`
       const item = Array.from(document.querySelectorAll('.repo-list-item'))
         .find((i) => (i.textContent || '').trim() === ${JSON.stringify(repoName)});
-      if (!item) throw new Error('repo checkbox not found: ' + ${JSON.stringify(repoName)});
-      const checkbox = item.querySelector('input[type=checkbox]');
-      checkbox.checked = true;
+      need(item, 'repo checkbox ' + ${JSON.stringify(repoName)}).querySelector('input[type=checkbox]').checked = true;
     `);
 
     await ui.click('.ws-new-form-create');

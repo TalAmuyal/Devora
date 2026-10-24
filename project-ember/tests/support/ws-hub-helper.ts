@@ -121,15 +121,8 @@ export async function switchProfile(
 
   // Open the profile dropdown and click the matching option, as a user would
   await driver.eval(`
-    const trigger = document.querySelector('.ws-profile-dropdown .dropdown-trigger');
-    if (!trigger) throw new Error('Profile dropdown not found');
-    trigger.click();
+    need(document.querySelector('.ws-profile-dropdown .dropdown-trigger'), 'the profile dropdown').click();
   `);
-  await driver.pollFor(
-    `return document.querySelector('.ws-profile-dropdown .dropdown-popup') !== null`,
-    true,
-    3_000,
-  );
   await driver.eval(`
     const rows = Array.from(
       document.querySelectorAll('.ws-profile-dropdown .dropdown-item-option'),
@@ -137,8 +130,7 @@ export async function switchProfile(
     const row = rows.find(
       r => r.querySelector('.dropdown-item-label')?.textContent === ${JSON.stringify(profileName)}
     );
-    if (!row) throw new Error('Profile option not found: ' + ${JSON.stringify(profileName)});
-    row.click();
+    need(row, 'profile option ' + ${JSON.stringify(profileName)}).click();
   `);
 
   // Wait for render() to rebuild the DOM: stale items are gone, new items or empty message appear
@@ -158,15 +150,8 @@ export async function clickBurgerMenuItem(
   // Open the burger (☰) menu and click the matching action item, as a user would.
   // The selector is scoped to .ws-burger-menu because the header has a second .dropdown-trigger (the profile dropdown).
   await driver.eval(`
-    const trigger = document.querySelector('.ws-burger-menu .dropdown-trigger');
-    if (!trigger) throw new Error('Burger menu not found');
-    trigger.click();
+    need(document.querySelector('.ws-burger-menu .dropdown-trigger'), 'the burger menu').click();
   `);
-  await driver.pollFor(
-    `return document.querySelector('.ws-burger-menu .dropdown-popup') !== null`,
-    true,
-    3_000,
-  );
   await driver.eval(`
     const rows = Array.from(
       document.querySelectorAll('.ws-burger-menu .dropdown-item-action'),
@@ -174,8 +159,7 @@ export async function clickBurgerMenuItem(
     const row = rows.find(
       r => r.querySelector('.dropdown-item-label')?.textContent === ${JSON.stringify(label)}
     );
-    if (!row) throw new Error('Burger menu item not found: ' + ${JSON.stringify(label)});
-    row.click();
+    need(row, 'burger menu item ' + ${JSON.stringify(label)}).click();
   `);
 }
 

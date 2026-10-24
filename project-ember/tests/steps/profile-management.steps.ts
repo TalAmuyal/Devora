@@ -157,8 +157,7 @@ When(
     await this.driver.eval(`
       const rows = Array.from(document.querySelectorAll('.pm-master-item'));
       const row = rows.find((r) => r.querySelector('.pm-name')?.textContent === ${JSON.stringify(rowName)});
-      if (!row) throw new Error('Master row not found: ' + ${JSON.stringify(rowName)});
-      row.click();
+      need(row, 'master row ' + ${JSON.stringify(rowName)}).click();
     `);
     await this.driver.pollFor(
       `return document.querySelector('.pm-detail-title')?.textContent ?? null`,
@@ -298,8 +297,7 @@ When(
        const row = rows.find(
          (r) => r.querySelector('.dropdown-item-label')?.textContent === ${JSON.stringify(label)}
        );
-       if (!row) throw new Error('Dropdown action not found: ' + ${JSON.stringify(label)});
-       row.click();`,
+       need(row, 'dropdown action ' + ${JSON.stringify(label)}).click();`,
     );
   },
 );
