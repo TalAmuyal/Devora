@@ -68,16 +68,13 @@ export class UIDriver {
 
   async click(selector: string): Promise<void> {
     await this.driver.eval(`
-      const el = document.querySelector(${JSON.stringify(selector)});
-      if (!el) throw new Error('Element not found: ' + ${JSON.stringify(selector)});
-      el.click();
+      need(document.querySelector(${JSON.stringify(selector)}), ${JSON.stringify(selector)}).click();
     `);
   }
 
   async typeIntoInput(selector: string, text: string): Promise<void> {
     await this.driver.eval(`
-      const input = document.querySelector(${JSON.stringify(selector)});
-      if (!input) throw new Error('Input not found: ' + ${JSON.stringify(selector)});
+      const input = need(document.querySelector(${JSON.stringify(selector)}), ${JSON.stringify(selector)});
       input.focus();
       input.value = ${JSON.stringify(text)};
       input.dispatchEvent(new Event('input', { bubbles: true }));
@@ -138,8 +135,7 @@ export class UIDriver {
   async dispatchKeyToFocused(selector: string, key: string): Promise<boolean> {
     const code = deriveCode(key);
     return await this.driver.eval(`
-      const el = document.querySelector(${JSON.stringify(selector)});
-      if (!el) throw new Error('Element not found: ' + ${JSON.stringify(selector)});
+      const el = need(document.querySelector(${JSON.stringify(selector)}), ${JSON.stringify(selector)});
       el.focus();
       const evt = new KeyboardEvent('keydown', {
         key: ${JSON.stringify(key)},

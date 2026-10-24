@@ -27,8 +27,7 @@ When(
     await this.driver.eval(`
       const item = Array.from(document.querySelectorAll('.add-repo-dialog .repo-list-item'))
         .find((i) => (i.textContent || '').trim() === ${JSON.stringify(repoName)});
-      if (!item) throw new Error('repo option not found: ' + ${JSON.stringify(repoName)});
-      item.querySelector('input[type=radio]').checked = true;
+      need(item, 'repo option ' + ${JSON.stringify(repoName)}).querySelector('input[type=radio]').checked = true;
     `);
 
     if (postfix) {

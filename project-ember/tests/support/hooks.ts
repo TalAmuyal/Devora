@@ -1,4 +1,4 @@
-import { Before, After, BeforeAll, AfterAll } from '@cucumber/cucumber';
+import { Before, After, AfterStep, BeforeAll, AfterAll, Status } from '@cucumber/cucumber';
 import { spawn, ChildProcess } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -13,8 +13,9 @@ import {
 } from '../../scripts/app-bundle';
 import { AppDriver } from './app-driver';
 import { FakeClaudeServer, STRUCTURED_LOG_BASE_DIR } from './fake-claude-server';
-import { cleanupWorkspace, stopClaudeCode } from './claude-helper';
+import { CLAUDE_CONFIG_PATH, cleanupWorkspace, stopClaudeCode } from './claude-helper';
 import { assertOriginalCritAvailable } from './crit-helper';
+import { FAILURE_CAPTURE_DIR, canCaptureScreen, captureFailure } from './failure-capture';
 import { cleanupFixtures, writeTestConfig } from './fixture-helper';
 import { EmberWorld } from './world';
 
@@ -24,7 +25,6 @@ let ipcPort: number | null = null;
 let fakeClaudeServer: FakeClaudeServer | null = null;
 let testConfigPath: string | null = null;
 let testConfigDir: string | null = null;
-const CLAUDE_CONFIG_PATH = '/tmp/ember-bdd-claude';
 
 /*
  * Resolve the app binary to test, refusing artifacts that would make the run meaningless: a bundle whose BUILD_FINGERPRINT does not match the working tree (tests would silently exercise stale code), an incomplete bundle, or a raw binary (no bundled-apps/, so Claude/Crit scenarios fail confusingly).
@@ -94,6 +94,7 @@ async function waitForReady(port: number, timeoutMs: number): Promise<void> {
 
 BeforeAll(async function () {
   fs.rmSync(STRUCTURED_LOG_BASE_DIR, { recursive: true, force: true });
+  fs.rmSync(FAILURE_CAPTURE_DIR, { recursive: true, force: true });
 
   fakeClaudeServer = new FakeClaudeServer();
   await fakeClaudeServer.start();
@@ -108,10 +109,14 @@ BeforeAll(async function () {
     path.join(CLAUDE_CONFIG_PATH, 'settings.json'),
     JSON.stringify({ permissions: { defaultMode: 'plan' }, theme: 'dark' }, null, 2),
   );
+  // Claude Code shows one-time nudge dialogs (e.g. "Make auto mode your default permission mode?") depending on remote cohorts; one appearing mid-test swallows the keys meant for the prompt, so mark them as already seen.
+  fs.writeFileSync(
+    path.join(CLAUDE_CONFIG_PATH, '.claude.json'),
+    JSON.stringify({ hasSeenAutoDefaultNudge: true, hasSeenEffortMediumNudge: true }, null, 2),
+  );
   // Note: We intentionally do NOT copy .credentials.json here.
-  // Tests use ANTHROPIC_API_KEY (pointed at the fake server) instead of
-  // OAuth tokens.  Copying credentials would cause an "auth conflict"
-  // warning in Claude Code.
+  // Tests use ANTHROPIC_API_KEY (pointed at the fake server) instead of OAuth tokens.
+  // Copying credentials would cause an "auth conflict" warning in Claude Code.
 
   const binary = findAppBinary();
 
@@ -135,6 +140,8 @@ BeforeAll(async function () {
       ANTHROPIC_API_KEY: 'sk-ant-fake-key-for-bdd-tests',
       DEVORA_CONFIG_PATH: testConfigPath,
       CLAUDE_CONFIG_DIR: CLAUDE_CONFIG_PATH,
+      // No feature flags or telemetry from the network, so Claude Code behaves the same on every run.
+      CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -195,6 +202,11 @@ BeforeAll(async function () {
   await driver.pollFor("return typeof window.__test !== 'undefined'", true, 30_000);
 });
 
+AfterStep(async function (this: EmberWorld, { result, pickle, pickleStep }) {
+  if (result.status !== Status.FAILED) return;
+  await captureFailure(this.driver, `${pickle.name}--${pickleStep.text}`);
+});
+
 Before(async function (this: EmberWorld) {
   this.driver = new AppDriver(testHarnessPort!, ipcPort!);
   this.testConfigPath = testConfigPath!;
@@ -233,11 +245,18 @@ After({ tags: '@real-claude' }, async function (this: EmberWorld) {
   fakeClaudeServer!.reset();
 });
 
+// Locally, the terminal running the tests may lack macOS Screen Recording permission; CI must always run these.
+Before({ tags: '@screen-capture' }, function () {
+  if (!process.env.CI && !canCaptureScreen()) return 'skipped';
+});
+
 Before({ tags: '@real-crit' }, async function (this: EmberWorld) {
   assertOriginalCritAvailable();
 });
 
 After(async function (this: EmberWorld) {
+  // A scenario can end while the app is still loading (e.g. a hub fetching settings); deleting the fixtures under a command in flight fails it and reports a backend error, so let the app settle first.
+  await this.driver.pollFor(`return window.__test.invokesInFlight()`, 0, 5_000);
   if (this.fixtureRoot) {
     cleanupFixtures(this.fixtureRoot);
   }

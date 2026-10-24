@@ -11,8 +11,9 @@ run = """
 set -e
 mise run -C project-debi build
 mise run -C project-status-line build
+mise run -C project-judgess build
 """
-description = "Build all sub-projects (debi, cc-simple-statusline)"
+description = "Build all sub-projects (debi, cc-simple-statusline, judgess)"
 
 [tasks.clean]
 run = """
@@ -29,7 +30,7 @@ description = "Build Devora.app in development mode and open it"
 run = """
 set -e
 mise run -C project-debi test
-mise run -C project-judge test
+mise run -C project-judgess test
 mise run -C project-status-line test
 mise run test-bundler
 """

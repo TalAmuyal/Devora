@@ -36,7 +36,6 @@ function baseReport(): ReportShape {
     required: [
       { name: 'claude', found: true, version: '2.1.4', path: '/u/bin/claude' },
       { name: 'git', found: true, version: '2.45', path: '/usr/bin/git' },
-      { name: 'uv', found: true, version: '0.5', path: '/u/bin/uv' },
       { name: 'zsh', found: true, version: '5.9', path: '/bin/zsh' },
     ],
     optional: [
@@ -49,8 +48,8 @@ function baseReport(): ReportShape {
       { name: 'task-tracker', status: 'info', message: 'not configured (optional)' },
     ],
     summary: {
-      requiredMet: 4,
-      requiredTotal: 4,
+      requiredMet: 3,
+      requiredTotal: 3,
       optionalMet: 2,
       optionalTotal: 3,
       credentialsMet: 0,
@@ -121,7 +120,7 @@ describe('HealthHub', () => {
     const el = await mount();
     expect(text(el)).toContain('v0.42.0');
     const tiles = el.querySelectorAll('.health-tile-value');
-    expect(Array.from(tiles).map((t) => t.textContent)).toEqual(['4/4', '2/3', '0/1', '1/2']);
+    expect(Array.from(tiles).map((t) => t.textContent)).toEqual(['3/3', '2/3', '0/1', '1/2']);
   });
 
   it('shows "Healthy" only when nothing is missing', async () => {
@@ -130,8 +129,8 @@ describe('HealthHub', () => {
     report.completion = { path: '/c', found: true };
     report.credentials = [{ name: 'GitHub', status: 'ok', message: 'Logged in' }];
     report.summary = {
-      requiredMet: 4,
-      requiredTotal: 4,
+      requiredMet: 3,
+      requiredTotal: 3,
       optionalMet: 3,
       optionalTotal: 3,
       credentialsMet: 1,
@@ -153,8 +152,8 @@ describe('HealthHub', () => {
 
   it('shows "Missing required" when a required dependency is missing', async () => {
     const report = baseReport();
-    report.required[2] = { name: 'uv', found: false, version: '', path: '' };
-    report.summary.requiredMet = 3;
+    report.required[1] = { name: 'git', found: false, version: '', path: '' };
+    report.summary.requiredMet = 2;
     resolveWith(report);
     const el = await mount();
     const pill = el.querySelector('.health-overall-pill')!;

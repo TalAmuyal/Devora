@@ -9,9 +9,9 @@ import (
 	"devora/internal/shellinit"
 )
 
-// frozenShimNames is the contract this package has with the outside world: Judge's command allowlist contains "gaac" and Ember's e2e suite probes `command -v gcl`, and users' muscle memory relies on all of them.
+// frozenShimNames is the contract this package has with the outside world: Judgess's command allowlist contains "gaac" and Ember's e2e suite probes `command -v gcl`, and users' muscle memory relies on all of them.
 // The list is duplicated here ON PURPOSE — deriving it from GitShimAliases would make the test blind to renames.
-// Additions are fine; renames/removals must be coordinated with Judge and the Ember e2e suite.
+// Additions are fine; renames/removals must be coordinated with Judgess and the Ember e2e suite.
 var frozenShimNames = []string{
 	"gaa",
 	"gaaa",

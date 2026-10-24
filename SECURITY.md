@@ -24,13 +24,13 @@ You should expect an initial response within a few days. The advisory will remai
 
 The following are considered security issues in Devora:
 
-- **Judge auto-approval rules** -- Vulnerabilities in the Judge component (`project-judge/`) that could allow unintended command execution or bypass approval checks.
+- **Judgess auto-approval rules** -- Vulnerabilities in the Judgess component (`project-judgess/`) that could allow unintended command execution or bypass approval checks.
 - **Shell script injection or path traversal** -- Issues in Devora's own shell scripts (`ccc.sh`, `bundler/macos/bootstrap.sh`, `bundler/macos/bundle.sh`, etc.) that could lead to arbitrary code execution, path traversal, or privilege escalation.
-- **Bundled third-party binaries** -- If you discover a vulnerability in a binary bundled with Devora (Kitty, uv, glimpse-tty, crit), please report it to the upstream project first, then notify Devora so the bundled version can be updated.
+- **Bundled third-party binaries** -- If you discover a vulnerability in a binary bundled with Devora (Kitty, glimpse-tty, crit), please report it to the upstream project first, then notify Devora so the bundled version can be updated.
 
 ## Out of scope
 
 The following should be reported to their respective upstream projects, not to Devora:
 
 - **Claude Code** -- Security issues in Claude Code itself should be reported to [Anthropic](https://www.anthropic.com/).
-- **Kitty, uv, glimpse-tty, crit** -- Vulnerabilities in these tools that are not specific to how Devora bundles or invokes them should be reported to their respective maintainers.
+- **Kitty, glimpse-tty, crit** -- Vulnerabilities in these tools that are not specific to how Devora bundles or invokes them should be reported to their respective maintainers.

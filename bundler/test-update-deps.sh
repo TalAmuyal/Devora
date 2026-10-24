@@ -59,12 +59,12 @@ assert_eq "version in filename (glow pattern)" \
 		"v2.1.1" "v2.2.0" \
 		"2.1.1" "2.2.0")"
 
-assert_eq "no version in filename (uv pattern)" \
-	"https://github.com/astral-sh/uv/releases/download/0.11.0/uv-aarch64-apple-darwin.tar.gz" \
+assert_eq "no version in filename (crit pattern)" \
+	"https://github.com/tomasz-tomczyk/crit/releases/download/v0.16.0/crit-darwin-arm64" \
 	"$(compute_new_url \
-		"https://github.com/astral-sh/uv/releases/download/0.10.12/uv-aarch64-apple-darwin.tar.gz" \
-		"0.10.12" "0.11.0" \
-		"0.10.12" "0.11.0")"
+		"https://github.com/tomasz-tomczyk/crit/releases/download/v0.15.4/crit-darwin-arm64" \
+		"v0.15.4" "v0.16.0" \
+		"0.15.4" "0.16.0")"
 
 assert_eq "source archive (crit-cc-plugin pattern)" \
 	"https://github.com/tomasz-tomczyk/crit/archive/refs/tags/v0.11.0.tar.gz" \

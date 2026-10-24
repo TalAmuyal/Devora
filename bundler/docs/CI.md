@@ -14,7 +14,7 @@ If multiple runs are triggered for the same branch, the older in-progress run is
 The workflow runs `mise run test`, which executes the test suites for the following sub-projects (in order):
 
 - **project-debi** (Go)
-- **project-judge** (Python)
+- **project-judgess** (Rust)
 - **project-status-line** (Go)
 
 The runner is `ubuntu-latest`. Tool versions (Go, Python, etc.) are managed by [mise](https://mise.jdx.dev/) via `jdx/mise-action`.
@@ -31,7 +31,7 @@ This is the same command the CI workflow executes. You can also run tests for a 
 
 ```
 mise run -C project-debi test
-mise run -C project-judge test
+mise run -C project-judgess test
 mise run -C project-status-line test
 ```
 

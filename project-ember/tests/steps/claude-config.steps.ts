@@ -53,11 +53,9 @@ When(
     await this.driver.eval(`
       const rows = Array.from(document.querySelectorAll('.settings-card .config-row'));
       const row = rows.find((r) => r.querySelector('.config-row-name')?.textContent === 'Effort');
-      if (!row) throw new Error('Effort row not found in the Claude config card');
-      const segment = Array.from(row.querySelectorAll('.segmented-control-btn'))
+      const segment = Array.from(need(row, 'the Effort row').querySelectorAll('.segmented-control-btn'))
         .find((b) => b.textContent === ${JSON.stringify(level)});
-      if (!segment) throw new Error('Effort segment not found: ' + ${JSON.stringify(level)});
-      segment.click();
+      need(segment, 'Effort segment ' + ${JSON.stringify(level)}).click();
     `);
     // The card persists, re-reads, and re-renders; the level's segment becoming active marks the write as committed.
     await this.driver.pollFor(
@@ -86,10 +84,9 @@ When('the user turns the default model off', async function (this: EmberWorld) {
   await this.driver.eval(`
     const rows = Array.from(document.querySelectorAll('.settings-card .config-row'));
     const row = rows.find((r) => r.querySelector('.config-row-name')?.textContent === 'Default model');
-    if (!row) throw new Error('Default model row not found in the Claude config card');
-    const off = Array.from(row.querySelectorAll('.segmented-control-btn')).find((b) => b.textContent === 'Off');
-    if (!off) throw new Error('Off segment not found in the Default model toggle');
-    off.click();
+    const off = Array.from(need(row, 'the Default model row').querySelectorAll('.segmented-control-btn'))
+      .find((b) => b.textContent === 'Off');
+    need(off, 'the Default model Off segment').click();
   `);
   // The card persists, re-reads, and re-renders; the Off segment becoming active marks the write as committed.
   await this.driver.pollFor(
@@ -119,15 +116,12 @@ When(
     await this.driver.eval(`
       const findRow = () => Array.from(document.querySelectorAll('.settings-card .config-row'))
         .find((r) => r.querySelector('.config-row-name')?.textContent === 'Permission mode');
-      let row = findRow();
-      if (!row) throw new Error('Permission mode row not found in the Claude config card');
-      const custom = Array.from(row.querySelectorAll('.segmented-control-btn')).find((b) => b.textContent === 'Custom');
-      if (!custom) throw new Error('Custom segment not found in the Permission mode combo');
-      custom.click();
-      row = findRow(); // the card re-renders synchronously to reveal the chips
-      const chip = Array.from(row.querySelectorAll('.config-chip')).find((c) => c.textContent === ${JSON.stringify(mode)});
-      if (!chip) throw new Error('Permission mode chip not found: ' + ${JSON.stringify(mode)});
-      chip.click();
+      const custom = Array.from(need(findRow(), 'the Permission mode row').querySelectorAll('.segmented-control-btn'))
+        .find((b) => b.textContent === 'Custom');
+      need(custom, 'the Permission mode Custom segment').click();
+      // The card re-renders synchronously to reveal the chips.
+      const chip = Array.from(findRow().querySelectorAll('.config-chip')).find((c) => c.textContent === ${JSON.stringify(mode)});
+      need(chip, 'Permission mode chip ' + ${JSON.stringify(mode)}).click();
     `);
     // The commit persists, re-reads, and re-renders; the value appearing in the Custom input marks the write as committed.
     await this.driver.pollFor(

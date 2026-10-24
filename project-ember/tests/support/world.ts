@@ -1,5 +1,6 @@
 import { World, setWorldConstructor, setDefaultTimeout } from '@cucumber/cucumber';
 import { AppDriver } from './app-driver';
+import type { FailureCapture } from './failure-capture';
 
 setDefaultTimeout(30_000);
 
@@ -19,6 +20,7 @@ export class EmberWorld extends World {
   recordedTerminalCols?: number;
   // Temp files created for preview scenarios; the last one is reused by "same file" steps.
   previewFiles?: string[];
+  failureCapture?: FailureCapture;
 }
 
 setWorldConstructor(EmberWorld);

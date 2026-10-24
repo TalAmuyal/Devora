@@ -14,7 +14,7 @@ type ShimAlias struct {
 }
 
 // GitShimAliases is the single source of truth for the shell shims.
-// The alias NAMES are frozen external contracts - Judge's command allowlist contains "gaac" and Ember's e2e suite probes `command -v gcl` - so renames break integrations and muscle memory; additions are fine.
+// The alias NAMES are frozen external contracts - Judgess's command allowlist contains "gaac" and Ember's e2e suite probes `command -v gcl` - so renames break integrations and muscle memory; additions are fine.
 // The drift guard in internal/cli/git_shortcut_shims_test.go enforces this.
 var GitShimAliases = []ShimAlias{
 	{Name: "gaa", Target: "add ."},

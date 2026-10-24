@@ -157,6 +157,8 @@ jobs:
 
           # Verify bundled resources were copied
           test -f "$EMBER_APP/Contents/Resources/bundled-apps/debi"
+          test -x "$EMBER_APP/Contents/Resources/cc-plugins/judgess/judgess"
+          test -f "$EMBER_APP/Contents/Resources/cc-plugins/judgess/hooks/hooks.json"
 
           # Verify version was patched in Info.plist (should not be the tauri.conf.json placeholder)
           EMBER_VERSION=$(plutil -extract CFBundleShortVersionString raw "$EMBER_APP/Contents/Info.plist")

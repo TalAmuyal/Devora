@@ -1,3 +1,11 @@
+const NEED_TIMEOUT_MS = 5_000;
+const NOT_READY = '__NOT_READY__:';
+const NEED_PRELUDE = `const need = (value, what) => {
+  if (value === null || value === undefined) throw new Error(${JSON.stringify(NOT_READY)} + what);
+  return value;
+};
+`;
+
 export class AppDriver {
   private testHarnessPort: number;
   private ipcPort: number;
@@ -7,7 +15,29 @@ export class AppDriver {
     this.ipcPort = ipcPort;
   }
 
-  async eval(js: string): Promise<any> {
+  /**
+   * Run `js` as an async function body in the app's webview and return its result.
+   *
+   * The script can call `need(value, what)` to require something that may not be rendered yet: it returns `value` when present, otherwise the whole script is re-run (every 100ms) until it is, or until `timeoutMs` passes.
+   * Call `need` before any side effect, since a re-run repeats everything before it.
+   */
+  async eval(js: string, timeoutMs = NEED_TIMEOUT_MS): Promise<any> {
+    const start = Date.now();
+    for (;;) {
+      try {
+        return await this.evalOnce(NEED_PRELUDE + js);
+      } catch (error) {
+        const missing = String(error).split(NOT_READY)[1];
+        if (missing === undefined) throw error;
+        if (Date.now() - start >= timeoutMs) {
+          throw new Error(`Timed out after ${timeoutMs}ms waiting for ${missing}`);
+        }
+        await new Promise((r) => setTimeout(r, 100));
+      }
+    }
+  }
+
+  private async evalOnce(js: string): Promise<any> {
     const id = crypto.randomUUID();
     const response = await fetch(`http://127.0.0.1:${this.testHarnessPort}/test/eval`, {
       method: 'POST',

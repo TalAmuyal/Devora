@@ -52,7 +52,7 @@ fi
 
 echo "Effective version: $EFFECTIVE_VERSION"
 
-# --- Step 1: Build Go binaries ---
+# --- Build Go binaries ---
 
 echo ""
 echo "==> Building Go binaries..."
@@ -77,7 +77,20 @@ GOOS=darwin \
 
 echo "    Go binaries built."
 
-# --- Step 2: Build Ember app ---
+# --- Build Judgess ---
+
+echo ""
+echo "==> Building Judgess..."
+
+mise \
+	-C "$REPO_ROOT/project-judgess" \
+	exec \
+	-- \
+	cargo build --release
+
+echo "    Judgess built."
+
+# --- Build Ember app ---
 
 echo ""
 echo "==> Building Devora Ember..."
@@ -86,7 +99,7 @@ echo "==> Building Devora Ember..."
 
 echo "    Devora Ember built."
 
-# --- Step 3: Locate the .app bundle ---
+# --- Locate the .app bundle ---
 
 APP_DIR="$EMBER_DIR/src-tauri/target/release/bundle/macos/Devora-Ember.app"
 
@@ -95,7 +108,7 @@ if [ ! -d "$APP_DIR" ]; then
 	exit 1
 fi
 
-# --- Step 4: Populate app resources ---
+# --- Populate app resources ---
 
 echo ""
 echo "==> Bundling resources into Devora Ember.app..."

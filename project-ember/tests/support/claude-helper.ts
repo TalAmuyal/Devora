@@ -13,10 +13,13 @@ import {
 
 export type ClaudeHookType = 'PostToolUse' | 'PermissionRequest';
 
+export const CLAUDE_CONFIG_PATH = '/tmp/ember-bdd-claude';
+
 export function createTestWorkspace(): string {
   const workspacePath = fs.mkdtempSync(path.join(os.tmpdir(), 'ember-bdd-'));
 
   execSync('git init', { cwd: workspacePath, stdio: 'ignore' });
+  trustWorkspace(workspacePath);
 
   fs.writeFileSync(
     path.join(workspacePath, 'main.py'),
@@ -24,6 +27,19 @@ export function createTestWorkspace(): string {
   );
 
   return workspacePath;
+}
+
+/**
+ * Pre-accept Claude Code's folder-trust dialog for `workspacePath`, so the tests don't depend on how that dialog is drawn or which option it defaults.
+ */
+function trustWorkspace(workspacePath: string): void {
+  const configFile = path.join(CLAUDE_CONFIG_PATH, '.claude.json');
+  const config = fs.existsSync(configFile) ? JSON.parse(fs.readFileSync(configFile, 'utf-8')) : {};
+  config.projects ??= {};
+  for (const key of new Set([workspacePath, fs.realpathSync(workspacePath)])) {
+    config.projects[key] = { ...config.projects[key], hasTrustDialogAccepted: true };
+  }
+  fs.writeFileSync(configFile, JSON.stringify(config, null, 2));
 }
 
 export function setupClaudeHook(
@@ -91,7 +107,6 @@ const ONBOARDING_STEPS = [
   { id: 'theme', needle: 'Choose the text style', keys: [KEY_CR] },
   { id: 'apikey', needle: 'Do you want to use this API key', keys: [KEY_ARROW_UP, KEY_CR], delayMs: 100 },
   { id: 'security', needle: 'Press Enter to continue', keys: [KEY_CR] },
-  { id: 'trust', needle: 'Yes, I trust this folder', keys: [KEY_CR] },
 ] as const;
 
 /**

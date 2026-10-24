@@ -30,7 +30,7 @@ Modules may have been split, merged, or added since this was written.
 A rule of thumb for any given piece of code:
 - **Core**: it would still be needed if Devora's UI were rewritten from scratch (reading/writing profiles and config, discovering and creating workspaces and worktrees, running the prepare command, keychain access, dependency checks)
 - **Ember**: it only exists because the UI is a webview (Tauri command signatures, the ACL, PTY-to-xterm.js streaming, theme delivery to CSS, the eval bridge)
-- **Undecided**: the IPC server that external tools (Crit, `debi preview`, Judge) talk to. Its *protocol* is product-level and should be documented as such (see below). Where its *implementation* lives is a judgment call for whoever does the work. Moving it into the core is reasonable if it can be done without UI coupling, and fine to defer otherwise.
+- **Undecided**: the IPC server that external tools (Crit, `debi preview`, Judgess) talk to. Its *protocol* is product-level and should be documented as such (see below). Where its *implementation* lives is a judgment call for whoever does the work. Moving it into the core is reasonable if it can be done without UI coupling, and fine to defer otherwise.
 
 ### Decoupling the seams
 
@@ -46,7 +46,7 @@ Ember then adapts these: it wraps a Tauri channel in the core's event sink, reso
 As part of this ticket, write down the IPC protocol that tools outside the app rely on: the environment variables a session exposes, the routes, and the request/response shapes.
 Put it next to whichever code owns the server.
 
-That contract is what keeps Judge, Crit, and Debi working across UI changes, so it should be a reviewed artifact rather than something you have to infer from the server code.
+That contract is what keeps Judgess, Crit, and Debi working across UI changes, so it should be a reviewed artifact rather than something you have to infer from the server code.
 
 ## Non-goals
 

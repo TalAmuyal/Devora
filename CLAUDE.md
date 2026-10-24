@@ -22,7 +22,7 @@ Below are terms that have a specific meaning in the context of Devora:
 - **Settings Hub**: The Devora-Ember tab-covering overlay for managing profiles and editing settings — User Defaults, per-profile Claude models/effort, and registered repos. Reached from the Workspace Hub via `P`, the profile dropdown's "Manage Profiles…", or the burger menu's "Settings"
 - **Terminal Pane** (Ember): An xterm.js terminal instance within a session
 - **Tab Bar** (Ember): The strip at the bottom of the window showing open sessions
-- **Judge**: A Claude Code plugin that auto-manages permission requests to reduce permission fatigue (`./project-judge/`)
+- **Judgess**: A Claude Code plugin that auto-manages permission requests to reduce permission fatigue (`./project-judgess/`)
 - **Code-Cleanup**: A Claude Code plugin that defines and directs the post-task cleanup process (`./project-code-cleanup/`)
 - **Debi**: Devora's CLI for workspace management and utilities (`./project-debi/`)
 - **CCC**: Customized Claude Code — a launcher script that wraps Claude Code with Devora-specific configuration (`./ccc.sh`). Written as CCC when used as a name, `ccc` when referring to the shell command
@@ -52,6 +52,7 @@ Reference those homes rather than restating them.
 - [ADR-002: Ember Centralized Error Reporting](docs/adrs/ADR-002-ember-centralized-error-reporting.md) — Single showError/report_error path, invoke wrapper with surfaced-by-default errors, ACL completeness test
 - [ADR-003: Ember Layer System (Stacked Surfaces)](docs/adrs/ADR-003-ember-layer-system.md) — Surfaces routed and focused by stack position, with extent from which stack (one per tab, plus one for the window); shortcuts routed before any surface; paint order from DOM order. Current behavior is documented in [`project-ember/src/ui/layers/CLAUDE.md`](project-ember/src/ui/layers/CLAUDE.md)
 - [ADR-004: Ember Vim-Inspired Navigation](docs/adrs/ADR-004-ember-vim-inspired-navigation.md) — Vim/Neovim as the explicit keyboard-navigation model; reusable primitives (`createVimScroll` for viewport scroll: j/k, Ctrl+D/U, gg/G; `createListCursor` for list selection)
+- [ADR-005: Judgess](docs/adrs/ADR-005-judgess.md) — Rust rewrite of the permission hook: a real shell parser, a four-way verdict collapsed to three on the wire, and a raw → labelled → redacted-cases pipeline
 
 ## Vision
 

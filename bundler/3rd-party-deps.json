@@ -14,18 +14,6 @@
       "extract_path": "kitty.app"
     },
     {
-      "name": "uv",
-      "version": "0.11.17",
-      "license": "MIT AND Apache-2.0",
-      "source_repo": "https://github.com/astral-sh/uv",
-      "commit": "a33a629d66753e9722a0040212c004ba66ad04b4",
-      "tag": "0.11.17",
-      "download_url": "https://github.com/astral-sh/uv/releases/download/0.11.17/uv-aarch64-apple-darwin.tar.gz",
-      "sha256": "2a162f6b90ff3691a2f9cae1622e066a3ce592e110f66670cdcc841324b28226",
-      "archive_type": "tar.gz",
-      "extract_path": "uv"
-    },
-    {
       "name": "glimpse-tty",
       "version": "2.1.0",
       "license": "BSD-3-Clause",

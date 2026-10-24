@@ -100,3 +100,12 @@ jobs:
         env:
           CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
         run: mise run -C project-ember test-e2e
+
+      - name: Upload failure captures
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-failure-captures
+          path: project-ember/test-results/failures/
+          if-no-files-found: ignore
+          retention-days: 14

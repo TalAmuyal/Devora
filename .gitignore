@@ -21,7 +21,9 @@ __pycache__/
 # Ember (Tauri + Vite)
 project-ember/node_modules/
 project-ember/dist/
+project-ember/test-results/
 project-ember/src-tauri/target/
+project-judgess/target/
 project-ember/src-tauri/gen/
 *.log
 *.swp
