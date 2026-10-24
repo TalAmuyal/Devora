@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/../../uv run --script -- ${CLAUDE_PLUGIN_ROOT}/main.py"
+            "command": "${CLAUDE_PLUGIN_ROOT}/judgess hook"
           }
         ]
       }

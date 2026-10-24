@@ -169,8 +169,6 @@ bundle "$THIRD_PARTY_APPS_DIR/glimpse-tty"            "$RESOURCES_DIR/glimpse-tt
 bundle "$REPO_ROOT/kitty-configs"                     "$RESOURCES_DIR/."                      overwrite
 bundle "$SCRIPT_DIR/bootstrap.sh"                     "$ROOT_EXEC_DIR/."                      overwrite
 bundle "$REPO_ROOT/ccc.sh"                            "$BUNDLED_APPS_DIR/ccc"                 overwrite
-bundle "$REPO_ROOT/project-judge/cc-plugin"           "$BUNDLED_CC_PLUGINS_DIR/judge"         overwrite
-bundle "$REPO_ROOT/project-judge/main.py"             "$BUNDLED_CC_PLUGINS_DIR/judge/."       overwrite
 bundle "$REPO_ROOT/project-team-work/cc-plugin"       "$BUNDLED_CC_PLUGINS_DIR/team-work"     overwrite
 bundle "$REPO_ROOT/project-detached-flow/cc-plugin"   "$BUNDLED_CC_PLUGINS_DIR/detached-flow" overwrite
 bundle "$REPO_ROOT/project-code-cleanup/cc-plugin"    "$BUNDLED_CC_PLUGINS_DIR/code-cleanup"  overwrite

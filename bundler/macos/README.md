@@ -35,10 +35,6 @@ Devora/                           (DMG root)
          │  │  └─ skills/
          │  │     └─ submit-pr/
          │  │        └─ SKILL.md
-         │  ├─ judge/
-         │  │  ├─ hooks/
-         │  │  │  └─ hooks.json
-         │  │  └─ main.py
          │  └─ team-work/
          │     └─ skills/
          │        └─ team-work/

@@ -183,8 +183,8 @@ copy_built       "project-debi/debi"                          "$BUNDLED_APPS_DIR
 
 # --- CC plugins ---
 
-copy_repo        "project-judge/cc-plugin"                    "$BUNDLED_CC_PLUGINS_DIR/judge"
-copy_repo        "project-judge/main.py"                      "$BUNDLED_CC_PLUGINS_DIR/judge/."
+copy_repo        "project-judgess/cc-plugin"                  "$BUNDLED_CC_PLUGINS_DIR/judgess"
+copy_built       "project-judgess/target/release/judgess"     "$BUNDLED_CC_PLUGINS_DIR/judgess/."  "project-judgess"
 copy_repo        "project-detached-flow/cc-plugin"            "$BUNDLED_CC_PLUGINS_DIR/detached-flow"
 copy_repo        "project-team-work/cc-plugin"                "$BUNDLED_CC_PLUGINS_DIR/team-work"
 copy_repo        "project-code-cleanup/cc-plugin"             "$BUNDLED_CC_PLUGINS_DIR/code-cleanup"

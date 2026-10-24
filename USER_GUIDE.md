@@ -189,7 +189,7 @@ What it does:
 	- These defaults, and the effort level and permission mode below, are configurable (globally and per profile)
 - **Effort level**: Sets the effort level to `xhigh` (extra-high) by default, so that Claude Code always tries to give a better result
 - **Plan mode**: Claude Code starts in plan permission mode by default, which requires explicit approval before making changes and takes advantage of the Crit integration -- the permission mode is configurable
-- **Plugins**: Auto-loads Devora plugins (including Judge -- see below)
+- **Plugins**: Auto-loads Devora plugins (including Judgess -- see below)
 
 ## Crit Integration
 
@@ -198,14 +198,22 @@ Crit is integrated into Devora and works out-of-the-box.
 When Claude Code has a plan ready, it opens up Crit's UI in a tab (session) covering overlay, where you can review the plan, comment on specific lines, and approve or request changes.
 Once Claude receives your feedback, it adjusts the plan and re-presents for a follow-up review until it's approved.
 
-## Judge
+## Judgess
 
-Judge is a permission auto-manager plugin for Claude Code.
+Judgess is a permission auto-manager plugin for Claude Code.
 It automatically handles Claude Code's permission requests to reduce permission fatigue during development.
-Known-safe commands (like `cat`, `ls`, `git diff`, etc.) are approved automatically, disallowed commands are declined with a reason, and anything unrecognized is deferred to the user for manual review.
-Judge runs automatically when using `ccc` -- no additional setup is needed.
+Known-safe commands (like `cat`, `ls`, `git diff`, etc.) are approved automatically, commands that break Devora's conventions are declined with a redirect (for example, a raw `go build` is redirected to `mise exec -- go build`), and anything else is left to Claude Code's normal permission flow.
+Judgess understands shell syntax (pipelines, `&&`, newlines, subshells, `$(...)`, `bash -c`, etc.), so every command in a compound command line is checked.
+Judgess runs automatically when using `ccc`.
 
-Jedge persists unsupported cases to `~/.claude/cc-judge-unsupported-cases.json`, which can be submitted to the project to help expand Judge's automatic coverage.
+Judgess records what it does and what it does not know under `~/.claude/judgess/`:
+- `audit.jsonl` -- one line per permission request with the verdict (`jq` is handy for slicing it)
+- `unknown.jsonl` -- requests Judgess had no rule for
+
+To help expand Judgess's coverage, from a Devora source checkout:
+1. Run `mise run -C project-judgess classify` to label the unknown requests (approve, deny, defer, abstain, delete, or skip)
+2. Have an agent implement the rules for the labelled requests (see `project-judgess/CLAUDE.md`)
+3. Run `mise run -C project-judgess export` to move the labelled requests, with private details redacted, into the project's regression cases (`project-judgess/cases.json`)
 
 ## Optional Additions
 

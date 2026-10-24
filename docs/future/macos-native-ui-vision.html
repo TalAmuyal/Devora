@@ -324,7 +324,7 @@
   </p>
   <div class="tldr">
     <b>TL;DR</b>: Swift 6 + AppKit-hosted SwiftUI, <b>libghostty</b> for terminals, the existing Rust workspace logic extracted into a <b>devora-core</b> crate called through <b>UniFFI</b>, and <b>WKWebView</b> kept only where the content really is web (Crit, Mermaid).
-    The biggest UX change isn't how it looks. It's that <b>Devora starts telling you what Claude is doing</b>: per-session state in a sidebar, notifications for pending permission requests, a Judge menu-bar extra, and Dock badges.
+    The biggest UX change isn't how it looks. It's that <b>Devora starts telling you what Claude is doing</b>: per-session state in a sidebar, notifications for pending permission requests, a Judgess menu-bar extra, and Dock badges.
     The biggest cost isn't the code. It means <b>giving up the Linux plan for the UI</b> and starting a third UI generation.
   </div>
 </header>
@@ -362,7 +362,7 @@
       <span class="apple"></span>
       <b>Devora</b><span>File</span><span>Edit</span><span>Session</span><span>Workspace</span><span>View</span><span>Window</span><span>Help</span>
       <div class="right">
-        <span class="judge-item" title="Judge">
+        <span class="judge-item" title="Judgess">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8"><path d="M12 3v18M5 7h14M5 7l-3 7a3 3 0 006 0zM19 7l-3 7a3 3 0 006 0zM8 21h8"/></svg>
           <span class="count">1⏸</span>
         </span>
@@ -377,7 +377,7 @@
       <div>
         <div class="h">Claude needs you · login bug <span>now</span></div>
         <div class="c">Bash: git push origin HEAD</div>
-        <div style="color:#9a9aa6;font-size:11.5px">Judge deferred: no approved detector</div>
+        <div style="color:#9a9aa6;font-size:11.5px">Judgess abstained: no rule for `kubectl`</div>
       </div>
       <div class="acts"><div>Allow once</div><div>Deny</div><div>Open session</div></div>
     </div>
@@ -440,7 +440,7 @@
         </div>
         <div class="body">
 <div class="term"><span class="p">~/devora/work/workspaces/ws-4</span> <span class="g">❯</span> ccc
-<span class="box">╭───</span> <span class="o">✻</span> Claude Code  <span class="dim">opusplan · effort xhigh · Judge on</span>
+<span class="box">╭───</span> <span class="o">✻</span> Claude Code  <span class="dim">opusplan · effort xhigh · Judgess on</span>
 <span class="box">╰───</span> <span class="dim">~/devora/work/workspaces/ws-4</span>
 
 <span class="dim">&gt;</span> Fix the login redirect loop described in TASK.md
@@ -476,7 +476,7 @@
               <div class="r2">HEAD (detached)</div>
               <div class="chips"><span class="chip">3 behind origin/main</span></div>
             </div>
-            <div class="ins-h"><span>JUDGE · THIS SESSION</span><span>12</span></div>
+            <div class="ins-h"><span>JUDGESS · THIS SESSION</span><span>12</span></div>
             <div class="jl">
               <span class="d f">DEFER</span><span class="c">git push origin HEAD</span>
               <span class="d a">ALLOW</span><span class="c">go test ./auth/...</span>
@@ -569,7 +569,7 @@
           <div class="row"><div class="l">Haiku tier → </div><span class="inh">inherited</span><div class="popup">Sonnet 5.5</div></div>
         </div>
         <div class="group">
-          <div class="row"><div class="l">Judge<small>Auto-resolve permission requests · audit log ~/.claude/cc-judge-audit.jsonl</small></div><div class="toggle"></div></div>
+          <div class="row"><div class="l">Judgess<small>Auto-resolve permission requests · audit log ~/.claude/judgess/audit.jsonl</small></div><div class="toggle"></div></div>
           <div class="row"><div class="l">Notify on deferred permission<small>Banner + Dock badge when a background session is blocked</small></div><div class="toggle"></div></div>
           <div class="row"><div class="l">Notify when a plan is ready for review</div><div class="toggle offt"></div></div>
         </div>
@@ -579,14 +579,14 @@
 
     <!-- Menu bar dropdown -->
     <div class="ov menubar-drop">
-      <div class="md-h"><span>JUDGE · LAST HOUR</span><span>41 allow · 3 deny · 1 defer</span></div>
+      <div class="md-h"><span>JUDGESS · LAST HOUR</span><span>41 allow · 3 deny · 1 defer</span></div>
       <div class="md-row sel"><span class="d" style="color:var(--peach)">⏸ DEFER</span><span class="c">git push origin HEAD</span><span class="s">login bug · Bash · 0:12 ago · click to focus</span></div>
       <div class="md-row"><span class="d" style="color:var(--green)">ALLOW</span><span class="c">go test ./auth/...</span><span class="s">login bug · Bash</span></div>
       <div class="md-row"><span class="d" style="color:var(--red)">DENY</span><span class="c">rm -rf node_modules/.cache</span><span class="s">refactor auth · Bash · destructive</span></div>
       <div class="md-row"><span class="d" style="color:#9a9aa6">ABSTAIN</span><span class="c">WebFetch docs.stripe.com</span><span class="s">docs sweep · deferred to Claude Code</span></div>
       <div class="md-sep"></div>
       <div class="md-item">Open audit log… <span>⌘L</span></div>
-      <div class="md-item">Pause Judge for 15 minutes</div>
+      <div class="md-item">Pause Judgess for 15 minutes</div>
       <div class="md-item">Report unsupported cases…</div>
     </div>
 
@@ -598,8 +598,8 @@
     <div class="it"><span class="n">1</span><div><b>Sidebar instead of a bottom tab bar.</b> Sessions are a source list with a live <i>Claude state</i> per row (Working / Needs you / Plan ready / Idle), driven by Claude Code hooks posting to the IPC server. Today you can't tell a blocked tab from a busy one without switching to it. That's the single most valuable UX change here. ⌘1…9 switch sessions, and you drag rows to reorder.</div></div>
     <div class="it"><span class="n">2</span><div><b>Unified toolbar.</b> Title = task title, subtitle = profile · workspace · repos (the window title also serves Mission Control and ⌘`). The Terminal / Review / Preview segmented control replaces the per-tab overlay layers from ADR-003.</div></div>
     <div class="it"><span class="n">3</span><div><b>The terminal is a Metal surface, not a DOM.</b> libghostty draws it, and it handles IME, ligatures, font fallback, and the macOS text-input system. App shortcuts use <b>⌘</b>, which terminals never use, so <code>Ctrl+S</code>, <code>Ctrl+←/→</code>, and friends go back to the shell/Neovim instead of being swallowed by Devora.</div></div>
-    <div class="it"><span class="n">4</span><div><b>Inspector (⌥⌘I).</b> Native per-worktree status (what <code>gsum</code> prints, as live views), the Judge decisions for <i>this</i> session, and the task's CLAUDE.md summary. Crit and previews open as a WKWebView in the Review/Preview modes.</div></div>
-    <div class="it"><span class="n">5</span><div><b>Judge menu-bar extra.</b> The design already in <code>docs/future/judge-ember-menu-bar-integration.md</code>, as a <code>MenuBarExtra</code> with full SwiftUI views (not a rebuilt-on-every-event <code>NSMenu</code>). Pending defers show as <code>N⏸</code> next to the icon.</div></div>
+    <div class="it"><span class="n">4</span><div><b>Inspector (⌥⌘I).</b> Native per-worktree status (what <code>gsum</code> prints, as live views), the Judgess decisions for <i>this</i> session, and the task's CLAUDE.md summary. Crit and previews open as a WKWebView in the Review/Preview modes.</div></div>
+    <div class="it"><span class="n">5</span><div><b>Judgess menu-bar extra.</b> Judgess decisions as a <code>MenuBarExtra</code> with full SwiftUI views (not a rebuilt-on-every-event <code>NSMenu</code>). Pending defers show as <code>N⏸</code> next to the icon.</div></div>
     <div class="it"><span class="n">6</span><div><b>Actionable notifications</b> (see the “Menu bar + notification” view). A deferred permission in a background session posts a <code>UNUserNotification</code> with Allow / Deny / Open buttons and badges the Dock icon. You can leave Devora in the background without forgetting a blocked agent.</div></div>
     <div class="it"><span class="n">7</span><div><b>Profile + health in the sidebar footer.</b> Switching profiles is a menu, not a hub. The health dot turns amber/red when <code>debi health</code> would fail, and clicking it opens the Health view.</div></div>
     <div class="it"><span class="n">·</span><div><b>System design language for free.</b> Vibrancy, sheets, focus rings, Liquid Glass, light/dark, accent color, reduced-motion, and VoiceOver all follow the OS. The Catppuccin theme stays where it belongs, <i>inside</i> the terminal, and becomes the app's accent tint.</div></div>
@@ -618,7 +618,7 @@
         <div class="bx new">AppKit window + NSToolbar<small>NSWindowController, key routing, restoration</small></div>
         <div class="bx new">SwiftUI views<small>sidebar, hub, sheets, Settings scene, inspector</small></div>
         <div class="bx new">@Observable models<small>Session, Workspace, Profile, ClaudeState</small></div>
-        <div class="bx new">MenuBarExtra · UNNotifications · NSDockTile<small>Judge, deferred permissions, badges</small></div>
+        <div class="bx new">MenuBarExtra · UNNotifications · NSDockTile<small>Judgess, deferred permissions, badges</small></div>
         <div class="bx new">App Intents + Core Spotlight<small>“New Devora task”, find tasks from Spotlight</small></div>
         <div class="bx new">PromptEditor<small><code>nvim --embed</code>, msgpack-RPC, ext_linegrid/ext_popupmenu drawn natively</small></div>
         <div class="bx">WKWebView<small>Crit (it is a web app) + Mermaid previews only</small></div>
@@ -647,7 +647,7 @@
     <div class="tier ext">
       <div class="lbl">Outside the app<small>unchanged</small></div>
       <div class="boxes">
-        <div class="bx keep">ccc + Claude Code</div><div class="bx keep">Judge</div><div class="bx keep">Code-Cleanup</div>
+        <div class="bx keep">ccc + Claude Code</div><div class="bx keep">Judgess</div><div class="bx keep">Code-Cleanup</div>
         <div class="bx keep">debi (Go)</div><div class="bx keep">Crit</div><div class="bx keep">CC Status Line</div><div class="bx keep">profile dirs / config.json</div>
       </div>
     </div>
@@ -659,7 +659,7 @@
     <tr><td>UI framework</td><td>AppKit window/toolbar/key handling hosting SwiftUI content</td><td>SwiftUI is great for lists, forms, settings, and sheets. AppKit is still the only reliable way to own first-responder, key equivalents, and a terminal NSView in a keyboard-first app.</td><td>Pure SwiftUI: focus and key routing are too coarse for vim-style lists plus a terminal. Catalyst: the worst of both.</td></tr>
     <tr><td>Terminal</td><td>libghostty</td><td>The best macOS terminal engine available: GPU rendering, correctness, and input handling built for exactly this purpose. Ghostty's own Mac app is Swift on top of it.</td><td>SwiftTerm (good, but a weaker renderer). xterm.js in WKWebView (that's just Ember again).</td></tr>
     <tr><td>Business logic</td><td>Keep Rust, expose it via UniFFI</td><td>~5.2k of the 6.8k Rust lines aren't UI and are already tested. UniFFI generates async Swift APIs and callback interfaces, so <code>CreationEvent</code> streams map cleanly to <code>AsyncStream</code>.</td><td>Rewriting in Swift means re-earning trust in worktree and config code with no UX gain.</td></tr>
-    <tr><td>IPC</td><td>Unix domain socket (0600), same JSON routes</td><td>Judge, Crit, and <code>debi preview</code> keep working. A socket file isn't reachable by other users or by browsers the way a localhost TCP port is.</td><td>XPC (great for Apple-signed helpers, awkward for Python/Go callers).</td></tr>
+    <tr><td>IPC</td><td>Unix domain socket (0600), same JSON routes</td><td>Judgess, Crit, and <code>debi preview</code> keep working. A socket file isn't reachable by other users or by browsers the way a localhost TCP port is.</td><td>XPC (great for Apple-signed helpers, awkward for Python/Go callers).</td></tr>
     <tr><td>Rich text / prompt editor</td><td><code>nvim --embed</code> drawn natively</td><td>Delivers <code>docs/vision/rich-text-editor.md</code> properly: real Neovim, with its popup menu drawn as a native completion list for <code>@paths</code> and <code>/skills</code> (prior art: VimR, Neovide).</td><td>NSTextView with vim emulation: always uncanny. Monaco in a web view: not native.</td></tr>
     <tr><td>Distribution</td><td>Developer ID + notarization + Sparkle 2</td><td>Removes the <code>xattr -dr com.apple.quarantine</code> step and gives in-app updates with release notes.</td><td>(Tauri can do this too; it isn't a reason to go native by itself.)</td></tr>
     <tr><td>Build</td><td>Tuist or XcodeGen + <code>xcodebuild</code> behind mise tasks</td><td>No hand-edited <code>.pbxproj</code> in diffs, and agents keep running <code>mise build</code> / <code>mise test</code>.</td><td>Checked-in Xcode project.</td></tr>
@@ -678,7 +678,7 @@
     <tr><td>Settings Hub</td><td>Window-covering layer</td><td>Standard Settings scene (⌘,) with a scope switcher and inherited/overridden markers</td><td class="tauri"><span class="part">Partly</span>: looks like a page, not like macOS</td></tr>
     <tr><td>Layer system (ADR-003)</td><td>Custom stacks, router, presets, isolation for paint order</td><td>Mostly <b>deleted</b>: menu key equivalents → key window → responder chain is the same three-stage routing, built in. Sheets, panels, and popovers replace the presets.</td><td class="tauri"><span class="no">No</span>: you need the layer system in a web view</td></tr>
     <tr><td>Crit review</td><td>Per-tab overlay iframe</td><td>Review mode of the session (WKWebView), with a toolbar badge when a plan is waiting</td><td class="tauri"><span class="yes">Yes</span></td></tr>
-    <tr><td>Claude visibility</td><td>None outside the active tab</td><td>Per-session state, notifications, Dock badge, Judge menu-bar extra</td><td class="tauri"><span class="yes">Mostly</span>: tray + notification plugins exist</td></tr>
+    <tr><td>Claude visibility</td><td>None outside the active tab</td><td>Per-session state, notifications, Dock badge, Judgess menu-bar extra</td><td class="tauri"><span class="yes">Mostly</span>: tray + notification plugins exist</td></tr>
     <tr><td>Terminal</td><td>xterm.js + WebGL in a WKWebView; PTY bytes cross IPC as JSON</td><td>GPU-native surface in-process, no IPC hop, native IME/dictation/services</td><td class="tauri"><span class="no">No</span>: this is the native-only gain</td></tr>
     <tr><td>Errors (ADR-002)</td><td><code>invoke</code> wrapper → persistent banner</td><td>Typed UniFFI errors → one <code>ErrorPresenter</code> → window-attached banner. Same one-path rule.</td><td class="tauri">n/a</td></tr>
     <tr><td>Session restore</td><td>None</td><td>NSWindow restoration: relaunch reopens sessions in the same workspaces</td><td class="tauri"><span class="part">Possible</span>, all custom</td></tr>
@@ -714,10 +714,10 @@
   <div class="cards">
     <div class="card"><h4>The Rust core (~5.2k lines)</h4><p>Profiles, workspaces, task creation, cloning, credentials, health. Extracted into <code>devora-core</code>, which helps Ember right away too.</p></div>
     <div class="card"><h4>The domain model</h4><p>Profile, Workspace, Active Workspace, Session, Repo, Worktree, and Prepare Command keep their meanings. Only "Tab Bar" and "Terminal Pane (xterm.js)" go away.</p></div>
-    <div class="card"><h4>The external contract</h4><p><code>DEVORA_PTY_ID</code> / IPC env vars and the JSON routes Judge, Crit, and <code>debi preview</code> already use. None of those tools need changes.</p></div>
+    <div class="card"><h4>The external contract</h4><p><code>DEVORA_PTY_ID</code> / IPC env vars and the JSON routes Judgess, Crit, and <code>debi preview</code> already use. None of those tools need changes.</p></div>
     <div class="card"><h4>Keyboard-first, vim-flavoured (ADR-004)</h4><p>Native doesn't mean mouse-first. <code>createVimScroll</code> / <code>createListCursor</code> become a SwiftUI modifier and an NSResponder mixin.</p></div>
     <div class="card"><h4>The acceptance specs</h4><p>20 feature files and 119 scenarios become the parity checklist. When they all pass on the native driver, Ember can retire.</p></div>
-    <div class="card"><h4>ccc, Judge, Code-Cleanup, debi, Status Line</h4><p>Untouched. They are the parts with the most product value, and none of them have a UI of their own.</p></div>
+    <div class="card"><h4>ccc, Judgess, Code-Cleanup, debi, Status Line</h4><p>Untouched. They are the parts with the most product value, and none of them have a UI of their own.</p></div>
   </div>
 </section>
 
@@ -744,7 +744,7 @@
     <div class="phase"><div class="num">1</div><div><h4>Terminal spike</h4><p>A bare window running <code>ccc</code> on libghostty and on SwiftTerm. Measure input latency, IME, resize, scrollback, ligatures, and Neovim inside it.</p><div class="gate">Gate: a clear winner, and a Swift wrapper API that hides which one.</div></div></div>
     <div class="phase"><div class="num">2</div><div><h4>Daily-drivable shell</h4><p>Sidebar + sessions + terminal + IPC socket + Crit in WKWebView + Claude-state hooks. Add the test harness <i>now</i>, not later.</p><div class="gate">Gate: you can work a full day in it. session-management, crit-overlay, preview, and claude-hook-integration features pass.</div></div></div>
     <div class="phase"><div class="num">3</div><div><h4>Hub, New Task, Settings, Health</h4><p>The rest of Ember's surface area, ported feature file by feature file.</p><div class="gate">Gate: all 119 scenarios pass on the native driver. Ember retires.</div></div></div>
-    <div class="phase"><div class="num">4</div><div><h4>Native-only wins</h4><p>Notifications with actions, Judge MenuBarExtra, Dock badge, restoration, App Intents, Spotlight, multi-window.</p></div></div>
+    <div class="phase"><div class="num">4</div><div><h4>Native-only wins</h4><p>Notifications with actions, Judgess MenuBarExtra, Dock badge, restoration, App Intents, Spotlight, multi-window.</p></div></div>
     <div class="phase"><div class="num">5</div><div><h4>The vision docs</h4><p>PromptEditor on embedded Neovim with native <code>@</code>/<code>/</code> completion and <code>{{snippet:…}}</code> templates, used in the New Task sheet and for commit messages.</p></div></div>
   </div>
 </section>
@@ -763,12 +763,12 @@
 
 <script>
   const captions = {
-    main: 'The everyday view. The session is blocked on a permission request that Judge deferred: the sidebar marks it orange and the toolbar pill repeats it. If it were in the background, a notification would offer to resolve it (see “Menu bar + notification”).',
+    main: 'The everyday view. The session is blocked on a permission request that Judgess deferred: the sidebar marks it orange and the toolbar pill repeats it. If it were in the background, a notification would offer to resolve it (see “Menu bar + notification”).',
     hub: 'The Workspace Hub is no longer a covering overlay. It is a mode of the main area (⌘O), reached from the sidebar, with the same vim keys, and it shows Claude state and PR/dirty status per workspace.',
     newtask: 'New Task is a sheet attached to the window. Repos are tokens. The prompt field is an embedded Neovim whose completion popup is drawn natively, so @paths and {{skill:…}} templates are first-class (docs/vision/task-creation.md).',
     palette: 'The Command Palette is a floating panel over the window. It searches commands, sessions, workspaces, and individual settings. Every command also lives in the menu bar, so Help ▸ Search and Spotlight find it too.',
     settings: 'Settings is a standard macOS Settings window. A scope switcher replaces navigating between User Defaults and each profile, and every row says whether it is inherited or overridden.',
-    menubar: 'The Judge menu-bar extra from docs/future/judge-ember-menu-bar-integration.md: decisions from every session, with defers pinned on top, and clicking one focuses that session. Below it, the actionable notification posted when a background session is blocked.'
+    menubar: 'The Judgess menu-bar extra from docs/future/judge-ember-menu-bar-integration.md: decisions from every session, with defers pinned on top, and clicking one focuses that session. Below it, the actionable notification posted when a background session is blocked.'
   };
   const desk = document.getElementById('desktop');
   const cap = document.getElementById('caption');

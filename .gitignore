@@ -22,6 +22,7 @@ __pycache__/
 project-ember/node_modules/
 project-ember/dist/
 project-ember/src-tauri/target/
+project-judgess/target/
 project-ember/src-tauri/gen/
 *.log
 *.swp
