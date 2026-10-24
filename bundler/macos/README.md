@@ -54,13 +54,11 @@ Devora/                           (DMG root)
          │  └─ kitty.conf
          ├─ crit-license.txt
          ├─ kitty-license.txt
-         ├─ uv-license.txt
          ├─ glimpse-tty-license.txt
          ├─ kitty.app/
          │  └─ ...
-         ├─ glimpse-tty/             (distribution: launcher + Electron + node_modules)
-         │  └─ ...
-         └─ uv
+         └─ glimpse-tty/             (distribution: launcher + Electron + node_modules)
+            └─ ...
 ```
 
 ## Dev Mode

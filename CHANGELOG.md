@@ -18,6 +18,10 @@ Types of changes:
 
 - Replaced the Judge permission hook with Judgess, a Rust rewrite built on a real shell parser
 
+### Removed
+
+- `uv` is no longer bundled with Devora or required by `debi health`
+
 ### Fixed
 
 - Permission-hook denials now reach the agent (Judge's denials were silently ignored by Claude Code)

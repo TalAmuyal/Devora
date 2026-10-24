@@ -55,7 +55,6 @@ func TestCleanVersion(t *testing.T) {
 		{"gh version 2.62.0 (2024-11-14)", "2.62.0"},
 		{"2.1.89 (Claude Code)", "2.1.89"},
 		{"git version 2.50.1 (Apple Git-155)", "2.50.1"},
-		{"uv 0.11.2 (Homebrew 2026-03-26 aarch64-apple-darwin)", "0.11.2"},
 		{"zsh 5.9 (arm64-apple-darwin25.0)", "5.9"},
 		{"NVIM v0.12.0", "0.12.0"},
 		{"2026.3.17 macos-arm64 (2026-03-27)", "2026.3.17"},
@@ -137,9 +136,9 @@ func TestCheck_NotFoundDependency(t *testing.T) {
 	}
 
 	dep := Dependency{
-		Name:           "uv",
+		Name:           "zsh",
 		Required:       true,
-		VersionCommand: []string{"uv", "--version"},
+		VersionCommand: []string{"zsh", "--version"},
 	}
 
 	result := Check(dep)
@@ -367,7 +366,7 @@ func TestRun_AllFound(t *testing.T) {
 	if !strings.Contains(output, "Optional:") {
 		t.Fatal("expected output to contain 'Optional:' header")
 	}
-	if !strings.Contains(output, "Required met:") || !strings.Contains(output, "(4/4)") {
+	if !strings.Contains(output, "Required met:") || !strings.Contains(output, "(3/3)") {
 		t.Fatalf("expected required summary line with count, got:\n%s", output)
 	}
 	if !strings.Contains(output, "Optional met:") || !strings.Contains(output, "(3/3)") {
@@ -1151,12 +1150,12 @@ func TestGather_StructuredReport(t *testing.T) {
 	if report.Version != "test-version" {
 		t.Fatalf("expected version 'test-version', got %q", report.Version)
 	}
-	// Required: claude/git/uv/zsh all found.
-	if len(report.Required) != 4 {
-		t.Fatalf("expected 4 required deps, got %d", len(report.Required))
+	// Required: claude/git/zsh all found.
+	if len(report.Required) != 3 {
+		t.Fatalf("expected 3 required deps, got %d", len(report.Required))
 	}
-	if report.Summary.RequiredMet != 4 || report.Summary.RequiredTotal != 4 {
-		t.Fatalf("expected required 4/4, got %d/%d", report.Summary.RequiredMet, report.Summary.RequiredTotal)
+	if report.Summary.RequiredMet != 3 || report.Summary.RequiredTotal != 3 {
+		t.Fatalf("expected required 3/3, got %d/%d", report.Summary.RequiredMet, report.Summary.RequiredTotal)
 	}
 	// Optional: nvim/mise found, gh missing.
 	if report.Summary.OptionalMet != 2 || report.Summary.OptionalTotal != 3 {
@@ -1238,8 +1237,8 @@ func TestRunJSON_OutputsParseableReport(t *testing.T) {
 	if report.Version != "test-version" {
 		t.Fatalf("expected version 'test-version', got %q", report.Version)
 	}
-	if report.Summary.RequiredTotal != 4 {
-		t.Fatalf("expected 4 required deps in JSON, got %d", report.Summary.RequiredTotal)
+	if report.Summary.RequiredTotal != 3 {
+		t.Fatalf("expected 3 required deps in JSON, got %d", report.Summary.RequiredTotal)
 	}
 	if report.Required[0].Version != "9.9.9" {
 		t.Fatalf("expected version field populated, got %q", report.Required[0].Version)

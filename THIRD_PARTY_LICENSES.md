@@ -11,13 +11,6 @@ Devora bundles and depends on the following third-party software and assets.
 - **Source:** https://github.com/kovidgoyal/kitty/tree/4483a6c110275d5603e48337ba533a322781efe2
 - **Full license text:** See `bundler/kitty-license.txt`
 
-### uv v0.11.17
-
-- **License:** MIT AND Apache-2.0
-- **Author:** Astral
-- **Source:** https://github.com/astral-sh/uv/tree/a33a629d6
-- **Full license text:** See `bundler/uv-license.txt`
-
 ### glimpse-tty v2.1.0
 
 - **License:** BSD-3-Clause

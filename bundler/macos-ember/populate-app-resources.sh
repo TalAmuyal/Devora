@@ -192,8 +192,6 @@ copy_third_party "claude-code"                                "$BUNDLED_CC_PLUGI
 
 # --- Resources ---
 
-copy_third_party "uv"                                         "$RESOURCES_DIR/uv"
-copy_repo        "bundler/uv-license.txt"                     "$RESOURCES_DIR/."
 copy_repo        "bundler/crit-license.txt"                   "$RESOURCES_DIR/."
 
 ensure_dir "$RESOURCES_DIR/kitty-configs"

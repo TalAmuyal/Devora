@@ -20,7 +20,6 @@ Only macOS (Apple Silicon) is currently supported, but there are plans to add Li
 ### Bundled
 
 - [Crit](https://github.com/tomasz-tomczyk/crit) -- AI code review tool with inline comments
-- [uv](https://docs.astral.sh/uv/) -- Python package manager
 
 ### Optional (recommended)
 
