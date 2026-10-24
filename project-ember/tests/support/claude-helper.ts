@@ -9,7 +9,6 @@ import {
   writeBytesToTerminal,
   KEY_CR,
   KEY_ARROW_UP,
-  KEY_ARROW_DOWN,
 } from './terminal-helper';
 
 export type ClaudeHookType = 'PostToolUse' | 'PermissionRequest';
@@ -111,32 +110,6 @@ const ONBOARDING_STEPS = [
 ] as const;
 
 /**
- * Options to choose in option-list dialogs, which Enter alone could answer wrongly (their default option varies between Claude Code versions).
- * Keeping plan mode preserves the plan-mode permission prompts the tests rely on.
- */
-const DIALOG_OPTIONS = ['No, keep plan mode'];
-
-/** The last non-blank lines of the terminal, where a live dialog is drawn; answered dialogs can linger above. */
-const LIVE_LINES = 20;
-
-/**
- * One step toward choosing `option`: confirm when the `❯` cursor is on it, otherwise move the cursor one line toward it.
- * Single steps let the dialog re-render between keys, which a burst of keys would outrun.
- */
-async function stepTowardOption(driver: AppDriver, content: string, option: string): Promise<void> {
-  const lines = content.split('\n');
-  const optionIndex = lines.findIndex(l => l.includes(option));
-  const cursorIndex = lines.findIndex(l => /^\s*❯\s+\S/.test(l));
-  if (optionIndex === -1 || cursorIndex === -1) return;
-  if (optionIndex === cursorIndex) {
-    await writeBytesToTerminal(driver, KEY_CR);
-    await new Promise(r => setTimeout(r, 500));
-  } else {
-    await writeBytesToTerminal(driver, optionIndex > cursorIndex ? KEY_ARROW_DOWN : KEY_ARROW_UP);
-  }
-}
-
-/**
  * Dismiss Claude Code onboarding screens (theme picker, API key
  * confirmation, etc.) by detecting known prompts and sending the
  * appropriate keystrokes.
@@ -148,13 +121,6 @@ async function dismissOnboardingIfNeeded(
   content: string,
   dismissed: Set<string>,
 ): Promise<boolean> {
-  const live = content.trimEnd().split('\n').slice(-LIVE_LINES).join('\n');
-  const option = DIALOG_OPTIONS.find(o => live.includes(o));
-  if (option) {
-    await stepTowardOption(driver, live, option);
-    return true;
-  }
-
   for (const step of ONBOARDING_STEPS) {
     if (dismissed.has(step.id)) continue;
     if (!content.includes(step.needle)) continue;

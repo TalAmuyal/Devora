@@ -1,6 +1,6 @@
 import '@xterm/xterm/css/xterm.css';
 import { listen } from '@tauri-apps/api/event';
-import { invoke, invokeLogOnly, Channel } from './invoke';
+import { invoke, invokeLogOnly, invokesInFlight, Channel } from './invoke';
 import { SessionManager } from './session/SessionManager';
 import { TabBar } from './ui/TabBar';
 import { KeyboardShortcuts } from './ui/KeyboardShortcuts';
@@ -608,5 +608,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     dismissTopLayer: () => layers.requestUserDismiss(),
     showError,
     clearErrorBanners,
+    invokesInFlight,
   };
 });

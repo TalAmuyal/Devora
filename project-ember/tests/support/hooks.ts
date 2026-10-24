@@ -107,6 +107,12 @@ BeforeAll(async function () {
     path.join(CLAUDE_CONFIG_PATH, 'settings.json'),
     JSON.stringify({ permissions: { defaultMode: 'plan' }, theme: 'dark' }, null, 2),
   );
+  // Claude Code shows one-time nudge dialogs (e.g. "Make auto mode your default permission mode?") depending on
+  // remote cohorts; one appearing mid-test swallows the keys meant for the prompt, so mark them as already seen.
+  fs.writeFileSync(
+    path.join(CLAUDE_CONFIG_PATH, '.claude.json'),
+    JSON.stringify({ hasSeenAutoDefaultNudge: true, hasSeenEffortMediumNudge: true }, null, 2),
+  );
   // Note: We intentionally do NOT copy .credentials.json here.
   // Tests use ANTHROPIC_API_KEY (pointed at the fake server) instead of
   // OAuth tokens.  Copying credentials would cause an "auth conflict"
@@ -134,6 +140,8 @@ BeforeAll(async function () {
       ANTHROPIC_API_KEY: 'sk-ant-fake-key-for-bdd-tests',
       DEVORA_CONFIG_PATH: testConfigPath,
       CLAUDE_CONFIG_DIR: CLAUDE_CONFIG_PATH,
+      // No feature flags or telemetry from the network, so Claude Code behaves the same on every run.
+      CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -237,6 +245,9 @@ Before({ tags: '@real-crit' }, async function (this: EmberWorld) {
 });
 
 After(async function (this: EmberWorld) {
+  // A scenario can end while the app is still loading (e.g. a hub fetching settings); deleting the fixtures under
+  // a command in flight fails it and reports a backend error, so let the app settle first.
+  await this.driver.pollFor(`return window.__test.invokesInFlight()`, 0, 5_000);
   if (this.fixtureRoot) {
     cleanupFixtures(this.fixtureRoot);
   }

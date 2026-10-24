@@ -40,6 +40,7 @@ Cassettes are stored as gzip-compressed JSON at `tests/support/fixtures/cassette
 - Use `driver.ipcPost()` to simulate external tool communication
 - Steps that change application state and are followed by another step that depends on that state (to further change it or to assert it) must block until the state mutation is complete.
 	For example, a step that clicks a button to start a procedure must await that procedure's completion and verify it succeeded before returning control to the next step.
+- The last step of a scenario does not need to wait for background loading: teardown waits until no backend command is in flight (`window.__test.invokesInFlight()`, counted by the `invoke` wrappers) before deleting fixtures.
 
 ### UI interaction conventions
 
