@@ -129,7 +129,8 @@ describe('readBundleFingerprint', () => {
 });
 
 describe('computeCurrentFingerprint', () => {
-  it('returns the same digest as invoking the bundler script directly', () => {
+  // Runs the real script twice (hashing the source tree): under 2s on an idle machine, but CI runs it alongside the Rust build.
+  it('returns the same digest as invoking the bundler script directly', { timeout: 30_000 }, () => {
     const direct = execFileSync(FINGERPRINT_SCRIPT, { encoding: 'utf8' }).trim();
     expect(computeCurrentFingerprint()).toBe(direct);
   });
