@@ -26,11 +26,9 @@ The following are considered security issues in Devora:
 
 - **Judgess auto-approval rules** -- Vulnerabilities in the Judgess component (`project-judgess/`) that could allow unintended command execution or bypass approval checks.
 - **Shell script injection or path traversal** -- Issues in Devora's own shell scripts (`ccc.sh`, `install.sh`, `bundler/macos-ember/bundle-ember.sh`, etc.) that could lead to arbitrary code execution, path traversal, or privilege escalation.
-- **Bundled third-party binaries** -- If you discover a vulnerability in a binary bundled with Devora (e.g. crit), please report it to the upstream project first, then notify Devora so the bundled version can be updated.
 
 ## Out of scope
 
 The following should be reported to their respective upstream projects, not to Devora:
 
 - **Claude Code** -- Security issues in Claude Code itself should be reported to [Anthropic](https://www.anthropic.com/).
-- **crit** -- Vulnerabilities in this tool that are not specific to how Devora bundles or invokes it should be reported to its maintainers.

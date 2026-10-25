@@ -517,9 +517,9 @@ func runPreview(args []string) error
 ```
 
 Asks the running Devora-Ember app to render a Markdown or HTML file in a preview
-pane to the right of the terminal. Communicates over the same loopback IPC HTTP
-server used by the Crit integration (`POST /preview/open`), addressed by the
-`DEVORA_IPC_PORT`/`DEVORA_PTY_ID` env vars Ember injects into each PTY shell.
+pane to the right of the terminal. Communicates over Ember's loopback IPC HTTP
+server (`POST /preview/open`), addressed by the `DEVORA_IPC_PORT`/`DEVORA_PTY_ID`
+env vars Ember injects into each PTY shell.
 
 Usage: `debi preview [--stack] <file>`
 

@@ -20,7 +20,7 @@ export class SessionTab {
 
   /**
    * Its surfaces (layers) covers only this session and disappears with the tab, because the stack is hosted inside `containerEl`.
-   * Hiding the tab hides its whole stack, so a live `<iframe>` survives a tab switch untouched.
+   * Hiding the tab hides its whole stack, so its surfaces survive a tab switch untouched.
    */
   readonly layers: LayerStack;
 
@@ -196,7 +196,7 @@ export class SessionTab {
 
   dispose(): void {
     this.closeAllPreviews();
-    // Tear the tab's surfaces down first so each runs its cleanup (a Crit review notifying its process, a creation dialog settling).
+    // Tear the tab's surfaces down first so each runs its cleanup.
     this.layers.clear();
     this.terminalPane.dispose();
     this.containerEl.remove();

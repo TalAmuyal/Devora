@@ -50,6 +50,10 @@ export function setupClaudeHook(
   const claudeDir = path.join(workspacePath, '.claude');
   fs.mkdirSync(claudeDir, { recursive: true });
 
+  // The hook opens this file in a preview pane via the IPC server, so a test can see that the hook reached the session's own tab.
+  const previewPath = path.join(claudeDir, 'hook-preview.md');
+  fs.writeFileSync(previewPath, '# Hook preview\n');
+
   const hookScriptPath = path.join(claudeDir, 'bdd-test-hook.sh');
   const hookScript = [
     '#!/bin/bash',
@@ -57,9 +61,9 @@ export function setupClaudeHook(
     `echo "IPC_PORT=$DEVORA_IPC_PORT" >> ${JSON.stringify(logFilePath)}`,
     '',
     'if [ -n "$DEVORA_IPC_PORT" ] && [ -n "$DEVORA_PTY_ID" ]; then',
-    '  curl -s -X POST "http://127.0.0.1:$DEVORA_IPC_PORT/crit/open" \\',
+    '  curl -s -o /dev/null -X POST "http://127.0.0.1:$DEVORA_IPC_PORT/preview/open" \\',
     '    -H "Content-Type: application/json" \\',
-    '    -d "{\\"ptyId\\": $DEVORA_PTY_ID, \\"url\\": \\"http://localhost/bdd-test-hook\\"}" &',
+    `    -d "{\\"ptyId\\": $DEVORA_PTY_ID, \\"path\\": \\"${previewPath}\\", \\"stack\\": false}"`,
     'fi',
     '',
   ].join('\n');

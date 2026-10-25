@@ -99,7 +99,7 @@ describe('LayerRouter — ordering', () => {
   it('reaches the tab stack when the window stack is empty', () => {
     const { tabStack } = build();
     const onKey = vi.fn(() => true);
-    tabStack.push(pageLayer({ name: 'crit-review', element: content('crit'), onKey }));
+    tabStack.push(pageLayer({ name: 'task-creation-progress', element: content('task-creation'), onKey }));
 
     const e = dispatch({ key: 'j', code: 'KeyJ' });
     expect(onKey).toHaveBeenCalledOnce();
@@ -114,7 +114,7 @@ describe('LayerRouter — ordering', () => {
     anchor.appendChild(popup);
     windowStack.push(popupLayer({ name: 'dropdown-menu', element: popup }));
     const onKey = vi.fn(() => true);
-    tabStack.push(pageLayer({ name: 'crit-review', element: content('crit'), onKey }));
+    tabStack.push(pageLayer({ name: 'task-creation-progress', element: content('task-creation'), onKey }));
 
     dispatch({ key: 'j', code: 'KeyJ' });
     expect(onKey).toHaveBeenCalledOnce();
@@ -124,7 +124,7 @@ describe('LayerRouter — ordering', () => {
     const { windowStack, tabStack } = build();
     windowStack.push(pageLayer({ name: 'ws-hub', element: content('ws-hub') }));
     const onKey = vi.fn(() => true);
-    tabStack.push(pageLayer({ name: 'crit-review', element: content('crit'), onKey }));
+    tabStack.push(pageLayer({ name: 'task-creation-progress', element: content('task-creation'), onKey }));
 
     dispatch({ key: 'j', code: 'KeyJ' });
     expect(onKey).not.toHaveBeenCalled();

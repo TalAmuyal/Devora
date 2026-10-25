@@ -2,15 +2,6 @@
 
 Devora bundles and depends on the following third-party software and assets.
 
-## Bundled Binaries
-
-### crit v0.15.4
-
-- **License:** MIT
-- **Author:** Tomasz Tomczyk
-- **Source:** https://github.com/tomasz-tomczyk/crit
-- **Full license text:** See `bundler/crit-license.txt`
-
 ## Go Dependencies
 
 ### charm.land/lipgloss/v2

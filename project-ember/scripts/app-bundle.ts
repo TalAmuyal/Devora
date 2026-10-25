@@ -24,7 +24,7 @@ export interface AppBundle {
 }
 
 /** The bundled-apps/ entries acceptance tests rely on (subset of what populate-app-resources.sh installs). */
-export const REQUIRED_BUNDLED_APPS = ['ccc', 'crit', 'original-crit', 'debi'];
+export const REQUIRED_BUNDLED_APPS = ['ccc', 'debi'];
 
 export function findAppBundle(bundleDir: string = DEFAULT_BUNDLE_DIR): AppBundle | null {
   if (!fs.existsSync(bundleDir)) return null;

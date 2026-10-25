@@ -22,6 +22,8 @@ Types of changes:
 
 - `uv` is no longer bundled with Devora or required by `debi health`
 - Removed the remnants of Devora OG (Kitty + Glimpse-TTY), including the `debi workspace-ui` command
+- Removed the Crit integration (the plan-review overlay opened when Claude Code exits plan mode)
+- Crit is no longer bundled with Devora
 
 ### Fixed
 

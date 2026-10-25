@@ -116,6 +116,7 @@ Given(
 When(
   'the user creates a task {string} selecting repo {string}',
   async function (this: EmberWorld, title: string, repoName: string) {
+    this.sessionsBeforeTask = await this.driver.eval('return window.__test.sessionManager.getSessionCount()');
     const ui = new UIDriver(this.driver);
     await ui.waitForElement('.ws-new-btn');
     await ui.click('.ws-new-btn');
@@ -138,14 +139,22 @@ When(
   },
 );
 
+async function waitForPreparing(world: EmberWorld): Promise<void> {
+  await world.driver.pollFor(
+    `return Array.from(document.querySelectorAll('.task-creation-step-label')).some((s) => (s.textContent || '').includes('Preparing'))`,
+    true,
+    20_000,
+  );
+}
+
+Given('the task creation is preparing', async function (this: EmberWorld) {
+  await waitForPreparing(this);
+});
+
 When(
   'the user cancels the task creation once it is preparing',
   async function (this: EmberWorld) {
-    await this.driver.pollFor(
-      `return Array.from(document.querySelectorAll('.task-creation-step-label')).some((s) => (s.textContent || '').includes('Preparing'))`,
-      true,
-      20_000,
-    );
+    await waitForPreparing(this);
     const ui = new UIDriver(this.driver);
     await ui.click('.task-creation-action');
   },
@@ -225,7 +234,7 @@ Then(
 
 Then('the task-creation tab should close', async function (this: EmberWorld) {
   await this.driver.pollFor(`return document.querySelector('.task-creation') === null`, true, 30_000);
-  await this.driver.pollFor(`return window.__test.sessionManager.getSessions().length`, 0, 30_000);
+  await this.driver.pollFor(`return window.__test.sessionManager.getSessionCount()`, this.sessionsBeforeTask ?? 0, 30_000);
 });
 
 Then('workspace {string} should be inactive', async function (this: EmberWorld, wsId: string) {

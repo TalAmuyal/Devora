@@ -36,7 +36,6 @@
     "allow-read-text-file",
     "allow-get-user-guide-path",
     "allow-get-theme",
-    "allow-crit-overlay-dismissed",
     "allow---test-report",
     "allow-remove-task",
     "allow-prepare-repurpose-task",

@@ -18,9 +18,9 @@ description = "Build all sub-projects (debi, cc-simple-statusline, judgess)"
 [tasks.clean]
 run = """
 set -e
-rm -rf bin/ bundler/3rd-party-apps/
+rm -rf bin/
 """
-description = "Clean build artifacts and downloaded dependencies"
+description = "Clean build artifacts"
 
 [tasks.test]
 run = """
@@ -28,29 +28,12 @@ set -e
 mise run -C project-debi test
 mise run -C project-judgess test
 mise run -C project-status-line test
-mise run test-bundler
 """
 description = "Run tests for all sub-projects"
-
-[tasks.test-bundler]
-run = """
-set -e
-./bundler/test-download-deps.sh
-./bundler/test-update-deps.sh
-"""
-description = "Run tests for the bundler scripts"
 
 [tasks.lint-shell]
 run = "shellcheck install.sh bundler/macos-ember/populate-app-resources.sh bundler/macos-ember/install-completions.sh"
 description = "Lint shell scripts with shellcheck"
-
-[tasks.update-deps]
-run = "./bundler/update-deps.sh"
-description = "Update all 3rd-party dependencies to their latest versions"
-
-[tasks.download-deps]
-run = "./bundler/download-deps.sh"
-description = "Download 3rd-party dependencies for bundling"
 
 [tasks.release]
 run = "./cut-release.sh"
@@ -69,7 +52,7 @@ echo "Installed pre-commit hook: $HOOKS_DIR/pre-commit -> $REPO_ROOT/scripts/hoo
 description = "Install local git hooks (pre-commit changelog check)"
 
 [tasks.build-ember-app]
-depends = ["build", "download-deps"]
+depends = ["build"]
 description = "Build Devora Ember .app and populate all bundled resources"
 run = """
 set -e
@@ -93,12 +76,10 @@ description = "Run Devora Ember tests"
 run = "mise run -C project-ember test-all"
 
 [tasks.ember-bundle]
-depends = ["download-deps"]
 description = "Build the complete Devora Ember.app bundle with all resources"
 run = "./bundler/macos-ember/bundle-ember.sh"
 
 [tasks.mac-install]
-depends = ["download-deps"]
 description = "Build and install Devora.app to /Applications, plus zsh completion (close Devora first). Untagged source builds install as Devora-<version>.app; --dev installs as Devora-dev.app."
 usage = '''
 flag "-d --dev"

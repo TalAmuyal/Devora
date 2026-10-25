@@ -45,7 +45,7 @@ export interface KeyboardShortcutsDeps {
   onOpenUserGuide: () => void;
   /**
    * Whether an opaque layer occupies the *window* stack — the single precondition shared by every shortcut that opens a window surface or navigates tabs.
-   * Scoped to the window stack on purpose: a Crit review or a terminal lives in a tab stack and is opaque, and neither should make tab switching inert.
+   * Scoped to the window stack on purpose: a tab-bound surface (task-creation progress) or a terminal lives in a tab stack and is opaque, and neither should make tab switching inert.
    */
   hasWindowSurface: () => boolean;
 }

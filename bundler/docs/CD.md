@@ -27,16 +27,15 @@ The pipeline has two jobs:
 
 1. **Checkout** with `fetch-depth: 0` (full history, needed for version computation).
 2. **Set up mise** for Go, Python, and other tool versions.
-3. **Restore cached dependencies** (see [Caching](#caching) below).
-4. **Download third-party dependencies** via `./bundler/download-deps.sh`. If the cache was hit, this is a no-op since the script skips already-present files.
-5. **Build the app bundle** via `mise run ember-bundle`, then **create the DMG** via `mise run ember-create-dmg`. This compiles Debi and Status-line, builds the Tauri (Ember) app into `Devora-Ember.app`, bundles all resources, and produces a compressed `Devora.dmg` (the "Devora" name is applied only at the DMG/install boundary).
-6. **Smoke test** -- verifies that:
+3. **Restore build caches** for the Ember Rust build artifacts (keyed on `Cargo.lock`) and npm modules (keyed on `package-lock.json`).
+4. **Build the app bundle** via `mise run ember-bundle`, then **create the DMG** via `mise run ember-create-dmg`. This compiles Debi and Status-line, builds the Tauri (Ember) app into `Devora-Ember.app`, bundles all resources, and produces a compressed `Devora.dmg` (the "Devora" name is applied only at the DMG/install boundary).
+5. **Smoke test** -- verifies that:
    - The built `.app` exists and contains the `devora-ember` binary
    - Bundled resources (`debi`) were copied in
    - The version in `Info.plist` was patched (not the placeholder `0.1.0`)
    - The app icon (`app.icns`) was generated
    - `Devora.dmg` was created
-7. **Publish release** (see [Release types](#release-types)).
+6. **Publish release** (see [Release types](#release-types)).
 
 ## Release types
 
@@ -104,31 +103,6 @@ After the script completes:
 
 If the auto-tag workflow fails, run `./cut-release.sh --tag-only` to manually create and push the tag (reads the version from the `VERSION` file).
 
-## Dependency management
-
-Third-party dependencies are declared in `bundler/3rd-party-deps.json`.
-Each entry specifies:
-
-- `name`, `version`, `license`, `source_repo` -- metadata
-- `download_url` -- direct download link for the release artifact
-- `sha256` -- SHA-256 checksum of the downloaded archive
-- `archive_type` -- `tar.gz` or `raw`
-- `extract_path` -- file or directory to extract from the archive
-
-The `bundler/download-deps.sh` script processes this manifest:
-1. Skips dependencies that are already present in `bundler/3rd-party-apps/`
-2. Downloads the archive
-3. Verifies the SHA-256 checksum
-4. Extracts the specified file or directory
-
-To update a dependency, edit `3rd-party-deps.json` with the new version, download URL, and checksum.
-The cache key will change automatically, triggering a fresh download on the next pipeline run.
-
-### Caching
-
-The pipeline caches `bundler/3rd-party-apps/` using a key derived from the hashes of both `bundler/3rd-party-deps.json` and `bundler/download-deps.sh`.
-This means the cache is invalidated when either the dependency manifest or the download script changes.
-
 ## Cost considerations
 
 The **test** job runs on `ubuntu-latest`, which is free for public repos and cheap for private ones.
@@ -138,12 +112,6 @@ MacOS runners on GitHub Actions are roughly 10x more expensive than Linux runner
 The test job is deliberately kept on Linux to avoid unnecessary MacOS runner usage -- the build job only runs after tests pass.
 
 ## Troubleshooting
-
-### Cache miss causes slow builds
-
-If `3rd-party-deps.json` or `download-deps.sh` changed, the cache key no longer matches and all dependencies are re-downloaded.
-This is expected.
-Builds without cache take longer due to downloading the dependencies.
 
 ### Smoke test fails on version check
 
@@ -162,8 +130,3 @@ Verify the `GH_TOKEN` has `contents: write` permission.
 The stable release step extracts notes by matching `## <version>` (without the `v` prefix) in `CHANGELOG.md`.
 If the section is missing or the heading format differs, notes will be empty and the fallback message is used.
 Ensure `cut-release.sh` was used to prepare the release, as it formats the changelog correctly.
-
-### Checksum mismatch during dependency download
-
-If a dependency's download URL now points to a different file (e.g. the upstream project re-tagged a release), the SHA-256 check will fail.
-Download the new artifact manually, compute its checksum (`shasum -a 256 <file>`), and update `3rd-party-deps.json`.

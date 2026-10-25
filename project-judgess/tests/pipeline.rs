@@ -34,7 +34,6 @@ fn classified_requests_are_exported_redacted() {
     let mut output = Vec::new();
     classify::run(
         &store,
-        home,
         &mut Cursor::new("a\nneeds network\n"),
         &mut output,
     )

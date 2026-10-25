@@ -73,7 +73,6 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 BUNDLER_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 REPO_ROOT="$(cd "$BUNDLER_DIR/.." && pwd)"
-THIRD_PARTY_APPS_DIR="$BUNDLER_DIR/3rd-party-apps"
 
 if [[ "$LIST_SOURCES" -eq 0 ]]; then
 	# Validate app directory
@@ -138,18 +137,6 @@ copy_built() {
 	copy_required "$REPO_ROOT/$repo_rel_artifact" "$dest"
 }
 
-# A downloaded artifact whose content is determined by the version pins file
-copy_third_party() {
-	local name="$1"
-	local dest="$2"
-
-	if [[ "$LIST_SOURCES" -eq 1 ]]; then
-		echo "bundler/3rd-party-deps.json"
-		return
-	fi
-	copy_required "$THIRD_PARTY_APPS_DIR/$name" "$dest"
-}
-
 ensure_dir() {
 	if [[ "$LIST_SOURCES" -eq 1 ]]; then
 		return
@@ -176,8 +163,6 @@ gen_app_icon() {
 # --- Bundled apps ---
 
 copy_repo        "ccc.sh"                                     "$BUNDLED_APPS_DIR/ccc"
-copy_repo        "project-crit-integration/bin/crit"          "$BUNDLED_APPS_DIR/crit"
-copy_third_party "original-crit"                              "$BUNDLED_APPS_DIR/original-crit"
 copy_built       "project-debi/debi"                          "$BUNDLED_APPS_DIR/debi"          "project-debi"
 
 # --- CC plugins ---
@@ -187,11 +172,8 @@ copy_built       "project-judgess/target/release/judgess"     "$BUNDLED_CC_PLUGI
 copy_repo        "project-detached-flow/cc-plugin"            "$BUNDLED_CC_PLUGINS_DIR/detached-flow"
 copy_repo        "project-team-work/cc-plugin"                "$BUNDLED_CC_PLUGINS_DIR/team-work"
 copy_repo        "project-code-cleanup/cc-plugin"             "$BUNDLED_CC_PLUGINS_DIR/code-cleanup"
-copy_third_party "claude-code"                                "$BUNDLED_CC_PLUGINS_DIR/crit"
 
 # --- Resources ---
-
-copy_repo        "bundler/crit-license.txt"                   "$RESOURCES_DIR/."
 
 ensure_dir "$RESOURCES_DIR/themes"
 copy_repo        "themes/catppuccin-macchiato.conf"           "$RESOURCES_DIR/themes/catppuccin-macchiato.conf"

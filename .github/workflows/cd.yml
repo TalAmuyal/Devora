@@ -118,11 +118,6 @@ jobs:
         with:
           experimental: true
 
-      - uses: actions/cache@v5
-        with:
-          path: bundler/3rd-party-apps
-          key: 3rd-party-deps-macos-${{ hashFiles('bundler/3rd-party-deps.json', 'bundler/download-deps.sh') }}
-
       - name: Cache Ember Rust build artifacts
         uses: actions/cache@v5
         with:
@@ -136,9 +131,6 @@ jobs:
           path: project-ember/node_modules
           key: ember-npm-${{ runner.os }}-${{ hashFiles('project-ember/package-lock.json') }}
           restore-keys: ember-npm-${{ runner.os }}-
-
-      - name: Download third-party dependencies
-        run: ./bundler/download-deps.sh
 
       - name: Build Ember variant
         run: mise run ember-bundle
