@@ -5,7 +5,6 @@ You can read `./USER_GUIDE.md` for high-level understanding of the project.
 ## Language
 
 **Devora**: The name of the application we develop. The published product is the Ember build (see below)
-**Devora OG**: The legacy version of Devora based on Kitty and Glimpse-TTY; No longer published or installable; kept in-repo as a source-only reference for implementing Ember
 **Devora-Ember** / **Ember**: The Tauri + xterm.js build, which is published as "Devora"
 	- It keeps the "Ember" name internally (the `project-ember/` directory, the `devora-ember` binary, some `ember-*` mise tasks)
 
@@ -18,7 +17,7 @@ Below are terms that have a specific meaning in the context of Devora:
 - **Profile**: A named, isolated configuration scope with its own root directory, registered repos, and workspaces
 - **Worktree**: A git worktree checkout inside a workspace; each registered repo gets its own worktree directory
 - **Prepare Command**: A user-configured shell command that runs after worktree creation (config key: `prepare-command`)
-- **Workspace Hub**: The UI for listing, filtering, creating, and managing workspaces. In Devora OG this is a full-screen TUI; in Devora-Ember this is a tab-covering overlay
+- **Workspace Hub**: The UI for listing, filtering, creating, and managing workspaces; a tab-covering overlay
 - **Settings Hub**: The Devora-Ember tab-covering overlay for managing profiles and editing settings — User Defaults, per-profile Claude models/effort, and registered repos. Reached from the Workspace Hub via `P`, the profile dropdown's "Manage Profiles…", or the burger menu's "Settings"
 - **Terminal Pane** (Ember): An xterm.js terminal instance within a session
 - **Tab Bar** (Ember): The strip at the bottom of the window showing open sessions

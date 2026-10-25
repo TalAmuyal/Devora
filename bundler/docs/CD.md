@@ -112,11 +112,11 @@ Each entry specifies:
 - `name`, `version`, `license`, `source_repo` -- metadata
 - `download_url` -- direct download link for the release artifact
 - `sha256` -- SHA-256 checksum of the downloaded archive
-- `archive_type` -- `tar.gz` or `dmg`
+- `archive_type` -- `tar.gz` or `raw`
 - `extract_path` -- file or directory to extract from the archive
 
 The `bundler/download-deps.sh` script processes this manifest:
-1. Skips dependencies that are already present in `bundler/macos/3rd-party-apps/`
+1. Skips dependencies that are already present in `bundler/3rd-party-apps/`
 2. Downloads the archive
 3. Verifies the SHA-256 checksum
 4. Extracts the specified file or directory
@@ -126,7 +126,7 @@ The cache key will change automatically, triggering a fresh download on the next
 
 ### Caching
 
-The pipeline caches `bundler/macos/3rd-party-apps/` using a key derived from the hashes of both `bundler/3rd-party-deps.json` and `bundler/download-deps.sh`.
+The pipeline caches `bundler/3rd-party-apps/` using a key derived from the hashes of both `bundler/3rd-party-deps.json` and `bundler/download-deps.sh`.
 This means the cache is invalidated when either the dependency manifest or the download script changes.
 
 ## Cost considerations
@@ -143,13 +143,13 @@ The test job is deliberately kept on Linux to avoid unnecessary MacOS runner usa
 
 If `3rd-party-deps.json` or `download-deps.sh` changed, the cache key no longer matches and all dependencies are re-downloaded.
 This is expected.
-Builds without cache take longer due to downloading Kitty (~80 MB DMG) and other dependencies.
+Builds without cache take longer due to downloading the dependencies.
 
 ### Smoke test fails on version check
 
-The smoke test verifies that `Info.plist` does not contain the placeholder version `1.0`.
-This fails if `bundle.sh` did not patch the plist correctly.
-Check that `VERSION` contains a valid version and that the `sed` replacement in `bundle.sh` matches the plist template.
+The smoke test verifies that `Info.plist` does not contain the `tauri.conf.json` placeholder version `0.1.0`.
+This fails if `bundler/macos-ember/populate-app-resources.sh` did not patch the plist correctly.
+Check that `VERSION` contains a valid version and that the `plutil -replace` calls in `populate-app-resources.sh` succeeded.
 
 ### Nightly release already exists
 

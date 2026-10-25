@@ -114,27 +114,6 @@ func TestGetOutput_WithCwd(t *testing.T) {
 	}
 }
 
-func TestGetShellOutput_Success(t *testing.T) {
-	out, err := GetShellOutput("echo hello world")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if out != "hello world" {
-		t.Fatalf("expected %q, got %q", "hello world", out)
-	}
-}
-
-func TestGetShellOutput_ShellFeatures(t *testing.T) {
-	out, err := GetShellOutput("echo foo; echo bar")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	expected := "foo\nbar"
-	if out != expected {
-		t.Fatalf("expected %q, got %q", expected, out)
-	}
-}
-
 func TestRunPassthrough_Success(t *testing.T) {
 	err := RunPassthrough([]string{"true"})
 	if err != nil {
@@ -176,20 +155,6 @@ func TestRunPassthrough_WithCwd(t *testing.T) {
 	err := RunPassthrough([]string{"test", "-f", "marker.txt"}, WithCwd(dir))
 	if err != nil {
 		t.Fatalf("expected success when running in dir with marker file, got: %v", err)
-	}
-}
-
-func TestGetShellOutput_WithCwd(t *testing.T) {
-	dir := t.TempDir()
-	out, err := GetShellOutput("pwd", WithCwd(dir))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	expectedDir, _ := filepath.EvalSymlinks(dir)
-	actualDir, _ := filepath.EvalSymlinks(out)
-	if actualDir != expectedDir {
-		t.Fatalf("expected cwd %q, got %q", expectedDir, actualDir)
 	}
 }
 

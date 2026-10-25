@@ -3,7 +3,6 @@ package cli
 import (
 	closecmd "devora/internal/close"
 	"devora/internal/completion"
-	"devora/internal/config"
 	"devora/internal/credentials"
 	"devora/internal/git"
 	"devora/internal/health"
@@ -11,18 +10,15 @@ import (
 	"devora/internal/process"
 	"devora/internal/prstatus"
 	"devora/internal/shellinit"
-	"devora/internal/style"
 	"devora/internal/submit"
 	"devora/internal/tomlvalidate"
 	"devora/internal/yamlvalidate"
 	// Register the Asana task-tracker provider. The blank import runs the
 	// package's init(), which calls tasktracker.Register("asana", New).
 	_ "devora/internal/tasktracker/asana"
-	"devora/internal/tui"
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 )
 
@@ -58,59 +54,6 @@ func Run(args []string) error {
 	}
 
 	return cmd.Run(cmdArgs)
-}
-
-func runWorkspaceUI() error {
-	profiles := config.GetProfiles()
-	showProfileRegistration := len(profiles) == 0
-	if !showProfileRegistration {
-		config.SetActiveProfile(&profiles[0])
-	}
-
-	var repoNames []string
-	if !showProfileRegistration {
-		var err error
-		repoNames, err = config.GetRegisteredRepoNames()
-		if err != nil {
-			return fmt.Errorf("get repo names: %w", err)
-		}
-	}
-
-	startupError := checkBundledAppsInPath(
-		os.Getenv("DEVORA_RESOURCES_DIR"),
-		os.Getenv("PATH"),
-	)
-
-	result, err := tui.RunWorkspaceUI(
-		style.DefaultKittyThemePath(),
-		repoNames,
-		showProfileRegistration,
-		startupError,
-	)
-	if err != nil {
-		return err
-	}
-	if result == nil {
-		return nil
-	}
-
-	if result.SelectedWorkspace != nil {
-		ws := result.SelectedWorkspace
-		sessionName := ws.TaskTitle
-		if sessionName == "" {
-			sessionName = ws.Name
-		}
-		return tui.CreateAndAttachSession(ws.Path, sessionName)
-	}
-
-	if result.NewWorkspace != nil {
-		return tui.CreateAndAttachSession(
-			result.NewWorkspace.WorkspacePath,
-			result.NewWorkspace.SessionName,
-		)
-	}
-
-	return nil
 }
 
 const healthUsage = `usage: debi health [--strict] [-v|--verbose] [--json] [-p|--profile <name>] [--profile-path <path>]
@@ -481,30 +424,6 @@ func runClose(args []string) error {
 		return wrapped
 	}
 	return err
-}
-
-func checkBundledAppsInPath(resourcesDir, pathEnv string) string {
-	if resourcesDir == "" {
-		return ""
-	}
-	expected := filepath.Join(resourcesDir, "bundled-apps")
-	for _, dir := range filepath.SplitList(pathEnv) {
-		if filepath.Clean(dir) == filepath.Clean(expected) {
-			return ""
-		}
-	}
-	return formatStartupError(expected, pathEnv)
-}
-
-func formatStartupError(expectedDir, pathEnv string) string {
-	var b strings.Builder
-	b.WriteString("Expected directory in PATH:\n")
-	b.WriteString("  " + expectedDir + "\n\n")
-	b.WriteString("Current PATH:\n")
-	for _, entry := range filepath.SplitList(pathEnv) {
-		b.WriteString("  " + entry + "\n")
-	}
-	return b.String()
 }
 
 const completionHelp = `Generate shell completion script.

@@ -73,7 +73,7 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 BUNDLER_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 REPO_ROOT="$(cd "$BUNDLER_DIR/.." && pwd)"
-THIRD_PARTY_APPS_DIR="$BUNDLER_DIR/macos/3rd-party-apps"
+THIRD_PARTY_APPS_DIR="$BUNDLER_DIR/3rd-party-apps"
 
 if [[ "$LIST_SOURCES" -eq 0 ]]; then
 	# Validate app directory
@@ -158,7 +158,6 @@ ensure_dir() {
 }
 
 # The .app bundle icon, generated post-build from Ember's own brand asset (the mauve "D" on a crust squircle) rather than committed as a derived .icns.
-# Ember has a distinct icon from the Kitty variant, so it uses base-icon-ember.png instead of the shared base-icon.png.
 # (Tauri's separate compile-time window icon is the committed src-tauri/icons/icon.png.)
 # Routed through the manifest so base-icon-ember.png counts as a fingerprint source.
 gen_app_icon() {
@@ -166,10 +165,10 @@ gen_app_icon() {
 		echo "base-icon-ember.png"
 		return
 	fi
-	"$BUNDLER_DIR/macos/gen-icon.sh" \
+	"$SCRIPT_DIR/gen-icon.sh" \
 		--base-icon "$REPO_ROOT/base-icon-ember.png" \
 		--output-dir "$RESOURCES_DIR"
-	# gen-icon.sh emits app.icns; drop any default icns Tauri injected and point the bundle at ours (CFBundleIconFile is extensionless, as in the Kitty variant).
+	# gen-icon.sh emits app.icns; drop any default icns Tauri injected and point the bundle at ours (CFBundleIconFile is extensionless).
 	find "$RESOURCES_DIR" -maxdepth 1 -name '*.icns' ! -name 'app.icns' -delete
 	plutil -replace CFBundleIconFile -string "app" "$APP_DIR/Contents/Info.plist"
 }
@@ -194,8 +193,8 @@ copy_third_party "claude-code"                                "$BUNDLED_CC_PLUGI
 
 copy_repo        "bundler/crit-license.txt"                   "$RESOURCES_DIR/."
 
-ensure_dir "$RESOURCES_DIR/kitty-configs"
-copy_repo        "kitty-configs/current-theme.conf"           "$RESOURCES_DIR/kitty-configs/current-theme.conf"
+ensure_dir "$RESOURCES_DIR/themes"
+copy_repo        "themes/catppuccin-macchiato.conf"           "$RESOURCES_DIR/themes/catppuccin-macchiato.conf"
 
 copy_repo        "USER_GUIDE.md"                              "$RESOURCES_DIR/."
 copy_repo        "CHANGELOG.md"                               "$RESOURCES_DIR/."

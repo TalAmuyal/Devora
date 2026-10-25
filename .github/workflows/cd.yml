@@ -120,7 +120,7 @@ jobs:
 
       - uses: actions/cache@v5
         with:
-          path: bundler/macos/3rd-party-apps
+          path: bundler/3rd-party-apps
           key: 3rd-party-deps-macos-${{ hashFiles('bundler/3rd-party-deps.json', 'bundler/download-deps.sh') }}
 
       - name: Cache Ember Rust build artifacts

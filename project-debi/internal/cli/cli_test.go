@@ -73,18 +73,6 @@ func TestRun_UnknownCommand_ReturnsUsageError(t *testing.T) {
 	}
 }
 
-// workspace-ui and add commands attempt real operations.
-// In test environments (no TTY, not inside a workspace), they produce
-// expected errors rather than "not yet implemented" messages.
-
-func TestRun_WorkspaceUI_Recognized(t *testing.T) {
-	err := Run([]string{"workspace-ui"})
-	// May fail due to TTY not available in tests, but should not return "unknown command"
-	if err != nil && strings.Contains(err.Error(), "unknown command") {
-		t.Fatalf("workspace-ui should be recognized, got: %s", err.Error())
-	}
-}
-
 func TestRun_Health_Recognized(t *testing.T) {
 	stubResolveActiveProfile(t, func(string) (string, error) { return "", nil })
 	stubHealthRun(t, func(io.Writer, bool, bool) error { return nil })
@@ -503,89 +491,6 @@ func TestRun_PRCheck_UnknownFlag_ReturnsUsageError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "--foo") {
 		t.Fatalf("expected error to mention the flag, got: %s", err.Error())
-	}
-}
-
-func TestCheckBundledAppsInPath_EmptyResourcesDir_ReturnsEmpty(t *testing.T) {
-	result := checkBundledAppsInPath("", "/usr/bin:/usr/local/bin")
-	if result != "" {
-		t.Fatalf("expected empty string for empty resourcesDir, got: %q", result)
-	}
-}
-
-func TestCheckBundledAppsInPath_BundledAppsPresent_ReturnsEmpty(t *testing.T) {
-	resourcesDir := "/Applications/Devora.app/Contents/Resources"
-	bundledApps := filepath.Join(resourcesDir, "bundled-apps")
-	pathEnv := "/usr/bin:" + bundledApps + ":/usr/local/bin"
-
-	result := checkBundledAppsInPath(resourcesDir, pathEnv)
-	if result != "" {
-		t.Fatalf("expected empty string when bundled-apps is in PATH, got: %q", result)
-	}
-}
-
-func TestCheckBundledAppsInPath_BundledAppsMissing_ReturnsWarning(t *testing.T) {
-	resourcesDir := "/Applications/Devora.app/Contents/Resources"
-	pathEnv := "/usr/bin:/usr/local/bin"
-
-	result := checkBundledAppsInPath(resourcesDir, pathEnv)
-	if result == "" {
-		t.Fatal("expected non-empty warning when bundled-apps is not in PATH")
-	}
-}
-
-func TestCheckBundledAppsInPath_TrailingSlash_ReturnsEmpty(t *testing.T) {
-	resourcesDir := "/Applications/Devora.app/Contents/Resources"
-	bundledAppsWithSlash := filepath.Join(resourcesDir, "bundled-apps") + "/"
-	pathEnv := "/usr/bin:" + bundledAppsWithSlash + ":/usr/local/bin"
-
-	result := checkBundledAppsInPath(resourcesDir, pathEnv)
-	if result != "" {
-		t.Fatalf("expected empty string when bundled-apps with trailing slash is in PATH, got: %q", result)
-	}
-}
-
-func TestCheckBundledAppsInPath_MultipleEntries_BundledAppsPresent_ReturnsEmpty(t *testing.T) {
-	resourcesDir := "/Applications/Devora.app/Contents/Resources"
-	bundledApps := filepath.Join(resourcesDir, "bundled-apps")
-	pathEnv := "/usr/bin:/opt/homebrew/bin:" + bundledApps + ":/usr/local/bin:/home/user/.local/bin"
-
-	result := checkBundledAppsInPath(resourcesDir, pathEnv)
-	if result != "" {
-		t.Fatalf("expected empty string when bundled-apps is among multiple PATH entries, got: %q", result)
-	}
-}
-
-func TestFormatStartupError_ContainsExpectedDirectory(t *testing.T) {
-	expectedDir := "/Applications/Devora.app/Contents/Resources/bundled-apps"
-	pathEnv := "/usr/bin:/usr/local/bin"
-
-	result := formatStartupError(expectedDir, pathEnv)
-	if !strings.Contains(result, expectedDir) {
-		t.Fatalf("expected output to contain the expected directory %q, got: %q", expectedDir, result)
-	}
-}
-
-func TestFormatStartupError_ContainsPathEntries(t *testing.T) {
-	expectedDir := "/Applications/Devora.app/Contents/Resources/bundled-apps"
-	pathEnv := "/usr/bin:/usr/local/bin"
-
-	result := formatStartupError(expectedDir, pathEnv)
-	if !strings.Contains(result, "/usr/bin") {
-		t.Fatalf("expected output to contain PATH entry /usr/bin, got: %q", result)
-	}
-	if !strings.Contains(result, "/usr/local/bin") {
-		t.Fatalf("expected output to contain PATH entry /usr/local/bin, got: %q", result)
-	}
-}
-
-func TestFormatStartupError_ContainsDiagnosticDataOnly(t *testing.T) {
-	expectedDir := "/Applications/Devora.app/Contents/Resources/bundled-apps"
-	pathEnv := "/usr/bin:/usr/local/bin"
-
-	result := formatStartupError(expectedDir, pathEnv)
-	if strings.Contains(result, ".zprofile") || strings.Contains(result, ".zshrc") {
-		t.Fatalf("formatStartupError should not contain fix instructions (owned by TUI layer), got: %q", result)
 	}
 }
 

@@ -352,7 +352,7 @@ export class HealthHub {
   private renderConfigSection(r: HealthReport): HTMLElement {
     const section = this.sectionShell('Configuration', '', 'ok', false);
 
-    // Config file (a missing config is informational, like the OG "(not found)").
+    // Config file (a missing config is informational, not a failure).
     const configRow = this.rowShell(r.config.found ? 'ok' : 'warn', 'config');
     this.appendText(configRow, 'health-row-msg', r.config.found ? 'found' : 'not found');
     this.appendText(configRow, 'health-row-path', r.config.path);

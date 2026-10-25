@@ -56,7 +56,7 @@ The crash handler is used in `main.go` (see [cli.md](cli.md#integration-with-mai
 - `crash.HandleError(err)` is called for non-`UsageError` errors returned by `cli.Run`.
 - `cli.UsageError` is handled separately — usage errors are printed to stderr without crash logging.
 
-Note: Ctrl+C sends SIGINT which terminates the process. Bubble Tea handles SIGINT gracefully within the TUI.
+Note: Ctrl+C sends SIGINT which terminates the process.
 
 ## Testing
 

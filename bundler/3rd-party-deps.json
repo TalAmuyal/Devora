@@ -1,31 +1,6 @@
 {
   "dependencies": [
     {
-      "name": "kitty",
-      "version": "0.46.2",
-      "license": "GPL-3.0",
-      "source_repo": "https://github.com/kovidgoyal/kitty",
-      "commit": "4483a6c110275d5603e48337ba533a322781efe2",
-      "source_tree_url": "https://github.com/kovidgoyal/kitty/tree/4483a6c110275d5603e48337ba533a322781efe2",
-      "tag": "v0.46.2",
-      "download_url": "https://github.com/kovidgoyal/kitty/releases/download/v0.46.2/kitty-0.46.2.dmg",
-      "sha256": "e4e19cb8aef816dd64862e013d2b83cc1e3c0f37ed6398f3cda221004c2240d2",
-      "archive_type": "dmg",
-      "extract_path": "kitty.app"
-    },
-    {
-      "name": "glimpse-tty",
-      "version": "2.1.0",
-      "license": "BSD-3-Clause",
-      "source_repo": "https://github.com/TalAmuyal/glimpse-tty",
-      "tag": "v2.1.0",
-      "download_url": "https://github.com/TalAmuyal/glimpse-tty/releases/download/v2.1.0/glimpse-tty-2.1.0-darwin-arm64.tar.gz",
-      "sha256": "8941c6187c722e78f4fd85bbfde7103411d58c3c5f65aa851fb71bf9fe2bb2ce",
-      "archive_type": "tar.gz",
-      "extract_path": "glimpse-tty",
-      "extract_type": "directory"
-    },
-    {
       "name": "crit",
       "version": "0.15.4",
       "license": "MIT",

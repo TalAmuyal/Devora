@@ -18,13 +18,9 @@ description = "Build all sub-projects (debi, cc-simple-statusline, judgess)"
 [tasks.clean]
 run = """
 set -e
-rm -rf bin/ bundler/macos/3rd-party-apps/
+rm -rf bin/ bundler/3rd-party-apps/
 """
 description = "Clean build artifacts and downloaded dependencies"
-
-[tasks.build-dev-and-open]
-run = "./bundler/macos/bundle.sh --dev --open"
-description = "Build Devora.app in development mode and open it"
 
 [tasks.test]
 run = """
@@ -45,7 +41,7 @@ set -e
 description = "Run tests for the bundler scripts"
 
 [tasks.lint-shell]
-run = "shellcheck install.sh bundler/macos-ember/populate-app-resources.sh bundler/macos/install-completions.sh"
+run = "shellcheck install.sh bundler/macos-ember/populate-app-resources.sh bundler/macos-ember/install-completions.sh"
 description = "Lint shell scripts with shellcheck"
 
 [tasks.update-deps]
@@ -127,5 +123,5 @@ fi
 rm -rf "$APP_DEST"
 mv "$APP_SRC" "$APP_DEST"
 echo "Installed to $APP_DEST"
-./bundler/macos/install-completions.sh "$APP_DEST"
+./bundler/macos-ember/install-completions.sh "$APP_DEST"
 """

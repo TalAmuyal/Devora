@@ -27,8 +27,8 @@ source "$SCRIPT_DIR/test-helpers.sh"
 echo "test: extract_repo_slug"
 
 assert_eq "standard github url" \
-	"kovidgoyal/kitty" \
-	"$(extract_repo_slug "https://github.com/kovidgoyal/kitty")"
+	"tomasz-tomczyk/crit" \
+	"$(extract_repo_slug "https://github.com/tomasz-tomczyk/crit")"
 
 assert_eq "url with trailing slash" \
 	"owner/repo" \

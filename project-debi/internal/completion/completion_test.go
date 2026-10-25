@@ -12,10 +12,10 @@ import (
 func testCommands() []cmdinfo.Command {
 	return []cmdinfo.Command{
 		{
-			Name:        "workspace-ui",
-			Alias:       "w",
-			Description: "Open the workspace management UI",
-			Group:       "Workspace Commands",
+			Name:        "util",
+			Alias:       "u",
+			Description: "An example utility command with an alias",
+			Group:       "Utility",
 		},
 		{
 			Name:        "health",

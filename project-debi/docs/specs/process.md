@@ -4,7 +4,7 @@ Package: `internal/process`
 
 ## Purpose
 
-Execute shell commands and return their output. This is the foundation package - nearly every other package depends on it for running git, kitty, and mise commands.
+Execute shell commands and return their output. This is the foundation package - nearly every other package depends on it for running git, gh, and mise commands.
 
 ## Types
 
@@ -53,7 +53,7 @@ Sets the working directory for the command.
 func WithSilent() ExecOption
 ```
 
-Routes `RunPassthrough`'s stdout and stderr to `io.Discard`. Has no effect on `GetOutput`/`GetShellOutput` (which always capture). `stdin` is left unchanged. Used by submit/close in Normal and Quiet modes to keep git/gh subprocess output off the user's terminal while still enforcing exit-code semantics (`*PassthroughError` is still returned on failure).
+Routes `RunPassthrough`'s stdout and stderr to `io.Discard`. Has no effect on `GetOutput` (which always captures). `stdin` is left unchanged. Used by submit/close in Normal and Quiet modes to keep git/gh subprocess output off the user's terminal while still enforcing exit-code semantics (`*PassthroughError` is still returned on failure).
 
 #### WithStdout
 
@@ -61,7 +61,7 @@ Routes `RunPassthrough`'s stdout and stderr to `io.Discard`. Has no effect on `G
 func WithStdout(w io.Writer) ExecOption
 ```
 
-Directs `RunPassthrough`'s child stdout to `w` instead of the default (`os.Stdout`, or `io.Discard` when `WithSilent` is also set). Takes precedence over `WithSilent` for stdout. Has no effect on `GetOutput`/`GetShellOutput`.
+Directs `RunPassthrough`'s child stdout to `w` instead of the default (`os.Stdout`, or `io.Discard` when `WithSilent` is also set). Takes precedence over `WithSilent` for stdout. Has no effect on `GetOutput`.
 
 #### WithStderr
 
@@ -69,7 +69,7 @@ Directs `RunPassthrough`'s child stdout to `w` instead of the default (`os.Stdou
 func WithStderr(w io.Writer) ExecOption
 ```
 
-Directs `RunPassthrough`'s child stderr to `w` instead of the default (`os.Stderr`, or `io.Discard` when `WithSilent` is also set). Takes precedence over `WithSilent` for stderr. Has no effect on `GetOutput`/`GetShellOutput`.
+Directs `RunPassthrough`'s child stderr to `w` instead of the default (`os.Stderr`, or `io.Discard` when `WithSilent` is also set). Takes precedence over `WithSilent` for stderr. Has no effect on `GetOutput`.
 
 #### WithExtraEnv
 
@@ -142,23 +142,12 @@ func GetOutputRaw(command []string, opts ...ExecOption) (string, error)
 
 Identical to `GetOutput` but does not trim whitespace from stdout. Used for byte-sensitive output like `git status --porcelain=v1 -z`, where leading spaces in each entry encode meaningful status information and trimming would corrupt the parse.
 
-### GetShellOutput
-
-```go
-func GetShellOutput(command string, opts ...ExecOption) (string, error)
-```
-
-Executes a shell command string (with shell interpretation). Equivalent to `GetOutput([]string{"sh", "-c", command}, opts...)`.
-
-This is needed for commands that use shell features (pipes, redirections) or are passed as single strings from config/other systems. Used by the Kitty backend for some commands.
-
 ## Testing
 
 - Test `GetOutput` with simple commands (`echo hello`, `true`, `false`).
 - Test that `VerboseExecError` includes stdout/stderr from failed commands.
 - Test that `VerboseExecError` omits empty stdout/stderr sections.
 - Test `WithCwd` by running a command that outputs the working directory.
-- Test `GetShellOutput` with a shell expression.
 - Test `Unwrap` returns the underlying error.
 - Test `RunPassthrough` with a successful command (`true`) returns nil.
 - Test `RunPassthrough` with a failing command (`false`) returns `*PassthroughError` with correct exit code.
@@ -171,4 +160,3 @@ This is needed for commands that use shell features (pipes, redirections) or are
 ## Notes
 
 - No timeout support is needed at this time. Commands are expected to complete in reasonable time.
-- Shell commands (single string) and argument-list commands are separated into two distinct functions (`GetShellOutput` and `GetOutput`) for clarity.

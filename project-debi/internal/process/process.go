@@ -52,8 +52,7 @@ func WithCwd(cwd string) ExecOption {
 }
 
 // WithSilent routes RunPassthrough's stdout and stderr to io.Discard. Has no
-// effect on GetOutput/GetShellOutput (which always capture). stdin is left
-// unchanged.
+// effect on GetOutput (which always captures). stdin is left unchanged.
 func WithSilent() ExecOption {
 	return func(cfg *execConfig) {
 		cfg.silent = true
@@ -202,8 +201,4 @@ func getOutputRaw(command []string, opts ...ExecOption) (string, error) {
 		}
 	}
 	return stdout.String(), nil
-}
-
-func GetShellOutput(command string, opts ...ExecOption) (string, error) {
-	return GetOutput([]string{"sh", "-c", command}, opts...)
 }

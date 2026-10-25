@@ -69,7 +69,7 @@ func TestRun_GetConf_NumericValue_PrintsInteger(t *testing.T) {
 	})
 
 	stop := captureStdout(t)
-	err := runGetConf([]string{"terminal.session-creation-timeout-seconds"})
+	err := runGetConf([]string{"some.numeric-key"})
 	out := stop()
 
 	if err != nil {

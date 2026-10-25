@@ -34,7 +34,6 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 BUNDLER_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 REPO_ROOT="$(cd "$BUNDLER_DIR/.." && pwd)"
 EMBER_DIR="$REPO_ROOT/project-ember"
-THIRD_PARTY_APPS_DIR="$BUNDLER_DIR/macos/3rd-party-apps"
 
 # Compute effective version
 BASE_VERSION=$(cat "$REPO_ROOT/VERSION")

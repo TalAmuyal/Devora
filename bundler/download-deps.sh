@@ -50,35 +50,6 @@ extract_raw() {
 	chmod 755 "$TARGET_DIR/$extract_path"
 }
 
-extract_dmg() {
-	local name="$1"
-	local archive="$2"
-	local extract_path="$3"
-
-	DMG_MOUNT_POINT="$TEMP_DIR/${name}-dmg-mount"
-	mkdir -p "$DMG_MOUNT_POINT"
-
-	echo "[$name] Mounting DMG..."
-	hdiutil attach "$archive" -nobrowse -noverify -noautoopen -mountpoint "$DMG_MOUNT_POINT"
-
-	local src="$DMG_MOUNT_POINT/$extract_path"
-	if [ ! -e "$src" ]; then
-		echo "[$name] Error: could not find '$extract_path' in DMG"
-		exit 1
-	fi
-
-	echo "[$name] Copying $extract_path..."
-	rm -rf "$TARGET_DIR/$extract_path"
-	cp -R "$src" "$TARGET_DIR/$extract_path"
-
-	echo "[$name] Stripping quarantine attribute..."
-	xattr -rd com.apple.quarantine "$TARGET_DIR/$extract_path" 2>/dev/null || true
-
-	echo "[$name] Detaching DMG..."
-	hdiutil detach "$DMG_MOUNT_POINT" -quiet
-	DMG_MOUNT_POINT=""
-}
-
 verify_checksum() {
 	local name="$1"
 	local file="$2"
@@ -112,17 +83,13 @@ check_version() {
 main() {
 	SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 	DEPS_JSON="$SCRIPT_DIR/3rd-party-deps.json"
-	TARGET_DIR="$SCRIPT_DIR/macos/3rd-party-apps"
+	TARGET_DIR="$SCRIPT_DIR/3rd-party-apps"
 
 	mkdir -p "$TARGET_DIR"
 
 	TEMP_DIR=$(mktemp -d)
-	DMG_MOUNT_POINT=""
 
 	cleanup() {
-		if [ -n "$DMG_MOUNT_POINT" ] && [ -d "$DMG_MOUNT_POINT" ]; then
-			hdiutil detach "$DMG_MOUNT_POINT" -quiet 2>/dev/null || true
-		fi
 		rm -rf "$TEMP_DIR"
 	}
 	trap cleanup EXIT
@@ -172,9 +139,6 @@ for dep in data['dependencies']:
 		case "$archive_type" in
 			tar.gz)
 				extract_tar_gz "$name" "$local_archive" "$extract_path" "$extract_type"
-				;;
-			dmg)
-				extract_dmg "$name" "$local_archive" "$extract_path"
 				;;
 			raw)
 				extract_raw "$name" "$local_archive" "$extract_path"

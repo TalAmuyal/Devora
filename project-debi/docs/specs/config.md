@@ -4,7 +4,7 @@ Package: `internal/config`
 
 ## Overview
 
-The config package manages Devora's two-level JSON configuration system (global config + per-profile config), profile lifecycle operations, and repo registration. It provides a resolution chain where profile-level settings override global settings for supported keys.
+The config package manages Devora's two-level JSON configuration system (global config + per-profile config) and profile loading. It provides a resolution chain where profile-level settings override global settings for supported keys.
 
 ## Data Types
 
@@ -15,15 +15,6 @@ type Profile struct {
     Name     string
     RootPath string         // Absolute path to profile root directory
     Config   map[string]any // Raw parsed JSON from the profile's config.json
-}
-```
-
-### ExplicitRepoEntry
-
-```go
-type ExplicitRepoEntry struct {
-    Name string // filepath.Base of the absolute path
-    Path string // absolute path
 }
 ```
 
@@ -46,7 +37,6 @@ The global config path is resolved by `defaultConfigPath()` at package init: if 
 {
   "profiles": ["/path/to/profile-1", "/path/to/profile-2"],
   "terminal": {
-    "session-creation-timeout-seconds": 3,
     "default-app": "shell"
   },
   "prepare-command": "prep",
@@ -68,6 +58,8 @@ The global config path is resolved by `defaultConfigPath()` at package init: if 
 }
 ```
 
+`terminal.default-app`, `prepare-command`, and `repos` are part of the shared config format but are read by the Devora app, not by `debi`.
+
 `task-tracker.*`, `feature.branch-prefix`, and `pr.auto-merge` are profile-overridable. `task-tracker.<provider>.<key>` merges per leaf, so global and profile can each contribute different leaves under the same provider (e.g., global sets `workspace-id`, profile sets `project-id`).
 
 ### Loading and Caching
@@ -77,7 +69,7 @@ The global config is loaded lazily from `~/.config/devora/config.json` on first 
 - On first call, reads and parses the file. If the file does not exist, returns an empty map.
 - On subsequent calls, returns the cached value.
 - If the file exists but contains invalid JSON, returns an empty map (log a warning).
-- The cache is reset after operations that mutate the global config file (e.g., `RegisterProfile`), so the next access re-reads from disk.
+- The cache is reset after operations that mutate the global config file (e.g., `SetPrAutoMergeGlobal`), so the next access re-reads from disk.
 
 ### Concurrency Note
 
@@ -107,7 +99,6 @@ Resolves the path against the global config only. Skips profile lookup entirely.
 | Config Key | Scope |
 |------------|-------|
 | `profiles` | global-only |
-| `terminal.session-creation-timeout-seconds` | global-only |
 | `terminal.default-app` | profile-overridable |
 | `prepare-command` | profile-overridable |
 | `task-tracker.provider` | profile-overridable |
@@ -128,7 +119,7 @@ func GetActiveProfile() *Profile
 
 - `SetActiveProfile(nil)` clears the active profile.
 - `GetActiveProfile()` returns `nil` when no profile is active.
-- Functions that require an active profile (`GetRegisteredRepos`, `GetRegisteredRepoNames`, `GetWorkspacesRootPath`, `RegisterRepo`, `UnregisterRepo`, `GetExplicitRepoEntries`) return an error if `GetActiveProfile()` is `nil`. The error message: `"no active profile set"`.
+- Functions that require an active profile (`SetPrAutoMergeProfile`) return an error if `GetActiveProfile()` is `nil`. The error message: `"no active profile set"`.
 
 ## Profile Operations
 
@@ -149,49 +140,6 @@ Returns the list of successfully loaded profiles. Returns an empty slice if `pro
 
 Warnings are logged via Go's `log` package (not returned as errors), since partial results are expected and useful.
 
-### RegisterProfile
-
-```go
-func RegisterProfile(rootPath string, name string) (Profile, error)
-```
-
-1. Resolve `rootPath` to an absolute path.
-2. Attempt to load the existing profile config at `<absRootPath>/config.json`:
-   - If it exists and is valid JSON with a `"name"` key, use the existing config (do not overwrite). The `name` parameter is ignored in this case; the profile's name comes from the existing file.
-   - If it does not exist or is invalid:
-     a. Create the directory structure: `<absRootPath>/`, `<absRootPath>/repos/`, `<absRootPath>/workspaces/` (create parents as needed, no error if they already exist).
-     b. Write `{"name": "<name>"}` to `<absRootPath>/config.json` with 4-space indentation.
-3. Load the global config from disk via `loadFreshGlobalConfig()`.
-4. Read the `profiles` list from it. If the resolved path is not already in the list, append it.
-5. Write the updated global config via `writeFreshGlobalConfig()`.
-6. Return the `Profile` with `Name` from the config's `"name"` key, `RootPath` set to the resolved absolute path, and `Config` from the config data.
-
-Returns an error if any filesystem or JSON operation fails.
-
-### UnregisterProfile
-
-```go
-func UnregisterProfile(rootPath string) error
-```
-
-Removes a profile from the global config's `profiles` list. Does not delete the profile directory or its contents.
-
-1. Resolve `rootPath` to an absolute path.
-2. Load the global config from disk via `loadFreshGlobalConfig()`.
-3. Remove the resolved path from the `profiles` list. If it was not present, the list is unchanged.
-4. Write the updated global config via `writeFreshGlobalConfig()`.
-5. If the active profile's `RootPath` matches the removed path, clear the active profile (`activeProfile = nil`).
-
-Returns an error if any filesystem or JSON operation fails.
-
-### IsInitializedProfile
-
-```go
-func IsInitializedProfile(rootPath string) bool
-```
-
-Returns `true` if `<rootPath>/config.json` exists, is valid JSON, and contains a `"name"` key.
-
 ### SetActiveProfile / GetActiveProfile
 
 See [Active Profile State](#active-profile-state) above.
@@ -210,82 +158,7 @@ func writeFreshGlobalConfig(cfg map[string]any) error
 
 Writes the given map to the global config file path with 4-space JSON indentation, creating the parent directory if needed. Resets the global config cache after writing.
 
-Both helpers are unexported and used by `RegisterProfile` and `UnregisterProfile`.
-
-## Repo Operations
-
-### GetRegisteredRepos
-
-```go
-func GetRegisteredRepos() ([]string, error)
-```
-
-Returns the union of auto-discovered and explicitly registered repos for the active profile, as absolute paths.
-
-**Auto-discovered repos**: Immediate child directories of `<profile-root>/repos/` that contain a `.git` subdirectory. Keyed by directory base name.
-
-**Explicit repos**: Paths listed in the active profile's config under the `"repos"` key (a JSON array of strings). Each path is expanded (`~` expansion) and resolved to an absolute path. Only paths that exist on disk are included. Keyed by base name of the resolved path.
-
-**Merge rule**: Build a map of `baseName -> absolutePath`. Start with explicit repos, then overlay auto-discovered repos. This means auto-discovered repos take precedence when both sources have a repo with the same base name.
-
-Return the map's values as a slice of absolute path strings. Order is not guaranteed.
-
-Returns an error if no active profile is set.
-
-### GetRegisteredRepoNames
-
-```go
-func GetRegisteredRepoNames() ([]string, error)
-```
-
-Returns the base names of all registered repos, sorted alphabetically. Calls `GetRegisteredRepos` internally.
-
-Returns an error if no active profile is set.
-
-### RegisterRepo
-
-```go
-func RegisterRepo(path string) error
-```
-
-Appends the given path (resolved to absolute) to the active profile's `"repos"` list in its `config.json`. If the path is already in the list, this is a no-op.
-
-Uses the read-modify-write pattern (see [Profile Config Mutation](#profile-config-mutation)).
-
-Returns an error if no active profile is set.
-
-### UnregisterRepo
-
-```go
-func UnregisterRepo(path string) error
-```
-
-Removes the given path (resolved to absolute) from the active profile's `"repos"` list in its `config.json`. Only removes from config — does not touch the filesystem.
-
-If the resolved path is not in the list, returns an error (`"repo not found in config"`).
-
-Uses the read-modify-write pattern (see [Profile Config Mutation](#profile-config-mutation)).
-
-Returns an error if no active profile is set.
-
-### GetExplicitRepoEntries
-
-```go
-type ExplicitRepoEntry struct {
-    Name string // filepath.Base of the absolute path
-    Path string // absolute path
-}
-
-func GetExplicitRepoEntries() ([]ExplicitRepoEntry, error)
-```
-
-Returns name+path pairs for repos explicitly listed in the active profile's `config.json` `"repos"` array. Does not include auto-discovered repos.
-
-Paths are expanded (`~` expansion) and resolved to absolute. Entries where the path no longer exists on disk are filtered out (matching `explicitRepos()` behavior).
-
-Results are sorted alphabetically by name.
-
-Returns an error if no active profile is set.
+Both helpers are unexported and used by the global-config setters (e.g., `SetPrAutoMergeGlobal`).
 
 ## Workspace Root
 
@@ -297,54 +170,7 @@ func WorkspacesRootForProfile(p *Profile) string
 
 Returns `<p.RootPath>/workspaces`. Does not check whether the directory exists.
 
-### GetWorkspacesRootPath
-
-```go
-func GetWorkspacesRootPath() (string, error)
-```
-
-Convenience function that calls `WorkspacesRootForProfile` with the active profile. Returns an error if no active profile is set.
-
 ## Config Mutation
-
-### SetPrepareCommand
-
-```go
-func SetPrepareCommand(value *string) error
-```
-
-Writes the `"prepare-command"` key to the active profile's `config.json`.
-
-- If `value` is non-nil, sets `"prepare-command"` to `*value`.
-- If `value` is nil, removes the `"prepare-command"` key from the config.
-
-Uses the read-modify-write pattern (see [Profile Config Mutation](#profile-config-mutation)). Returns an error if no active profile is set.
-
-### SetDefaultTerminalAppGlobal
-
-```go
-func SetDefaultTerminalAppGlobal(value *string) error
-```
-
-Writes the `"terminal.default-app"` key to the global config.
-
-- If `value` is non-nil, sets `"terminal.default-app"` to `*value`, creating the `"terminal"` object if it does not already exist.
-- If `value` is nil, removes the `"default-app"` key. If the `"terminal"` object becomes empty as a result, it is pruned too.
-
-Operates on the global config only (does not touch profile config). Uses `loadFreshGlobalConfig` / `writeFreshGlobalConfig` to bypass the cache.
-
-### SetDefaultTerminalAppProfile
-
-```go
-func SetDefaultTerminalAppProfile(value *string) error
-```
-
-Writes the `"terminal.default-app"` key to the active profile's `config.json`.
-
-- If `value` is non-nil, sets `"terminal.default-app"` to `*value`, creating the `"terminal"` object if it does not already exist.
-- If `value` is nil, removes the `"default-app"` key. If the `"terminal"` object becomes empty as a result, it is pruned too.
-
-Uses the read-modify-write pattern (see [Profile Config Mutation](#profile-config-mutation)). Returns an error if no active profile is set.
 
 ### SetPrAutoMergeGlobal
 
@@ -403,50 +229,6 @@ func ConfigPath() string
 ```
 
 Returns the global config file path (`~/.config/devora/config.json`). The path is computed once at package init from `os.UserHomeDir()` and cached in a package-level variable.
-
-### GetPrepareCommand
-
-```go
-func GetPrepareCommand() *string
-```
-
-Returns the resolved value of `"prepare-command"` (profile-overridable). Returns `nil` if the key is not set at any level.
-
-Uses profile-overridable resolution internally. If found and the value is a string, returns a pointer to it. Otherwise returns `nil`.
-
-### GetDefaultTerminalApp
-
-```go
-func GetDefaultTerminalApp(fallback string) string
-```
-
-Returns the resolved value of `"terminal.default-app"` (profile-overridable). If not found at any level, returns `fallback`.
-
-The value `"shell"` is a reserved sentinel interpreted by the terminal layer as "launch a bare login/interactive shell without wrapping a command". A stored value that matches `$SHELL` is detected by the terminal layer and treated the same way. This package does not interpret the value -- it simply returns the string.
-
-### GetDefaultTerminalAppGlobalRaw
-
-```go
-func GetDefaultTerminalAppGlobalRaw() *string
-```
-
-Returns a pointer to the value of `"terminal.default-app"` stored in the global config, or `nil` if the key is unset or not a string. Reads only from the global config -- does not fall back to any other scope. Intended for UI code that needs to distinguish "unset at this scope" from "set to empty string".
-
-### GetDefaultTerminalAppProfileRaw
-
-```go
-func GetDefaultTerminalAppProfileRaw() *string
-```
-
-Returns a pointer to the value of `"terminal.default-app"` stored in the active profile's config, or `nil` if there is no active profile, the key is unset at the profile scope, or the value is not a string. Reads only from the active profile -- does not fall back to global. Intended for UI code that needs to distinguish "unset at this scope" from "set to empty string".
-
-### TerminalSessionCreationTimeoutSeconds
-
-```go
-func TerminalSessionCreationTimeoutSeconds(fallback int) int
-```
-
-Returns the value of `"terminal.session-creation-timeout-seconds"` (global-only). If not found, returns `fallback`.
 
 ### GetTaskTrackerProvider
 
@@ -512,16 +294,6 @@ Per-repo state for `pr.auto-merge` lives in git's local config (`devora.pr.auto-
 
 A wrong-type value stored under `devora.pr.auto-merge` (e.g., `maybe`) is treated as "unset" by `GetRepoConfigBool` -- resolution falls through to the profile/global layers rather than propagating the parse failure.
 
-## Path Utilities
-
-### ExpandTilde
-
-```go
-func ExpandTilde(path string) string
-```
-
-Expands a leading `~/` in the path to the user's home directory. If the path does not start with `~/`, it is returned unchanged. If the home directory cannot be determined, the path is returned unchanged.
-
 ## JSON Formatting
 
 All JSON written by this package uses 4-space indentation (`json.MarshalIndent(data, "", "    ")`).
@@ -565,56 +337,6 @@ Clears the active profile and resets the global config cache. Must be called bet
 - Profile with invalid JSON is skipped with warning.
 - Profile with missing `"name"` key is skipped with warning.
 - Empty `profiles` list returns empty slice.
-
-**Profile registration (`RegisterProfile`):**
-- New profile: creates directory structure, writes config.json, updates global config.
-- Existing initialized profile: uses existing config, does not overwrite, still appends to global if not present.
-- Duplicate registration (already in global profiles list): no duplicate entry added.
-- Global config directory created if it does not exist.
-- Global config cache is reset after registration.
-
-**Profile unregistration (`UnregisterProfile`):**
-- Removes path from global config profiles list.
-- Profile not in list: no error, list unchanged.
-- Clears active profile if it matches the removed path.
-- Does not delete profile directory or files.
-- Global config cache is reset after unregistration.
-
-**Repo discovery (`GetRegisteredRepos`):**
-- Auto-discovered repos: directories with `.git` in `repos/`.
-- Directories without `.git` in `repos/` are not included.
-- Explicit repos from config are included.
-- Explicit repo path that does not exist on disk is excluded.
-- Name collision: auto-discovered takes precedence over explicit.
-- No active profile: returns error.
-
-**Repo registration (`RegisterRepo`):**
-- Appends to `repos` list in profile config.
-- Duplicate path is a no-op.
-- No active profile: returns error.
-
-**Repo unregistration (`UnregisterRepo`):**
-- Removes path from `repos` list in profile config.
-- Leaves other repos intact.
-- Repo not in list: returns error (`"repo not found in config"`).
-- Empty repos list: returns error.
-- Updates in-memory active profile config.
-- Does not delete the repo directory on disk.
-- No active profile: returns error.
-
-**Explicit repo entries (`GetExplicitRepoEntries`):**
-- Returns name and path for explicit repos.
-- Results sorted alphabetically by name.
-- Excludes paths that do not exist on disk.
-- Returns empty slice when no repos configured.
-- Does not include auto-discovered repos.
-- No active profile: returns error.
-
-**Config mutation (`SetPrepareCommand`):**
-- Setting a value writes to profile config.
-- Setting nil removes the key.
-- Active profile's in-memory config is updated after write.
-- No active profile: returns error.
 
 **Convenience getters:**
 - Return correct type (string, int) from resolved config value.

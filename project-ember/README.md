@@ -97,7 +97,7 @@ When Claude Code's behavior changes or new `@real-claude` scenarios are added:
 | `pty.rs` | PTY manager: spawn, read, write, resize, close terminal sessions via `portable-pty` |
 | `workspace.rs` | Workspace and profile management: list, create, status queries against the same filesystem layout debi uses |
 | `commands.rs` | Tauri command handlers (IPC bridge between frontend and Rust) |
-| `theme.rs` | Parses `kitty-configs/current-theme.conf` into CSS custom properties |
+| `theme.rs` | Parses `themes/catppuccin-macchiato.conf` into CSS custom properties |
 | `ipc_server.rs` | Lightweight HTTP server for external tools (e.g., Crit) to open panel overlays |
 | `logging.rs` | Logging setup |
 | `lib.rs` | App setup and command registration |

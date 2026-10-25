@@ -130,7 +130,7 @@ with open(licenses_path, 'w') as f:
 main() {
 	SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 	DEPS_JSON="$SCRIPT_DIR/3rd-party-deps.json"
-	TARGET_DIR="$SCRIPT_DIR/macos/3rd-party-apps"
+	TARGET_DIR="$SCRIPT_DIR/3rd-party-apps"
 	LICENSES_FILE="$SCRIPT_DIR/../THIRD_PARTY_LICENSES.md"
 
 	if ! command -v gh &>/dev/null; then

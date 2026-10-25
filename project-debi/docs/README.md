@@ -21,15 +21,9 @@ Treat the code as the source of truth, and consult a spec only for context the c
 |----------|---------|-------------|
 | [specs/config.md](specs/config.md) | `internal/config` | Configuration loading, profiles, paths |
 | [specs/workspace.md](specs/workspace.md) | `internal/workspace` | Workspace creation, worktrees, locking |
-| [specs/terminal.md](specs/terminal.md) | `internal/terminal` | Kitty terminal session management |
 | [specs/cli.md](specs/cli.md) | `internal/cli` | CLI entry point and subcommands |
 | [specs/process.md](specs/process.md) | `internal/process` | Shell command execution |
 | [specs/crash.md](specs/crash.md) | `internal/crash` | Crash logging |
-| [specs/tui.md](specs/tui.md) | `internal/tui` | TUI pages, state machine, components |
-| [specs/tui-navigation.md](specs/tui-navigation.md) | `internal/tui` | Navigation key bindings: back, quit, exit behavior across all pages |
-| [specs/tui-operations.md](specs/tui-operations.md) | `internal/tui` | Business logic: workspace gathering, creation, deletion rules |
-| [specs/tui-theme.md](specs/tui-theme.md) | `internal/tui` | Theme loading, palette, color mapping, styles |
-| [specs/tui-components.md](specs/tui-components.md) | `internal/tui/components` | Reusable UI widgets: list, checkbox, text input, vim navigation, footer |
 | [specs/jsonvalidate.md](specs/jsonvalidate.md) | `internal/jsonvalidate` | JSON validation with line:column error positions |
 | [specs/yamlvalidate.md](specs/yamlvalidate.md) | `internal/yamlvalidate` | YAML validation (multi-document) with line:column error positions |
 | [specs/tomlvalidate.md](specs/tomlvalidate.md) | `internal/tomlvalidate` | TOML validation with line:column error positions |

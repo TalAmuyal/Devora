@@ -21,11 +21,13 @@ Types of changes:
 ### Removed
 
 - `uv` is no longer bundled with Devora or required by `debi health`
+- Removed the remnants of Devora OG (Kitty + Glimpse-TTY), including the `debi workspace-ui` command
 
 ### Fixed
 
 - Permission-hook denials now reach the agent (Judge's denials were silently ignored by Claude Code)
 - Commands chained with a newline or `&`, or hidden in a quoted `$(…)`, are no longer auto-approved
+- The app now loads its bundled color theme (it previously looked for the theme at a build-machine path)
 
 ## 2026-08-03.0
 

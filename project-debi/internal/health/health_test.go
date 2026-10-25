@@ -1114,15 +1114,6 @@ func TestRun_TrackerConfigured_TokenMissing_CredentialsRow(t *testing.T) {
 	}
 }
 
-func TestDependencies_DoesNotIncludeKitty(t *testing.T) {
-	// Ember does not use Kitty; the OG required-dependency entry was removed.
-	for _, dep := range dependencies {
-		if dep.Name == "kitty" {
-			t.Fatal("dependencies must not include 'kitty' (Ember does not use Kitty)")
-		}
-	}
-}
-
 func TestGather_StructuredReport(t *testing.T) {
 	stubHealthDeps(t)
 	origHome := homeDir

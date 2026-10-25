@@ -47,13 +47,6 @@ Then('the Health Hub should report the config file as found', async function (th
   assert.strictEqual(message, 'found', 'config row should report the fixture config as found');
 });
 
-Then('the Health Hub should not list kitty', async function (this: EmberWorld) {
-  const names = (await this.driver.eval(
-    `return Array.from(document.querySelectorAll('.health-row-name')).map(e => e.textContent)`,
-  )) as string[];
-  assert.ok(!names.includes('kitty'), `kitty should not appear, got: ${names.join(', ')}`);
-});
-
 Then('the Health Hub should show a version', async function (this: EmberWorld) {
   const version = (await this.driver.eval(
     `return document.querySelector('.health-version-pill')?.textContent ?? ''`,
