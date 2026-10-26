@@ -69,4 +69,4 @@ The current contract — the routing table, shortcut availability, the presets, 
 
 ## Later changes
 
-- The Crit integration was removed after this ADR was written. The Crit review is no longer a per-session surface, so the cross-origin `<iframe>` limitation above no longer applies to any current surface.
+- The Crit integration was removed after this ADR was written. The Crit review is no longer a per-session surface; the cross-origin `<iframe>` limitation above was observed there, but it applies to any surface that hosts one.
