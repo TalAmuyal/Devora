@@ -66,3 +66,7 @@ The current contract — the routing table, shortcut availability, the presets, 
 - User-visible changes, all intended: `F1` and Health/Settings stack over the hub and reveal it on dismissal instead of replacing it; `q` cancels modals and closes dropdowns; font sizing works inside the hub and under dialogs; `F1` opens the guide over a dialog; `Ctrl+S` no longer closes anything; a Crit review no longer participates in window-level routing at all. Each is pinned by an acceptance scenario.
 - Closing a tab now tears its surfaces down, because they live inside it.
 - What this does **not** fix: focus inside the Crit review's cross-origin `<iframe>` still makes every shortcut inert, because those events never reach the host window. That is a browser constraint needing its own fix.
+
+## Later changes
+
+- The Crit integration was removed after this ADR was written. The Crit review is no longer a per-session surface, so the cross-origin `<iframe>` limitation above no longer applies to any current surface.
