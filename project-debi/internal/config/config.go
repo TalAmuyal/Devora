@@ -1,3 +1,12 @@
+// Package config reads Devora's two-level JSON configuration: a global file (see ConfigPath) and a config.json in each profile's root directory.
+// The format is shared with the Devora app, which also reads keys debi ignores (terminal.default-app, prepare-command, repos).
+//
+// Keys resolve profile first, then global (see Get).
+// Resolution is per leaf, so the two levels can contribute different leaves under the same object (e.g., global sets task-tracker.asana.workspace-id, profile sets task-tracker.asana.project-id).
+// The exceptions are profiles, which only the global file lists, and name and repos, which only a profile's own config holds.
+//
+// pr.auto-merge has a third, highest-precedence layer: a per-repo value in git's local config (devora.pr.auto-merge), shared by all worktrees of a clone.
+// Callers pass it in through GetAutoMergeDefaultForRepo.
 package config
 
 import (
@@ -65,6 +74,7 @@ func ResetForTesting() {
 	resetForTesting()
 }
 
+// Config is only accessed from the main goroutine, so the cache needs no lock.
 var (
 	cachedGlobalConfig map[string]any
 	globalConfigLoaded bool
@@ -185,6 +195,8 @@ func loadProfileConfig(rootPath string) (map[string]any, bool) {
 	return result, true
 }
 
+// GetProfiles loads the profiles listed in the global config.
+// Unloadable profiles are logged and skipped rather than returned as errors, since the remaining profiles are still usable.
 func GetProfiles() []Profile {
 	cfg := globalConfig()
 	profilesRaw, ok := cfg["profiles"]
@@ -330,10 +342,6 @@ func GetTaskTrackerProvider() string {
 // GetTaskTrackerString resolves "task-tracker.<provider>.<key>" via the
 // standard profile-first / global-fallback resolver. Returns "" when the
 // leaf is unset at both levels or the value is not a string.
-//
-// Each leaf is queried independently, so profile and global can contribute
-// different leaves under the same provider (e.g., global sets workspace-id,
-// profile sets project-id).
 func GetTaskTrackerString(provider, key string) string {
 	val, ok := get("task-tracker." + provider + "." + key)
 	if !ok {

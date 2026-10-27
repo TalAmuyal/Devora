@@ -126,7 +126,7 @@ Tests replace `getProvider` to avoid setting up config fixtures.
 - `task-tracker.provider` selects the provider (profile-overridable).
 - `task-tracker.<provider>.<key>` holds provider-specific settings (profile-overridable per leaf: profile and global can each contribute different leaves).
 
-See [config.md](config.md#gettasktrackerprovider) for the config-resolution semantics. The Asana provider requires `workspace-id`, `project-id`, `cli-tag`; `section-id` is optional.
+See the `internal/config` package doc for the config-resolution semantics. The Asana provider requires `workspace-id`, `project-id`, `cli-tag`; `section-id` is optional.
 
 ## Test Coverage
 

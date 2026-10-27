@@ -97,6 +97,7 @@ const keyNotFoundExitCode = 1
 
 const unsetExitCode = 5 // "nothing to unset"
 
+// GetRepoConfigBool returns nil for a malformed value (e.g., "maybe"), as for an unset one, so callers fall through to their next config layer instead of failing.
 func GetRepoConfigBool(key string, opts ...process.ExecOption) (*bool, error) {
 	output, err := process.GetOutput(
 		[]string{"git", "config", "--type=bool", "--get", key},
