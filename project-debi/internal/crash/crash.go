@@ -1,3 +1,7 @@
+// Package crash reports failures that escaped the CLI's error handling (see main.go).
+// Expected failures, like usage errors or missing preconditions, must be handled before reaching it.
+//
+// Details are written to a timestamped log in os.TempDir(), which outlives the terminal, and echoed to stderr, which still reaches the user if the log can't be written.
 package crash
 
 import (
@@ -9,8 +13,11 @@ import (
 	"time"
 )
 
-var crashDir = os.TempDir()
-var stderrWriter io.Writer = os.Stderr
+// Stubbable package-level vars for tests.
+var (
+	crashDir               = os.TempDir()
+	stderrWriter io.Writer = os.Stderr
+)
 
 func HandleError(err error) {
 	content := err.Error()

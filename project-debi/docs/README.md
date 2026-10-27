@@ -23,7 +23,6 @@ Treat the code as the source of truth, and consult a spec only for context the c
 | [specs/workspace.md](specs/workspace.md) | `internal/workspace` | Workspace creation, worktrees, locking |
 | [specs/cli.md](specs/cli.md) | `internal/cli` | CLI entry point and subcommands |
 | [specs/process.md](specs/process.md) | `internal/process` | Shell command execution |
-| [specs/crash.md](specs/crash.md) | `internal/crash` | Crash logging |
 | [specs/jsonvalidate.md](specs/jsonvalidate.md) | `internal/jsonvalidate` | JSON validation with line:column error positions |
 | [specs/yamlvalidate.md](specs/yamlvalidate.md) | `internal/yamlvalidate` | YAML validation (multi-document) with line:column error positions |
 | [specs/tomlvalidate.md](specs/tomlvalidate.md) | `internal/tomlvalidate` | TOML validation with line:column error positions |
