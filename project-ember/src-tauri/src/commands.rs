@@ -405,15 +405,6 @@ pub fn get_user_guide_path() -> Result<String, String> {
 }
 
 #[tauri::command]
-pub fn crit_overlay_dismissed(
-    ipc_state: State<'_, IpcState>,
-    pty_id: u32,
-) -> Result<(), String> {
-    ipc_state.resolve(pty_id, "dismissed".to_string());
-    Ok(())
-}
-
-#[tauri::command]
 pub fn __test_report(
     state: State<'_, TestHarnessState>,
     id: String,

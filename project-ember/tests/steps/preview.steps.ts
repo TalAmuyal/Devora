@@ -21,7 +21,7 @@ function makeTempFile(world: EmberWorld, ext: string, heading: string): string {
 
 async function sendPreview(world: EmberWorld, filePath: string, stack: boolean): Promise<void> {
   const ptyId = await activePtyId(world);
-  world.driver.ipcPostFireAndForget('/preview/open', { ptyId, path: filePath, stack });
+  await world.driver.ipcPost('/preview/open', { ptyId, path: filePath, stack });
   await new Promise((r) => setTimeout(r, 200));
 }
 
@@ -65,7 +65,7 @@ When(
 
 When('a Markdown file is previewed for an unknown session', async function (this: EmberWorld) {
   const file = makeTempFile(this, '.md', 'Orphan');
-  this.driver.ipcPostFireAndForget('/preview/open', { ptyId: 999999, path: file, stack: false });
+  await this.driver.ipcPost('/preview/open', { ptyId: 999999, path: file, stack: false });
   await new Promise((r) => setTimeout(r, 200));
 });
 
@@ -75,11 +75,19 @@ When('the preview pane close button is clicked', async function (this: EmberWorl
   `);
 });
 
+const SESSION_LOOKUPS: Record<string, string> = {
+  active: 'getActiveSession()',
+  first: 'getSessions()[0]',
+  second: 'getSessions()[1]',
+};
+
 Then(
-  'the active session should have {int} preview pane(s)',
-  async function (this: EmberWorld, count: number) {
+  'the {word} session should have {int} preview pane(s)',
+  async function (this: EmberWorld, which: string, count: number) {
+    const lookup = SESSION_LOOKUPS[which];
+    if (lookup === undefined) throw new Error(`Unknown session: ${which}`);
     await this.driver.pollFor(
-      'return window.__test.sessionManager.getActiveSession().getPreviewCount()',
+      `return window.__test.sessionManager.${lookup}.getPreviewCount()`,
       count,
       10_000,
     );

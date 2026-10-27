@@ -2,7 +2,6 @@ import assert from 'node:assert';
 import * as path from 'node:path';
 import { Given, When, Then } from '@cucumber/cucumber';
 import { EmberWorld } from '../support/world';
-import { assertActivePanelOverlay } from '../support/overlay-helper';
 import {
   createTestWorkspace,
   setupClaudeHook,
@@ -47,10 +46,15 @@ When(
 );
 
 Then(
-  'a panel overlay should appear on the active session',
+  'the hook should open a preview pane on the {word} session',
   { timeout: 120_000 },
-  async function (this: EmberWorld) {
-    await assertActivePanelOverlay(this.driver, true, 90_000);
+  async function (this: EmberWorld, ordinal: string) {
+    const lookup = ordinal === 'active' ? 'getActiveSession()' : `getSessions()[${ordinalToIndex(ordinal)}]`;
+    await this.driver.pollFor(
+      `return window.__test.sessionManager.${lookup}?.getPreviewCount() ?? 0`,
+      1,
+      90_000,
+    );
   },
 );
 
@@ -86,7 +90,7 @@ function ordinalToIndex(ordinal: string): number {
 }
 
 Given(
-  'the {word} session has a workspace with a {word} crit hook',
+  'the {word} session has a workspace with a {word} Claude Code hook',
   async function (this: EmberWorld, ordinal: string, hookType: string) {
     const targetIndex = ordinalToIndex(ordinal);
 
@@ -144,9 +148,7 @@ When(
 
     this.stopAutoApprove = await runClaudePrompt(this.driver, 'Write the word hello to test-output.txt');
 
-    // Wait for the PostToolUse hook to fire (confirmed by hook log appearing)
-    // before switching back to the previous session. This ensures the crit/open
-    // IPC call has been made from the hook script.
+    // Wait for the PostToolUse hook to fire (confirmed by the hook log appearing) before switching back to the previous session.
     if (this.hookLogPath) {
       await pollForHookLog(this.hookLogPath, HOOK_LOG_TIMEOUT_MS);
     }

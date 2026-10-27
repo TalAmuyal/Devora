@@ -5,7 +5,7 @@ Devora-Ember (internally "Ember") is the Devora app: a native desktop build usin
 ## Architecture highlights
 
 - **Tauri WebView app window**: the app is a native desktop window embedding a WebView
-- **Native web content**: Crit UI, User Guide, etc. render natively in the WebView via the layer system
+- **Native web content**: the User Guide and file previews render natively in the WebView
 - **Native workspace management UI**: the Workspace Hub is a web UI overlay
 - **Layer system**: stacked surfaces routed and focused by stack position, with extent decided by which stack they are in — one per session tab, plus one for the window (ADR-003)
 
@@ -59,7 +59,6 @@ Set `EMBER_E2E_PREBUILT=1` to skip all freshness/completeness checks and test ex
 | Tag | Meaning |
 |-----|---------|
 | `@real-claude` | Spawns real Claude Code with fake API server |
-| `@real-crit` | Spawns real crit with Ember IPC integration |
 
 ### UI interaction layer
 
@@ -97,8 +96,8 @@ When Claude Code's behavior changes or new `@real-claude` scenarios are added:
 | `pty.rs` | PTY manager: spawn, read, write, resize, close terminal sessions via `portable-pty` |
 | `workspace.rs` | Workspace and profile management: list, create, status queries against the same filesystem layout debi uses |
 | `commands.rs` | Tauri command handlers (IPC bridge between frontend and Rust) |
-| `theme.rs` | Parses `kitty-configs/current-theme.conf` into CSS custom properties |
-| `ipc_server.rs` | Lightweight HTTP server for external tools (e.g., Crit) to open panel overlays |
+| `theme.rs` | Parses `themes/catppuccin-macchiato.conf` into CSS custom properties |
+| `ipc_server.rs` | Lightweight HTTP server for external tools (e.g., `debi preview`) to open preview panes |
 | `logging.rs` | Logging setup |
 | `lib.rs` | App setup and command registration |
 
@@ -107,13 +106,13 @@ When Claude Code's behavior changes or new `@real-claude` scenarios are added:
 | Module | Role |
 |--------|------|
 | `terminal/TerminalPane.ts` | xterm.js terminal instance + PTY binding (WebGL rendering, fit addon, clipboard, search, web links) |
-| `session/SessionTab.ts` | Session tab: holds a terminal pane and optional panel overlay |
+| `session/SessionTab.ts` | Session tab: holds a terminal pane, its preview panes, and its own layer stack |
 | `session/SessionManager.ts` | Manages ordered list of session tabs: create, close, switch, reorder |
 | `ui/TabBar.ts` | Bottom tab bar showing all session tabs |
 | `ui/layers/LayerStack.ts` | Layer system: single keydown dispatcher and focus-by-stack-position for pages, modals, popups, and session panels (see `ui/layers/CLAUDE.md`) |
 | `ui/KeyboardShortcuts.ts` | App-wide keyboard shortcut policy, driven by the LayerStack |
 | `workspace/WorkspaceHub.ts` | Workspace Hub (tab-covering overlay): list, filter, create, open workspaces |
-| `webview/WebContentOverlay.ts` | Web content rendering in panel overlays (URLs via iframe, markdown via `marked`) |
+| `webview/WebContentOverlay.ts` | Web content rendering for the User Guide and preview panes (Markdown via `marked`, HTML in a sandboxed iframe) |
 | `styles/theme.css` | Centralized CSS custom properties (Catppuccin Macchiato defaults, overridden at runtime from theme file) |
 
 ### Layer System

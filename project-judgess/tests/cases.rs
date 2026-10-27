@@ -46,7 +46,7 @@ fn report_local_labelled_cases() {
         .filter_map(|entry| {
             let raw = entry.get("request")?;
             let label = entry.get("label")?.as_str()?;
-            let verdict = decide(&judgess::Request::from_raw(raw, Some(&home))?);
+            let verdict = decide(&judgess::Request::from_raw(raw)?);
             let wanted = judgess::classify::Label::parse(label)?.expected_kind()?;
             (verdict.kind() != wanted).then(|| {
                 format!(
@@ -57,7 +57,7 @@ fn report_local_labelled_cases() {
             })
         })
         .collect();
-    let queued = pending(&store, Some(&home)).len();
+    let queued = pending(&store).len();
     eprintln!(
         "labelled cases still to implement: {}\n{}\nunclassified requests: {queued}",
         todo.len(),

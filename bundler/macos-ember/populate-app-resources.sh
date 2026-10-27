@@ -73,7 +73,6 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 BUNDLER_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 REPO_ROOT="$(cd "$BUNDLER_DIR/.." && pwd)"
-THIRD_PARTY_APPS_DIR="$BUNDLER_DIR/macos/3rd-party-apps"
 
 if [[ "$LIST_SOURCES" -eq 0 ]]; then
 	# Validate app directory
@@ -138,18 +137,6 @@ copy_built() {
 	copy_required "$REPO_ROOT/$repo_rel_artifact" "$dest"
 }
 
-# A downloaded artifact whose content is determined by the version pins file
-copy_third_party() {
-	local name="$1"
-	local dest="$2"
-
-	if [[ "$LIST_SOURCES" -eq 1 ]]; then
-		echo "bundler/3rd-party-deps.json"
-		return
-	fi
-	copy_required "$THIRD_PARTY_APPS_DIR/$name" "$dest"
-}
-
 ensure_dir() {
 	if [[ "$LIST_SOURCES" -eq 1 ]]; then
 		return
@@ -158,7 +145,6 @@ ensure_dir() {
 }
 
 # The .app bundle icon, generated post-build from Ember's own brand asset (the mauve "D" on a crust squircle) rather than committed as a derived .icns.
-# Ember has a distinct icon from the Kitty variant, so it uses base-icon-ember.png instead of the shared base-icon.png.
 # (Tauri's separate compile-time window icon is the committed src-tauri/icons/icon.png.)
 # Routed through the manifest so base-icon-ember.png counts as a fingerprint source.
 gen_app_icon() {
@@ -166,10 +152,10 @@ gen_app_icon() {
 		echo "base-icon-ember.png"
 		return
 	fi
-	"$BUNDLER_DIR/macos/gen-icon.sh" \
+	"$SCRIPT_DIR/gen-icon.sh" \
 		--base-icon "$REPO_ROOT/base-icon-ember.png" \
 		--output-dir "$RESOURCES_DIR"
-	# gen-icon.sh emits app.icns; drop any default icns Tauri injected and point the bundle at ours (CFBundleIconFile is extensionless, as in the Kitty variant).
+	# gen-icon.sh emits app.icns; drop any default icns Tauri injected and point the bundle at ours (CFBundleIconFile is extensionless).
 	find "$RESOURCES_DIR" -maxdepth 1 -name '*.icns' ! -name 'app.icns' -delete
 	plutil -replace CFBundleIconFile -string "app" "$APP_DIR/Contents/Info.plist"
 }
@@ -177,8 +163,6 @@ gen_app_icon() {
 # --- Bundled apps ---
 
 copy_repo        "ccc.sh"                                     "$BUNDLED_APPS_DIR/ccc"
-copy_repo        "project-crit-integration/bin/crit"          "$BUNDLED_APPS_DIR/crit"
-copy_third_party "original-crit"                              "$BUNDLED_APPS_DIR/original-crit"
 copy_built       "project-debi/debi"                          "$BUNDLED_APPS_DIR/debi"          "project-debi"
 
 # --- CC plugins ---
@@ -188,14 +172,11 @@ copy_built       "project-judgess/target/release/judgess"     "$BUNDLED_CC_PLUGI
 copy_repo        "project-detached-flow/cc-plugin"            "$BUNDLED_CC_PLUGINS_DIR/detached-flow"
 copy_repo        "project-team-work/cc-plugin"                "$BUNDLED_CC_PLUGINS_DIR/team-work"
 copy_repo        "project-code-cleanup/cc-plugin"             "$BUNDLED_CC_PLUGINS_DIR/code-cleanup"
-copy_third_party "claude-code"                                "$BUNDLED_CC_PLUGINS_DIR/crit"
 
 # --- Resources ---
 
-copy_repo        "bundler/crit-license.txt"                   "$RESOURCES_DIR/."
-
-ensure_dir "$RESOURCES_DIR/kitty-configs"
-copy_repo        "kitty-configs/current-theme.conf"           "$RESOURCES_DIR/kitty-configs/current-theme.conf"
+ensure_dir "$RESOURCES_DIR/themes"
+copy_repo        "themes/catppuccin-macchiato.conf"           "$RESOURCES_DIR/themes/catppuccin-macchiato.conf"
 
 copy_repo        "USER_GUIDE.md"                              "$RESOURCES_DIR/."
 copy_repo        "CHANGELOG.md"                               "$RESOURCES_DIR/."

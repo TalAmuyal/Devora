@@ -61,13 +61,4 @@ export class WebContentOverlay {
     container.appendChild(await this.createMarkdownBody(filePath));
     return container;
   }
-
-  static createUrlContent(url: string, title: string): HTMLElement {
-    const container = this.buildShell(title);
-    const iframe = document.createElement('iframe');
-    iframe.className = 'web-content-iframe';
-    iframe.src = url;
-    container.appendChild(iframe);
-    return container;
-  }
 }

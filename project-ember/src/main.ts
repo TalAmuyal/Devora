@@ -537,38 +537,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   router.setKeyObserver((e) => shortcuts.observeKey(e));
   router.setShortcutHandler((e) => shortcuts.handleShortcut(e));
 
-  // Crit review integration: listen for backend events requesting a review surface, and wire its dismissal back to the backend.
-  // The review is tab-bound, so it lives on that session's own stack — it covers only its session and never blocks a window shortcut.
-  await listen<{ ptyId: number; url: string }>('crit-open-overlay', (event) => {
-    const { ptyId, url } = event.payload;
-
-    const session = sessionManager.getSessionByPtyId(ptyId);
-    if (!session) {
-      logToFile('WARN', `crit-open-overlay: no session found for ptyId ${ptyId}`);
-      return;
-    }
-    const existing = session.layers.find('crit-review');
-    if (existing) session.layers.remove(existing);
-
-    session.layers.push(
-      pageLayer({
-        name: 'crit-review',
-        element: WebContentOverlay.createUrlContent(url, 'Crit Review'),
-        // Notify the backend on user dismissal (q/Esc) so the crit process can exit.
-        onUserDismissRequest: () => {
-          const pid = session.getPtyId();
-          if (pid !== null) {
-            invokeLogOnly('crit_overlay_dismissed', { ptyId: pid }).catch(() => {});
-          }
-          return 'close';
-        },
-        // Covers every teardown path — user dismissal, the backend closing it, and the tab going away.
-        onCleanup: () => tabBar.render(),
-      }),
-    );
-    tabBar.render();
-  });
-
   // Preview pane integration: an external tool (debi preview) asks Ember to render a file beside the terminal of a specific PTY session.
   await listen<{ ptyId: number; path: string; stack: boolean }>('preview-open', (event) => {
     const { ptyId, path, stack } = event.payload;
@@ -578,15 +546,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       return;
     }
     session.openPreview(path, stack);
-  });
-
-  // Backend-initiated close (crit process exited): tear the panel down without notifying it back.
-  await listen<{ ptyId: number }>('crit-close-overlay', (event) => {
-    const session = sessionManager.getSessionByPtyId(event.payload.ptyId);
-    const review = session?.layers.find('crit-review');
-    if (session && review) {
-      session.layers.remove(review);
-    }
   });
 
   tabBar.render();

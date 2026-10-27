@@ -14,10 +14,6 @@ description = "Automatically sync Go module dependencies"
 run = "go build -o debi ."
 description = "Build the project"
 
-[tasks.start]
-run = "go run . workspace-ui"
-description = "Run the application"
-
 [tasks.test]
 run = "go test ./..."
 description = "Run all tests"

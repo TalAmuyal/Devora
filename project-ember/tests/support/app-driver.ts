@@ -78,12 +78,4 @@ export class AppDriver {
     }
     return response.json();
   }
-
-  ipcPostFireAndForget(path: string, body: any): void {
-    fetch(`http://127.0.0.1:${this.ipcPort}${path}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    }).catch(() => {});
-  }
 }

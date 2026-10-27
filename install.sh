@@ -144,7 +144,7 @@ install_app() {
 	xattr -dr com.apple.quarantine "$APP_PATH"
 }
 
-# Mirrors bundler/macos/install-completions.sh: generate the zsh completion
+# Mirrors bundler/macos-ember/install-completions.sh: generate the zsh completion
 # file under ~/.zsh/completions and, if the user hasn't yet wired up fpath in
 # ~/.zshrc, print a one-time hint.
 install_completions() {
@@ -209,7 +209,7 @@ print_success() {
 	local channel="$1"
 	local version="unknown"
 	local version_file="$APP_PATH/Contents/Resources/VERSION"
-	# Strip any trailing newline defensively -- bundle.sh writes via `echo -n`
+	# Strip any trailing newline defensively -- populate-app-resources.sh writes via `echo -n`
 	# today, but the VERSION file's exact byte content shouldn't be a load-bearing
 	# detail of a separate script.
 	if [ -f "$version_file" ]; then

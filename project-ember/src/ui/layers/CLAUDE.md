@@ -13,9 +13,9 @@ This file is the current contract; the ADR deliberately does not restate it.
 - **One stack per tab**, owned by its `SessionTab` and hosted on that tab's container.
 
 A surface is app-covering **iff** it is in the window stack.
-Nothing else declares extent, and the same `pageLayer` preset produces a full-window hub or a session-sized Crit review depending only on where it is pushed.
+Nothing else declares extent, and the same `pageLayer` preset produces a full-window hub or a session-sized task-creation progress page depending only on where it is pushed.
 
-Two consequences worth knowing: hiding a tab hides its whole stack (a live `<iframe>` survives a tab switch untouched), and closing a tab tears its surfaces down with it.
+Two consequences worth knowing: hiding a tab hides its whole stack (its surfaces survive a tab switch untouched), and closing a tab tears its surfaces down with it.
 
 Only the window stack has a singleton accessor (`getWindowLayerStack()`), because deep call sites like `showModalDialog` cannot be threaded an instance.
 A tab stack is always passed explicitly.
@@ -84,7 +84,7 @@ Use these over the raw flags whenever possible.
 
 | Preset | Use for | What is special |
 |---|---|---|
-| `pageLayer` | hubs, the guide, the palette, a Crit review | dismissing it refreshes what it covered (navigation) |
+| `pageLayer` | hubs, the guide, the palette, the task-creation progress | dismissing it refreshes what it covered (navigation) |
 | `modalLayer` | dialogs | traps Tab; dismissing it does *not* refresh the caller |
 | `popupLayer` | anchored dropdowns | takes no focus, caller-mounted, transparent to keys, auto-closes with its host |
 | `terminalLayer` | the bottom of a tab stack | opaque, **not** dismissible, consumes nothing |
@@ -120,11 +120,6 @@ Passive elements on `document.body` above everything; they take no focus and nev
 
 A *horizontal split*, not a stack — the terminal stays live and focused beside them.
 Modelling a split as a stack would be a category error.
-
-### Crit panel's `<iframe>`
-
-Once the user clicks *into* it, keydown events fire in the iframe's cross-origin document and never reach the host window, so routing (and every global shortcut) is inert until focus returns to host chrome.
-This is a browser constraint the layer system cannot change, and per-tab stacks do not affect it; the review takes focus on activation so `q`/Esc works until the user deliberately clicks inside the iframe.
 
 ## Where things live
 

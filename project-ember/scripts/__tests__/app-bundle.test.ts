@@ -146,10 +146,10 @@ describe('assertBundleComplete', () => {
   it('throws naming every missing bundled app', () => {
     const { resourcesDir } = makeApp(makeTempDir(), 'Devora-Ember.app');
     makeCompleteBundledApps(resourcesDir);
-    fs.rmSync(path.join(resourcesDir, 'bundled-apps', 'original-crit'));
+    fs.rmSync(path.join(resourcesDir, 'bundled-apps', 'ccc'));
     fs.rmSync(path.join(resourcesDir, 'bundled-apps', 'debi'));
 
-    expect(() => assertBundleComplete(resourcesDir)).toThrow(/original-crit.*debi|debi.*original-crit/s);
+    expect(() => assertBundleComplete(resourcesDir)).toThrow(/ccc.*debi|debi.*ccc/s);
     expect(() => assertBundleComplete(resourcesDir)).toThrow(/mise test-e2e -- --force/);
   });
 

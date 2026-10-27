@@ -172,7 +172,6 @@ describe('populate-app-resources.sh --list-sources', () => {
     expect(sources.length).toBeGreaterThan(0);
     expect(sources).toContain('ccc.sh');
     expect(sources).toContain('project-debi');
-    expect(sources).toContain('bundler/3rd-party-deps.json');
   });
 
   it('lists only paths that exist in the repo', () => {

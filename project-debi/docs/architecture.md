@@ -8,8 +8,6 @@
 | **Workspace** | An isolated working environment stored as a `ws-N` directory under the profile's workspaces root. Contains git worktrees, a `task.json` file, and an `initialized` marker. |
 | **Worktree** | A git worktree checkout inside a workspace. Each registered repo gets its own worktree directory, created in detached HEAD state from the repo's default branch. |
 | **Active Workspace** | A workspace activated for work. Represented as `task.json` with a UUID, title, and start date. A workspace without a `task.json` is considered inactive. |
-| **Session** | An active workspace that is currently open in Devora. In Devora OG, sessions are Kitty terminal tabs identified by tab ID and matched to workspaces by comparing the tab's CWD to the workspace path. |
-| **Backend** | The terminal integration layer. Currently Kitty-only, using `kitty @` remote control commands. The `Backend` interface exists for testability. |
 
 ## Package Dependency Map
 
@@ -31,29 +29,13 @@ cli
   ├── prstatus   (PR status checking)
   ├── submit     (debi pr submit command)
   ├── tasktracker/asana (blank import; registers "asana" provider via init)
-  ├── task       (task file read/write)
   ├── tomlvalidate
-  ├── tui        (UI entry points)
   ├── workspace  (workspace detection from CWD)
   └── yamlvalidate
 
-tui
-  ├── config     (active profile, settings, repos)
-  ├── task       (task file creation)
-  ├── terminal   (session listing, creation, attachment)
-  ├── workspace  (workspace CRUD, git operations)
-  ├── tui/components  (reusable UI widgets)
-  ├── bubbletea  (Elm architecture framework)
-  └── lipgloss   (styling)
-
 workspace
-  ├── config     (workspaces root path, prepare command)
-  ├── git        (default branch name utility)
-  ├── process    (git commands)
-  └── errgroup   (parallel worktree removal)
-
-terminal
-  └── process    (kitty @ commands)
+  ├── config     (profiles and workspaces root, for CWD detection)
+  └── process    (git status)
 
 git
   └── process    (command execution)
@@ -106,68 +88,19 @@ tomlvalidate
 yamlvalidate
   └── goccy/go-yaml (YAML parser with typed errors carrying token positions)
 
-config, process, task, crash, cmdinfo, version
+config, process, crash, cmdinfo, version
   └── (stdlib only)
-
-tui/components
-  └── lipgloss   (styling)
 ```
 
-No circular dependencies. Data flows downward: `cli` orchestrates top-level flow, `tui` handles interactive UI, domain packages (`workspace`, `terminal`, `config`, `task`) are independent of each other (except `workspace` depending on `config` and `process`).
+No circular dependencies. Data flows downward: `cli` orchestrates top-level flow, and domain packages (`workspace`, `config`, `process`) are independent of each other (except `workspace` depending on `config` and `process`).
 
 ## CLI Commands
 
 The binary is named `debi`. For the command table with arguments, see [cli.md](specs/cli.md#commands).
 
-## Workspace Creation Flow
-
-This is the primary end-to-end flow, spanning `cli` → `tui` → `workspace` → `terminal`.
-
-```
-User runs: debi workspace-ui
-         │
-         ▼
-   ┌─────────────┐
-   │  cli.Run()  │  Load profiles, set active profile, get repo names
-   └──────┬──────┘
-          ▼
-   ┌───────────────────┐
-   │ tui.RunWorkspaceUI│  Bubble Tea program starts
-   └──────┬────────────┘
-          ▼
-   ┌───────────────────┐
-   │ PageWorkspaceList │  User sees workspace cards
-   │   user presses n  │
-   └──────┬────────────┘
-          ▼
-   ┌───────────────────┐
-   │   PageNewTask     │  User selects repos, enters title, submits
-   └──────┬────────────┘
-          ▼
-   ┌───────────────────┐
-   │  PageCreation     │  Shows progress while background work runs:
-   │                   │  1. Search for reusable inactive workspace
-   │                   │  2. Create ws-N directory (if needed)
-   │                   │  3. Write CLAUDE.md (multi-repo only)
-   │                   │  4. Create git worktrees (parallel)
-   │                   │  5. Write task.json
-   └──────┬────────────┘
-          ▼
-   TUI exits with WorkspaceReadyResult
-          │
-          ▼
-   ┌──────────────────────────────┐
-   │ tui.CreateAndAttachSession() │  Post-TUI, called by CLI:
-   │                              │  1. Create Kitty backend
-   │                              │  2. Try to attach to existing session
-   │                              │  3. If none, launch new Kitty tab
-   │                              │  4. Poll until session appears
-   └──────────────────────────────┘
-```
-
 ## Workspace States
 
-For the state decision tree and conditions, see [workspace.md](specs/workspace.md#workspace-states). The TUI's workspace list assigns categories based on these states and matches sessions by comparing workspace paths against Kitty tab CWDs.
+For the state decision tree and conditions, see [workspace.md](specs/workspace.md#workspace-states).
 
 ## PR Submit/Close Flow
 

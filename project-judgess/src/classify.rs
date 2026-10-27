@@ -87,7 +87,7 @@ pub fn case_key(raw: &Value) -> String {
 }
 
 /// Queued requests that still need a label: deduplicated, not yet labelled, and still not decidable.
-pub fn pending(store: &Store, home: Option<&str>) -> Vec<(Value, Verdict)> {
+pub fn pending(store: &Store) -> Vec<(Value, Verdict)> {
     let mut seen: HashSet<String> = store
         .read(store::LABELLED)
         .iter()
@@ -96,7 +96,7 @@ pub fn pending(store: &Store, home: Option<&str>) -> Vec<(Value, Verdict)> {
         .collect();
     let mut pending = Vec::new();
     for raw in store.read(store::UNKNOWN) {
-        let Some(request) = Request::from_raw(&raw, home) else {
+        let Some(request) = Request::from_raw(&raw) else {
             continue;
         };
         if !seen.insert(case_key(&raw)) {
@@ -128,11 +128,10 @@ pub fn describe(raw: &Value) -> String {
 
 pub fn run(
     store: &Store,
-    home: Option<&str>,
     input: &mut impl BufRead,
     output: &mut impl Write,
 ) -> io::Result<()> {
-    let queue = pending(store, home);
+    let queue = pending(store);
     if queue.is_empty() {
         writeln!(output, "Nothing to classify.")?;
         return Ok(());

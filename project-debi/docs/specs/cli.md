@@ -17,12 +17,6 @@ The CLI has the following commands:
 - Validation util commands (json-validate, yaml-validate, toml-validate)
 - `git` (custom subcommands, passthrough, and multi-repo fan-out)
 
-### Workspace Commands
-
-| Command | Args | Description |
-|---------|------|-------------|
-| `workspace-ui` | none | Open the Workspace Hub (deprecated) |
-
 ### Health
 
 | Command | Args | Description |
@@ -156,20 +150,18 @@ Behavior:
 ```
 usage: debi <command> [args]
 
-Workspace Commands:
-  workspace-ui          Open the Workspace Hub
-
 Health:
-  health [flags]        Check Devora dependencies
+  health [flags]              Check Devora dependencies
 
 PR:
-  pr <subcommand>       Pull request commands
+  pr <subcommand>             Pull request commands
 
 Git:
-  git <subcommand|git-args>  Git with custom subcommands, passthrough, and multi-repo fan-out
+  git <subcommand|git-args>   Git with custom subcommands, passthrough, and multi-repo fan-out
 
 Utility:
   get-conf <key>              Print a resolved config value
+  preview [--stack] <file>    Render a Markdown/HTML file in a preview pane
   util <subcommand>           Developer utility commands
   completion <bash|zsh|fish>  Generate shell completion script
   git-shortcut-shims <dir>    Write git-shortcut command shims into <dir>
@@ -214,22 +206,6 @@ The handlers reach the resolvers through `resolveActiveProfile` and `resolveActi
 `runHealth` accepts both `--profile <name>` and `--profile-path <path>` (path wins); `runGetConf` accepts `--profile <name>`; `runSubmit` and `runClose` call `ResolveActiveProfile("")`. All of them honor `DEBI_PROFILE_PATH` via the shared core.
 
 ## Command Handlers
-
-### workspace-ui
-
-```go
-func runWorkspaceUI() error
-```
-
-1. Check if `$DEVORA_RESOURCES_DIR/bundled-apps` is in PATH (only when `DEVORA_RESOURCES_DIR` is set, i.e., running from the app bundle). If missing, set `startupError` to a diagnostic message describing the issue.
-2. Load profiles from config.
-3. If no profiles exist, set `showProfileRegistration = true`. Skip to step 5 (`repoNames` remains `nil`).
-4. If profiles exist, set the first profile as active and load repo names.
-5. Launch the workspace TUI via `tui.RunWorkspaceUI(themePath, repoNames, showProfileRegistration, startupError)`. The `themePath` is obtained from `style.DefaultKittyThemePath()`.
-5. After the TUI exits, handle the result:
-   - If `result.SelectedWorkspace` is set, derive `sessionName` from `ws.TaskTitle` (falling back to `ws.Name` if empty), then delegate to `tui.CreateAndAttachSession(ws.Path, sessionName)` to create and attach a terminal session.
-   - If `result.NewWorkspace` is set, delegate to `tui.CreateAndAttachSession(ws.WorkspacePath, ws.SessionName)`.
-   - If the user quit without selection (`result == nil`), return nil.
 
 ### util
 
@@ -541,9 +517,9 @@ func runPreview(args []string) error
 ```
 
 Asks the running Devora-Ember app to render a Markdown or HTML file in a preview
-pane to the right of the terminal. Communicates over the same loopback IPC HTTP
-server used by the Crit integration (`POST /preview/open`), addressed by the
-`DEVORA_IPC_PORT`/`DEVORA_PTY_ID` env vars Ember injects into each PTY shell.
+pane to the right of the terminal. Communicates over Ember's loopback IPC HTTP
+server (`POST /preview/open`), addressed by the `DEVORA_IPC_PORT`/`DEVORA_PTY_ID`
+env vars Ember injects into each PTY shell.
 
 Usage: `debi preview [--stack] <file>`
 
@@ -670,7 +646,7 @@ func main() {
 - Test that `get-conf --profile <name>` passes the profile name to `resolveActiveProfile`.
 - Test that `get-conf -p <name>` passes the profile name to `resolveActiveProfile`.
 - Test that `get-conf --help` prints usage information.
-- Command handler integration tests are better handled at a higher level (testing the actual TUI behavior or workspace operations).
+- Command handler integration tests are better handled at a higher level (acceptance tests).
 
 **preview (`preview.go`):**
 - Test that `preview` without a file, with an unknown flag, or with a second positional argument returns a `*UsageError`.

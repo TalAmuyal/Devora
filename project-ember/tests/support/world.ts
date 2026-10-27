@@ -9,7 +9,6 @@ export class EmberWorld extends World {
   workspacePath?: string;
   hookLogPath?: string;
   fixtureRoot?: string;
-  bareRepoPath?: string;
   testConfigPath?: string;
   stopAutoApprove?: () => void;
   lastKeyDefaultPrevented?: boolean;
@@ -20,6 +19,8 @@ export class EmberWorld extends World {
   recordedTerminalCols?: number;
   // Temp files created for preview scenarios; the last one is reused by "same file" steps.
   previewFiles?: string[];
+  // Session count before a task was created, i.e. what remains once its creation tab closes.
+  sessionsBeforeTask?: number;
   failureCapture?: FailureCapture;
 }
 

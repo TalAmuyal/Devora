@@ -18,7 +18,6 @@ Feature: Health Hub
     And the Health Hub should show the "Credentials" section
     And the Health Hub should show the "Configuration" section
     And the Health Hub should report the config file as found
-    And the Health Hub should not list kitty
     And the Health Hub should show a version
 
   Scenario: Open the Health Hub from the Workspace Hub with H

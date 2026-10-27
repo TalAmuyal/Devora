@@ -17,10 +17,6 @@ Only macOS (Apple Silicon) is currently supported, but there are plans to add Li
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) (`claude`) -- agentic coding tool (requires a subscription)
 - [git](https://git-scm.com/)
 
-### Bundled
-
-- [Crit](https://github.com/tomasz-tomczyk/crit) -- AI code review tool with inline comments
-
 ### Optional (recommended)
 
 - [Neovim](https://neovim.io/) (`nvim`) -- recommended editor/terminal multiplexer; configurable via `terminal.default-app` (defaults to a bare login shell)
@@ -77,7 +73,6 @@ This builds Devora.app and installs it to `/Applications`.
 
 Devora builds upon the following tools:
 - Claude Code, as the agentic coding tool
-- Crit for reviewing plans and code changes
 - Ember (Tauri + xterm.js), as the UI framework
 - Debi (`./project-debi/`), Devora's CLI for workspace management and utilities
 - Judgess (`./project-judgess/`), a Claude Code plugin for auto-approving/rejecting permission requests aiming to reduce permission fatigue and speed up the development process

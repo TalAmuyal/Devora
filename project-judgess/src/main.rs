@@ -13,8 +13,8 @@ fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.first().map(String::as_str) {
         Some("hook") => run_hook(),
-        Some("classify") => user_command(|store, home| {
-            classify::run(store, home, &mut io::stdin().lock(), &mut io::stdout())
+        Some("classify") => user_command(|store, _| {
+            classify::run(store, &mut io::stdin().lock(), &mut io::stdout())
         }),
         Some("export") => match cases_file(&args[1..]) {
             Some(cases_file) => {
@@ -49,7 +49,7 @@ fn run_hook() -> ExitCode {
             return;
         }
         let Some(home) = home_dir() else { return };
-        if let Some(output) = hook::run(&input, &Store::in_home(&home), &home) {
+        if let Some(output) = hook::run(&input, &Store::in_home(&home)) {
             let _ = writeln!(io::stdout(), "{output}");
         }
     }));

@@ -7,7 +7,7 @@ use serde_json::Value;
 
 use crate::model::{Abstain, Request, RuleId, Verdict};
 
-/// What redaction rewrites a home directory to, and so the home directory every case is decided under.
+/// What redaction rewrites a home directory to.
 pub const REDACTED_HOME: &str = "/Users/user";
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -92,7 +92,6 @@ impl CaseInput {
             tool_name: self.tool_name.clone(),
             tool_input: self.tool_input.clone(),
             cwd: self.cwd.clone(),
-            home: Some(REDACTED_HOME.to_string()),
         }
     }
 }

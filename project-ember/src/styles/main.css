@@ -71,7 +71,7 @@ body {
   outline: none;
 }
 
-/* A full surface replacing its stack's region: a hub, the User Guide, a Crit review. */
+/* A full surface replacing its stack's region: a hub, the User Guide, a task-creation progress page. */
 .layer-page {
   background: var(--color-bg);
   overflow-y: auto;

@@ -5,17 +5,15 @@ pub struct Request {
     pub tool_name: String,
     pub tool_input: Value,
     pub cwd: Option<String>,
-    pub home: Option<String>,
 }
 
 impl Request {
     /// The request a raw hook payload (as logged in `audit.jsonl` / `unknown.jsonl`) describes.
-    pub fn from_raw(raw: &Value, home: Option<&str>) -> Option<Request> {
+    pub fn from_raw(raw: &Value) -> Option<Request> {
         Some(Request {
             tool_name: raw.get("tool_name")?.as_str()?.to_string(),
             tool_input: raw.get("tool_input").cloned().unwrap_or(Value::Null),
             cwd: raw.get("cwd").and_then(Value::as_str).map(str::to_string),
-            home: home.map(str::to_string),
         })
     }
 }

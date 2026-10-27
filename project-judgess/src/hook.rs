@@ -10,7 +10,7 @@ use crate::store::{self, Store};
 use crate::{decide, wire};
 
 /// The stdout to print. Persistence problems never change it.
-pub fn run(raw_input: &str, store: &Store, home: &str) -> Option<String> {
+pub fn run(raw_input: &str, store: &Store) -> Option<String> {
     let started = Instant::now();
     let input: Value = match serde_json::from_str(raw_input) {
         Ok(input) => input,
@@ -24,7 +24,7 @@ pub fn run(raw_input: &str, store: &Store, home: &str) -> Option<String> {
             return None;
         }
     };
-    let Some(request) = Request::from_raw(&input, Some(home)) else {
+    let Some(request) = Request::from_raw(&input) else {
         audit_error(store, &input, "request without a tool name", started);
         return None;
     };

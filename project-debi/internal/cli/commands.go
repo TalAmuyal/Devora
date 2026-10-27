@@ -23,7 +23,6 @@ type Command struct {
 }
 
 var groupOrder = []string{
-	"Workspace Commands",
 	"Health",
 	"PR",
 	"Git",
@@ -57,12 +56,6 @@ var autoMergeFlags = []cmdinfo.Flag{
 }
 
 var commands = []Command{
-	{
-		Name:        "workspace-ui",
-		Description: "Open the Workspace Hub (deprecated — will be removed with Devora OG)",
-		Group:       "Workspace Commands",
-		Run:         func(args []string) error { return runWorkspaceUI() },
-	},
 	{
 		Name:        "health",
 		Description: "Check Devora dependencies",

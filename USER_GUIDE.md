@@ -188,15 +188,8 @@ What it does:
 	- The cost-per-token is higher, but that should be balanced by lower token usage due to better performance
 	- These defaults, and the effort level and permission mode below, are configurable (globally and per profile)
 - **Effort level**: Sets the effort level to `xhigh` (extra-high) by default, so that Claude Code always tries to give a better result
-- **Plan mode**: Claude Code starts in plan permission mode by default, which requires explicit approval before making changes and takes advantage of the Crit integration -- the permission mode is configurable
+- **Plan mode**: Claude Code starts in plan permission mode by default, which requires explicit approval before making changes -- the permission mode is configurable
 - **Plugins**: Auto-loads Devora plugins (including Judgess -- see below)
-
-## Crit Integration
-
-[Crit](https://github.com/tomasz-tomczyk/crit) is a tool for reviewing and commenting on plans, code diffs, and frontend elements to  send feedback directly to your agent.
-Crit is integrated into Devora and works out-of-the-box.
-When Claude Code has a plan ready, it opens up Crit's UI in a tab (session) covering overlay, where you can review the plan, comment on specific lines, and approve or request changes.
-Once Claude receives your feedback, it adjusts the plan and re-presents for a follow-up review until it's approved.
 
 ## Judgess
 

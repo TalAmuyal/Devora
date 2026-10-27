@@ -4,7 +4,7 @@ See ./rule-development-instructions.md when developing new rules from `labelled.
 
 ## Layout
 
-- `src/decide.rs` -- `decide`, the only decision entry point; tool dispatch (`Bash`, `Read`, `WebFetch`, ...)
+- `src/decide.rs` -- `decide`, the only decision entry point; tool dispatch (`Bash`, `WebFetch`, ...)
 - `src/bash.rs` -- Bash verdicts: normalizer (wrappers, `git -C`, `mise exec`, `bash -c`, `find -exec`) and rule application; the wrapper names live in `rules::WRAPPERS` / `rules::SHELLS` only
 - `src/rules.rs` -- the rule tables (command lists, prefixes, dangerous env vars) and the vocabulary derived from them
 - `src/shell.rs` -- the only module that touches `brush-parser`; yields commands and word spans
@@ -15,7 +15,7 @@ See ./rule-development-instructions.md when developing new rules from `labelled.
 - `cases.json` -- redacted regression cases; `tests/cases.rs` runs them
 
 `decide` must stay pure: no I/O, no environment, no clock.
-Anything environmental (home directory) arrives through `Request`.
+Anything environmental arrives through `Request`.
 
 ## Rules of thumb
 

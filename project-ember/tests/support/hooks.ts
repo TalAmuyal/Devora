@@ -14,7 +14,6 @@ import {
 import { AppDriver } from './app-driver';
 import { FakeClaudeServer, STRUCTURED_LOG_BASE_DIR } from './fake-claude-server';
 import { CLAUDE_CONFIG_PATH, cleanupWorkspace, stopClaudeCode } from './claude-helper';
-import { assertOriginalCritAvailable } from './crit-helper';
 import { FAILURE_CAPTURE_DIR, canCaptureScreen, captureFailure } from './failure-capture';
 import { cleanupFixtures, writeTestConfig } from './fixture-helper';
 import { EmberWorld } from './world';
@@ -27,7 +26,7 @@ let testConfigPath: string | null = null;
 let testConfigDir: string | null = null;
 
 /*
- * Resolve the app binary to test, refusing artifacts that would make the run meaningless: a bundle whose BUILD_FINGERPRINT does not match the working tree (tests would silently exercise stale code), an incomplete bundle, or a raw binary (no bundled-apps/, so Claude/Crit scenarios fail confusingly).
+ * Resolve the app binary to test, refusing artifacts that would make the run meaningless: a bundle whose BUILD_FINGERPRINT does not match the working tree (tests would silently exercise stale code), an incomplete bundle, or a raw binary (no bundled-apps/, so Claude scenarios fail confusingly).
  * EMBER_E2E_PREBUILT=1 opts out of all checks: test exactly what exists.
  */
 function findAppBinary(): string {
@@ -68,12 +67,12 @@ function findAppBinary(): string {
     throw new Error(
       `No app bundle found in ${DEFAULT_BUNDLE_DIR} (only a raw binary at ${rawBinary}). ` +
         'Run `mise test-e2e` (auto-rebuilds), or set EMBER_E2E_PREBUILT=1 to test the raw ' +
-        'binary -- bundled-apps/ will be unavailable, so Claude/Crit scenarios will fail.',
+        'binary -- bundled-apps/ will be unavailable, so Claude scenarios will fail.',
     );
   }
   console.warn(
     `EMBER_E2E_PREBUILT=1 -- testing raw binary ${rawBinary}; bundled-apps/ is unavailable, ` +
-      'so Claude/Crit scenarios will fail',
+      'so Claude scenarios will fail',
   );
   return rawBinary;
 }
@@ -231,16 +230,6 @@ After({ tags: '@real-claude' }, async function (this: EmberWorld) {
   }
   await stopClaudeCode(this.driver);
 
-  try {
-    await this.driver.eval(`
-      for (const s of [...window.__test.sessionManager.getSessions()]) {
-        while (s.layers.depth() > 1) s.layers.pop();
-      }
-    `);
-  } catch {
-    // overlay may not be active
-  }
-
   await fakeClaudeServer!.saveCassette();
   fakeClaudeServer!.reset();
 });
@@ -250,18 +239,11 @@ Before({ tags: '@screen-capture' }, function () {
   if (!process.env.CI && !canCaptureScreen()) return 'skipped';
 });
 
-Before({ tags: '@real-crit' }, async function (this: EmberWorld) {
-  assertOriginalCritAvailable();
-});
-
 After(async function (this: EmberWorld) {
   // A scenario can end while the app is still loading (e.g. a hub fetching settings); deleting the fixtures under a command in flight fails it and reports a backend error, so let the app settle first.
   await this.driver.pollFor(`return window.__test.invokesInFlight()`, 0, 5_000);
   if (this.fixtureRoot) {
     cleanupFixtures(this.fixtureRoot);
-  }
-  if (this.bareRepoPath) {
-    fs.rmSync(this.bareRepoPath, { recursive: true, force: true });
   }
 
   writeTestConfig(testConfigPath!, []);

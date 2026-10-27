@@ -5,7 +5,7 @@ use std::path::Path;
 
 use serde_json::Value;
 
-use crate::cases::{self, Case, Expected, REDACTED_HOME};
+use crate::cases::{self, Case, Expected};
 use crate::classify::Label;
 use crate::decide;
 use crate::model::Request;
@@ -25,7 +25,7 @@ pub fn run(
     let mut remaining = Vec::new();
     let mut exported = 0;
     for entry in labelled {
-        match export_one(&entry, home, &redactor) {
+        match export_one(&entry, &redactor) {
             Ok(Some(case)) => {
                 if !cases.iter().any(|existing| {
                     existing.input.tool_name == case.input.tool_name
@@ -62,7 +62,6 @@ pub fn run(
 /// `Ok(None)` for entries that are not cases (deleted ones).
 fn export_one(
     entry: &Value,
-    home: Option<&str>,
     redactor: &Redactor,
 ) -> Result<Option<Case>, String> {
     let label = entry
@@ -74,7 +73,7 @@ fn export_one(
         return Ok(None);
     };
     let raw = entry.get("request").ok_or("missing request")?;
-    let request = Request::from_raw(raw, home).ok_or("unreadable request")?;
+    let request = Request::from_raw(raw).ok_or("unreadable request")?;
 
     let verdict = decide(&request);
     if verdict.kind() != wanted {
@@ -94,9 +93,7 @@ fn export_one(
     if redactor.leaks(&redacted_text) {
         return Err("redaction left the home directory or username in place".into());
     }
-    let mut redacted_request = input.request();
-    redacted_request.home = Some(REDACTED_HOME.to_string());
-    let after = decide(&redacted_request);
+    let after = decide(&input.request());
     if Expected::of(&after).as_ref() != Some(&expected) {
         return Err(format!(
             "redaction changed the verdict ({verdict:?} became {after:?}); extend the vocabulary or the rule"

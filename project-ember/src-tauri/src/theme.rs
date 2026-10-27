@@ -1,13 +1,14 @@
 use std::collections::HashMap;
 use std::fs;
+use std::path::Path;
+use tauri::Manager;
 
-/// Default path to the Kitty theme file, resolved at compile time relative to the repo layout.
-const DEFAULT_THEME_PATH: &str =
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../../kitty-configs/current-theme.conf");
+/// Where `populate-app-resources.sh` bundles the theme, relative to the app's resource directory.
+const BUNDLED_THEME_PATH: &str = "themes/catppuccin-macchiato.conf";
 
-/// Returns the list of CSS custom property names that a Kitty config key maps to.
-fn css_properties_for(kitty_key: &str) -> &'static [&'static str] {
-    match kitty_key {
+/// Returns the list of CSS custom property names that a theme key maps to.
+fn css_properties_for(key: &str) -> &'static [&'static str] {
+    match key {
         "foreground" => &["--color-terminal-fg", "--color-text", "--color-fg"],
         "background" => &["--color-terminal-bg", "--color-bg", "--color-base"],
         "selection_foreground" => &["--color-terminal-selection-fg"],
@@ -47,12 +48,12 @@ fn css_properties_for(kitty_key: &str) -> &'static [&'static str] {
     }
 }
 
-/// Parse a Kitty theme config file and return a map of CSS custom property names to color values.
+/// Parse a theme file (in Kitty's config format) and return a map of CSS custom property names to color values.
 ///
 /// Lines starting with `#` are treated as comments. Blank lines are skipped.
 /// Each data line is expected to be `key  value` (separated by whitespace).
 /// The special key `macos_titlebar_color` is mapped to `--color-crust` unless its value is "system".
-pub fn load_theme(theme_path: &str) -> Result<HashMap<String, String>, String> {
+pub fn load_theme(theme_path: &Path) -> Result<HashMap<String, String>, String> {
     let content =
         fs::read_to_string(theme_path).map_err(|e| format!("failed to read theme file: {e}"))?;
 
@@ -91,21 +92,27 @@ pub fn load_theme(theme_path: &str) -> Result<HashMap<String, String>, String> {
     Ok(result)
 }
 
-/// Tauri command that loads the theme from the given path, or from the default location.
+/// Tauri command that loads the theme bundled in the app.
 #[tauri::command]
-pub fn get_theme(theme_path: Option<String>) -> Result<HashMap<String, String>, String> {
-    let path = theme_path.unwrap_or_else(|| DEFAULT_THEME_PATH.to_string());
-    load_theme(&path)
+pub fn get_theme(app: tauri::AppHandle) -> Result<HashMap<String, String>, String> {
+    let resource_dir = app
+        .path()
+        .resource_dir()
+        .map_err(|e| format!("failed to resolve resource directory: {e}"))?;
+    load_theme(&resource_dir.join(BUNDLED_THEME_PATH))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    const REPO_THEME_PATH: &str =
+        concat!(env!("CARGO_MANIFEST_DIR"), "/../../themes/catppuccin-macchiato.conf");
+
     #[test]
     fn parse_actual_theme_file() {
-        let theme = load_theme(DEFAULT_THEME_PATH)
-            .expect("should be able to parse the actual current-theme.conf");
+        let theme = load_theme(Path::new(REPO_THEME_PATH))
+            .expect("should be able to parse the actual catppuccin-macchiato.conf");
 
         // Verify a selection of key mappings exist with correct values from the file
         assert_eq!(theme.get("--color-terminal-fg"), Some(&"#CAD3F5".to_string()));
@@ -184,7 +191,7 @@ mod tests {
         )
         .unwrap();
 
-        let theme = load_theme(path.to_str().unwrap()).unwrap();
+        let theme = load_theme(&path).unwrap();
 
         assert_eq!(theme.get("--color-terminal-fg"), Some(&"#AABBCC".to_string()));
         assert_eq!(theme.get("--color-text"), Some(&"#AABBCC".to_string()));
@@ -198,7 +205,7 @@ mod tests {
         let path = dir.path().join("test-theme.conf");
         std::fs::write(&path, "macos_titlebar_color system\n").unwrap();
 
-        let theme = load_theme(path.to_str().unwrap()).unwrap();
+        let theme = load_theme(&path).unwrap();
         assert!(theme.is_empty());
     }
 
@@ -208,7 +215,7 @@ mod tests {
         let path = dir.path().join("test-theme.conf");
         std::fs::write(&path, "macos_titlebar_color #112233\n").unwrap();
 
-        let theme = load_theme(path.to_str().unwrap()).unwrap();
+        let theme = load_theme(&path).unwrap();
         assert_eq!(theme.get("--color-crust"), Some(&"#112233".to_string()));
         assert_eq!(theme.len(), 1);
     }
@@ -219,13 +226,13 @@ mod tests {
         let path = dir.path().join("test-theme.conf");
         std::fs::write(&path, "url_color #FF0000\nactive_border_color #00FF00\n").unwrap();
 
-        let theme = load_theme(path.to_str().unwrap()).unwrap();
+        let theme = load_theme(&path).unwrap();
         assert!(theme.is_empty());
     }
 
     #[test]
     fn missing_file_returns_error() {
-        let result = load_theme("/nonexistent/path/theme.conf");
+        let result = load_theme(Path::new("/nonexistent/path/theme.conf"));
         assert!(result.is_err());
     }
 }

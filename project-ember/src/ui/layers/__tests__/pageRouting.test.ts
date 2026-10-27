@@ -234,11 +234,11 @@ describe('page routing — app-wide shortcuts under a surface', () => {
 
   it('tab navigation stays live while only a tab-bound surface is open', () => {
     const { activateNext } = wireShortcuts();
-    tabStack.push(pageLayer({ name: 'crit-review', element: content('crit') }));
+    tabStack.push(pageLayer({ name: 'task-creation-progress', element: content('task-creation') }));
 
     dispatch({ key: 'ArrowRight', code: 'ArrowRight', ctrlKey: true });
 
-    // A Crit review covers its session, not the window — it has no business freezing the tab bar.
+    // A task-creation progress surface covers its session, not the window — it has no business freezing the tab bar.
     expect(activateNext).toHaveBeenCalledOnce();
   });
 });

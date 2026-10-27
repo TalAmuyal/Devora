@@ -2060,28 +2060,6 @@
         "input": {
             "tool_name": "Read",
             "tool_input": {
-                "file_path": "/Users/user/.crit/plans/x.md"
-            }
-        },
-        "expected": {
-            "verdict": "approve"
-        }
-    },
-    {
-        "input": {
-            "tool_name": "Read",
-            "tool_input": {
-                "file_path": "/Users/user/.crit/plans/../../.ssh/id_rsa"
-            }
-        },
-        "expected": {
-            "verdict": "not-approve"
-        }
-    },
-    {
-        "input": {
-            "tool_name": "Read",
-            "tool_input": {
                 "file_path": "/Users/user/notes.txt"
             }
         },

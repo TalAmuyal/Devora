@@ -3,23 +3,18 @@ import { Given, When, Then } from '@cucumber/cucumber';
 import { EmberWorld } from '../support/world';
 import { writeToTerminal, waitForTerminalContent } from '../support/terminal-helper';
 
+// Both poll: session creation and retitling finish asynchronously after the steps that trigger them return (e.g. opening a workspace dismisses the Hub before its session is added).
 Then(
   'there should be {int} session(s)',
   async function (this: EmberWorld, expected: number) {
-    const count = await this.driver.eval(
-      'return window.__test.sessionManager.getSessionCount()',
-    );
-    assert.strictEqual(count, expected);
+    await this.driver.pollFor('return window.__test.sessionManager.getSessionCount()', expected, 5_000);
   },
 );
 
 Then(
   'the active session title should be {string}',
   async function (this: EmberWorld, expected: string) {
-    const title = await this.driver.eval(
-      'return window.__test.sessionManager.getActiveSession()?.title',
-    );
-    assert.strictEqual(title, expected);
+    await this.driver.pollFor('return window.__test.sessionManager.getActiveSession()?.title', expected, 5_000);
   },
 );
 
@@ -40,16 +35,6 @@ When('the user switches to the second session', async function (this: EmberWorld
     window.__test.sessionManager.activateSession(secondId);
   `);
 });
-
-When(
-  'the user switches to the second session before the overlay opens',
-  async function (this: EmberWorld) {
-    await this.driver.eval(`
-      const secondId = window.__test.sessionManager.getSessions()[1]?.id;
-      window.__test.sessionManager.activateSession(secondId);
-    `);
-  },
-);
 
 Then('the first session should be active', async function (this: EmberWorld) {
   const activeId = await this.driver.eval(
@@ -105,3 +90,41 @@ Then(
     assert.strictEqual(cols, this.recordedTerminalCols);
   },
 );
+
+const ORDINALS: Record<string, number> = { first: 0, second: 1, third: 2 };
+
+Then(
+  'the {word} session should have a panel overlay',
+  async function (this: EmberWorld, ordinal: string) {
+    const index = ORDINALS[ordinal];
+    if (index === undefined) throw new Error(`Unknown ordinal: ${ordinal}`);
+    await this.driver.pollFor(
+      `return window.__test.sessionManager.getSessions()[${index}]?.hasSurface() ?? false`,
+      true,
+      10_000,
+    );
+  },
+);
+
+/**
+ * Whether a session-scoped surface is actually on screen.
+ * Asked of the DOM rather than of app state: a tab's surface is hidden by hiding the tab, and this is the assertion that would notice if that ever stopped being true.
+ */
+async function isPanelOverlayVisible(world: EmberWorld): Promise<boolean> {
+  return world.driver.eval(
+    `return Array.from(document.querySelectorAll('.session-content .layer-page'))
+       .some((el) => el.getClientRects().length > 0)`,
+  );
+}
+
+Then('the panel overlay should be visible', async function (this: EmberWorld) {
+  assert.strictEqual(await isPanelOverlayVisible(this), true, 'Expected the panel overlay to be visible');
+});
+
+Then('the panel overlay should not be visible', async function (this: EmberWorld) {
+  assert.strictEqual(await isPanelOverlayVisible(this), false, 'Expected the panel overlay to be hidden');
+});
+
+Given("the active session's terminal holds focus", async function (this: EmberWorld) {
+  await this.driver.eval('window.__test.sessionManager.getActiveSession().terminalPane.focus()');
+});
