@@ -1,3 +1,4 @@
+// Package process runs external commands (git, gh, mise) from an argv slice, never through a shell.
 package process
 
 import (
@@ -96,6 +97,7 @@ func WithContext(ctx context.Context) ExecOption {
 	}
 }
 
+// PassthroughError carries a passthrough child's non-zero exit code so main can exit with it without crash logging.
 type PassthroughError struct {
 	Code int
 }
