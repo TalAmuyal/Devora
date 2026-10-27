@@ -22,6 +22,7 @@ Types of changes:
 - Migrated Debi's `internal/process` spec into code comments and removed `docs/specs/process.md`
 - Migrated Debi's `internal/cli` spec into code comments and removed `docs/specs/cli.md`
 - Migrated Debi's `internal/config` spec into code comments and removed `docs/specs/config.md`
+- Migrated Debi's remaining package specs into code comments and removed `docs/specs/`
 - `debi health` shell completion now offers `--json` and `--profile-path`
 
 ### Removed
