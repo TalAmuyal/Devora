@@ -1,3 +1,8 @@
+// Package workspace reads workspaces on disk: directories under a profile's workspaces root, each holding one git worktree per repo.
+// The Devora app owns creating, activating, and deleting workspaces; debi only reads them, to resolve the profile from the CWD and to run the multi-repo git commands in wsgit.
+//
+// A workspace without the initialized marker is Invalid (its initialization failed or hasn't finished), so debi ignores it.
+// The app also tells Active from Inactive workspaces by a task.json file, which debi doesn't need.
 package workspace
 
 import (
@@ -25,6 +30,8 @@ func IsInitialized(workspacePath string) bool {
 
 // --- Workspace Enumeration ---
 
+// GetWorkspaceRepos returns the names of the workspace's repos, in no guaranteed order.
+// Dot-prefixed directories (e.g., .claude) are not repos.
 func GetWorkspaceRepos(workspacePath string) ([]string, error) {
 	entries, err := os.ReadDir(workspacePath)
 	if err != nil {
@@ -42,6 +49,8 @@ func GetWorkspaceRepos(workspacePath string) ([]string, error) {
 
 // --- Workspace Detection from CWD ---
 
+// ResolveWorkspaceFromCWD returns the profile and workspace path containing cwd.
+// Being outside any workspace is not an error: it returns (nil, "", nil).
 func ResolveWorkspaceFromCWD(cwd string) (*config.Profile, string, error) {
 	resolvedCWD, err := filepath.Abs(cwd)
 	if err != nil {

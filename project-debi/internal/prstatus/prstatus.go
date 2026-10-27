@@ -1,3 +1,5 @@
+// Package prstatus implements `debi pr check`, which reports the PR, CI checks, and reviews for the current branch.
+// The package keeps its historical name; only the CLI verb changed.
 package prstatus
 
 import (
@@ -16,6 +18,8 @@ import (
 
 // --- Types ---
 
+// PRData is the `gh pr view --json` payload.
+// AutoMergeRequest is kept raw because only its presence matters: gh sends null unless auto-merge is enabled.
 type PRData struct {
 	Number            int              `json:"number"`
 	Title             string           `json:"title"`
@@ -29,6 +33,8 @@ type PRData struct {
 	Reviews           []Review         `json:"reviews"`
 }
 
+// CheckRun is one statusCheckRollup entry.
+// GitHub check runs carry a Name, while legacy commit statuses (StatusContext) carry a Context instead.
 type CheckRun struct {
 	Name       string `json:"name"`
 	Context    string `json:"context"`

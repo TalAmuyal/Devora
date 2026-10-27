@@ -100,7 +100,7 @@ The binary is named `debi`. The command registry lives in `internal/cli/commands
 
 ## Workspace States
 
-For the state decision tree and conditions, see [workspace.md](specs/workspace.md#workspace-states).
+See the `internal/workspace` package doc for which workspace states debi distinguishes.
 
 ## PR Submit/Close Flow
 
@@ -137,6 +137,6 @@ detached HEAD on origin/<default>
 detached HEAD on origin/<default>
 ```
 
-`internal/submit` and `internal/close` (pkg `closecmd`) each expose a single `Run(io.Writer, Options)` entry point and a set of domain-specific sentinel errors. The CLI layer (`internal/cli`) translates those sentinels into `*cli.UsageError` or `*process.PassthroughError` as described in the command specs. Credentials for the task tracker are fetched lazily from the OS keychain via `internal/credentials`; `internal/gh` centralizes all `gh` CLI invocations used by submit and close.
+`internal/submit` and `internal/close` (pkg `closecmd`) each expose a single `Run(io.Writer, Options)` entry point and a set of domain-specific sentinel errors. The CLI layer (`internal/cli`) translates those sentinels into `*cli.UsageError` or `*process.PassthroughError` (see `runSubmit` and `runClose` in `internal/cli/cli.go`). Credentials for the task tracker are fetched lazily from the OS keychain via `internal/credentials`; `internal/gh` centralizes all `gh` CLI invocations used by submit and close.
 
-For per-command details see [specs/submit.md](specs/submit.md) and [specs/close.md](specs/close.md). For the pluggable tracker interface see [specs/tasktracker.md](specs/tasktracker.md).
+For per-command details see the `internal/submit` and `internal/close` package docs. For the pluggable tracker interface see the `internal/tasktracker` package doc.

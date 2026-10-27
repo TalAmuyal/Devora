@@ -44,10 +44,11 @@ type Tracker interface {
 	CompleteTask(taskID string) error
 
 	// ParseTaskURL extracts a task ID from a user-supplied URL. Returns ""
-	// when the URL is not recognized. Offline / no network.
+	// when the URL is not recognized.
+	// ParseTaskURL, TaskURL, and PRBodyPrefix must stay offline, so that `debi pr close --task-url` stays fast and composing a PR body needs no round-trip.
 	ParseTaskURL(url string) string
 
-	// TaskURL returns the canonical web URL for the given ID. Offline.
+	// TaskURL returns the canonical web URL for the given ID.
 	TaskURL(taskID string) string
 
 	// PRBodyPrefix returns the first line included in the PR body when a
@@ -58,7 +59,7 @@ type Tracker interface {
 // Factory constructs a Tracker from config. It reads config eagerly and
 // returns an error when required config is missing or invalid. It must not
 // fetch credentials — those are fetched lazily by the provider on the first
-// API call.
+// API call, so constructing a tracker never touches the keychain.
 type Factory func() (Tracker, error)
 
 // factories holds the registered provider factories, keyed by provider name.

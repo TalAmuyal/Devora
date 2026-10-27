@@ -15,6 +15,7 @@ func Validate(r io.Reader) (valid bool, errMsg string, err error) {
 		return false, "", fmt.Errorf("read input: %w", err)
 	}
 
+	// Unlike json.Decoder, json.Unmarshal rejects trailing garbage after the first value.
 	var v any
 	unmarshalErr := json.Unmarshal(data, &v)
 	if unmarshalErr != nil {

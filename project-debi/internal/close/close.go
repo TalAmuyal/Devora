@@ -29,7 +29,7 @@ import (
 // Options configures Run
 type Options struct {
 	// TaskURL, when set, overrides the task ID stored at branch.<current-branch>.task-id.
-	//Requires a configured task-tracker.
+	// Requires a configured task-tracker.
 	TaskURL string
 	// SkipTracker bypasses the tracker entirely (no task completion).
 	SkipTracker bool

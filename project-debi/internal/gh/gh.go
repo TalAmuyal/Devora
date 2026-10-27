@@ -1,6 +1,8 @@
 // Package gh wraps the GitHub CLI (`gh`) subprocess for the submit and close
 // commands. It centralizes JSON parsing, stderr-driven error classification,
 // and the stubbable package-level function vars that tests replace.
+//
+// internal/prstatus predates this package and still calls gh directly.
 package gh
 
 import (
@@ -118,7 +120,8 @@ func GetRepo() (RepoInfo, error) {
 
 // prViewPayload is the wire shape of `gh pr view --json
 // number,url,state,isDraft,title`. The PRSummary.Merged field is derived
-// from state == "MERGED" (gh does not expose a direct "merged" JSON field).
+// from state == "MERGED": gh has no "merged" JSON field, and requesting one
+// fails with `Unknown JSON field: "merged"`.
 type prViewPayload struct {
 	Number  int    `json:"number"`
 	URL     string `json:"url"`
@@ -183,9 +186,9 @@ var prAlreadyExistsRE = regexp.MustCompile(
 	`a pull request for branch "([^"]+)".*?already exists(?::\s*(https?://\S+))?`,
 )
 
-// CreatePR runs `gh pr create --title <title> --body <body> --assignee @me
-// [--draft]`. Returns the PR URL (trimmed stdout). On "already exists" stderr,
-// returns *PRAlreadyExistsError.
+// CreatePR runs `gh pr create --title <title> --body <body> --assignee @me [--draft]`.
+// Self-assigning here saves a separate round-trip.
+// Returns the PR URL (trimmed stdout), or *PRAlreadyExistsError on gh's "already exists" stderr.
 func CreatePR(title, body string, draft bool) (string, error) {
 	args := []string{"pr", "create", "--title", title, "--body", body, "--assignee", "@me"}
 	if draft {
@@ -208,8 +211,7 @@ func CreatePR(title, body string, draft bool) (string, error) {
 // parsePRAlreadyExists returns a *PRAlreadyExistsError if stderr matches gh's
 // "a pull request for branch ... already exists" pattern; otherwise nil.
 func parsePRAlreadyExists(stderr string) *PRAlreadyExistsError {
-	// Guard on both substrings before the regex for a cheap pre-check that
-	// matches the plan's intent.
+	// Cheap pre-check before the regex.
 	if !strings.Contains(stderr, "a pull request for branch") ||
 		!strings.Contains(stderr, "already exists") {
 		return nil

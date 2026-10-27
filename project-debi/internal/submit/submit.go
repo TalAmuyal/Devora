@@ -1,4 +1,4 @@
-// Package submit implements debi's `submit` command: commit local changes,
+// Package submit implements `debi pr submit`: commit local changes,
 // create a tracker task (if configured), create a feature branch, push it,
 // open a GitHub PR, and optionally enable auto-merge.
 //
@@ -349,11 +349,8 @@ func Run(w io.Writer, opts Options) error {
 	return nil
 }
 
-// emitJSON writes the JSONOutput struct to w. It fetches the PR number and
-// title via getGHPRView; if that fails, it emits a minimal object using the
-// values we already have (URL, branch, opts.Message as title, draft, task URL)
-// and logs a warning — the command's primary goal (PR created) has already
-// succeeded, so a cosmetic fetch failure must not turn it into a hard error.
+// emitJSON writes the JSONOutput struct to w, with the PR number and title from getGHPRView.
+// If that lookup fails, it silently falls back to the values already known (opts.Message as title, no number): the PR is already created, so a cosmetic lookup failure must not fail the command.
 func emitJSON(w io.Writer, opts Options, prURL, branchName, baseBranch string, task tasktracker.Task) error {
 	out := JSONOutput{
 		URL:        prURL,
@@ -364,9 +361,6 @@ func emitJSON(w io.Writer, opts Options, prURL, branchName, baseBranch string, t
 		TaskURL:    task.URL,
 	}
 
-	// A cosmetic lookup failure after the PR is successfully created must
-	// not fail the command. The warning is silently swallowed in JSON mode
-	// to keep the payload clean; human mode never uses this code path.
 	if summary, err := getGHPRView(prURL); err == nil {
 		out.Number = summary.Number
 		if summary.Title != "" {

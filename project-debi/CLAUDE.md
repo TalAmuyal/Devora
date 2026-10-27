@@ -1,12 +1,9 @@
 @README.md
 
-## Spec Maintenance
+## Documentation
 
-Previously, we've been writing package specs.
-However, we should change our approach and instead write the why into the code itself.
-Going forward, we should move the "spirit" of the spec into the code, and avoid writing new specs.
-
-As for existing specs, we should gradually migrate them into the code as well, and remove the parts of the spec that are already covered by the code itself.
+Don't write package specs or other separate per-package docs.
+Write the "why" into the code itself, as package and type doc comments.
 
 ## Precondition handling
 
