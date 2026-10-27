@@ -193,7 +193,10 @@ func TestResolveActiveProfileByPath_Found_SetsActiveAndReturnsName(t *testing.T)
 	target := config.Profile{Name: "work", RootPath: "/tmp/work"}
 	stubResolveActiveProfileDeps(
 		t,
-		func() (string, error) { t.Fatal("getCWD should not be called when explicit path matches"); return "", nil },
+		func() (string, error) {
+			t.Fatal("getCWD should not be called when explicit path matches")
+			return "", nil
+		},
 		func() []config.Profile { return []config.Profile{{Name: "play", RootPath: "/tmp/play"}, target} },
 		func(cwd string) (*config.Profile, string, error) {
 			t.Fatal("resolveFromCWD should not be called when explicit path is given")

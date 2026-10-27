@@ -20,6 +20,7 @@ import (
 	_ "devora/internal/tasktracker/asana"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 )
@@ -547,23 +548,23 @@ func runUtil(args []string) error {
 		fmt.Println("usage: debi util <subcommand>\n\nSubcommands:\n  json-validate <file|->  Validate a JSON file (use - for stdin)\n  yaml-validate <file|->  Validate a YAML file (use - for stdin)\n  toml-validate <file|->  Validate a TOML file (use - for stdin)")
 		return nil
 	case "json-validate":
-		return runJSONValidate(subArgs)
+		return runValidate(subArgs, "json-validate", "JSON", jsonvalidate.Validate)
 	case "yaml-validate":
-		return runYAMLValidate(subArgs)
+		return runValidate(subArgs, "yaml-validate", "YAML", yamlvalidate.Validate)
 	case "toml-validate":
-		return runTOMLValidate(subArgs)
+		return runValidate(subArgs, "toml-validate", "TOML", tomlvalidate.Validate)
 	default:
 		return &UsageError{Message: fmt.Sprintf("unknown util subcommand: %s\nusage: debi util <subcommand>", subcommand)}
 	}
 }
 
-func runJSONValidate(args []string) error {
+func runValidate(args []string, subcommand, format string, validate func(io.Reader) (bool, string, error)) error {
 	if len(args) != 1 {
-		fmt.Fprintln(os.Stderr, "usage: debi util json-validate <file|->")
+		fmt.Fprintf(os.Stderr, "usage: debi util %s <file|->\n", subcommand)
 		return &process.PassthroughError{Code: 2}
 	}
 
-	var reader *os.File
+	var reader io.Reader
 	if args[0] == "-" {
 		reader = os.Stdin
 	} else {
@@ -576,82 +577,16 @@ func runJSONValidate(args []string) error {
 		reader = f
 	}
 
-	valid, errMsg, err := jsonvalidate.Validate(reader)
+	valid, errMsg, err := validate(reader)
 	if err != nil {
 		return err
 	}
 
 	if valid {
-		fmt.Println("Valid JSON")
+		fmt.Printf("Valid %s\n", format)
 		return nil
 	}
 
-	fmt.Printf("Invalid JSON: %s\n", errMsg)
-	return &process.PassthroughError{Code: 1}
-}
-
-func runYAMLValidate(args []string) error {
-	if len(args) != 1 {
-		fmt.Fprintln(os.Stderr, "usage: debi util yaml-validate <file|->")
-		return &process.PassthroughError{Code: 2}
-	}
-
-	var reader *os.File
-	if args[0] == "-" {
-		reader = os.Stdin
-	} else {
-		f, err := os.Open(args[0])
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "error: %s\n", err.Error())
-			return &process.PassthroughError{Code: 2}
-		}
-		defer f.Close()
-		reader = f
-	}
-
-	valid, errMsg, err := yamlvalidate.Validate(reader)
-	if err != nil {
-		return err
-	}
-
-	if valid {
-		fmt.Println("Valid YAML")
-		return nil
-	}
-
-	fmt.Printf("Invalid YAML: %s\n", errMsg)
-	return &process.PassthroughError{Code: 1}
-}
-
-func runTOMLValidate(args []string) error {
-	if len(args) != 1 {
-		fmt.Fprintln(os.Stderr, "usage: debi util toml-validate <file|->")
-		return &process.PassthroughError{Code: 2}
-	}
-
-	var reader *os.File
-	if args[0] == "-" {
-		reader = os.Stdin
-	} else {
-		f, err := os.Open(args[0])
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "error: %s\n", err.Error())
-			return &process.PassthroughError{Code: 2}
-		}
-		defer f.Close()
-		reader = f
-	}
-
-	valid, errMsg, err := tomlvalidate.Validate(reader)
-	if err != nil {
-		return err
-	}
-
-	if valid {
-		fmt.Println("Valid TOML")
-		return nil
-	}
-
-	fmt.Printf("Invalid TOML: %s\n", errMsg)
+	fmt.Printf("Invalid %s: %s\n", format, errMsg)
 	return &process.PassthroughError{Code: 1}
 }

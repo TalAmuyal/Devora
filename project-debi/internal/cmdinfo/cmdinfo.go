@@ -28,6 +28,7 @@ type SubCommand struct {
 
 // Flag describes a flag accepted by a command.
 type Flag struct {
+	// Name lists every spelling of the flag, comma-separated (e.g. "-v, --verbose").
 	Name        string
 	Description string
 }

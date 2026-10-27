@@ -20,6 +20,8 @@ Types of changes:
 - Migrated Debi's `internal/credentials` spec into code comments and removed `docs/specs/credentials.md`
 - Migrated Debi's `internal/crash` spec into code comments and removed `docs/specs/crash.md`
 - Migrated Debi's `internal/process` spec into code comments and removed `docs/specs/process.md`
+- Migrated Debi's `internal/cli` spec into code comments and removed `docs/specs/cli.md`
+- `debi health` shell completion now offers `--json` and `--profile-path`
 
 ### Removed
 
@@ -33,6 +35,7 @@ Types of changes:
 - Permission-hook denials now reach the agent (Judge's denials were silently ignored by Claude Code)
 - Commands chained with a newline or `&`, or hidden in a quoted `$(…)`, are no longer auto-approved
 - The app now loads its bundled color theme (it previously looked for the theme at a build-machine path)
+- `debi` shell completion now offers each spelling of a flag (e.g. `-p` and `--profile`) instead of a combined `-p, --profile` entry
 
 ## 2026-08-03.0
 

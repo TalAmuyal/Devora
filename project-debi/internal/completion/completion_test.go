@@ -705,3 +705,42 @@ func TestGenerateZsh_RealFlagsHasBalancedQuotes(t *testing.T) {
 		}
 	}
 }
+
+func TestGenerate_SplitsMultiSpellingFlags(t *testing.T) {
+	commands := []cmdinfo.Command{
+		{
+			Name:  "health",
+			Flags: []cmdinfo.Flag{{Name: "-p, --profile", Description: "Pick a profile"}},
+		},
+		{
+			Name: "pr",
+			SubCommands: []cmdinfo.SubCommand{
+				{Name: "close", Flags: []cmdinfo.Flag{{Name: "-y, --force", Description: "Skip prompt"}}},
+			},
+		},
+	}
+	generators := map[string]func(io.Writer, string, []cmdinfo.Command) error{
+		"bash": GenerateBash,
+		"zsh":  GenerateZsh,
+		"fish": GenerateFish,
+	}
+	for shell, generate := range generators {
+		t.Run(shell, func(t *testing.T) {
+			var buf bytes.Buffer
+			if err := generate(&buf, "debi", commands); err != nil {
+				t.Fatalf("generate failed: %v", err)
+			}
+			output := buf.String()
+			for _, bad := range []string{"-p,", "-y,"} {
+				if strings.Contains(output, bad) {
+					t.Errorf("output offers %q as a completion word:\n%s", bad, output)
+				}
+			}
+			for _, want := range []string{"-p", "--profile", "-y", "--force"} {
+				if !strings.Contains(output, want) {
+					t.Errorf("output missing %q:\n%s", want, output)
+				}
+			}
+		})
+	}
+}

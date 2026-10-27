@@ -280,4 +280,3 @@ func TestRunPassthrough_WithStdoutStderr_OnFailure_CapturesOutput(t *testing.T) 
 		t.Fatalf("expected stderr buffer to contain 'fail_stderr', got %q", stderr.String())
 	}
 }
-

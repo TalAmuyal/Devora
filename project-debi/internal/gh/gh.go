@@ -82,8 +82,8 @@ func classifyGHError(err error) error {
 
 // repoViewPayload is the wire shape of `gh repo view --json defaultBranchRef,name,owner`.
 type repoViewPayload struct {
-	Name             string `json:"name"`
-	Owner            struct {
+	Name  string `json:"name"`
+	Owner struct {
 		Login string `json:"login"`
 	} `json:"owner"`
 	DefaultBranchRef struct {
@@ -170,9 +170,13 @@ func GetPRForBranch(branch string, opts ...process.ExecOption) (*PRSummary, erro
 
 // prAlreadyExistsRE matches gh's "already exists" error line. gh prints
 // messages like:
-//   a pull request for branch "foo" into branch "main" already exists: https://github.com/owner/repo/pull/7
+//
+//	a pull request for branch "foo" into branch "main" already exists: https://github.com/owner/repo/pull/7
+//
 // or (when gh omits the URL):
-//   a pull request for branch "foo" into branch "main" already exists
+//
+//	a pull request for branch "foo" into branch "main" already exists
+//
 // Group 1 captures the branch name; group 2 captures the trailing URL (empty
 // when absent).
 var prAlreadyExistsRE = regexp.MustCompile(
