@@ -1,6 +1,5 @@
-// Package gh wraps the GitHub CLI (`gh`) subprocess for the submit and close
-// commands. It centralizes JSON parsing, stderr-driven error classification,
-// and the stubbable package-level function vars that tests replace.
+// Package gh wraps the GitHub CLI (`gh`) subprocess for the submit and close commands.
+// It centralizes JSON parsing, stderr-driven error classification, and the stubbable package-level function vars that tests replace.
 //
 // internal/prstatus predates this package and still calls gh directly.
 package gh
@@ -33,9 +32,8 @@ type PRSummary struct {
 	Title   string
 }
 
-// PRAlreadyExistsError is returned by CreatePR when `gh` reports that a PR for
-// the current branch already exists. ExistingURL is extracted from gh's stderr
-// when present; otherwise empty.
+// PRAlreadyExistsError is returned by CreatePR when `gh` reports that a PR for the current branch already exists.
+// ExistingURL is extracted from gh's stderr when present; otherwise empty.
 type PRAlreadyExistsError struct {
 	Branch      string
 	ExistingURL string
@@ -67,9 +65,8 @@ func defaultRunGHPassthrough(args []string, opts ...process.ExecOption) error {
 	return process.RunPassthrough(append([]string{"gh"}, args...), opts...)
 }
 
-// classifyGHError wraps a gh invocation error so callers can recognize
-// "gh not installed" via errors.Is(err, ErrGHNotInstalled). Other errors are
-// returned unchanged.
+// classifyGHError wraps a gh invocation error so callers can recognize "gh not installed" via errors.Is(err, ErrGHNotInstalled).
+// Other errors are returned unchanged.
 func classifyGHError(err error) error {
 	if err == nil {
 		return nil
@@ -93,8 +90,7 @@ type repoViewPayload struct {
 	} `json:"defaultBranchRef"`
 }
 
-// GetRepo runs `gh repo view --json defaultBranchRef,name,owner` and returns
-// the flattened RepoInfo.
+// GetRepo runs `gh repo view --json defaultBranchRef,name,owner` and returns the flattened RepoInfo.
 func GetRepo() (RepoInfo, error) {
 	out, err := runGHGetOutput([]string{
 		"repo", "view",
@@ -118,10 +114,8 @@ func GetRepo() (RepoInfo, error) {
 
 // --- GetPRForBranch ---
 
-// prViewPayload is the wire shape of `gh pr view --json
-// number,url,state,isDraft,title`. The PRSummary.Merged field is derived
-// from state == "MERGED": gh has no "merged" JSON field, and requesting one
-// fails with `Unknown JSON field: "merged"`.
+// prViewPayload is the wire shape of `gh pr view --json number,url,state,isDraft,title`.
+// The PRSummary.Merged field is derived from state == "MERGED": gh has no "merged" JSON field, and requesting one fails with `Unknown JSON field: "merged"`.
 type prViewPayload struct {
 	Number  int    `json:"number"`
 	URL     string `json:"url"`
@@ -130,16 +124,11 @@ type prViewPayload struct {
 	Title   string `json:"title"`
 }
 
-// GetPRForBranch runs `gh pr view <branch> --json
-// number,url,state,isDraft,title` and returns the parsed PRSummary.
+// GetPRForBranch runs `gh pr view <branch> --json number,url,state,isDraft,title` and returns the parsed PRSummary.
 // PRSummary.Merged is derived from state == "MERGED".
-// Returns (nil, nil) when gh reports no PR for the branch — detected via the
-// stderr substring "no pull requests found", matching the handling in
-// internal/prstatus.
+// Returns (nil, nil) when gh reports no PR for the branch — detected via the stderr substring "no pull requests found", matching the handling in internal/prstatus.
 //
-// Variadic process.ExecOption is forwarded to the underlying gh subprocess so
-// callers can scope the lookup (e.g. process.WithCwd to a specific repo when
-// invoked from a multi-repo context).
+// Variadic process.ExecOption is forwarded to the underlying gh subprocess so callers can scope the lookup (e.g. process.WithCwd to a specific repo when invoked from a multi-repo context).
 func GetPRForBranch(branch string, opts ...process.ExecOption) (*PRSummary, error) {
 	out, err := runGHGetOutput([]string{
 		"pr", "view", branch,
@@ -171,17 +160,10 @@ func GetPRForBranch(branch string, opts ...process.ExecOption) (*PRSummary, erro
 
 // --- CreatePR ---
 
-// prAlreadyExistsRE matches gh's "already exists" error line. gh prints
-// messages like:
+// prAlreadyExistsRE matches gh's "already exists" error line.
+// gh prints messages like: `a pull request for branch "foo" into branch "main" already exists: https://github.com/owner/repo/pull/7` or (when gh omits the URL): `a pull request for branch "foo" into branch "main" already exists`.
 //
-//	a pull request for branch "foo" into branch "main" already exists: https://github.com/owner/repo/pull/7
-//
-// or (when gh omits the URL):
-//
-//	a pull request for branch "foo" into branch "main" already exists
-//
-// Group 1 captures the branch name; group 2 captures the trailing URL (empty
-// when absent).
+// Group 1 captures the branch name; group 2 captures the trailing URL (empty when absent).
 var prAlreadyExistsRE = regexp.MustCompile(
 	`a pull request for branch "([^"]+)".*?already exists(?::\s*(https?://\S+))?`,
 )
@@ -208,8 +190,7 @@ func CreatePR(title, body string, draft bool) (string, error) {
 	return strings.TrimSpace(out), nil
 }
 
-// parsePRAlreadyExists returns a *PRAlreadyExistsError if stderr matches gh's
-// "a pull request for branch ... already exists" pattern; otherwise nil.
+// parsePRAlreadyExists returns a *PRAlreadyExistsError if stderr matches gh's "a pull request for branch ... already exists" pattern; otherwise nil.
 func parsePRAlreadyExists(stderr string) *PRAlreadyExistsError {
 	// Cheap pre-check before the regex.
 	if !strings.Contains(stderr, "a pull request for branch") ||
@@ -218,8 +199,7 @@ func parsePRAlreadyExists(stderr string) *PRAlreadyExistsError {
 	}
 	match := prAlreadyExistsRE.FindStringSubmatch(stderr)
 	if match == nil {
-		// Substrings present but pattern didn't match — still surface as
-		// "already exists" without a branch/URL rather than losing the signal.
+		// Substrings present but pattern didn't match — still surface as "already exists" without a branch/URL rather than losing the signal.
 		return &PRAlreadyExistsError{}
 	}
 	return &PRAlreadyExistsError{
@@ -230,8 +210,8 @@ func parsePRAlreadyExists(stderr string) *PRAlreadyExistsError {
 
 // --- EnableAutoMergeSquash ---
 
-// EnableAutoMergeSquash runs `gh pr merge <prURL> --auto --squash` in
-// passthrough mode so the user sees gh's output. Wraps errors with context.
+// EnableAutoMergeSquash runs `gh pr merge <prURL> --auto --squash` in passthrough mode so the user sees gh's output.
+// Wraps errors with context.
 // Callers pass process.WithSilent() to suppress stdout/stderr.
 func EnableAutoMergeSquash(prURL string, opts ...process.ExecOption) error {
 	if err := runGHPassthrough([]string{"pr", "merge", prURL, "--auto", "--squash"}, opts...); err != nil {

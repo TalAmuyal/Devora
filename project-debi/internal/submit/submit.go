@@ -1,10 +1,7 @@
-// Package submit implements `debi pr submit`: commit local changes,
-// create a tracker task (if configured), create a feature branch, push it,
-// open a GitHub PR, and optionally enable auto-merge.
+// Package submit implements `debi pr submit`: commit local changes, create a tracker task (if configured), create a feature branch, push it, open a GitHub PR, and optionally enable auto-merge.
 //
-// Run is the entry point. All external dependencies are injected via
-// package-level function vars so tests can stub them without touching the
-// filesystem, network, or subprocess layer.
+// Run is the entry point.
+// All external dependencies are injected via package-level function vars so tests can stub them without touching the filesystem, network, or subprocess layer.
 package submit
 
 import (
@@ -79,27 +76,25 @@ var (
 	getGHPRView                = defaultGetGHPRView
 )
 
-// stderr is the sink for warnings that must not corrupt w. In JSON mode w is
-// the real stdout and must contain only the JSON payload, so warnings go here.
+// stderr is the sink for warnings that must not corrupt w.
+// In JSON mode w is the real stdout and must contain only the JSON payload, so warnings go here.
 // Stubbable in tests.
 var stderr io.Writer = os.Stderr
 
-// defaultCurrentBranchOrDetached wraps git.CurrentBranchOrDetached into the
-// zero-arg signature Run uses. Tests replace getCurrentBranchOrDetached with a
-// zero-arg stub, so this adapter keeps the stubbable-var signature uniform.
+// defaultCurrentBranchOrDetached wraps git.CurrentBranchOrDetached into the zero-arg signature Run uses.
+// Tests replace getCurrentBranchOrDetached with a zero-arg stub, so this adapter keeps the stubbable-var signature uniform.
 func defaultCurrentBranchOrDetached() (string, error) {
 	return git.CurrentBranchOrDetached()
-}
+}//
 
-// defaultGetRepoAutoMerge reads the per-repo "devora.pr.auto-merge" local git
-// config. Used by shouldEnableAutoMerge via getRepoAutoMerge so the config
-// package can stay free of internal/git imports.
+// defaultGetRepoAutoMerge reads the per-repo "devora.pr.auto-merge" local git config.
+// Used by shouldEnableAutoMerge via getRepoAutoMerge so the config package can stay free of internal/git imports.
 func defaultGetRepoAutoMerge() (*bool, error) {
 	return git.GetRepoConfigBool("devora.pr.auto-merge")
 }
 
-// defaultOpenBrowser opens url in the OS default browser via `open` on macOS
-// or `xdg-open` on Linux. Uses passthrough so the user sees any child output.
+// defaultOpenBrowser opens url in the OS default browser via `open` on macOS or `xdg-open` on Linux.
+// Uses passthrough so the user sees any child output.
 func defaultOpenBrowser(url string) error {
 	var command []string
 	switch runtime.GOOS {
@@ -111,8 +106,9 @@ func defaultOpenBrowser(url string) error {
 	return process.RunPassthrough(command)
 }
 
-// defaultGetGHPRView fetches PR number/title for JSON output. Called only in
-// --json mode. Used so tests can inject a stub without going through gh.
+// defaultGetGHPRView fetches PR number/title for JSON output.
+// Called only in --json mode.
+// Used so tests can inject a stub without going through gh.
 func defaultGetGHPRView(url string) (gh.PRSummary, error) {
 	pr, err := gh.GetPRForBranch(url)
 	if err != nil {
@@ -126,9 +122,7 @@ func defaultGetGHPRView(url string) (gh.PRSummary, error) {
 
 // --- Run ---
 
-// Run executes the submit flow: validate preconditions, commit changes,
-// (optionally) create a tracker task, create+push a feature branch, open a
-// PR, and (depending on config and flags) enable auto-merge.
+// Run executes the submit flow: validate preconditions, commit changes, (optionally) create a tracker task, create+push a feature branch, open a PR, and (depending on config and flags) enable auto-merge.
 //
 // Output modes:
 //   - JSON (opts.JSONOutput): a single JSON object on w; progress to io.Discard.
@@ -140,22 +134,22 @@ func Run(w io.Writer, opts Options) error {
 		return errors.New("--message is required")
 	}
 
-	// Subprocess output: silenced in every mode except Verbose so the
-	// default/quiet output stays concise. Threaded into every git/gh call.
+	// Subprocess output: silenced in every mode except Verbose so the default/quiet output stays concise.
+	// Threaded into every git/gh call.
 	var execOpts []process.ExecOption
 	if !opts.Verbose {
 		execOpts = []process.ExecOption{process.WithSilent()}
 	}
 
-	// Progress sink: where checkmark/warning lines go. Suppressed in JSON
-	// and Quiet modes so only the final payload reaches w.
+	// Progress sink: where checkmark/warning lines go.
+	// Suppressed in JSON and Quiet modes so only the final payload reaches w.
 	progress := w
 	if opts.JSONOutput || opts.Quiet {
 		progress = io.Discard
 	}
 
-	// Detached-HEAD guard: submit must start from detached HEAD. A branch
-	// means the user has not yet merged the previous PR.
+	// Detached-HEAD guard: submit must start from detached HEAD.
+	// A branch means the user has not yet merged the previous PR.
 	branch, err := getCurrentBranchOrDetached()
 	if err != nil {
 		return fmt.Errorf("check current branch: %w", err)
@@ -164,8 +158,8 @@ func Run(w io.Writer, opts Options) error {
 		return fmt.Errorf("%w (currently on branch %q). The current PR needs to be reviewed and merged before further work is performed.", ErrNotDetached, branch)
 	}
 
-	// Stage and commit. In non-verbose modes, capture subprocess output
-	// so pre-commit hook diagnostics can be shown on failure.
+	// Stage and commit.
+	// In non-verbose modes, capture subprocess output so pre-commit hook diagnostics can be shown on failure.
 	if opts.Verbose {
 		fmt.Fprintln(progress, style.Info.Render("\u2192 Staging and committing..."))
 	}
@@ -200,9 +194,8 @@ func Run(w io.Writer, opts Options) error {
 		}
 	}
 
-	// Pre-fetch: run only the calls we actually need, and only run them in
-	// parallel if both are needed. Unused pre-fetches add latency and a
-	// pointless errgroup.
+	// Pre-fetch: run only the calls we actually need, and only run them in parallel if both are needed.
+	// Unused pre-fetches add latency and a pointless errgroup.
 	var whoami string
 	var repoInfo gh.RepoInfo
 	needWhoAmI := tracker != nil
@@ -256,8 +249,7 @@ func Run(w io.Writer, opts Options) error {
 		return fmt.Errorf("create branch %s: %w", branchName, err)
 	}
 	if tracker != nil && task.ID != "" {
-		// Key is "task-id" — provider-agnostic. The provider-specific
-		// identifier lives only in the value.
+		// Key is "task-id" — provider-agnostic. The provider-specific identifier lives only in the value.
 		if err := setBranchConfig(branchName, "task-id", task.ID, execOpts...); err != nil {
 			return fmt.Errorf("set branch task-id: %w", err)
 		}
@@ -267,8 +259,7 @@ func Run(w io.Writer, opts Options) error {
 	}
 	fmt.Fprintln(progress, style.Success.Render("\u2713 Pushed "+branchName))
 
-	// Build PR body: tracker prefix first, description after (with a blank
-	// line separator when both are present).
+	// Build PR body: tracker prefix first, description after (with a blank line separator when both are present).
 	body := ""
 	if tracker != nil && task.ID != "" {
 		body = tracker.PRBodyPrefix(task.ID)
@@ -281,14 +272,13 @@ func Run(w io.Writer, opts Options) error {
 		}
 	}
 
-	// Create the PR. Distinguish "already exists" because the error is
-	// user-actionable and we want to surface the existing URL.
+	// Create the PR.
+	// Distinguish "already exists" because the error is user-actionable and we want to surface the existing URL.
 	prURL, err := createGHPR(opts.Message, body, opts.Draft)
 	if err != nil {
 		var exists *gh.PRAlreadyExistsError
 		if errors.As(err, &exists) {
-			// Route the warning to stderr so stdout (especially in JSON or
-			// Quiet mode) stays clean for piping to scripts.
+			// Route the warning to stderr so stdout (especially in JSON or Quiet mode) stays clean for piping to scripts.
 			if exists.ExistingURL != "" {
 				fmt.Fprintln(stderr, style.Warning.Render("\u26a0 PR already exists: "+exists.ExistingURL))
 			} else {
@@ -299,9 +289,9 @@ func Run(w io.Writer, opts Options) error {
 		return fmt.Errorf("create PR: %w", err)
 	}
 
-	// Post-PR ops. Auto-merge is best-effort; a failure warns but does not
-	// fail the command. Warnings land on stderr in JSON/Quiet modes to keep
-	// stdout clean; in Normal/Verbose they go to progress (which == w).
+	// Post-PR ops.
+	// Auto-merge is best-effort; a failure warns but does not fail the command.
+	// Warnings land on stderr in JSON/Quiet modes to keep stdout clean; in Normal/Verbose they go to progress (which == w).
 	if shouldEnableAutoMerge(opts) {
 		if err := enableGHAutoMerge(prURL, execOpts...); err != nil {
 			sink := progress
@@ -383,8 +373,7 @@ func emitJSON(w io.Writer, opts Options, prURL, branchName, baseBranch string, t
 //  4. profile then global pr.auto-merge
 //  5. default true
 //
-// The CLI layer rejects --blocked + --auto-merge before Run is invoked, so
-// at most one of opts.Blocked / opts.ForceAutoMerge is set here.
+// The CLI layer rejects --blocked + --auto-merge before Run is invoked, so at most one of opts.Blocked / opts.ForceAutoMerge is set here.
 func shouldEnableAutoMerge(opts Options) bool {
 	if opts.Blocked {
 		return false
