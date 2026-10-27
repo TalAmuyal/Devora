@@ -8,7 +8,7 @@ Implement `debi pr submit`: commit local changes, create a tracker task (when a 
 
 ## Profile Resolution
 
-The CLI layer calls `cli.ResolveActiveProfile("")` before dispatching to `submit.Run`, so profile-scoped config (such as `task-tracker.provider`) resolved from the current working directory is visible. See [cli.md](./cli.md) for the resolution order. There is no `--profile` flag on `submit`; CWD is the sole selector.
+The CLI layer calls `cli.ResolveActiveProfile("")` before dispatching to `submit.Run`, so profile-scoped config (such as `task-tracker.provider`) resolved from the current working directory is visible. See `resolveActiveProfileCore` in `internal/cli/profile.go` for the resolution order. There is no `--profile` flag on `submit`; CWD is the sole selector.
 
 ## Stability
 
@@ -205,7 +205,7 @@ Lines are styled via lipgloss using the shared pre-built styles from `internal/s
 
 Per-invocation flags always win over every layer: `--blocked` forces off, `--auto-merge` forces on, and the two are mutually exclusive at the CLI layer.
 
-The three scopes can be managed via the `debi pr auto-merge <enable|disable|reset|show> [--scope=repo|profile|global] [--json]` command; see [cli.md](./cli.md) for its flags, verbs, output, and error conditions.
+The three scopes can be managed via the `debi pr auto-merge <enable|disable|reset|show> [--scope=repo|profile|global] [--json]` command; see `internal/cli/auto_merge.go` for its flags, verbs, output, and error conditions.
 
 At the package level this is implemented by plumbing a `getRepoAutoMerge` callback (reading `devora.pr.auto-merge` via `git.GetRepoConfigBool`) into `config.GetAutoMergeDefaultForRepo`, so the `config` package stays free of dependencies on `internal/git`.
 

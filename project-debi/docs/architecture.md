@@ -96,7 +96,7 @@ No circular dependencies. Data flows downward: `cli` orchestrates top-level flow
 
 ## CLI Commands
 
-The binary is named `debi`. For the command table with arguments, see [cli.md](specs/cli.md#commands).
+The binary is named `debi`. The command registry lives in `internal/cli/commands.go`; `debi --help` (and `debi <command> --help`) prints the commands and their arguments.
 
 ## Workspace States
 

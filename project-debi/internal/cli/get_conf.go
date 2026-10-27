@@ -68,6 +68,7 @@ func printConfigValue(val any) error {
 	case bool:
 		fmt.Println(v)
 	case float64:
+		// Config JSON decodes every number as float64; print whole numbers as integers so 1000000 doesn't come out as 1e+06.
 		if v == math.Trunc(v) && !math.IsInf(v, 0) {
 			fmt.Printf("%d\n", int64(v))
 		} else {

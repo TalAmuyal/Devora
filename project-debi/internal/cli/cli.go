@@ -1,3 +1,5 @@
+// Package cli is a hand-rolled dispatcher over os.Args (no CLI framework).
+// The registry in commands.go drives dispatch, the usage message, and shell completion.
 package cli
 
 import (
@@ -25,6 +27,7 @@ import (
 // UsageError represents a user-facing error caused by incorrect CLI usage
 // (e.g., missing command, unknown command, missing required argument).
 // These should be printed to stderr without crash logging.
+// An empty Message means the handler already printed its own explanation.
 type UsageError struct {
 	Message string
 }
@@ -160,6 +163,7 @@ func runPRCheck(args []string) error {
 		}
 		return err
 	}
+	// The domain package keeps its name from when this command was `pr status`.
 	return prstatus.Run(os.Stdout, jsonOutput)
 }
 
@@ -175,7 +179,7 @@ var healthRun = health.Run
 // healthRunJSON is the JSON health entry point; stubbable for tests.
 var healthRunJSON = health.RunJSON
 
-// resolveActiveProfile is the profile resolver entry point; stubbable for tests so the three handlers (health/submit/close) can verify they invoke it.
+// resolveActiveProfile is the profile resolver entry point; stubbable for tests so handlers can verify they invoke it.
 var resolveActiveProfile = ResolveActiveProfile
 
 // resolveActiveProfileByPath resolves the active profile by root path (used by `debi health --profile-path`); stubbable for tests.
@@ -533,6 +537,7 @@ func runGitShortcutShims(args []string) error {
 	return shellinit.WriteShims(dir)
 }
 
+// The validators exit 2 on usage or file errors (rather than a UsageError's 1) so scripts can tell "invalid" (1) from "could not check" (2).
 func runUtil(args []string) error {
 	subcommand := args[0]
 	subArgs := args[1:]
