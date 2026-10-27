@@ -31,7 +31,6 @@ Treat the code as the source of truth, and consult a spec only for context the c
 | [specs/submit.md](specs/submit.md) | `internal/submit` | `debi pr submit`: commit, tracker task, PR creation |
 | [specs/close.md](specs/close.md) | `internal/close` (pkg `closecmd`) | `debi pr close`: task completion, branch cleanup |
 | [specs/tasktracker.md](specs/tasktracker.md) | `internal/tasktracker` | Pluggable issue tracker interface and registry |
-| [specs/credentials.md](specs/credentials.md) | `internal/credentials` | OS keychain token lookup |
 | [specs/gh.md](specs/gh.md) | `internal/gh` | GitHub CLI (`gh`) wrapper for submit/close |
 
 ## Spec Conventions

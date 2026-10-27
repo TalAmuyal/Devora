@@ -1,9 +1,7 @@
 // Package credentials fetches API tokens from the OS keychain.
 //
-// The service name convention is "devora-<provider>" and the account is the
-// current user's login. The backend is github.com/zalando/go-keyring — a
-// single backend with no fallbacks. Callers that receive *NotFoundError
-// should print SetupHint(provider) to guide the user on how to store a token.
+// Entries live under service "devora-<provider>" with the user's login as the account.
+// go-keyring is deliberately the sole backend; tokens are never read from files or other fallback stores.
 package credentials
 
 import (
@@ -17,27 +15,16 @@ import (
 	"github.com/zalando/go-keyring"
 )
 
-// ErrNotFound is the sentinel returned (via *NotFoundError.Unwrap) when no
-// credential is stored. Use with errors.Is on a wrapped *NotFoundError.
-var ErrNotFound = errors.New("credential not found")
-
-// NotFoundError is returned when the keychain has no entry for the provider.
-// Callers typically use errors.As to extract the Provider and then print
-// SetupHint(Provider) alongside the short message from Error().
+// NotFoundError's Error() stays single-line; callers print the multi-line SetupHint(Provider) under it.
 type NotFoundError struct {
 	Provider string
-	Service  string // "devora-<provider>"
-	Account  string // resolved user login
+	Service  string
+	Account  string
 }
 
-// Error returns a short single-line message. Callers needing the multi-line
-// setup instructions should call SetupHint(provider).
 func (e *NotFoundError) Error() string {
 	return fmt.Sprintf("no '%s' credential stored in keychain for account '%s'", e.Service, e.Account)
 }
-
-// Unwrap makes errors.Is(err, ErrNotFound) work on any wrapped NotFoundError.
-func (e *NotFoundError) Unwrap() error { return ErrNotFound }
 
 // Stubbable package-level vars for tests.
 var (
@@ -46,9 +33,6 @@ var (
 	timeout    = 5 * time.Second
 )
 
-// defaultGetUser resolves the current user's login. It prefers $USER and
-// falls through to os/user.Current. It returns an error only if both paths
-// fail to yield a non-empty username.
 func defaultGetUser() (string, error) {
 	if u := os.Getenv("USER"); u != "" {
 		return u, nil
@@ -65,16 +49,7 @@ func defaultGetUser() (string, error) {
 
 // GetToken retrieves the API token for a provider from the OS keychain.
 //
-// The service name is "devora-<provider>"; the account is the resolved user
-// login. The keychain call is wrapped in a timeout (default 5s) because
-// macOS can surface an OS-level prompt that blocks indefinitely if the user
-// dismisses it or the prompt is not focused.
-//
-// Returns a *NotFoundError when the entry is missing (or the stored value is
-// empty). Returns a timeout error whose message contains "timed out" when
-// the keychain call does not complete within the configured timeout.
-// Wraps keyring.ErrUnsupportedPlatform with a clear message on unsupported
-// platforms. Other keychain errors are wrapped with a "keychain:" prefix.
+// The timeout guards against a macOS keychain prompt that blocks indefinitely when dismissed or unfocused.
 func GetToken(provider string) (string, error) {
 	user, err := getUser()
 	if err != nil {
@@ -112,16 +87,11 @@ func GetToken(provider string) (string, error) {
 	}
 }
 
-// SetupHint returns platform-specific multi-line instructions for storing a
-// provider's token in the OS keychain. Callers that receive *NotFoundError
-// typically print this under the short error message.
 func SetupHint(provider string) string {
 	return setupHintForGOOS(provider, runtime.GOOS)
 }
 
-// setupHintForGOOS is the testable core of SetupHint. It accepts an explicit
-// goos string so tests can exercise every branch without overriding the
-// runtime global.
+// setupHintForGOOS takes goos explicitly so tests can cover every platform.
 func setupHintForGOOS(provider, goos string) string {
 	service := "devora-" + provider
 	switch goos {

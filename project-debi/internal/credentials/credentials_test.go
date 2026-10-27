@@ -67,9 +67,6 @@ func TestGetToken_NotFound_ReturnsNotFoundError(t *testing.T) {
 	if !errors.As(err, &nfe) {
 		t.Fatalf("expected *NotFoundError, got %T: %v", err, err)
 	}
-	if !errors.Is(err, ErrNotFound) {
-		t.Fatalf("expected errors.Is(err, ErrNotFound) to be true, got false")
-	}
 	if nfe.Provider != "asana" {
 		t.Errorf("Provider: expected %q, got %q", "asana", nfe.Provider)
 	}
@@ -243,7 +240,7 @@ func TestDefaultGetUser_EmptyUSER_FallsThroughToOSUser(t *testing.T) {
 	}
 }
 
-// --- NotFoundError: Error() format + Unwrap() ---
+// --- NotFoundError: Error() format ---
 
 func TestNotFoundError_Error_ShortSingleLine(t *testing.T) {
 	nfe := &NotFoundError{
@@ -260,16 +257,6 @@ func TestNotFoundError_Error_ShortSingleLine(t *testing.T) {
 	}
 	if !strings.Contains(msg, "alice") {
 		t.Errorf("expected message to contain account %q, got: %q", "alice", msg)
-	}
-}
-
-func TestNotFoundError_Unwrap_ReturnsSentinel(t *testing.T) {
-	nfe := &NotFoundError{Provider: "asana", Service: "devora-asana", Account: "alice"}
-	if !errors.Is(nfe, ErrNotFound) {
-		t.Fatalf("expected errors.Is(nfe, ErrNotFound) to be true")
-	}
-	if nfe.Unwrap() != ErrNotFound {
-		t.Fatalf("expected Unwrap() to return ErrNotFound, got: %v", nfe.Unwrap())
 	}
 }
 
