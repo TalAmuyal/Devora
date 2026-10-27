@@ -187,7 +187,7 @@ func GenerateBranchName(prefix, taskName string) string {
 	return result
 }
 
-//  Used to check whether taskName is entirely non-ASCII-alphanumeric
+// Used to check whether taskName is entirely non-ASCII-alphanumeric
 func slugify(s string) string {
 	lower := strings.ToLower(s)
 	replaced := nonAlphaNum.ReplaceAllString(lower, "-")

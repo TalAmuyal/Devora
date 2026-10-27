@@ -138,9 +138,9 @@ func verifyRowSummary(r RepoVerifyResult) (bool, string) {
 
 // cleanRepoResult is the per-repo outcome of Phase 2.
 type cleanRepoResult struct {
-	Name    string
-	Branch  string // origin/<default> on success; empty on failure
-	Err     error
+	Name   string
+	Branch string // origin/<default> on success; empty on failure
+	Err    error
 }
 
 func runCleanPhase(w io.Writer, wsPath string, repos []string) []cleanRepoResult {

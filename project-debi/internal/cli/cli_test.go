@@ -609,7 +609,7 @@ func TestRun_Util_Help_PrintsUsage(t *testing.T) {
 }
 
 func TestRun_JSONValidate_NoArgs_ReturnsPassthroughError2(t *testing.T) {
-	// Capture stderr since runJSONValidate prints usage there
+	// Capture stderr since runValidate prints usage there
 	oldStderr := os.Stderr
 	_, w, err := os.Pipe()
 	if err != nil {
@@ -735,7 +735,7 @@ func TestRun_JSONValidate_Stdin_ValidJSON(t *testing.T) {
 }
 
 func TestRun_JSONValidate_NonexistentFile_ReturnsPassthroughError2(t *testing.T) {
-	// Capture stderr since runJSONValidate prints the error there
+	// Capture stderr since runValidate prints the error there
 	oldStderr := os.Stderr
 	_, w, err := os.Pipe()
 	if err != nil {
@@ -761,7 +761,7 @@ func TestRun_JSONValidate_NonexistentFile_ReturnsPassthroughError2(t *testing.T)
 }
 
 func TestRun_YAMLValidate_NoArgs_ReturnsPassthroughError2(t *testing.T) {
-	// Capture stderr since runYAMLValidate prints usage there
+	// Capture stderr since runValidate prints usage there
 	oldStderr := os.Stderr
 	_, w, err := os.Pipe()
 	if err != nil {
@@ -887,7 +887,7 @@ func TestRun_YAMLValidate_Stdin_ValidYAML(t *testing.T) {
 }
 
 func TestRun_YAMLValidate_NonexistentFile_ReturnsPassthroughError2(t *testing.T) {
-	// Capture stderr since runYAMLValidate prints the error there
+	// Capture stderr since runValidate prints the error there
 	oldStderr := os.Stderr
 	_, w, err := os.Pipe()
 	if err != nil {
@@ -913,7 +913,7 @@ func TestRun_YAMLValidate_NonexistentFile_ReturnsPassthroughError2(t *testing.T)
 }
 
 func TestRun_TOMLValidate_NoArgs_ReturnsPassthroughError2(t *testing.T) {
-	// Capture stderr since runTOMLValidate prints usage there
+	// Capture stderr since runValidate prints usage there
 	oldStderr := os.Stderr
 	_, w, err := os.Pipe()
 	if err != nil {
@@ -1039,7 +1039,7 @@ func TestRun_TOMLValidate_Stdin_ValidTOML(t *testing.T) {
 }
 
 func TestRun_TOMLValidate_NonexistentFile_ReturnsPassthroughError2(t *testing.T) {
-	// Capture stderr since runTOMLValidate prints the error there
+	// Capture stderr since runValidate prints the error there
 	oldStderr := os.Stderr
 	_, w, err := os.Pipe()
 	if err != nil {

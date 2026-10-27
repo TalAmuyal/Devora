@@ -29,8 +29,8 @@ type fakeTracker struct {
 	completeTaskCalls []string
 }
 
-func (f *fakeTracker) Provider() string                              { return "fake" }
-func (f *fakeTracker) WhoAmI() (string, error)                       { return "", nil }
+func (f *fakeTracker) Provider() string        { return "fake" }
+func (f *fakeTracker) WhoAmI() (string, error) { return "", nil }
 func (f *fakeTracker) CreateTask(tasktracker.CreateTaskRequest) (tasktracker.Task, error) {
 	return tasktracker.Task{}, nil
 }

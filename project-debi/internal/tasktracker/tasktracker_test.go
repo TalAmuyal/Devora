@@ -11,13 +11,13 @@ type fakeTracker struct {
 	provider string
 }
 
-func (f *fakeTracker) Provider() string                               { return f.provider }
-func (f *fakeTracker) WhoAmI() (string, error)                        { return "", nil }
-func (f *fakeTracker) CreateTask(CreateTaskRequest) (Task, error)     { return Task{}, nil }
-func (f *fakeTracker) CompleteTask(string) error                      { return nil }
-func (f *fakeTracker) ParseTaskURL(string) string                     { return "" }
-func (f *fakeTracker) TaskURL(string) string                          { return "" }
-func (f *fakeTracker) PRBodyPrefix(string) string                     { return "" }
+func (f *fakeTracker) Provider() string                           { return f.provider }
+func (f *fakeTracker) WhoAmI() (string, error)                    { return "", nil }
+func (f *fakeTracker) CreateTask(CreateTaskRequest) (Task, error) { return Task{}, nil }
+func (f *fakeTracker) CompleteTask(string) error                  { return nil }
+func (f *fakeTracker) ParseTaskURL(string) string                 { return "" }
+func (f *fakeTracker) TaskURL(string) string                      { return "" }
+func (f *fakeTracker) PRBodyPrefix(string) string                 { return "" }
 
 // withProviderStub replaces the package-level getProvider hook for the
 // duration of the test and restores it on cleanup.

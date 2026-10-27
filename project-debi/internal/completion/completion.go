@@ -47,9 +47,35 @@ func newTemplateData(binaryName string, commands []cmdinfo.Command) templateData
 	}
 	return templateData{
 		BinaryName:     binaryName,
-		Commands:       commands,
+		Commands:       splitCommandFlags(commands),
 		HasSubCommands: hasSubCommands,
 	}
+}
+
+// splitCommandFlags returns a copy of commands with every multi-spelling flag split into one Flag per spelling, since the templates emit each Flag.Name as a single completion word.
+func splitCommandFlags(commands []cmdinfo.Command) []cmdinfo.Command {
+	result := make([]cmdinfo.Command, len(commands))
+	for i, cmd := range commands {
+		cmd.Flags = splitFlags(cmd.Flags)
+		subs := make([]cmdinfo.SubCommand, len(cmd.SubCommands))
+		for j, sub := range cmd.SubCommands {
+			sub.Flags = splitFlags(sub.Flags)
+			subs[j] = sub
+		}
+		cmd.SubCommands = subs
+		result[i] = cmd
+	}
+	return result
+}
+
+func splitFlags(flags []cmdinfo.Flag) []cmdinfo.Flag {
+	var result []cmdinfo.Flag
+	for _, f := range flags {
+		for _, name := range strings.Split(f.Name, ", ") {
+			result = append(result, cmdinfo.Flag{Name: name, Description: f.Description})
+		}
+	}
+	return result
 }
 
 var bashTemplate = template.Must(template.New("bash").Funcs(templateFuncs).Parse(bashScript))

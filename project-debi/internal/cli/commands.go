@@ -66,7 +66,9 @@ var commands = []Command{
 			{Name: "--strict", Description: "Exit with code 1 if any dependency (including optional) is missing"},
 			{Name: "-v", Description: "Show dependency locations"},
 			{Name: "--verbose", Description: "Show dependency locations"},
+			{Name: "--json", Description: "Output the report as JSON (used by Devora's Health Hub)"},
 			{Name: "-p, --profile", Description: "Check a specific profile (defaults to CWD-based resolution)"},
+			{Name: "--profile-path", Description: "Check a specific profile by its root path (overrides --profile)"},
 		},
 	},
 	{

@@ -18,7 +18,7 @@ var (
 )
 
 // ResolveActiveProfile picks the active profile by name and registers it via config.SetActiveProfile.
-// See resolveActiveProfile for the resolution order.
+// See resolveActiveProfileCore for the resolution order.
 //
 // Returns the resolved profile name on success (empty string when nothing matches and the command should fall back to global config).
 func ResolveActiveProfile(explicitProfile string) (string, error) {
@@ -31,7 +31,7 @@ func ResolveActiveProfileByPath(explicitPath string) (string, error) {
 	return resolveActiveProfileCore(explicitPath, "")
 }
 
-// resolveActiveProfile resolves the active profile, stopping at the first hit:
+// resolveActiveProfileCore resolves the active profile, stopping at the first hit:
 //
 //  1. explicitPath != "" — match a registered profile by root path.
 //     No match is a UsageError (the caller asked for a specific profile).
