@@ -1,0 +1,36 @@
+# XcodeGen spec for the thin app target (D17). The generated .xcodeproj is gitignored; run `mise run generate`.
+name: SapphireSpike
+options:
+  bundleIdPrefix: dev.devora
+  deploymentTarget:
+    macOS: "27.0"
+packages:
+  SapphireSpike:
+    path: ..
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    ARCHS: arm64
+targets:
+  SapphireSpike:
+    type: application
+    platform: macOS
+    sources:
+      - path: .
+        excludes: ["project.yml", "*.xcodeproj"]
+    dependencies:
+      - package: SapphireSpike
+        product: AppShell
+    entitlements:
+      path: SapphireSpike.entitlements
+      properties: {}
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.devora.sapphire-spike
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Sapphire Spike
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.developer-tools
+        # Local runs: ad-hoc ("Sign to Run Locally"). Notarization needs a Developer ID identity instead.
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "-"
+        ENABLE_HARDENED_RUNTIME: YES

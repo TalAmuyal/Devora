@@ -1,0 +1,53 @@
+[tools]
+xcodegen = "2.46.0"
+
+[tasks.core]
+description = "Build the Rust core, the UniFFI Swift bindings and SpikeCoreFFI.xcframework"
+run = "./scripts/build-core.sh"
+
+[tasks.generate]
+description = "Generate the thin app target's Xcode project with XcodeGen"
+run = "xcodegen generate --quiet --spec App/project.yml"
+
+[tasks.build]
+description = "Rust -> bindings -> XcodeGen -> xcodebuild (no Xcode UI needed)"
+depends = ["core", "generate"]
+run = """
+set -o pipefail
+xcodebuild -project App/SapphireSpike.xcodeproj -scheme SapphireSpike -configuration Release \
+	-derivedDataPath build/DerivedData -destination 'platform=macOS,arch=arm64' build -quiet
+echo "Built build/DerivedData/Build/Products/Release/SapphireSpike.app"
+"""
+
+[tasks.run]
+description = "Run the spike app (extra args are passed through, e.g. --ui-bench out.jsonl)"
+run = "build/DerivedData/Build/Products/Release/SapphireSpike.app/Contents/MacOS/SapphireSpike"
+
+[tasks.test]
+description = "Run the boundary and store tests"
+depends = ["core"]
+run = "swift test"
+
+[tasks.bench]
+description = "Headless measurements: raw | throughput | rate | panic-infallible"
+depends = ["core"]
+run = "swift run -c release Bench"
+
+[tasks.ui-bench]
+description = "120 Hz UI measurements: one app launch per configuration (keep the window in front)"
+depends = ["build"]
+run = """
+set -e
+OUT="${1:-build/ui-bench.jsonl}"
+rm -f "$OUT"
+APP=build/DerivedData/Build/Products/Release/SapphireSpike.app/Contents/MacOS/SapphireSpike
+for style in callback callbackBatched pull pullBatched; do
+	for batching in perDelivery perFrame; do
+		LABELS="$LABELS $style/$batching"
+	done
+done
+for label in idle $LABELS; do
+	"$APP" --ui-bench "$OUT" --run "$label" >/dev/null 2>&1
+done
+./scripts/summarize-ui-bench.py "$OUT"
+"""

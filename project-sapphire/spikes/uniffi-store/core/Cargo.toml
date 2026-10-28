@@ -1,0 +1,26 @@
+[package]
+name = "sapphire-spike-core"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[lib]
+name = "sapphire_spike_core"
+# staticlib is linked into the app; cdylib only exists so uniffi-bindgen can read the metadata in library mode.
+crate-type = ["staticlib", "cdylib", "lib"]
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "src/bin/uniffi-bindgen.rs"
+
+[dependencies]
+async-channel = "2"
+async-io = "2"
+futures-lite = "2"
+libc = "0.2"
+thiserror = "2"
+uniffi = { version = "=0.32.2", features = ["cli"] }
+
+[profile.release]
+# D19: Judgess is linked in-process, so a Rust panic must unwind into a Swift error rather than abort.
+panic = "unwind"

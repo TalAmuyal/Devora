@@ -1,0 +1,8 @@
+/build/
+/core/target/
+/.build/
+/.swiftpm/
+/Sources/CoreBindings/CoreBindings.swift
+*.xcodeproj/
+DerivedData/
+/App/SapphireSpike.entitlements
