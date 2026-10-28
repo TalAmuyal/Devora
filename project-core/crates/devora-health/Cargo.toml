@@ -1,0 +1,6 @@
+[package]
+name = "devora-health"
+description = "The in-app health check: runs `debi health --json` through a login shell."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true

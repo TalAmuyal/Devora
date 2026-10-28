@@ -1,0 +1,9 @@
+[package]
+name = "devora-pty"
+description = "Terminal sessions on pseudo-terminals."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+portable-pty.workspace = true
