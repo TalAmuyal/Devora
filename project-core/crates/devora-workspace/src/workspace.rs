@@ -82,7 +82,7 @@ fn home_dir() -> Result<PathBuf, String> {
         .map_err(|_| "HOME environment variable not set".to_string())
 }
 
-pub(crate) fn expand_tilde(path: &str) -> Result<String, String> {
+pub fn expand_tilde(path: &str) -> Result<String, String> {
     if path == "~" {
         return Ok(home_dir()?.to_string_lossy().into_owned());
     }
@@ -94,7 +94,7 @@ pub(crate) fn expand_tilde(path: &str) -> Result<String, String> {
     }
 }
 
-pub(crate) fn global_config_path() -> Result<PathBuf, String> {
+pub fn global_config_path() -> Result<PathBuf, String> {
     if let Ok(override_path) = std::env::var("DEVORA_CONFIG_PATH") {
         return Ok(PathBuf::from(override_path));
     }
@@ -127,7 +127,7 @@ fn get_value_by_dot_path<'a>(root: &'a Value, dot_path: &str) -> Option<&'a Valu
     Some(current)
 }
 
-pub(crate) fn list_repo_subdirs(dir: &Path) -> Vec<String> {
+pub fn list_repo_subdirs(dir: &Path) -> Vec<String> {
     let Ok(entries) = fs::read_dir(dir) else {
         return Vec::new();
     };
@@ -1146,7 +1146,7 @@ fn set_or_remove_path(node: &mut Value, keys: &[&str], value: Option<Value>) -> 
     }
 }
 
-pub(crate) fn find_next_workspace_id(workspaces_dir: &Path) -> Result<String, String> {
+pub fn find_next_workspace_id(workspaces_dir: &Path) -> Result<String, String> {
     if !workspaces_dir.exists() {
         return Ok("ws-1".to_string());
     }
@@ -1177,7 +1177,7 @@ pub(crate) fn find_next_workspace_id(workspaces_dir: &Path) -> Result<String, St
     Ok(format!("ws-{next}"))
 }
 
-pub(crate) fn mise_available() -> bool {
+pub fn mise_available() -> bool {
     Command::new("which")
         .arg("mise")
         .output()
@@ -1246,7 +1246,7 @@ fn read_task_title(task_path: &Path) -> Result<String, String> {
     })
 }
 
-pub(crate) fn write_task_json(ws_path: &Path, title: &str) -> Result<(), String> {
+pub fn write_task_json(ws_path: &Path, title: &str) -> Result<(), String> {
     let task = serde_json::json!({
         "uid": Uuid::new_v4().to_string(),
         "title": title,

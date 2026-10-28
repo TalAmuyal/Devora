@@ -531,10 +531,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "devora-core"
+version = "0.1.0"
+dependencies = [
+ "devora-platform",
+ "devora-theme",
+ "devora-workspace",
+]
+
+[[package]]
 name = "devora-ember"
 version = "0.1.0"
 dependencies = [
- "base64 0.22.1",
+ "devora-core",
  "fs2",
  "http-body-util",
  "hyper",
@@ -547,6 +556,25 @@ dependencies = [
  "tauri-plugin-dialog",
  "tempfile",
  "tokio",
+]
+
+[[package]]
+name = "devora-platform"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+]
+
+[[package]]
+name = "devora-theme"
+version = "0.1.0"
+
+[[package]]
+name = "devora-workspace"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
  "uuid",
 ]
 

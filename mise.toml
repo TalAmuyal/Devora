@@ -25,6 +25,7 @@ description = "Clean build artifacts"
 [tasks.test]
 run = """
 set -e
+mise run -C project-core test
 mise run -C project-debi test
 mise run -C project-judgess test
 mise run -C project-status-line test

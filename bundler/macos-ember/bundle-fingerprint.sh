@@ -72,6 +72,7 @@ if [[ ${#INPUTS[@]} -eq 0 ]]; then
 	INPUTS+=(
 		project-ember/src
 		project-ember/src-tauri
+		project-core
 		project-ember/package.json
 		project-ember/package-lock.json
 		project-ember/vite.config.ts
