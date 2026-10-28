@@ -1,0 +1,13 @@
+[package]
+name = "claude-protocol-spike"
+version = "0.0.0"
+edition = "2024"
+publish = false
+description = "Spike 1 (TalAmuyal/Devora#205): drive `claude -p` over stream-json + the control protocol, with Judgess linked in-process. Throwaway."
+
+[dependencies]
+judgess = { path = "../../../project-judgess" }
+serde_json = "1"
+
+[profile.release]
+panic = "unwind"
