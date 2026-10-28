@@ -5,7 +5,7 @@ Throwaway spike for TalAmuyal/Devora#205 (part of TalAmuyal/Devora#204). Not mea
 ## Contents
 
 - `src/main.rs`: a Rust prototype that keeps one `claude -p` process alive over stream-json and links Judgess as a library, answering an in-process `PreToolUse` hook callback.
-- `harness/`: the Python harness used to explore the protocol scenario by scenario (`harness.py`, plus `interrupt_test.py` and `ask_test.py`), and `summarize.py`, which prints a fixture's permission timeline.
+- `harness/`: the Python harness used to explore the protocol scenario by scenario (`harness.py`, plus `interrupt_test.py`, `ask_test.py` and `deny_test.py`), and `summarize.py`, which prints a fixture's permission timeline.
 - `fixtures/`: every line in both directions, recorded against Claude Code 2.1.312 with Haiku. Each line is `{"t": ms, "dir": "in"|"out"|"stderr", "msg": ...}`, and local paths are replaced by `<spike>`, `<home>` and `<project>`. These are the seed for `devora-agent`'s contract tests.
 
 | Fixture | What it shows |
@@ -16,6 +16,7 @@ Throwaway spike for TalAmuyal/Devora#205 (part of TalAmuyal/Devora#204). Not mea
 | `plugin` | Today's Judgess plugin in manual mode, with `--include-hook-events` (`hook_started` / `hook_response`) |
 | `pre`, `pre-auto`, `rust-manual`, `rust-auto` | Judgess as an in-process `PreToolUse` callback: allow skips the classifier, deny returns the redirect, and an abstention falls through to the classifier or the prompt |
 | `ask-auto` | `PreToolUse` → `ask` forces `can_use_tool` even in auto mode |
+| `settings-deny-manual`, `settings-deny-auto` | Settings `deny` and `ask` rules still apply after a `PreToolUse` allow |
 | `runtime`, `runtime-resume` | `set_permission_mode`, `/compact` (`compact_boundary`), then a kill and `--resume` (the conversation survives) |
 | `interrupt` | `interrupt` mid-stream gives a `result` with `subtype: error_during_execution`, `terminal_reason: aborted_streaming` |
 
