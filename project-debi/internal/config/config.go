@@ -368,6 +368,20 @@ func GetBranchPrefix(fallback string) string {
 	return s
 }
 
+// GetPrTitlePrefix resolves "pr.title-prefix" (profile-overridable).
+// Returns "" (no prefix) when the key is unset or not a string.
+func GetPrTitlePrefix() string {
+	val, ok := get("pr.title-prefix")
+	if !ok {
+		return ""
+	}
+	s, ok := val.(string)
+	if !ok {
+		return ""
+	}
+	return s
+}
+
 // GetAutoMergeDefault resolves "pr.auto-merge" (profile-overridable) with the
 // given fallback when the key is unset or not a bool.
 func GetAutoMergeDefault(fallback bool) bool {

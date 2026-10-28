@@ -4,6 +4,7 @@
  *
  * Each field is a labeled row whose control depends on its kind:
  *  - `text`: a [Set | Default] toggle — Set reveals an input (commit with Enter or its Save button; an empty value reverts to Default).
+ *  - `fragment`: like `text`, but the value's surrounding whitespace is kept (it is concatenated verbatim onto other text).
  *  - `bool`: an [On | Off | Default] toggle.
  *  - `enum`: one segment per option (each maps to a stored value or "Default").
  * "Default" removes the key at this scope so it inherits (profile → User Defaults → Devora default); in Default mode the resolved value is shown as a hint unless `showResolved` is false.
@@ -12,7 +13,7 @@
  * DOM: `div.settings-card` (shared chrome) containing `div.config-row`s.
  */
 
-import { createSettingsEditor } from '../settingsEditor';
+import { createSettingsEditor, WhitespaceHandling } from '../settingsEditor';
 import { createSettingsCard } from './SettingsCard';
 import { createSegmentedControl } from './SegmentedControl';
 import { createCommitInput } from './CommitInput';
@@ -29,6 +30,7 @@ interface EnumOption {
 
 export type ConfigFieldKind =
   | { kind: 'text'; placeholder?: string }
+  | { kind: 'fragment'; placeholder?: string }
   | { kind: 'bool' }
   | { kind: 'enum'; options: EnumOption[] };
 
@@ -126,7 +128,7 @@ export function createConfigCard(options: ConfigCardOptions): HTMLElement {
     } else if (field.field.kind === 'enum') {
       renderEnum(field, field.field.options, control);
     } else {
-      renderText(field, field.field.placeholder, control);
+      renderText(field, field.field.placeholder, field.field.kind === 'fragment' ? 'keep' : 'trim', control);
     }
     if (field.note) {
       const note = document.createElement('div');
@@ -176,7 +178,12 @@ export function createConfigCard(options: ConfigCardOptions): HTMLElement {
     if (opts[activeIndex]?.state === 'default') appendResolvedHint(field, control);
   };
 
-  const renderText = (field: ConfigFieldSpec, placeholder: string | undefined, control: HTMLElement): void => {
+  const renderText = (
+    field: ConfigFieldSpec,
+    placeholder: string | undefined,
+    whitespace: WhitespaceHandling,
+    control: HTMLElement,
+  ): void => {
     const stored = editor.settings.stored[field.key];
     const mode: TextMode = editor.hasPendingEntry(field.key)
       ? 'set'
@@ -211,7 +218,8 @@ export function createConfigCard(options: ConfigCardOptions): HTMLElement {
         placeholder,
         value: editor.getDraft(field.key) ?? savedValue,
         savedValue,
-        onCommit: (raw) => editor.commit(field.key, raw),
+        whitespace,
+        onCommit: (raw) => editor.commit(field.key, raw, whitespace),
       });
       value.appendChild(commitInput.root);
       editor.focusOnRender(field.key, commitInput.input);

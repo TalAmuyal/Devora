@@ -6,6 +6,7 @@
  */
 
 import { blurOnEscape } from '../focus';
+import { normalizeCommitValue, WhitespaceHandling } from '../settingsEditor';
 
 export interface CommitInputHandle {
   /** The wrapper holding the input and its Save button; append this where the input should go. */
@@ -20,6 +21,8 @@ export interface CommitInputOptions {
   value: string;
   /** The value currently persisted at this scope ('' when none); the Save button shows only while the input differs from it. */
   savedValue: string;
+  /** Must match what the commit stores, so Save hides exactly when committing would change nothing. */
+  whitespace: WhitespaceHandling;
   /** Persist the input's current text; wired to both Enter and the Save button. */
   onCommit: (raw: string) => void;
 }
@@ -42,8 +45,8 @@ export function createCommitInput(options: CommitInputOptions): CommitInputHandl
   save.setAttribute('aria-label', 'Save');
 
   const syncSave = (): void => {
-    const trimmed = input.value.trim();
-    save.hidden = trimmed === '' || trimmed === options.savedValue;
+    const value = normalizeCommitValue(input.value, options.whitespace);
+    save.hidden = value === '' || value === options.savedValue;
   };
 
   input.addEventListener('keydown', (e) => {

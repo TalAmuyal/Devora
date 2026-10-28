@@ -872,6 +872,8 @@ pub fn write_claude_setting(
 #[derive(Clone, Copy)]
 enum ConfigFieldKind {
     Text,
+    /// Text concatenated verbatim onto other text (e.g. a PR title prefix), so surrounding whitespace is significant and kept.
+    Fragment,
     Bool,
     Enum(&'static [&'static str]),
 }
@@ -910,6 +912,11 @@ const CONFIG_FIELDS: &[ConfigFieldSpec] = &[
         key: "pr.auto-merge",
         kind: ConfigFieldKind::Bool,
         builtin_default: BuiltinDefault::None, // Debi owns the default (and a per-repo tier exists)
+    },
+    ConfigFieldSpec {
+        key: "pr.title-prefix",
+        kind: ConfigFieldKind::Fragment,
+        builtin_default: BuiltinDefault::None, // Debi owns the default (no prefix)
     },
     ConfigFieldSpec {
         key: "feature.branch-prefix",
@@ -960,7 +967,7 @@ fn stored_config_value(cfg: Option<&Value>, spec: &ConfigFieldSpec) -> Option<Va
     let val = get_value_by_dot_path(cfg?, spec.key)?;
     match spec.kind {
         ConfigFieldKind::Bool => val.as_bool().map(Value::Bool),
-        ConfigFieldKind::Text | ConfigFieldKind::Enum(_) => {
+        ConfigFieldKind::Text | ConfigFieldKind::Fragment | ConfigFieldKind::Enum(_) => {
             val.as_str().map(|s| Value::String(s.to_string()))
         }
     }
@@ -1016,7 +1023,7 @@ pub fn read_config_settings(profile_path: Option<&str>) -> Result<ConfigSettings
 }
 
 /// Coerces a UI-supplied string into the field's JSON value, validating the field kind.
-/// An empty value is rejected for `Text` (clear via the `default` state instead) but accepted for `Enum` as the explicit "none" choice (e.g. disabling a tracker inherited from a higher scope).
+/// An empty (or whitespace-only) value is rejected for `Text` and `Fragment` (clear via the `default` state instead) but accepted for `Enum` as the explicit "none" choice (e.g. disabling a tracker inherited from a higher scope).
 fn coerce_config_value(spec: &ConfigFieldSpec, value: Option<&str>) -> Result<Value, String> {
     let raw = value.unwrap_or("");
     match spec.kind {
@@ -1025,12 +1032,16 @@ fn coerce_config_value(spec: &ConfigFieldSpec, value: Option<&str>) -> Result<Va
             "false" => Ok(Value::Bool(false)),
             other => Err(format!("invalid boolean for {}: {other}", spec.key)),
         },
-        ConfigFieldKind::Text => {
+        ConfigFieldKind::Text | ConfigFieldKind::Fragment => {
             let trimmed = raw.trim();
             if trimmed.is_empty() {
                 return Err(format!("a non-empty value is required to set {}", spec.key));
             }
-            Ok(Value::String(trimmed.to_string()))
+            let stored = match spec.kind {
+                ConfigFieldKind::Fragment => raw,
+                _ => trimmed,
+            };
+            Ok(Value::String(stored.to_string()))
         }
         ConfigFieldKind::Enum(allowed) => {
             if raw.is_empty() {
@@ -1860,6 +1871,13 @@ mod tests {
         assert_eq!(s.stored.get("terminal.git-shortcuts"), Some(&Value::Bool(false)));
         assert_eq!(s.resolved.get("terminal.git-shortcuts"), Some(&Value::Bool(false)));
 
+        // A text value is trimmed; a fragment keeps its whitespace.
+        write_config_setting(None, "terminal.default-app", "value", Some(" nvim ")).unwrap();
+        write_config_setting(None, "pr.title-prefix", "value", Some("[ENG] ")).unwrap();
+        let cfg = read_json_file(&global_config).unwrap();
+        assert_eq!(cfg["terminal"]["default-app"], Value::String("nvim".into()));
+        assert_eq!(cfg["pr"]["title-prefix"], Value::String("[ENG] ".into()));
+
         // 3. Profile overrides user per key; profile-absent keys fall through to user.
         let profile_dir = tmp.path().join("profile");
         fs::create_dir_all(&profile_dir).unwrap();
@@ -1891,6 +1909,7 @@ mod tests {
         write_config_setting(Some(&profile_path), "task-tracker.provider", "default", None).unwrap();
         assert!(read_json_file(&profile_dir.join("config.json")).unwrap().get("task-tracker").is_none());
         assert!(write_config_setting(None, "feature.branch-prefix", "value", Some("   ")).is_err());
+        assert!(write_config_setting(None, "pr.title-prefix", "value", Some("   ")).is_err());
         assert!(write_config_setting(None, "unknown.key", "value", Some("x")).is_err());
         assert!(write_config_setting(None, "pr.auto-merge", "bogus", None).is_err());
         assert!(write_config_setting(None, "pr.auto-merge", "value", Some("yes")).is_err());

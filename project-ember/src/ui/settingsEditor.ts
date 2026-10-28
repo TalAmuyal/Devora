@@ -29,13 +29,22 @@ export interface SettingsEditor<S> {
 
   getDraft(key: string): string | undefined;
   setDraft(key: string, value: string): void;
-  /** Commit `key`'s reveal-input: a blank value reverts to Default (clearing the draft); otherwise the trimmed value is stored, keeping focus through the reload. */
-  commit(key: string, raw: string): void;
+  /** Commit `key`'s reveal-input: a blank value reverts to Default (clearing the draft); otherwise the value (trimmed per `whitespace`) is stored, keeping focus through the reload. */
+  commit(key: string, raw: string, whitespace: WhitespaceHandling): void;
 
   /** Grab focus for `key`'s input on the next render. */
   requestFocus(key: string): void;
   /** Focus `input` iff the focus was requested for `key`; the request is one-shot. */
   focusOnRender(key: string, input: HTMLInputElement): void;
+}
+
+/** How a committed text value's surrounding whitespace is treated: `keep` is for fragments concatenated verbatim onto other text (e.g. a PR title prefix). */
+export type WhitespaceHandling = 'trim' | 'keep';
+
+/** The value as it would be stored, or `''` when it is blank (whitespace-only counts as blank either way). */
+export function normalizeCommitValue(raw: string, whitespace: WhitespaceHandling): string {
+  if (raw.trim() === '') return '';
+  return whitespace === 'trim' ? raw.trim() : raw;
 }
 
 export interface SettingsEditorConfig<S> {
@@ -110,8 +119,8 @@ export function createSettingsEditor<S>(config: SettingsEditorConfig<S>): Settin
     setDraft: (key, value) => {
       drafts.set(key, value);
     },
-    commit: (key, raw) => {
-      const value = raw.trim();
+    commit: (key, raw, whitespace) => {
+      const value = normalizeCommitValue(raw, whitespace);
       if (value === '') {
         pendingEntry.delete(key);
         drafts.delete(key);

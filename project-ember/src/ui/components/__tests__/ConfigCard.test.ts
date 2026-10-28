@@ -167,6 +167,17 @@ describe('createConfigCard', () => {
     expect(lastSetCall()).toMatchObject({ key: 'terminal.default-app', state: 'default' });
   });
 
+  it('fragment field: commits the value with its surrounding whitespace kept', async () => {
+    const card = await mountCard([{ key: 'pr.title-prefix', label: 'Title prefix', field: { kind: 'fragment' } }]);
+    clickSegment(row(card, 0), 'Set');
+    await flush();
+    const input = row(card, 0).querySelector<HTMLInputElement>('.config-input')!;
+    input.value = '[ENG] ';
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await flush();
+    expect(lastSetCall()).toMatchObject({ key: 'pr.title-prefix', state: 'value', value: '[ENG] ' });
+  });
+
   it('enum field: selecting an option stores its value', async () => {
     const card = await mountCard();
     clickSegment(row(card, 3), 'Asana');

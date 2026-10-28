@@ -162,7 +162,7 @@ describe('createSettingsEditor', () => {
 
   it('commit of a value stores the trimmed draft and persists it', async () => {
     const { editor } = makeEditor();
-    editor.commit('a', '  hi  ');
+    editor.commit('a', '  hi  ', 'trim');
     await flush();
     expect(editor.getDraft('a')).toBe('hi');
     expect(invokeMock).toHaveBeenCalledWith('set_x', {
@@ -173,10 +173,23 @@ describe('createSettingsEditor', () => {
     });
   });
 
+  it('commit with kept whitespace stores the value verbatim', async () => {
+    const { editor } = makeEditor();
+    editor.commit('a', '[ENG] ', 'keep');
+    await flush();
+    expect(editor.getDraft('a')).toBe('[ENG] ');
+    expect(invokeMock).toHaveBeenCalledWith('set_x', {
+      profilePath: null,
+      key: 'a',
+      state: 'value',
+      value: '[ENG] ',
+    });
+  });
+
   it('commit of an empty value clears the entry and draft and reverts to Default', async () => {
     const { editor } = makeEditor();
     editor.beginEntry('a', 'seed');
-    editor.commit('a', '   ');
+    editor.commit('a', '   ', 'keep');
     await flush();
     expect(editor.hasPendingEntry('a')).toBe(false);
     expect(editor.getDraft('a')).toBeUndefined();
