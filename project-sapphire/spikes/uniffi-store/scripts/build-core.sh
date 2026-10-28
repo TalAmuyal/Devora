@@ -14,8 +14,9 @@ LIB_DIR="$CORE_DIR/target/$TARGET/$PROFILE"
 
 GEN_DIR="$BUILD_DIR/generated"
 rm -rf "$GEN_DIR"
-cargo run --manifest-path "$CORE_DIR/Cargo.toml" --quiet --bin uniffi-bindgen -- \
-	generate --library "$LIB_DIR/lib$LIB.dylib" --language swift --out-dir "$GEN_DIR"
+# Library mode runs `cargo metadata` in the working directory, so it must run inside the crate.
+(cd "$CORE_DIR" && cargo run --quiet --bin uniffi-bindgen -- \
+	generate --library "$LIB_DIR/lib$LIB.dylib" --language swift --out-dir "$GEN_DIR")
 
 HEADERS_DIR="$BUILD_DIR/headers"
 rm -rf "$HEADERS_DIR"
