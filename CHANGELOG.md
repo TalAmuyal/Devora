@@ -14,6 +14,10 @@ Types of changes:
 
 ## Unreleased
 
+### Added
+
+- `mise mac-install` accepts `-p/--path` to choose the install directory and `-s/--suffix` to install as `Devora-<suffix>.app`
+
 ### Changed
 
 - Replaced the Judge permission hook with Judgess, a Rust rewrite built on a real shell parser
