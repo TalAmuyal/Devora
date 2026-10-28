@@ -77,6 +77,18 @@ describe('createCommitInput', () => {
     expect(event.defaultPrevented).toBe(true);
   });
 
+  it('commits the text normalized per the whitespace handling', () => {
+    const commitWith = (value: string, whitespace: 'trim' | 'keep'): unknown => {
+      const onCommit = vi.fn();
+      const { input } = mount({ value, savedValue: '', whitespace, onCommit });
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      return onCommit.mock.calls[0][0];
+    };
+    expect(commitWith(' [ENG] ', 'trim')).toBe('[ENG]');
+    expect(commitWith(' [ENG] ', 'keep')).toBe(' [ENG] ');
+    expect(commitWith('   ', 'keep')).toBe('');
+  });
+
   it('blurs the input on Escape', () => {
     const { input } = mount({ value: 'nvim', savedValue: 'nvim', whitespace: 'trim', onCommit: vi.fn() });
     input.focus();

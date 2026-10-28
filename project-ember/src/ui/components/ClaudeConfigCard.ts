@@ -224,7 +224,7 @@ export function createClaudeConfigCard(options: ClaudeConfigCardOptions): HTMLEl
       value: editor.getDraft(row.key) ?? '',
       savedValue,
       whitespace: 'trim',
-      onCommit: (raw) => editor.commit(row.key, raw, 'trim'),
+      onCommit: (value) => editor.commit(row.key, value),
     });
     wrap.appendChild(commitInput.root);
 
@@ -236,7 +236,7 @@ export function createClaudeConfigCard(options: ClaudeConfigCardOptions): HTMLEl
       chip.textContent = suggestion;
       chip.addEventListener('click', () => {
         chip.blur();
-        editor.commit(row.key, suggestion, 'trim');
+        editor.commit(row.key, suggestion);
       });
       chips.appendChild(chip);
     }

@@ -13,10 +13,10 @@
  * DOM: `div.settings-card` (shared chrome) containing `div.config-row`s.
  */
 
-import { createSettingsEditor, WhitespaceHandling } from '../settingsEditor';
+import { createSettingsEditor } from '../settingsEditor';
 import { createSettingsCard } from './SettingsCard';
 import { createSegmentedControl } from './SegmentedControl';
-import { createCommitInput } from './CommitInput';
+import { createCommitInput, WhitespaceHandling } from './CommitInput';
 
 /** A stored config value (a string, or a bool for `bool` fields). */
 export type ConfigValue = string | boolean;
@@ -219,7 +219,7 @@ export function createConfigCard(options: ConfigCardOptions): HTMLElement {
         value: editor.getDraft(field.key) ?? savedValue,
         savedValue,
         whitespace,
-        onCommit: (raw) => editor.commit(field.key, raw, whitespace),
+        onCommit: (value) => editor.commit(field.key, value),
       });
       value.appendChild(commitInput.root);
       editor.focusOnRender(field.key, commitInput.input);
