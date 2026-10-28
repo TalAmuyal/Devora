@@ -40,6 +40,7 @@ Types of changes:
 
 ### Fixed
 
+- The app's display name (`CFBundleDisplayName`) is now "Devora" instead of the internal "Devora-Ember"
 - Permission-hook denials now reach the agent (Judge's denials were silently ignored by Claude Code)
 - Commands chained with a newline or `&`, or hidden in a quoted `$(…)`, are no longer auto-approved
 - The app now loads its bundled color theme (it previously looked for the theme at a build-machine path)

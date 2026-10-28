@@ -209,6 +209,7 @@ plutil -replace CFBundleVersion -string "$VERSION" "$INFO_PLIST"
 # The published product is "Devora": this build takes over the "Devora" display name and bundle id, while the internal Tauri productName/identifier stay "Devora-Ember".
 # macOS Launch Services and TCC key off these plist values, so a user upgrading from the previous /Applications/Devora.app gets an in-place replacement at the same id — TCC permissions carry over and the shared ~/.config/devora config (which is independent of the bundle id) is untouched.
 plutil -replace CFBundleName -string "Devora" "$INFO_PLIST"
+plutil -replace CFBundleDisplayName -string "Devora" "$INFO_PLIST"
 plutil -replace CFBundleIdentifier -string "com.devora-org.devora" "$INFO_PLIST"
 
 FINGERPRINT="$("$SCRIPT_DIR/bundle-fingerprint.sh")"
