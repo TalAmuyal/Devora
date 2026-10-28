@@ -280,7 +280,13 @@ mod tests {
             )
             .expect("should create session");
 
-        std::thread::sleep(std::time::Duration::from_millis(500));
+        // A login shell's startup time varies by machine (profile scripts), so wait for the output rather than for a fixed time.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while std::time::Instant::now() < deadline
+            && !String::from_utf8_lossy(&collected.lock().unwrap()).contains("EMBER_TEST_OUTPUT")
+        {
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
 
         let output = collected.lock().unwrap();
         let output_str = String::from_utf8_lossy(&output);
