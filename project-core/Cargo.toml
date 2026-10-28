@@ -14,6 +14,7 @@ devora-pty = { path = "crates/devora-pty" }
 devora-theme = { path = "crates/devora-theme" }
 devora-workspace = { path = "crates/devora-workspace" }
 base64 = "0.22"
+fs2 = "0.4"
 portable-pty = "0.8"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

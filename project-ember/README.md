@@ -93,14 +93,14 @@ When Claude Code's behavior changes or new `@real-claude` scenarios are added:
 
 | Module | Role |
 |--------|------|
-| `workspace_creation.rs` | Workspace creation and repo addition, with progress events and cancellation |
+| `workspace_creation.rs` | Entry points for workspace creation, repo addition and cloning: runs the core's work and reports its outcome to the frontend |
 | `commands.rs` | Tauri command handlers (IPC bridge between frontend and Rust) |
 | `theme.rs` | Serves the bundled theme, parsed by the core's `devora-theme` |
 | `ipc_server.rs` | Lightweight HTTP server for external tools (e.g., `debi preview`) to open preview panes |
 | `logging.rs` | Logging setup |
 | `lib.rs` | App setup and command registration |
 
-Non-UI logic (workspaces, profiles, settings, credentials, theme parsing, terminal sessions, the health check) lives in the shared Rust core, `project-core/` (ADR-007), which Ember reaches through the `devora-core` crate.
+Non-UI logic (workspaces, profiles, settings, credentials, theme parsing, terminal sessions, the health check, workspace creation) lives in the shared Rust core, `project-core/` (ADR-007), which Ember reaches through the `devora-core` crate.
 
 ### TypeScript Frontend (`src/`)
 
