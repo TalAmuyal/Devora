@@ -29,8 +29,8 @@ export interface SettingsEditor<S> {
 
   getDraft(key: string): string | undefined;
   setDraft(key: string, value: string): void;
-  /** Commit `key`'s reveal-input: a blank value reverts to Default (clearing the draft); otherwise the trimmed value is stored, keeping focus through the reload. */
-  commit(key: string, raw: string): void;
+  /** Commit `key`'s reveal-input with an already-normalized value: `''` reverts to Default (clearing the draft); otherwise the value is stored as given, keeping focus through the reload. */
+  commit(key: string, value: string): void;
 
   /** Grab focus for `key`'s input on the next render. */
   requestFocus(key: string): void;
@@ -110,8 +110,7 @@ export function createSettingsEditor<S>(config: SettingsEditorConfig<S>): Settin
     setDraft: (key, value) => {
       drafts.set(key, value);
     },
-    commit: (key, raw) => {
-      const value = raw.trim();
+    commit: (key, value) => {
       if (value === '') {
         pendingEntry.delete(key);
         drafts.delete(key);

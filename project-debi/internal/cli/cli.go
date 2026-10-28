@@ -196,6 +196,9 @@ Auto-merge default comes from config (pr.auto-merge, profile-overridable,
 defaults to on when unset). Use --blocked to disable or --auto-merge to
 force-enable for this PR only.
 
+The PR title is the message prefixed verbatim by pr.title-prefix
+(profile-overridable, no prefix when unset).
+
 Flags:
   -m, --message <msg>    Commit message, task title, and PR title (required)
   -d, --description <s>  PR body description

@@ -54,6 +54,12 @@ const PR_FIELDS: ConfigFieldSpec[] = [
     note: 'Per-repo overrides via `debi pr auto-merge` still apply.',
   },
   {
+    key: 'pr.title-prefix',
+    label: 'Title prefix',
+    hint: 'prepended as-is',
+    field: { kind: 'fragment', placeholder: 'e.g. "[ENG] " (include any trailing space)' },
+  },
+  {
     key: 'feature.branch-prefix',
     label: 'Branch prefix',
     hint: 'feature-branch name',

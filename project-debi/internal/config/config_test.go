@@ -674,6 +674,52 @@ func TestGetBranchPrefix_WrongType_ReturnsFallback(t *testing.T) {
 	}
 }
 
+func TestGetPrTitlePrefix_ProfileOverridesGlobal(t *testing.T) {
+	tmpDir := setupTest(t)
+	writeJSON(t, filepath.Join(tmpDir, "config.json"), map[string]any{
+		"pr": map[string]any{
+			"title-prefix": "[GLOBAL] ",
+		},
+	})
+	resetGlobalConfigCache()
+
+	if got := GetPrTitlePrefix(); got != "[GLOBAL] " {
+		t.Fatalf("expected global \"[GLOBAL] \" before a profile is active, got %q", got)
+	}
+
+	profileDir := filepath.Join(tmpDir, "profile")
+	profileCfg := map[string]any{
+		"name": "p",
+		"pr": map[string]any{
+			"title-prefix": "[WORK] ",
+		},
+	}
+	createProfile(t, profileDir, profileCfg)
+	SetActiveProfile(&Profile{Name: "p", RootPath: profileDir, Config: profileCfg})
+
+	if got := GetPrTitlePrefix(); got != "[WORK] " {
+		t.Fatalf("expected \"[WORK] \" (profile wins), got %q", got)
+	}
+}
+
+func TestGetPrTitlePrefix_UnsetOrWrongType_ReturnsEmpty(t *testing.T) {
+	tmpDir := setupTest(t)
+	if got := GetPrTitlePrefix(); got != "" {
+		t.Fatalf("expected empty prefix when unset, got %q", got)
+	}
+
+	writeJSON(t, filepath.Join(tmpDir, "config.json"), map[string]any{
+		"pr": map[string]any{
+			"title-prefix": 42,
+		},
+	})
+	resetGlobalConfigCache()
+
+	if got := GetPrTitlePrefix(); got != "" {
+		t.Fatalf("expected empty prefix for wrong type, got %q", got)
+	}
+}
+
 func TestGetAutoMergeDefault_Global(t *testing.T) {
 	tmpDir := setupTest(t)
 	writeJSON(t, filepath.Join(tmpDir, "config.json"), map[string]any{

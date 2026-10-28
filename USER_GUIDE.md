@@ -172,7 +172,7 @@ The Settings Hub manages:
 
 - **Claude Launch Settings** — the default model, the model for each tier, the effort level, and the permission mode (see [The `ccc` Command](#the-ccc-command) below)
 - **Terminal & Session** — the per-session app launched instead of a bare shell (e.g. `nvim`), whether Devora exposes Debi's [git shortcuts](#git-shortcuts), and the prepare command run after each worktree is created
-- **Pull Requests** — auto-merge and the feature-branch prefix used by `debi pr submit`
+- **Pull Requests** — auto-merge, the PR title prefix (prepended verbatim, so include any trailing space), and the feature-branch prefix used by `debi pr submit`
 - **Task Tracker** — the provider and, for Asana, the workspace/project/tag/section IDs plus the API token (stored in your OS keychain, shared with `debi`)
 
 ## The `ccc` Command

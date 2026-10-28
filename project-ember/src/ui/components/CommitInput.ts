@@ -14,14 +14,24 @@ export interface CommitInputHandle {
   readonly input: HTMLInputElement;
 }
 
+/** How the typed text's surrounding whitespace is treated: `keep` is for fragments concatenated verbatim onto other text (e.g. a PR title prefix). */
+export type WhitespaceHandling = 'trim' | 'keep';
+
+/** The text as it would be stored, or `''` when it is blank (whitespace-only counts as blank either way). */
+function normalize(raw: string, whitespace: WhitespaceHandling): string {
+  if (raw.trim() === '') return '';
+  return whitespace === 'trim' ? raw.trim() : raw;
+}
+
 export interface CommitInputOptions {
   placeholder?: string;
   /** Initial text shown in the input. */
   value: string;
   /** The value currently persisted at this scope ('' when none); the Save button shows only while the input differs from it. */
   savedValue: string;
-  /** Persist the input's current text; wired to both Enter and the Save button. */
-  onCommit: (raw: string) => void;
+  whitespace: WhitespaceHandling;
+  /** Persist the input's text, normalized per `whitespace` (`''` when blank); wired to both Enter and the Save button. */
+  onCommit: (value: string) => void;
 }
 
 export function createCommitInput(options: CommitInputOptions): CommitInputHandle {
@@ -42,15 +52,16 @@ export function createCommitInput(options: CommitInputOptions): CommitInputHandl
   save.setAttribute('aria-label', 'Save');
 
   const syncSave = (): void => {
-    const trimmed = input.value.trim();
-    save.hidden = trimmed === '' || trimmed === options.savedValue;
+    const value = normalize(input.value, options.whitespace);
+    save.hidden = value === '' || value === options.savedValue;
   };
+  const commit = (): void => options.onCommit(normalize(input.value, options.whitespace));
 
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
       e.stopPropagation();
-      options.onCommit(input.value);
+      commit();
     }
   });
   input.addEventListener('input', syncSave);
@@ -58,7 +69,7 @@ export function createCommitInput(options: CommitInputOptions): CommitInputHandl
 
   // Commit without first pulling focus off the input, so a save-by-click leaves focus where the user expects.
   save.addEventListener('mousedown', (e) => e.preventDefault());
-  save.addEventListener('click', () => options.onCommit(input.value));
+  save.addEventListener('click', commit);
 
   syncSave();
 

@@ -223,7 +223,8 @@ export function createClaudeConfigCard(options: ClaudeConfigCardOptions): HTMLEl
       placeholder: row.placeholder ?? '',
       value: editor.getDraft(row.key) ?? '',
       savedValue,
-      onCommit: (raw) => editor.commit(row.key, raw),
+      whitespace: 'trim',
+      onCommit: (value) => editor.commit(row.key, value),
     });
     wrap.appendChild(commitInput.root);
 

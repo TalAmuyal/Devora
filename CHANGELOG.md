@@ -17,6 +17,7 @@ Types of changes:
 ### Added
 
 - `mise mac-install` accepts `-p/--path` to choose the install directory and `-s/--suffix` to install as `Devora-<suffix>.app`
+- A configurable PR title prefix (`pr.title-prefix`, per-profile with a global fallback) that `debi pr submit` prepends verbatim to the PR title, editable in the Settings Hub's Pull Requests card
 
 ### Changed
 

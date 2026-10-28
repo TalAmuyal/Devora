@@ -70,6 +70,7 @@ var (
 	newTracker = tasktracker.NewForActiveProfile
 
 	getBranchPrefix            = config.GetBranchPrefix
+	getPrTitlePrefix           = config.GetPrTitlePrefix
 	getRepoAutoMerge           = defaultGetRepoAutoMerge
 	getAutoMergeDefaultForRepo = config.GetAutoMergeDefaultForRepo
 	openBrowser                = defaultOpenBrowser
@@ -274,7 +275,8 @@ func Run(w io.Writer, opts Options) error {
 
 	// Create the PR.
 	// Distinguish "already exists" because the error is user-actionable and we want to surface the existing URL.
-	prURL, err := createGHPR(opts.Message, body, opts.Draft)
+	title := getPrTitlePrefix() + opts.Message
+	prURL, err := createGHPR(title, body, opts.Draft)
 	if err != nil {
 		var exists *gh.PRAlreadyExistsError
 		if errors.As(err, &exists) {
@@ -307,7 +309,7 @@ func Run(w io.Writer, opts Options) error {
 	// Emit output.
 	switch {
 	case opts.JSONOutput:
-		return emitJSON(w, opts, prURL, branchName, repoInfo.DefaultBranch, task)
+		return emitJSON(w, opts, title, prURL, branchName, repoInfo.DefaultBranch, task)
 	case opts.Quiet:
 		// Plain URL, no prefix, no styling — easy to pipe to jq/xargs/etc.
 		fmt.Fprintln(w, prURL)
@@ -340,14 +342,14 @@ func Run(w io.Writer, opts Options) error {
 }
 
 // emitJSON writes the JSONOutput struct to w, with the PR number and title from getGHPRView.
-// If that lookup fails, it silently falls back to the values already known (opts.Message as title, no number): the PR is already created, so a cosmetic lookup failure must not fail the command.
-func emitJSON(w io.Writer, opts Options, prURL, branchName, baseBranch string, task tasktracker.Task) error {
+// If that lookup fails, it silently falls back to the values already known (the submitted title, no number): the PR is already created, so a cosmetic lookup failure must not fail the command.
+func emitJSON(w io.Writer, opts Options, title, prURL, branchName, baseBranch string, task tasktracker.Task) error {
 	out := JSONOutput{
 		URL:        prURL,
 		Branch:     branchName,
 		BaseBranch: baseBranch,
 		Draft:      opts.Draft,
-		Title:      opts.Message,
+		Title:      title,
 		TaskURL:    task.URL,
 	}
 

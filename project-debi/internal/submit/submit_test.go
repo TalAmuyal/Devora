@@ -84,6 +84,7 @@ type stubs struct {
 	newTrackerReturn         tasktracker.Tracker
 	newTrackerErr            error
 	branchPrefix             string
+	prTitlePrefix            string
 	autoMergeDefaultOverride *bool
 	repoAutoMerge            *bool
 	repoAutoMergeErr         error
@@ -108,6 +109,7 @@ func stubSubmitDeps(t *testing.T) *stubs {
 		enableGHAutoMerge          func(string, ...process.ExecOption) error
 		newTracker                 func() (tasktracker.Tracker, error)
 		getBranchPrefix            func(string) string
+		getPrTitlePrefix           func() string
 		getRepoAutoMerge           func() (*bool, error)
 		getAutoMergeDefaultForRepo func(bool, func() (*bool, error)) bool
 		openBrowser                func(string) error
@@ -124,6 +126,7 @@ func stubSubmitDeps(t *testing.T) *stubs {
 		enableGHAutoMerge:          enableGHAutoMerge,
 		newTracker:                 newTracker,
 		getBranchPrefix:            getBranchPrefix,
+		getPrTitlePrefix:           getPrTitlePrefix,
 		getRepoAutoMerge:           getRepoAutoMerge,
 		getAutoMergeDefaultForRepo: getAutoMergeDefaultForRepo,
 		openBrowser:                openBrowser,
@@ -142,6 +145,7 @@ func stubSubmitDeps(t *testing.T) *stubs {
 		enableGHAutoMerge = orig.enableGHAutoMerge
 		newTracker = orig.newTracker
 		getBranchPrefix = orig.getBranchPrefix
+		getPrTitlePrefix = orig.getPrTitlePrefix
 		getRepoAutoMerge = orig.getRepoAutoMerge
 		getAutoMergeDefaultForRepo = orig.getAutoMergeDefaultForRepo
 		openBrowser = orig.openBrowser
@@ -207,6 +211,9 @@ func stubSubmitDeps(t *testing.T) *stubs {
 			return fallback
 		}
 		return s.branchPrefix
+	}
+	getPrTitlePrefix = func() string {
+		return s.prTitlePrefix
 	}
 	getRepoAutoMerge = func() (*bool, error) {
 		return s.repoAutoMerge, s.repoAutoMergeErr
@@ -972,6 +979,41 @@ func TestRun_CallsBranchPrefixWithFeatureFallback(t *testing.T) {
 	}
 	if s.generatedBranchInput.msg != "Fix" {
 		t.Fatalf("expected GenerateBranchName called with message 'Fix', got %q", s.generatedBranchInput.msg)
+	}
+}
+
+func TestRun_PrTitlePrefix_AppliedToPRTitleOnly(t *testing.T) {
+	s := stubSubmitDeps(t)
+	s.prTitlePrefix = "[ENG-1] "
+	tracker := &fakeTracker{
+		createTaskReturn: tasktracker.Task{ID: "t1", URL: "https://example/t1"},
+	}
+	s.newTrackerReturn = tracker
+	s.getGHPRViewErr = errors.New("view failed") // JSON title falls back to the submitted title
+
+	var buf bytes.Buffer
+	err := Run(&buf, Options{Message: "Fix bug", JSONOutput: true})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(s.createPRCalls) != 1 || s.createPRCalls[0].title != "[ENG-1] Fix bug" {
+		t.Fatalf("expected PR title '[ENG-1] Fix bug', got %+v", s.createPRCalls)
+	}
+	var out JSONOutput
+	if err := json.Unmarshal(buf.Bytes(), &out); err != nil {
+		t.Fatalf("expected valid JSON output, got err: %v\n%s", err, buf.String())
+	}
+	if out.Title != "[ENG-1] Fix bug" {
+		t.Fatalf("expected JSON title '[ENG-1] Fix bug', got %q", out.Title)
+	}
+	if len(s.addCommitMessages) != 1 || s.addCommitMessages[0] != "Fix bug" {
+		t.Fatalf("expected unprefixed commit message 'Fix bug', got %v", s.addCommitMessages)
+	}
+	if s.generatedBranchInput.msg != "Fix bug" {
+		t.Fatalf("expected branch name generated from unprefixed 'Fix bug', got %q", s.generatedBranchInput.msg)
+	}
+	if len(tracker.createTaskCalls) != 1 || tracker.createTaskCalls[0].Title != "Fix bug" {
+		t.Fatalf("expected unprefixed tracker task title 'Fix bug', got %+v", tracker.createTaskCalls)
 	}
 }
 
