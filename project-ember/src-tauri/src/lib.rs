@@ -53,16 +53,21 @@ pub fn run() {
                 .first()
                 .expect("tauri.conf.json must have at least one window config")
                 .clone();
-            let version = app
-                .path()
-                .resource_dir()
-                .ok()
-                .map(|dir| dir.join("VERSION"))
-                .and_then(|path| std::fs::read_to_string(path).ok())
-                .map(|v| v.trim().to_string())
+            let read_resource = |name: &str| {
+                app.path()
+                    .resource_dir()
+                    .ok()
+                    .and_then(|dir| std::fs::read_to_string(dir.join(name)).ok())
+                    .map(|v| v.trim().to_string())
+            };
+            let version = read_resource("VERSION")
                 .unwrap_or_else(|| app.package_info().version.to_string());
 
-            let title = format!("Devora {version}");
+            // INSTALL_SUFFIX is written by `mise mac-install --suffix` to tell side-by-side installs apart.
+            let title = match read_resource("INSTALL_SUFFIX") {
+                Some(suffix) => format!("Devora {version} [{suffix}]"),
+                None => format!("Devora {version}"),
+            };
 
             WebviewWindowBuilder::from_config(&handle, &window_config)
                 .expect("failed to create WebviewWindowBuilder from config")

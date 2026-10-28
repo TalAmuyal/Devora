@@ -16,7 +16,7 @@ Types of changes:
 
 ### Added
 
-- `mise mac-install` accepts `-p/--path` to choose the install directory and `-s/--suffix` to install as `Devora-<suffix>.app`
+- `mise mac-install` accepts `-p/--path` to choose the install directory and `-s/--suffix` to install as `Devora-<suffix>.app`, with the suffix also shown in the window title and as the app name in the menu bar, Dock, and Cmd+Tab
 - A configurable PR title prefix (`pr.title-prefix`, per-profile with a global fallback) that `debi pr submit` prepends verbatim to the PR title, editable in the Settings Hub's Pull Requests card
 
 ### Changed
@@ -32,6 +32,7 @@ Types of changes:
 
 ### Removed
 
+- `mise mac-install --dev` (use `--suffix dev` instead)
 - `uv` is no longer bundled with Devora or required by `debi health`
 - Removed the remnants of Devora OG (Kitty + Glimpse-TTY), including the `debi workspace-ui` command
 - Removed the Crit integration (the plan-review overlay opened when Claude Code exits plan mode)
