@@ -39,8 +39,6 @@ pub(crate) const KNOWN_PREFIXES: &[(&[&str], RuleId)] = &[
     (&["chmod"], RuleId::Chmod),
     (&["sudo"], RuleId::PrivilegeEscalation),
     (&["doas"], RuleId::PrivilegeEscalation),
-    (&["git", "checkout"], RuleId::IrreversibleGitCheckout),
-    (&["git", "reset"], RuleId::IrreversibleGitReset),
 ];
 
 pub(crate) const APPROVED_COMMANDS: &[&str] = &[
@@ -86,6 +84,7 @@ pub(crate) const APPROVED_COMMANDS: &[&str] = &[
     "curl",
     "wget",
     "diff",
+    "bc",
 ];
 
 pub(crate) const APPROVED_PREFIXES: &[&[&str]] = &[
@@ -105,7 +104,11 @@ pub(crate) const APPROVED_PREFIXES: &[&[&str]] = &[
     &["git", "check-ignore"],
     &["git", "help"],
     &["git", "init"],
-    &["git", "stash", "list"],
+    &["git", "stash"],
+    &["git", "restore"],
+    &["git", "reset"],
+    &["git", "checkout"],
+    &["git", "push"],
     &["git", "notes", "list"],
     &["git", "remote", "get-url"],
     &["debi", "git", "ls-files"],
@@ -119,6 +122,7 @@ pub(crate) const APPROVED_PREFIXES: &[&[&str]] = &[
     &["mise", "usage"],
     &[".venv/bin/ruff", "check"],
     &[".venv/bin/ruff", "format"],
+    &[".venv/bin/pip", "list"],
     &["jar", "tf"],
     &["brew", "list"],
 ];
@@ -149,6 +153,9 @@ const SYSTEM_BIN_DIRS: &[&str] = &[
     "/sbin/",
     "/usr/sbin/",
 ];
+
+/// Directories the read-only file tools (`Read`, `Grep`, `Glob`) may look into anywhere.
+pub(crate) const TEMP_DIRS: &[&str] = &["/tmp/", "/private/tmp/"];
 
 /// Approved when it is the only argument (`X --help`); anywhere else it says nothing about the rest.
 pub(crate) const DERISKING_FLAGS: &[&str] = &["--help", "--version"];

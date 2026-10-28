@@ -22,6 +22,7 @@ Types of changes:
 ### Changed
 
 - Replaced the Judge permission hook with Judgess, a Rust rewrite built on a real shell parser
+- Judgess now approves `git restore`, `git reset`, `git checkout`, `git stash`, `git push`, `bc`, `.venv/bin/pip list`, `WebSearch`, and `Read`/`Grep`/`Glob` inside `/tmp`
 - Migrated Debi's `internal/credentials` spec into code comments and removed `docs/specs/credentials.md`
 - Migrated Debi's `internal/crash` spec into code comments and removed `docs/specs/crash.md`
 - Migrated Debi's `internal/process` spec into code comments and removed `docs/specs/process.md`

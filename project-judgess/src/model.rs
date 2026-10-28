@@ -112,8 +112,6 @@ rules! {
     GitAddViaPrSkill => "git-add-via-pr-skill",
     WebfetchFileUseRead => "webfetch-file-use-read",
     IrreversibleRm => "irreversible-rm",
-    IrreversibleGitCheckout => "irreversible-git-checkout",
-    IrreversibleGitReset => "irreversible-git-reset",
     IrreversibleFindDelete => "irreversible-find-delete",
     IrreversibleSedInPlace => "irreversible-sed-in-place",
     Chmod => "chmod",
