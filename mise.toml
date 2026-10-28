@@ -80,23 +80,17 @@ description = "Build the complete Devora Ember.app bundle with all resources"
 run = "./bundler/macos-ember/bundle-ember.sh"
 
 [tasks.mac-install]
-description = "Build and install Devora.app to /Applications (or --path), plus zsh completion (close Devora first). Untagged source builds install as Devora-<version>.app; --dev installs as Devora-dev.app; --suffix <s> installs as Devora-<s>.app."
+description = "Build and install Devora.app to /Applications (or --path), plus zsh completion (close Devora first). Untagged source builds install as Devora-<version>.app; --suffix <s> installs as Devora-<s>.app and shows the suffix in the window title and app name."
 usage = '''
-flag "-d --dev"
 flag "-p --path <path>" default="/Applications" help="Directory to install the app into"
-flag "-s --suffix <suffix>" help="Install as Devora-<suffix>.app"
+flag "-s --suffix <suffix>" help="Install as Devora-<suffix>.app, with the suffix shown in the window title and app name"
 '''
 run = """
 set -e
 
-DEV="${usage_dev:-false}"
 INSTALL_DIR="${usage_path:-/Applications}"
 SUFFIX="${usage_suffix:-}"
 
-if [[ "$DEV" == "true" && -n "$SUFFIX" ]]; then
-	echo "Error: --dev and --suffix are mutually exclusive" >&2
-	exit 1
-fi
 if [[ ! -d "$INSTALL_DIR" ]]; then
 	echo "Error: install directory does not exist: $INSTALL_DIR" >&2
 	exit 1
@@ -109,8 +103,10 @@ APP_SRC="project-ember/src-tauri/target/release/bundle/macos/Devora-Ember.app"
 VERSION=$(cat "$APP_SRC/Contents/Resources/VERSION")
 if [[ -n "$SUFFIX" ]]; then
 	APP_NAME="Devora-${SUFFIX}"
-elif [[ "$DEV" == "true" ]]; then
-	APP_NAME="Devora-dev"
+	# Read by Ember for the window title; the plist names drive the menu bar, Dock, and Cmd+Tab.
+	printf "%s" "$SUFFIX" > "$APP_SRC/Contents/Resources/INSTALL_SUFFIX"
+	plutil -replace CFBundleName -string "$APP_NAME" "$APP_SRC/Contents/Info.plist"
+	plutil -replace CFBundleDisplayName -string "$APP_NAME" "$APP_SRC/Contents/Info.plist"
 elif [[ "$VERSION" == *-dev.* ]]; then
 	APP_NAME="Devora-${VERSION}"
 else

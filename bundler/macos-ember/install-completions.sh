@@ -3,7 +3,7 @@
 set -e
 
 # Generate the debi zsh completion file from the debi binary bundled inside an installed Devora .app, and (one-time) hint the user how to wire up fpath.
-# The installed app path is passed in so completions resolve for any install destination (release Devora.app, an untagged Devora-<version>.app, or Devora-dev.app).
+# The installed app path is passed in so completions resolve for any install destination (release Devora.app, an untagged Devora-<version>.app, or a suffixed Devora-<suffix>.app).
 # The generated _debi content is identical regardless of build.
 
 if [ $# -lt 1 ]; then
