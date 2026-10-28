@@ -57,7 +57,7 @@ fn decode_secret(raw: &str) -> Result<String, String> {
 }
 
 fn decode_hex(s: &str) -> Result<Vec<u8>, String> {
-    if s.len() % 2 != 0 {
+    if !s.len().is_multiple_of(2) {
         return Err("invalid hex-encoded keychain token".to_string());
     }
     (0..s.len())

@@ -1,6 +1,6 @@
 /**
  * Best-effort, cosmetic derivation of the directory name a pasted git URL would clone into.
- * Mirrors the Rust `parse_clone_target` (`src-tauri/src/repo_clone.rs`) for the common shapes, and is used ONLY for the "Clones to:" hint in {@link showCloneRepoDialog}.
+ * Mirrors the Rust `parse_clone_target` (`project-core/crates/devora-workspace/src/repo_clone.rs`) for the common shapes, and is used ONLY for the "Clones to:" hint in {@link showCloneRepoDialog}.
  * The Rust parser is authoritative — when this returns `null` (input not yet a recognizable URL) the hint is simply hidden; the backend still validates.
  */
 export function deriveCloneDirName(input: string): string | null {

@@ -94,12 +94,14 @@ When Claude Code's behavior changes or new `@real-claude` scenarios are added:
 | Module | Role |
 |--------|------|
 | `pty.rs` | PTY manager: spawn, read, write, resize, close terminal sessions via `portable-pty` |
-| `workspace.rs` | Workspace and profile management: list, create, status queries against the same filesystem layout debi uses |
+| `workspace_creation.rs` | Workspace creation and repo addition, with progress events and cancellation |
 | `commands.rs` | Tauri command handlers (IPC bridge between frontend and Rust) |
-| `theme.rs` | Parses `themes/catppuccin-macchiato.conf` into CSS custom properties |
+| `theme.rs` | Serves the bundled theme, parsed by the core's `devora-theme` |
 | `ipc_server.rs` | Lightweight HTTP server for external tools (e.g., `debi preview`) to open preview panes |
 | `logging.rs` | Logging setup |
 | `lib.rs` | App setup and command registration |
+
+Non-UI logic (workspaces, profiles, settings, credentials, theme parsing) lives in the shared Rust core, `project-core/` (ADR-007), which Ember reaches through the `devora-core` crate.
 
 ### TypeScript Frontend (`src/`)
 
@@ -177,7 +179,7 @@ project-ember/
 │   └── src/
 │       ├── main.rs, lib.rs
 │       ├── pty.rs, commands.rs
-│       ├── workspace.rs, theme.rs
+│       ├── workspace_creation.rs, theme.rs
 │       ├── ipc_server.rs, logging.rs
 │       └── capabilities/
 ├── src/

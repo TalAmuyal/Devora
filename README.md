@@ -74,6 +74,7 @@ This builds Devora.app and installs it to `/Applications`.
 Devora builds upon the following tools:
 - Claude Code, as the agentic coding tool
 - Ember (Tauri + xterm.js), as the UI framework
+- Core (`./project-core/`), the shared Rust core that holds Devora's non-UI logic
 - Debi (`./project-debi/`), Devora's CLI for workspace management and utilities
 - Judgess (`./project-judgess/`), a Claude Code plugin for auto-approving/rejecting permission requests aiming to reduce permission fatigue and speed up the development process
 - Code-Cleanup (`./project-code-cleanup/`), a Claude Code plugin that defines and directs a post-task cleanup process (code decluttering and comment cleanup)

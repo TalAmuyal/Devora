@@ -1,0 +1,9 @@
+[package]
+name = "devora-platform"
+description = "Operating-system services: the keychain for now."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+base64.workspace = true

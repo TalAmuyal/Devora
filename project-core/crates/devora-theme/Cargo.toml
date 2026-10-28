@@ -1,0 +1,9 @@
+[package]
+name = "devora-theme"
+description = "Theme parsing: theme files to the CSS custom properties the UIs consume."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
