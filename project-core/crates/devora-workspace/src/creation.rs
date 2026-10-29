@@ -17,6 +17,8 @@ use std::time::Duration;
 
 use serde::Serialize;
 
+use devora_config::config;
+
 use crate::workspace::{self, CreatedWorkspace};
 
 /// Where progress events go; cloned into the threads that stream subprocess output.
@@ -160,7 +162,7 @@ pub fn create(
     // Resolve each repo to a worktree spec with its checkout target decided up front: the source workspace's current commit when duplicating a repo it already has, otherwise the latest default branch.
     let mut repos: Vec<RepoSpec> = Vec::new();
     for repo_path in repo_paths {
-        let expanded = workspace::expand_tilde(repo_path)?;
+        let expanded = config::expand_tilde(repo_path)?;
         let name = Path::new(&expanded)
             .file_name()
             .map(|n| n.to_string_lossy().into_owned())
@@ -241,7 +243,7 @@ pub fn add_repo(
         ));
     }
 
-    let source = workspace::expand_tilde(source_repo_path)?;
+    let source = config::expand_tilde(source_repo_path)?;
     let default_branch = determine_default_branch(Path::new(&source));
 
     if !create_worktree_for_repo(
@@ -299,7 +301,7 @@ pub fn clone_repo(
 ) -> Result<Outcome, String> {
     let target = crate::repo_clone::parse_clone_target(url)?;
 
-    let profile = workspace::expand_tilde(profile_path)?;
+    let profile = config::expand_tilde(profile_path)?;
     let repos_dir = Path::new(&profile).join("repos");
     fs::create_dir_all(&repos_dir).map_err(|e| format!("failed to create repos directory: {e}"))?;
 
@@ -596,7 +598,7 @@ fn run_prepare(
     on_event: &EventSink,
     warnings: &mut Vec<String>,
 ) -> Result<(), String> {
-    let Some(prepare_cmd) = workspace::get_prepare_command(profile_path) else {
+    let Some(prepare_cmd) = config::get_prepare_command(profile_path) else {
         return Ok(());
     };
 

@@ -8,8 +8,8 @@ use std::path::Path;
 use serde::Serialize;
 use serde_json::Value;
 
-use crate::workspace;
-use crate::workspace::write_pretty_json;
+use crate::config;
+use crate::config::write_pretty_json;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -66,7 +66,7 @@ pub fn validate_profile_path(path: &str) -> Result<ProfilePathValidation, String
         ));
     }
 
-    let expanded = workspace::expand_tilde(trimmed)?;
+    let expanded = config::expand_tilde(trimmed)?;
     let dir = Path::new(&expanded);
 
     if !dir.is_absolute() {
@@ -87,7 +87,7 @@ pub fn validate_profile_path(path: &str) -> Result<ProfilePathValidation, String
         if !config_path.exists() {
             return Ok(ProfilePathValidation::new_profile(expanded));
         }
-        return Ok(match workspace::read_json_file(&config_path) {
+        return Ok(match config::read_json_file(&config_path) {
             Ok(cfg) => match cfg.get("name").and_then(|v| v.as_str()) {
                 Some(name) => ProfilePathValidation::existing_profile(expanded, name.to_string()),
                 None => ProfilePathValidation::invalid(
@@ -175,7 +175,7 @@ pub fn register_profile(
 /// The profile directory and its contents are left untouched.
 /// Removing a path that is not registered is a no-op success.
 pub fn unregister_profile(config_path: &Path, root_path: &str) -> Result<(), String> {
-    let expanded = workspace::expand_tilde(root_path.trim())?;
+    let expanded = config::expand_tilde(root_path.trim())?;
 
     let mut global = load_global_config(config_path)?;
     let obj = global
@@ -201,7 +201,7 @@ fn load_global_config(config_path: &Path) -> Result<Value, String> {
     if !config_path.exists() {
         return Ok(Value::Object(serde_json::Map::new()));
     }
-    workspace::read_json_file(config_path)
+    config::read_json_file(config_path)
 }
 
 fn write_global_config(config_path: &Path, config: &Value) -> Result<(), String> {
@@ -222,7 +222,7 @@ mod tests {
     }
 
     fn read_profiles_list(config_path: &Path) -> Vec<String> {
-        let config = workspace::read_json_file(config_path).unwrap();
+        let config = config::read_json_file(config_path).unwrap();
         config["profiles"]
             .as_array()
             .unwrap()
@@ -244,7 +244,7 @@ mod tests {
         assert_eq!(result.path, root.to_string_lossy());
         assert!(root.join("repos").is_dir());
         assert!(root.join("workspaces").is_dir());
-        let profile_config = workspace::read_json_file(&root.join("config.json")).unwrap();
+        let profile_config = config::read_json_file(&root.join("config.json")).unwrap();
         assert_eq!(profile_config["name"], "Work");
         assert_eq!(
             read_profiles_list(&config_path),
@@ -277,7 +277,7 @@ mod tests {
 
         assert_eq!(result.name, "Legacy");
         // config.json untouched (repos key still present)
-        let profile_config = workspace::read_json_file(&root.join("config.json")).unwrap();
+        let profile_config = config::read_json_file(&root.join("config.json")).unwrap();
         assert!(profile_config.get("repos").is_some());
     }
 
@@ -303,7 +303,7 @@ mod tests {
 
         register_profile(&config_path, &root.to_string_lossy(), "A").unwrap();
 
-        let config = workspace::read_json_file(&config_path).unwrap();
+        let config = config::read_json_file(&config_path).unwrap();
         assert_eq!(config["terminal"]["default-app"], "nvim");
         assert_eq!(read_profiles_list(&config_path).len(), 1);
     }
@@ -334,7 +334,7 @@ mod tests {
 
         assert!(result.is_err());
         // config.json untouched
-        let profile_config = workspace::read_json_file(&root.join("config.json")).unwrap();
+        let profile_config = config::read_json_file(&root.join("config.json")).unwrap();
         assert!(profile_config.get("no-name").is_some());
     }
 

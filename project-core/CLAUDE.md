@@ -5,11 +5,12 @@ It is being extracted from Ember's `src-tauri/` area by area (TalAmuyal/Devora#2
 
 ## Layout
 
+- `crates/devora-config`: the global and per-profile config files, registered profiles, and the settings resolved from them (Claude settings, config fields, the prepare-command, git shortcuts).
 - `crates/devora-core`: the facade. A UI depends on this crate alone, never on the crates behind it.
 - `crates/devora-health`: the in-app health check (runs `debi health --json` through a login shell).
 - `crates/devora-platform`: operating-system services (the keychain today).
 - `crates/devora-pty`: terminal sessions on pseudo-terminals, with output delivered through callbacks.
-- `crates/devora-workspace`: profiles, workspaces, worktree tasks and their configuration, and cancellable workspace creation with streamed progress.
+- `crates/devora-workspace`: workspaces, their repos and status, worktree tasks, and cancellable workspace creation with streamed progress.
 - `crates/devora-theme`: theme files to CSS custom properties.
 
 ## Rules
