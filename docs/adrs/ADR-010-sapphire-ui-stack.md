@@ -2,8 +2,8 @@
 
 ## Status
 
-Proposed. It becomes Accepted once the remaining Phase 0 spikes report go: TalAmuyal/Devora#207 (libghostty) and TalAmuyal/Devora#208 (embedded Neovim).
-TalAmuyal/Devora#206 (UniFFI and the build skeleton) reported go ([report](https://github.com/TalAmuyal/Devora/issues/206#issuecomment-6479354609)), and its findings are folded in below.
+Proposed. It becomes Accepted once the remaining Phase 0 spike reports go: TalAmuyal/Devora#207 (libghostty).
+TalAmuyal/Devora#206 (UniFFI and the build skeleton) reported go ([report](https://github.com/TalAmuyal/Devora/issues/206#issuecomment-6479354609)), and so did TalAmuyal/Devora#208 (embedded Neovim, [report](https://github.com/TalAmuyal/Devora/issues/208#issuecomment-6480548262)); their findings are folded in below.
 
 ## Date
 
@@ -50,9 +50,23 @@ All of it sits over the shared core (ADR-007) and its state model (ADR-008).
 	- SwiftTerm is the fallback.
 - **The prompt editor is `nvim --embed`, drawn natively**
 	- The msgpack-RPC client, the grid model and rendering live in Swift, so redraws reach the renderer without an FFI hop.
+		Redraw events are parsed off the main actor and applied once per `flush`, and the grid is drawn as soon as a flush arrives rather than on the next update cycle.
 		The core owns the spawn spec, draft persistence and the `@`/`/` completion sources.
-	- It uses its own config (`NVIM_APPNAME`), seeded from the user's `init.lua`.
-	- `Ctrl-h/j/k/l` moves between Neovim windows first, and hands off to Sapphire's panes at the edge.
+	- **It runs a config vendored in Sapphire, never the user's.**
+		The vendored config is curated from the maintainer's own, and is isolated in Sapphire's own config, data and state directories, with its plugins pinned in the bundle.
+		The user's config made the embedded editor fragile: a plugin manager and tree-sitter parsers under the user's data directory, plugins that act on startup (session restore, handing buffers to a parent Neovim through an inherited `$NVIM`), and messages that block on prompts.
+	- **It attaches with `ext_linegrid`, `ext_cmdline`, `ext_popupmenu` and `ext_messages`.**
+		`ext_messages` is required rather than cosmetic: without it, any burst of messages raises a press-enter prompt that blocks every RPC request.
+		`ext_multigrid` is deferred; until then, plugins that draw their own floating windows render into the grid.
+	- **Startup and shutdown are defensive.**
+		Neovim serves RPC requests while its config still runs, so the host plugin loads with `--cmd` and the host waits for its `VimEnter` notification before touching the buffer.
+		Meanwhile the host polls `nvim_get_mode`, which Neovim answers even while blocked, and dismisses blocking prompts; `nomore` is set from the start.
+		Shutdown closes stdin, then sends SIGKILL after a grace period, because a Neovim stuck at a prompt on its way out ignores both EOF and SIGTERM; the host ignores SIGPIPE so a dying editor can't take the app down; and the spawn environment drops `NVIM`.
+	- **Drafts survive a crash with their cursor and undo history.**
+		Buffer changes (`nvim_buf_attach`) are debounced to about 250 ms, then the core saves the text and cursor while Neovim writes the undo history to a core-owned path with `:wundo`.
+		Restore sets the text without recording an undo step, then loads the history with `:rundo`, which only accepts the exact text it was saved with.
+		The prompt buffer never has a swap file, since a killed editor would leave an ATTENTION prompt behind.
+	- `Ctrl-h/j/k/l` moves between Neovim windows first, and hands off to Sapphire's panes at the edge (an `rpcnotify` from mappings installed on `VimEnter`, so they win over the config's own).
 - **Web panes are `WKWebView`**, with a persistent per-profile data store.
 - **The build is SwiftPM modules plus a generated app target**
 	- All Swift code lives in SwiftPM modules (`AppShell`, `Store`, `Panes/*`, `Theme`), each pane kind a deep module with one view entry point.
@@ -74,6 +88,7 @@ All of it sits over the shared core (ADR-007) and its state model (ADR-008).
 - **A pure-Rust GPU UI (GPUI-style) or objc2 AppKit bindings.** Rejected: less native, and the newest macOS APIs arrive late.
 - **SwiftTerm or `alacritty_terminal`.** Not chosen: libghostty is the fastest available and Metal-native. SwiftTerm stays as the fallback if spike TalAmuyal/Devora#207 says no-go.
 - **Neovim in a terminal pane.** Rejected: no native popups or IME, and clumsy text handoff to the agent.
+- **Running the user's own Neovim config in the embedded editor**, either copied under its own `NVIM_APPNAME` or sourced in place from a Sapphire-owned `-u` init. Rejected after TalAmuyal/Devora#208: a copy loses the plugin manager and parsers, which live under the data directory `NVIM_APPNAME` moves, and breaks configs that resolve their own path; sourcing in place works, but every user config brings its own startup hazards. A vendored config makes the editor predictable.
 - **The Neovim RPC client and grid in the Rust core.** Rejected: an extra hop and an FFI-shaped redraw model for no gain.
 - **Pure SwiftPM with a hand-rolled bundling script, or a checked-in `.xcodeproj`.** Rejected: the first means maintaining bundling and signing ourselves; the second is merge-hostile and painful for agents.
 - **Foreign callbacks for events (a Rust-called Swift `EventSink`).** Rejected after TalAmuyal/Devora#206: equally fast once batched, but a slow sink stalls the producer, ordering needs a hand-rolled serial queue, and Rust holds a strong reference that has to be cleared explicitly.
@@ -84,7 +99,9 @@ All of it sits over the shared core (ADR-007) and its state model (ADR-008).
 - Building Sapphire requires Xcode with the macOS 27 SDK.
 	CI needs a macOS 27 runner, hosted or self-hosted (TalAmuyal/Devora#212).
 - The `DevoraCore` facade (ADR-007) follows the three facade rules on its UniFFI side, so the core's API is shaped by them from Phase 1 on.
-- Keychain items that `debi` creates through the `security` CLI prompt the first time Sapphire's binary reads them.
+- Keychain items stay readable without prompts as long as the core reads them through the `security` CLI (`devora-platform`), whose access list already trusts that tool; reading them through the Security framework directly would prompt the first time Sapphire's binary does so.
 - Notarization stays untested until a Developer ID certificate is available.
-- The proposed performance budgets get measured from the first prototype on: under 500 ms from cold start to a restored window, and keystroke-to-glyph within one frame at 120 Hz.
+- The proposed performance budgets get measured from the first prototype on: under 500 ms from cold start to a restored window, and keystroke-to-glyph drawn within one frame at 120 Hz.
+	The embedded Neovim already draws within a frame (TalAmuyal/Devora#208: p95 6.3–6.6 ms); reaching the screen takes another one to two frames of Core Animation's pipeline, which no out-of-process editor avoids.
+- Sapphire's prompt editor does not follow the user's own Neovim setup; changing its keys or plugins means changing the vendored config.
 - Spike outcomes may amend this ADR before it is accepted.
