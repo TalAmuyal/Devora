@@ -179,11 +179,9 @@ enum ResolvedSetting {
 /// Both maps are keyed by the kebab config key.
 #[derive(Serialize)]
 pub struct ClaudeSettingsResponse {
-    /// Per key: the raw stored value at this scope — a string, JSON `null`, or the key is
-    /// omitted entirely (meaning "Default" / not set at this scope).
+    /// Per key: the raw stored value at this scope — a string, JSON `null`, or the key is omitted entirely (meaning "Default" / not set at this scope).
     stored: serde_json::Map<String, Value>,
-    /// Per key (all settings always present): the effective resolved value — a string, or JSON
-    /// `null` meaning None (no override; Claude Code uses its own default).
+    /// Per key (all settings always present): the effective resolved value — a string, or JSON `null` meaning None (no override; Claude Code uses its own default).
     resolved: serde_json::Map<String, Value>,
 }
 
