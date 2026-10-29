@@ -4,6 +4,7 @@ use std::sync::Mutex;
 use tauri::ipc::Channel;
 use tauri::{Manager, State};
 
+use crate::config;
 use crate::credentials;
 use crate::health;
 use crate::ipc_server::IpcState;
@@ -29,11 +30,11 @@ pub fn create_pty(
     on_exit: Channel<u32>,
 ) -> Result<u32, String> {
     let ipc_port = ipc_state.port;
-    let git_shortcuts_enabled = workspace::get_git_shortcuts_enabled(profile_path.as_deref());
+    let git_shortcuts_enabled = config::get_git_shortcuts_enabled(profile_path.as_deref());
 
     // Inject the resolved Claude launch env vars (profile → user → Devora default).
     // An explicit frontend-supplied `env` still wins on key collision.
-    let mut session_env = workspace::claude_launch_env(profile_path.as_deref());
+    let mut session_env = config::claude_launch_env(profile_path.as_deref());
     // Expose the session's profile to debi so a command typed in the terminal (e.g. `debi health`) resolves the same profile as the in-app UI.
     if let Some(path) = profile_path.as_deref() {
         session_env.insert("DEBI_PROFILE_PATH".to_string(), path.to_string());
@@ -108,13 +109,13 @@ pub fn register_profile(
     path: String,
     name: String,
 ) -> Result<profile::RegisteredProfile, String> {
-    let config_path = workspace::global_config_path()?;
+    let config_path = config::global_config_path()?;
     profile::register_profile(&config_path, &path, &name)
 }
 
 #[tauri::command]
 pub fn unregister_profile(path: String) -> Result<(), String> {
-    let config_path = workspace::global_config_path()?;
+    let config_path = config::global_config_path()?;
     profile::unregister_profile(&config_path, &path)
 }
 
@@ -166,15 +167,15 @@ pub fn get_registered_repos(
 
 #[tauri::command]
 pub fn get_default_app(profile_path: String) -> Result<Option<String>, String> {
-    workspace::get_default_app(&profile_path)
+    config::get_default_app(&profile_path)
 }
 
 /// Reads the Claude model/effort settings for one scope (a profile path, or `None` for the user-level/global scope): the raw stored values plus the effective resolved values.
 #[tauri::command]
 pub fn get_claude_settings(
     profile_path: Option<String>,
-) -> Result<workspace::ClaudeSettingsResponse, String> {
-    workspace::read_claude_settings(profile_path.as_deref())
+) -> Result<config::ClaudeSettingsResponse, String> {
+    config::read_claude_settings(profile_path.as_deref())
 }
 
 /// Writes one Claude model/effort setting at the given scope.
@@ -186,15 +187,15 @@ pub fn set_claude_setting(
     state: String,
     value: Option<String>,
 ) -> Result<(), String> {
-    workspace::write_claude_setting(profile_path.as_deref(), &key, &state, value.as_deref())
+    config::write_claude_setting(profile_path.as_deref(), &key, &state, value.as_deref())
 }
 
 /// Reads the generic config settings (terminal / PR / task-tracker) for one scope (a profile path, or `None` for the user-level/global scope): the raw stored values plus the effective resolved values.
 #[tauri::command]
 pub fn get_config_settings(
     profile_path: Option<String>,
-) -> Result<workspace::ConfigSettingsResponse, String> {
-    workspace::read_config_settings(profile_path.as_deref())
+) -> Result<config::ConfigSettingsResponse, String> {
+    config::read_config_settings(profile_path.as_deref())
 }
 
 /// Writes one generic config setting at the given scope.
@@ -206,7 +207,7 @@ pub fn set_config_setting(
     state: String,
     value: Option<String>,
 ) -> Result<(), String> {
-    workspace::write_config_setting(profile_path.as_deref(), &key, &state, value.as_deref())
+    config::write_config_setting(profile_path.as_deref(), &key, &state, value.as_deref())
 }
 
 /// Whether an Asana API token is currently stored in the OS keychain.

@@ -41,7 +41,7 @@ var configPathValue = defaultConfigPath()
 
 func defaultConfigPath() string {
 	// DEVORA_CONFIG_PATH lets the host process (Devora's Tauri backend, or the acceptance-test harness) point debi at the same config file it uses.
-	// Matches the Ember backend's override in workspace.rs:global_config_path.
+	// Matches the core's override in devora-config's config.rs:global_config_path.
 	if override := os.Getenv("DEVORA_CONFIG_PATH"); override != "" {
 		return override
 	}

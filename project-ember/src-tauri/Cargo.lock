@@ -531,9 +531,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "devora-config"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "devora-core"
 version = "0.1.0"
 dependencies = [
+ "devora-config",
  "devora-health",
  "devora-platform",
  "devora-pty",
@@ -584,6 +593,7 @@ version = "0.1.0"
 name = "devora-workspace"
 version = "0.1.0"
 dependencies = [
+ "devora-config",
  "fs2",
  "serde",
  "serde_json",
