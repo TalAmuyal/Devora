@@ -25,7 +25,7 @@ You should expect an initial response within a few days. The advisory will remai
 The following are considered security issues in Devora:
 
 - **Judgess auto-approval rules** -- Vulnerabilities in the Judgess component (`project-judgess/`) that could allow unintended command execution or bypass approval checks.
-- **Shell script injection or path traversal** -- Issues in Devora's own shell scripts (`ccc.sh`, `install.sh`, `bundler/macos-ember/bundle-ember.sh`, etc.) that could lead to arbitrary code execution, path traversal, or privilege escalation.
+- **Shell script injection or path traversal** -- Issues in Devora's own shell scripts (`install.sh`, `bundler/macos-ember/bundle-ember.sh`, etc.) that could lead to arbitrary code execution, path traversal, or privilege escalation.
 
 ## Out of scope
 

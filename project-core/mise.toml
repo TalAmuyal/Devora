@@ -1,3 +1,7 @@
+[tasks.build]
+run = "cargo build --release -p debi"
+description = "Build the debi binary (release)"
+
 [tasks.test]
 run = "cargo test"
 description = "Run the core's tests"

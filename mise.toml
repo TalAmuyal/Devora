@@ -9,11 +9,12 @@ rust = "latest"
 [tasks.build]
 run = """
 set -e
+mise run -C project-core build
 mise run -C project-debi build
 mise run -C project-status-line build
 mise run -C project-judgess build
 """
-description = "Build all sub-projects (debi, cc-simple-statusline, judgess)"
+description = "Build all sub-projects (core debi, Go debi, cc-simple-statusline, judgess)"
 
 [tasks.clean]
 run = """

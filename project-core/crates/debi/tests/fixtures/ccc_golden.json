@@ -1,0 +1,354 @@
+[
+  {
+    "name": "no-args-no-env",
+    "args": [],
+    "env": {},
+    "no_plugins": false,
+    "expected": {
+      "exit_code": 0,
+      "claude": {
+        "args": [
+          "--plugin-dir",
+          "<root>/cc-plugins/code-cleanup",
+          "--plugin-dir",
+          "<root>/cc-plugins/detached-flow",
+          "--plugin-dir",
+          "<root>/cc-plugins/judgess"
+        ],
+        "env": {
+          "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+          "CLAUDE_CODE_ENABLE_TELEMETRY": "0",
+          "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+        }
+      }
+    }
+  },
+  {
+    "name": "user-args-pass-through",
+    "args": [
+      "-p",
+      "hello world",
+      "--model",
+      "sonnet"
+    ],
+    "env": {},
+    "no_plugins": false,
+    "expected": {
+      "exit_code": 0,
+      "claude": {
+        "args": [
+          "-p",
+          "hello world",
+          "--model",
+          "sonnet",
+          "--plugin-dir",
+          "<root>/cc-plugins/code-cleanup",
+          "--plugin-dir",
+          "<root>/cc-plugins/detached-flow",
+          "--plugin-dir",
+          "<root>/cc-plugins/judgess"
+        ],
+        "env": {
+          "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+          "CLAUDE_CODE_ENABLE_TELEMETRY": "0",
+          "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+        }
+      }
+    }
+  },
+  {
+    "name": "effort-and-mode-from-env",
+    "args": [],
+    "env": {
+      "DEVORA_CCC_EFFORT": "high",
+      "DEVORA_CCC_PERMISSION_MODE": "plan"
+    },
+    "no_plugins": false,
+    "expected": {
+      "exit_code": 0,
+      "claude": {
+        "args": [
+          "--plugin-dir",
+          "<root>/cc-plugins/code-cleanup",
+          "--plugin-dir",
+          "<root>/cc-plugins/detached-flow",
+          "--plugin-dir",
+          "<root>/cc-plugins/judgess",
+          "--effort",
+          "high",
+          "--permission-mode",
+          "plan"
+        ],
+        "env": {
+          "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+          "CLAUDE_CODE_ENABLE_TELEMETRY": "0",
+          "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+        }
+      }
+    }
+  },
+  {
+    "name": "user-effort-wins",
+    "args": [
+      "--effort",
+      "low"
+    ],
+    "env": {
+      "DEVORA_CCC_EFFORT": "high",
+      "DEVORA_CCC_PERMISSION_MODE": "plan"
+    },
+    "no_plugins": false,
+    "expected": {
+      "exit_code": 0,
+      "claude": {
+        "args": [
+          "--effort",
+          "low",
+          "--plugin-dir",
+          "<root>/cc-plugins/code-cleanup",
+          "--plugin-dir",
+          "<root>/cc-plugins/detached-flow",
+          "--plugin-dir",
+          "<root>/cc-plugins/judgess",
+          "--permission-mode",
+          "plan"
+        ],
+        "env": {
+          "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+          "CLAUDE_CODE_ENABLE_TELEMETRY": "0",
+          "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+        }
+      }
+    }
+  },
+  {
+    "name": "user-equals-forms-win",
+    "args": [
+      "--effort=max",
+      "--permission-mode=auto"
+    ],
+    "env": {
+      "DEVORA_CCC_EFFORT": "high",
+      "DEVORA_CCC_PERMISSION_MODE": "plan"
+    },
+    "no_plugins": false,
+    "expected": {
+      "exit_code": 0,
+      "claude": {
+        "args": [
+          "--effort=max",
+          "--permission-mode=auto",
+          "--plugin-dir",
+          "<root>/cc-plugins/code-cleanup",
+          "--plugin-dir",
+          "<root>/cc-plugins/detached-flow",
+          "--plugin-dir",
+          "<root>/cc-plugins/judgess"
+        ],
+        "env": {
+          "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+          "CLAUDE_CODE_ENABLE_TELEMETRY": "0",
+          "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+        }
+      }
+    }
+  },
+  {
+    "name": "empty-env-values-ignored",
+    "args": [],
+    "env": {
+      "DEVORA_CCC_EFFORT": "",
+      "DEVORA_CCC_PERMISSION_MODE": ""
+    },
+    "no_plugins": false,
+    "expected": {
+      "exit_code": 0,
+      "claude": {
+        "args": [
+          "--plugin-dir",
+          "<root>/cc-plugins/code-cleanup",
+          "--plugin-dir",
+          "<root>/cc-plugins/detached-flow",
+          "--plugin-dir",
+          "<root>/cc-plugins/judgess"
+        ],
+        "env": {
+          "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+          "CLAUDE_CODE_ENABLE_TELEMETRY": "0",
+          "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+        }
+      }
+    }
+  },
+  {
+    "name": "telemetry-env-preserved",
+    "args": [],
+    "env": {
+      "CLAUDE_CODE_ENABLE_TELEMETRY": "1",
+      "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "0",
+      "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "0"
+    },
+    "no_plugins": false,
+    "expected": {
+      "exit_code": 0,
+      "claude": {
+        "args": [
+          "--plugin-dir",
+          "<root>/cc-plugins/code-cleanup",
+          "--plugin-dir",
+          "<root>/cc-plugins/detached-flow",
+          "--plugin-dir",
+          "<root>/cc-plugins/judgess"
+        ],
+        "env": {
+          "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "0",
+          "CLAUDE_CODE_ENABLE_TELEMETRY": "1",
+          "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "0"
+        }
+      }
+    }
+  },
+  {
+    "name": "telemetry-empty-env-defaulted",
+    "args": [],
+    "env": {
+      "CLAUDE_CODE_ENABLE_TELEMETRY": "",
+      "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "",
+      "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": ""
+    },
+    "no_plugins": false,
+    "expected": {
+      "exit_code": 0,
+      "claude": {
+        "args": [
+          "--plugin-dir",
+          "<root>/cc-plugins/code-cleanup",
+          "--plugin-dir",
+          "<root>/cc-plugins/detached-flow",
+          "--plugin-dir",
+          "<root>/cc-plugins/judgess"
+        ],
+        "env": {
+          "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+          "CLAUDE_CODE_ENABLE_TELEMETRY": "0",
+          "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+        }
+      }
+    }
+  },
+  {
+    "name": "update-short",
+    "args": [
+      "-u"
+    ],
+    "env": {},
+    "no_plugins": false,
+    "expected": {
+      "exit_code": 0,
+      "claude": {
+        "args": [
+          "--update"
+        ],
+        "env": {
+          "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": null,
+          "CLAUDE_CODE_ENABLE_TELEMETRY": null,
+          "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": null
+        }
+      }
+    }
+  },
+  {
+    "name": "update-long",
+    "args": [
+      "--update"
+    ],
+    "env": {
+      "DEVORA_CCC_EFFORT": "high"
+    },
+    "no_plugins": false,
+    "expected": {
+      "exit_code": 0,
+      "claude": {
+        "args": [
+          "--update"
+        ],
+        "env": {
+          "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": null,
+          "CLAUDE_CODE_ENABLE_TELEMETRY": null,
+          "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": null
+        }
+      }
+    }
+  },
+  {
+    "name": "update-word-after-args",
+    "args": [
+      "--resume",
+      "update",
+      "ignored"
+    ],
+    "env": {},
+    "no_plugins": false,
+    "expected": {
+      "exit_code": 0,
+      "claude": {
+        "args": [
+          "--update"
+        ],
+        "env": {
+          "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": null,
+          "CLAUDE_CODE_ENABLE_TELEMETRY": null,
+          "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": null
+        }
+      }
+    }
+  },
+  {
+    "name": "claude-exit-code-propagates",
+    "args": [
+      "-p",
+      "x"
+    ],
+    "env": {
+      "FAKE_CLAUDE_EXIT": "3"
+    },
+    "no_plugins": false,
+    "expected": {
+      "exit_code": 3,
+      "claude": {
+        "args": [
+          "-p",
+          "x",
+          "--plugin-dir",
+          "<root>/cc-plugins/code-cleanup",
+          "--plugin-dir",
+          "<root>/cc-plugins/detached-flow",
+          "--plugin-dir",
+          "<root>/cc-plugins/judgess"
+        ],
+        "env": {
+          "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+          "CLAUDE_CODE_ENABLE_TELEMETRY": "0",
+          "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+        }
+      }
+    }
+  },
+  {
+    "name": "no-plugins-dir",
+    "args": [],
+    "env": {},
+    "no_plugins": true,
+    "expected": {
+      "exit_code": 0,
+      "claude": {
+        "args": [],
+        "env": {
+          "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+          "CLAUDE_CODE_ENABLE_TELEMETRY": "0",
+          "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+        }
+      }
+    }
+  }
+]

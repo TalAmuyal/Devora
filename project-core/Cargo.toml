@@ -8,6 +8,7 @@ edition = "2021"
 publish = false
 
 [workspace.dependencies]
+devora-agent = { path = "crates/devora-agent" }
 devora-config = { path = "crates/devora-config" }
 devora-health = { path = "crates/devora-health" }
 devora-platform = { path = "crates/devora-platform" }

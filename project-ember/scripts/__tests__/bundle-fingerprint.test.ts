@@ -170,7 +170,7 @@ describe('populate-app-resources.sh --list-sources', () => {
   it('lists the repo paths that determine bundle content', () => {
     const sources = listSources();
     expect(sources.length).toBeGreaterThan(0);
-    expect(sources).toContain('ccc.sh');
+    expect(sources).toContain('project-core');
     expect(sources).toContain('project-debi');
   });
 
