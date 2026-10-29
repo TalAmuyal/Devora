@@ -137,6 +137,17 @@ copy_built() {
 	copy_required "$REPO_ROOT/$repo_rel_artifact" "$dest"
 }
 
+# A symlink inside the bundle; its target is a bundled file, already a fingerprint source.
+link_in_bundle() {
+	local target="$1"
+	local link="$2"
+
+	if [[ "$LIST_SOURCES" -eq 1 ]]; then
+		return
+	fi
+	ln -sfn "$target" "$link"
+}
+
 ensure_dir() {
 	if [[ "$LIST_SOURCES" -eq 1 ]]; then
 		return
@@ -162,8 +173,10 @@ gen_app_icon() {
 
 # --- Bundled apps ---
 
-copy_repo        "ccc.sh"                                     "$BUNDLED_APPS_DIR/ccc"
-copy_built       "project-debi/debi"                          "$BUNDLED_APPS_DIR/debi"          "project-debi"
+# `debi` is the Rust CLI from project-core: it runs `ccc` itself (also as the `ccc` symlink) and hands every other command to the Go CLI, bundled next to it as `debi-go`.
+copy_built       "project-core/target/release/debi"           "$BUNDLED_APPS_DIR/debi"          "project-core"
+copy_built       "project-debi/debi"                          "$BUNDLED_APPS_DIR/debi-go"       "project-debi"
+link_in_bundle   "debi"                                       "$BUNDLED_APPS_DIR/ccc"
 
 # --- CC plugins ---
 

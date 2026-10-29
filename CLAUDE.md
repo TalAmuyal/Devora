@@ -23,8 +23,8 @@ Below are terms that have a specific meaning in the context of Devora:
 - **Tab Bar** (Ember): The strip at the bottom of the window showing open sessions
 - **Judgess**: A Claude Code plugin that auto-manages permission requests to reduce permission fatigue (`./project-judgess/`)
 - **Code-Cleanup**: A Claude Code plugin that defines and directs the post-task cleanup process (`./project-code-cleanup/`)
-- **Debi**: Devora's CLI for workspace management and utilities (`./project-debi/`)
-- **CCC**: Customized Claude Code — a launcher script that wraps Claude Code with Devora-specific configuration (`./ccc.sh`). Written as CCC when used as a name, `ccc` when referring to the shell command
+- **Debi**: Devora's CLI for workspace management and utilities. Being ported from Go (`./project-debi/`, bundled as `debi-go`) to Rust (`./project-core/crates/debi`, bundled as `debi`), which hands every not-yet-ported command to `debi-go`
+- **CCC**: Customized Claude Code — the launcher that wraps Claude Code with Devora-specific configuration (`debi ccc`, also installed as a `ccc` command; built on `devora-agent` in `./project-core/`). Written as CCC when used as a name, `ccc` when referring to the shell command
 - **CC Status Line**: A status line script for Claude Code that shows context-window usage and session cost (`./project-status-line/`)
 - **Acceptance Test**: A test that verifies the functionality of Devora as a whole
 

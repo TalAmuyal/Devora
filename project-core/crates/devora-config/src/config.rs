@@ -123,7 +123,7 @@ pub fn get_git_shortcuts_enabled(profile_path: Option<&str>) -> bool {
 //
 // `ccc` launches Claude Code with various configurations.
 // Each is resolved per key with the precedence profile → user → Devora default, where a level may hold an explicit string (a value), JSON `null` (= "None": impose nothing, so Claude Code falls back to its own default), or omit the key (fall through to the next level).
-// The resolved values are injected as environment variables by the PTY layer (see commands.rs): the `ANTHROPIC_*` vars are read by Claude Code natively, while `DEVORA_CCC_*` vars are turned into CLI flags by `ccc.sh`.
+// The resolved values are injected as environment variables by the PTY layer (see commands.rs): the `ANTHROPIC_*` vars are read by Claude Code natively, while `DEVORA_CCC_*` vars are turned into CLI flags by `ccc` (`devora-agent`).
 
 /// One configurable Claude launch setting: its kebab-case config key (under the top-level `claude` object), the environment variable the PTY exports, and the Devora default value.
 struct ClaudeSettingSpec {

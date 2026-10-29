@@ -172,7 +172,7 @@ echo -n "$NEW_VERSION" > "$VERSION_FILE"
 
 if [ "$NO_AI" != "true" ]; then
 	echo "Running editorial cleanup on changelog..."
-	"$REPO_ROOT/ccc.sh" \
+	mise -C "$REPO_ROOT/project-core" exec -- cargo run --quiet --release -p debi -- ccc \
 		-p \
 		--permission-mode acceptEdits \
 		"We are cutting release ${NEW_VERSION} now, use the rules for cutting a release (@docs/changlog-edits.md) to update the \`## ${NEW_VERSION}\` section of ./CHANGELOG.md"

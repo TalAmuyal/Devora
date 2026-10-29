@@ -76,6 +76,19 @@ GOOS=darwin \
 
 echo "    Go binaries built."
 
+# --- Build the Rust debi ---
+
+echo ""
+echo "==> Building the Rust debi..."
+
+mise \
+	-C "$REPO_ROOT/project-core" \
+	exec \
+	-- \
+	cargo build --release -p debi
+
+echo "    Rust debi built."
+
 # --- Build Judgess ---
 
 echo ""

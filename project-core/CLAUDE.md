@@ -5,6 +5,8 @@ It is being extracted from Ember's `src-tauri/` area by area (TalAmuyal/Devora#2
 
 ## Layout
 
+- `crates/debi`: the Rust `debi` CLI. It runs `ccc` (also as a `ccc` symlink) and hands every other command to the Go `debi-go` until each command group is ported (ADR-007).
+- `crates/devora-agent`: how Devora launches Claude Code: the `ccc` command line resolved into arguments and environment.
 - `crates/devora-config`: the global and per-profile config files, registered profiles, and the settings resolved from them (Claude settings, config fields, the prepare-command, git shortcuts).
 - `crates/devora-core`: the facade. A UI depends on this crate alone, never on the crates behind it.
 - `crates/devora-health`: the in-app health check (runs `debi health --json` through a login shell).

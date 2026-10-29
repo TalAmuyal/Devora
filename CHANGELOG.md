@@ -22,6 +22,7 @@ Types of changes:
 
 ### Changed
 
+- `ccc` is now part of the Rust `debi` (`debi ccc`, still installed as `ccc`), replacing `ccc.sh` with identical behavior; the bundled `debi` runs it and passes every other command to the Go CLI, now bundled as `debi-go`
 - Moved Ember's workspace, profile, settings, credential, theme, terminal-session, health-check and workspace-creation logic into a new shared Rust core (`project-core/`), organized into crates by concern, with no change in behavior
 - Replaced the Judge permission hook with Judgess, a Rust rewrite built on a real shell parser
 - Judgess now approves `git restore`, `git reset`, `git checkout`, `git stash`, `git push`, `bc`, `.venv/bin/pip list`, `WebSearch`, and `Read`/`Grep`/`Glob` inside `/tmp`

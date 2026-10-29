@@ -1,0 +1,13 @@
+[package]
+name = "debi"
+description = "Devora's CLI. Commands ported to Rust run here; every other command is passed to the Go `debi-go` until it is retired (ADR-007)."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+devora-agent.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+tempfile.workspace = true
