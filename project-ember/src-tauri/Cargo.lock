@@ -546,7 +546,6 @@ name = "devora-ember"
 version = "0.1.0"
 dependencies = [
  "devora-core",
- "fs2",
  "http-body-util",
  "hyper",
  "hyper-util",
@@ -585,6 +584,7 @@ version = "0.1.0"
 name = "devora-workspace"
 version = "0.1.0"
 dependencies = [
+ "fs2",
  "serde",
  "serde_json",
  "uuid",
