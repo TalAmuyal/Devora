@@ -534,7 +534,9 @@ dependencies = [
 name = "devora-core"
 version = "0.1.0"
 dependencies = [
+ "devora-health",
  "devora-platform",
+ "devora-pty",
  "devora-theme",
  "devora-workspace",
 ]
@@ -548,7 +550,6 @@ dependencies = [
  "http-body-util",
  "hyper",
  "hyper-util",
- "portable-pty",
  "serde",
  "serde_json",
  "tauri",
@@ -559,10 +560,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "devora-health"
+version = "0.1.0"
+
+[[package]]
 name = "devora-platform"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
+]
+
+[[package]]
+name = "devora-pty"
+version = "0.1.0"
+dependencies = [
+ "portable-pty",
 ]
 
 [[package]]

@@ -1,8 +1,9 @@
+//! Terminal sessions: a login shell (or an app command run by one) on a pseudo-terminal, with output delivered through callbacks.
+
 use portable_pty::{native_pty_system, CommandBuilder, MasterPty, PtySize};
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::thread::JoinHandle;
-use tauri::ipc::Channel;
 
 pub struct PtySession {
     writer: Box<dyn Write + Send>,
@@ -16,6 +17,12 @@ pub struct PtyManager {
     next_id: u32,
 }
 
+impl Default for PtyManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PtyManager {
     pub fn new() -> Self {
         Self {
@@ -24,6 +31,7 @@ impl PtyManager {
         }
     }
 
+    #[allow(clippy::too_many_arguments)] // To become a session spec once Sapphire needs this API.
     pub fn create_session(
         &mut self,
         cwd: Option<&str>,
@@ -34,8 +42,8 @@ impl PtyManager {
         ipc_port: u16,
         cols: u16,
         rows: u16,
-        on_output: Channel<Vec<u8>>,
-        on_exit: Channel<u32>,
+        mut on_output: impl FnMut(Vec<u8>) -> Result<(), String> + Send + 'static,
+        on_exit: impl FnOnce(u32) + Send + 'static,
     ) -> Result<u32, String> {
         let id = self.next_id;
         self.next_id += 1;
@@ -143,14 +151,14 @@ impl PtyManager {
                 match reader.read(&mut buf) {
                     Ok(0) => break,
                     Ok(n) => {
-                        if on_output.send(buf[..n].to_vec()).is_err() {
+                        if on_output(buf[..n].to_vec()).is_err() {
                             break;
                         }
                     }
                     Err(_) => break,
                 }
             }
-            let _ = on_exit.send(id);
+            on_exit(id);
         });
 
         let session = PtySession {
@@ -221,26 +229,19 @@ mod tests {
     use super::*;
     use std::sync::{Arc, Mutex};
 
-    fn noop_exit_channel() -> Channel<u32> {
-        Channel::new(|_| Ok(()))
+    fn noop_exit_channel() -> impl FnOnce(u32) + Send + 'static {
+        |_| {}
     }
 
-    fn collecting_channel() -> (Channel<Vec<u8>>, Arc<Mutex<Vec<u8>>>) {
+    type Collected = Arc<Mutex<Vec<u8>>>;
+
+    fn collecting_channel() -> (impl FnMut(Vec<u8>) -> Result<(), String> + Send + 'static, Collected) {
         let collected = Arc::new(Mutex::new(Vec::new()));
         let collected_clone = collected.clone();
-        let channel = Channel::new(move |body| {
-            match body {
-                tauri::ipc::InvokeResponseBody::Raw(bytes) => {
-                    collected_clone.lock().unwrap().extend_from_slice(&bytes);
-                }
-                tauri::ipc::InvokeResponseBody::Json(json) => {
-                    if let Ok(bytes) = serde_json::from_str::<Vec<u8>>(&json) {
-                        collected_clone.lock().unwrap().extend_from_slice(&bytes);
-                    }
-                }
-            }
+        let channel = move |bytes: Vec<u8>| {
+            collected_clone.lock().unwrap().extend_from_slice(&bytes);
             Ok(())
-        });
+        };
         (channel, collected)
     }
 
@@ -279,7 +280,13 @@ mod tests {
             )
             .expect("should create session");
 
-        std::thread::sleep(std::time::Duration::from_millis(500));
+        // A login shell's startup time varies by machine (profile scripts), so wait for the output rather than for a fixed time.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while std::time::Instant::now() < deadline
+            && !String::from_utf8_lossy(&collected.lock().unwrap()).contains("EMBER_TEST_OUTPUT")
+        {
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
 
         let output = collected.lock().unwrap();
         let output_str = String::from_utf8_lossy(&output);

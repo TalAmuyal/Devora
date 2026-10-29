@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 
 use tauri::ipc::Channel;
-use tauri::State;
+use tauri::{Manager, State};
 
 use crate::credentials;
 use crate::health;
@@ -55,8 +55,10 @@ pub fn create_pty(
         ipc_port,
         cols,
         rows,
-        on_output,
-        on_exit,
+        move |bytes| on_output.send(bytes).map_err(|e| e.to_string()),
+        move |id| {
+            let _ = on_exit.send(id);
+        },
     )
 }
 
@@ -340,7 +342,8 @@ pub fn run_health_check(
     app: tauri::AppHandle,
     profile_path: Option<String>,
 ) -> Result<String, String> {
-    health::run(&app, profile_path)
+    let resource_dir = app.path().resource_dir().ok();
+    health::run(resource_dir.as_deref(), profile_path)
 }
 
 #[tauri::command]

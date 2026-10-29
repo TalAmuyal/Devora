@@ -1,7 +1,7 @@
 //! In-app health check: shells out to the bundled `debi health --json` and returns its JSON for the Health Hub to render.
 //!
 //! `debi` stays the single source of truth for the checks.
-//! The only subtlety is the environment: a Finder-launched macOS app has a minimal PATH, so to see the same tools a Devora terminal session sees we run `debi` through a login+interactive shell (`zsh -l -i`), exactly like the PTY (pty.rs).
+//! The only subtlety is the environment: a Finder-launched macOS app has a minimal PATH, so to see the same tools a Devora terminal session sees we run `debi` through a login+interactive shell (`zsh -l -i`), exactly like the PTY (`devora-pty`).
 //! The shell's own (interactive rc) stdout is discarded; `debi`'s JSON is captured via a redirect to a temp file so rc-file noise can never corrupt it.
 
 use std::io::Read;
@@ -10,8 +10,6 @@ use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
-
-use tauri::Manager;
 
 /// Monotonic counter making each run's temp-file name unique, so overlapping runs (e.g. rapid re-runs) never read each other's output.
 static RUN_SEQ: AtomicU64 = AtomicU64::new(0);
@@ -34,9 +32,9 @@ fn resolve_debi_path(resource_dir: Option<&Path>) -> String {
 
 /// Run `debi health --json` and return its raw JSON stdout.
 /// `profile_path`, when set, is forwarded as `--profile-path` so the credential rows reflect the active profile.
-pub fn run(app: &tauri::AppHandle, profile_path: Option<String>) -> Result<String, String> {
-    let resource_dir = app.path().resource_dir().ok();
-    let debi_path = resolve_debi_path(resource_dir.as_deref());
+/// `resource_dir` is the app bundle's resource directory, when there is one.
+pub fn run(resource_dir: Option<&Path>, profile_path: Option<String>) -> Result<String, String> {
+    let debi_path = resolve_debi_path(resource_dir);
 
     // Capture debi's JSON in a temp file, isolated from any interactive-rc stdout noise the login shell may emit.
     let out_path = std::env::temp_dir().join(format!(
@@ -60,7 +58,7 @@ pub fn run(app: &tauri::AppHandle, profile_path: Option<String>) -> Result<Strin
     }
 
     cmd.env("DEVORA_HEALTH_OUT", &out_path);
-    if let Some(dir) = resource_dir.as_deref() {
+    if let Some(dir) = resource_dir {
         cmd.env("DEVORA_RESOURCES_DIR", dir);
         let bundled_apps = dir.join("bundled-apps");
         if bundled_apps.is_dir() {
