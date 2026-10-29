@@ -22,6 +22,7 @@ Types of changes:
 
 ### Changed
 
+- ADR-010 records the embedded Neovim spike's findings: Sapphire's prompt editor runs a Neovim config vendored in Sapphire rather than the user's own
 - `ccc` is now part of the Rust `debi` (`debi ccc`, still installed as `ccc`), replacing `ccc.sh` with identical behavior; the bundled `debi` runs it and passes every other command to the Go CLI, now bundled as `debi-go`
 - Moved Ember's workspace, profile, settings, credential, theme, terminal-session, health-check and workspace-creation logic into a new shared Rust core (`project-core/`), organized into crates by concern, with no change in behavior
 - Replaced the Judge permission hook with Judgess, a Rust rewrite built on a real shell parser
