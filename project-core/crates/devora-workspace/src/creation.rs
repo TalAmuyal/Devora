@@ -141,8 +141,7 @@ struct RepoSpec {
     name: String,
     /// The ref to check out: a pinned commit SHA (duplication) or `origin/<default>` (latest).
     target_ref: String,
-    /// Whether to `git fetch origin` before checking out. True only for the latest case — a
-    /// pinned SHA is already present in the shared object store.
+    /// Whether to `git fetch origin` before checking out. True only for the latest case — a pinned SHA is already present in the shared object store.
     fetch_first: bool,
 }
 
