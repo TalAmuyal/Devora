@@ -114,7 +114,8 @@ impl WorkspaceCreationManager {
 
     /// Signal cancellation for the given creation. Unknown ids are ignored (the creation already
     /// finished and deregistered).
-    pub fn cancel(&mut self, id: u32) {
+    /// Signal cancellation for the given creation.
+    /// Unknown ids are ignored (the creation already finished and deregistered).
         if let Some(handle) = self.handles.get(&id) {
             handle.request_cancel();
         }
