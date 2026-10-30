@@ -2,12 +2,12 @@
 
 ## Status
 
-Proposed. It becomes Accepted once the remaining Phase 0 spike reports go: TalAmuyal/Devora#207 (libghostty).
-TalAmuyal/Devora#206 (UniFFI and the build skeleton) reported go ([report](https://github.com/TalAmuyal/Devora/issues/206#issuecomment-6479354609)), and so did TalAmuyal/Devora#208 (embedded Neovim, [report](https://github.com/TalAmuyal/Devora/issues/208#issuecomment-6480548262)); their findings are folded in below.
+Accepted, after all three Mac spikes reported go: TalAmuyal/Devora#206 (UniFFI and the build skeleton, [report](https://github.com/TalAmuyal/Devora/issues/206#issuecomment-6479354609)), TalAmuyal/Devora#208 (embedded Neovim, [report](https://github.com/TalAmuyal/Devora/issues/208#issuecomment-6480548262)) and TalAmuyal/Devora#207 (libghostty, [report](https://github.com/TalAmuyal/Devora/issues/207#issuecomment-6518346541)).
+Their findings are folded in below.
 
 ## Date
 
-2026-10-28
+2026-10-28 (proposed), 2026-10-30 (accepted)
 
 ## Context
 
@@ -44,10 +44,23 @@ All of it sits over the shared core (ADR-007) and its state model (ADR-008).
 		One main-actor hop per event falls seconds behind instead.
 	- Only leaf views observe high-frequency state.
 		A root view that reads streaming state re-evaluates the whole window on every fold.
-- **The terminal is libghostty**
-	- Metal-rendered.
-	- Pinned to one Ghostty commit and wrapped in a single module.
-	- SwiftTerm is the fallback.
+- **The terminal is libghostty, through Ghostty's internal embedding API**
+	- **It uses `ghostty.h` ("libghostty-internal"), which Ghostty documents as tailored to its own macOS app and not meant for external embedders.**
+		It is chosen deliberately: it is complete and works today, with Ghostty's Metal renderer, the PTY, input encoding, scrollback read-back and config hot-reload.
+	- **It is pinned and isolated.**
+		Ghostty is pinned to one commit (currently v1.4.0) and built from source by a `mise` task.
+		`TerminalKit` is the only module that imports `GhosttyKit`, and it exposes `TerminalPane` and `TerminalSession`, so swapping the implementation doesn't touch the rest of Sapphire.
+		`libghostty-vt`, Ghostty's sanctioned but still unstable embedding library with no renderer or PTY of its own, is the long-term path; it is re-evaluated periodically in TalAmuyal/Devora#221, along with version upgrades.
+		SwiftTerm remains a fallback, and isn't needed.
+	- **libghostty owns the PTY and the child process.**
+		The cwd comes from the kernel through the foreground PID, and scrollback is read back as text.
+		Restoring a terminal therefore means relaunching in the saved cwd and re-displaying the saved text, until `libghostty-vt`'s snapshot API is an option.
+	- **Sapphire generates libghostty's whole config, never loading the user's Ghostty config.**
+		It starts with `keybind = clear`, so the host's chords are routed first (ADR-003).
+		A theme change applies through a regenerated config (`ghostty_app_update_config`).
+	- **Every libghostty callback is built outside any actor (`nonisolated`) and hops to the main thread.**
+		libghostty calls back from its renderer and IO threads, and a closure written in a `@MainActor` context makes Swift 6's runtime isolation check abort the app.
+	- The spawn environment drops `NVIM` and `NVIM_LISTEN_ADDRESS`, as the embedded editor's does, since an inherited `$NVIM` makes flatten.nvim-style plugins exit.
 - **The prompt editor is `nvim --embed`, drawn natively**
 	- The msgpack-RPC client, the grid model and rendering live in Swift, so redraws reach the renderer without an FFI hop.
 		Redraw events are parsed off the main actor and applied once per `flush`, and the grid is drawn as soon as a flush arrives rather than on the next update cycle.
@@ -86,7 +99,8 @@ All of it sits over the shared core (ADR-007) and its state model (ADR-008).
 ## Alternatives considered
 
 - **A pure-Rust GPU UI (GPUI-style) or objc2 AppKit bindings.** Rejected: less native, and the newest macOS APIs arrive late.
-- **SwiftTerm or `alacritty_terminal`.** Not chosen: libghostty is the fastest available and Metal-native. SwiftTerm stays as the fallback if spike TalAmuyal/Devora#207 says no-go.
+- **SwiftTerm or `alacritty_terminal`.** Not chosen: libghostty is the fastest available and Metal-native, and TalAmuyal/Devora#207 found it covers everything Sapphire needs. SwiftTerm stays as a fallback that isn't needed.
+- **`libghostty-vt` with Sapphire's own renderer.** Not now: it means building a renderer, font shaping and PTY integration, and its API isn't stable either. Revisit in TalAmuyal/Devora#221, especially once terminal restore is in scope.
 - **Neovim in a terminal pane.** Rejected: no native popups or IME, and clumsy text handoff to the agent.
 - **Running the user's own Neovim config in the embedded editor**, either copied under its own `NVIM_APPNAME` or sourced in place from a Sapphire-owned `-u` init. Rejected after TalAmuyal/Devora#208: a copy loses the plugin manager and parsers, which live under the data directory `NVIM_APPNAME` moves, and breaks configs that resolve their own path; sourcing in place works, but every user config brings its own startup hazards. A vendored config makes the editor predictable.
 - **The Neovim RPC client and grid in the Rust core.** Rejected: an extra hop and an FFI-shaped redraw model for no gain.
@@ -104,4 +118,6 @@ All of it sits over the shared core (ADR-007) and its state model (ADR-008).
 - The proposed performance budgets get measured from the first prototype on: under 500 ms from cold start to a restored window, and keystroke-to-glyph drawn within one frame at 120 Hz.
 	The embedded Neovim already draws within a frame (TalAmuyal/Devora#208: p95 6.3–6.6 ms); reaching the screen takes another one to two frames of Core Animation's pipeline, which no out-of-process editor avoids.
 - Sapphire's prompt editor does not follow the user's own Neovim setup; changing its keys or plugins means changing the vendored config.
-- Spike outcomes may amend this ADR before it is accepted.
+- Building libghostty needs Zig (through `mise`, matching Ghostty's `minimum_zig_version`), Xcode's Metal Toolchain (a separate download since Xcode 27) and GNU gettext's `msgfmt`.
+	A cold build takes about 4 minutes and produces a 150 MB static library, so CI caches it by the pinned commit.
+- Each Ghostty upgrade is manual work, tracked in TalAmuyal/Devora#221 until upgrades can be automated.

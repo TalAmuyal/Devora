@@ -56,7 +56,7 @@ Reference those homes rather than restating them.
 - [ADR-007: Shared Rust Core and Debi in Rust](docs/adrs/ADR-007-shared-rust-core.md) — `project-core/` owns every non-UI behavior behind one `DevoraCore` facade (commands in, events out); Debi is ported to Rust by command group, starting with `ccc` as `debi ccc`
 - [ADR-008: Core-Owned App State and Durability](docs/adrs/ADR-008-core-owned-state-and-durability.md) — the core owns tabs, splits, panes, drafts and agents; every mutation is a named command written through to SQLite; conversation history lives in a separate `conversations.db`
 - [ADR-009: Agent Runtime](docs/adrs/ADR-009-agent-runtime.md) — one persistent `claude -p` stream-json process per agent session, driven over the control protocol, with Judgess linked in-process as a `PreToolUse` hook callback
-- [ADR-010: Sapphire UI Stack and Build](docs/adrs/ADR-010-sapphire-ui-stack.md) (Proposed) — SwiftUI on macOS 27 over UniFFI, libghostty terminal, natively drawn `nvim --embed` prompt editor, `WKWebView` panes, SwiftPM modules plus a generated app target
+- [ADR-010: Sapphire UI Stack and Build](docs/adrs/ADR-010-sapphire-ui-stack.md) — SwiftUI on macOS 27 over UniFFI, libghostty terminal, natively drawn `nvim --embed` prompt editor, `WKWebView` panes, SwiftPM modules plus a generated app target
 
 ## Vision
 
