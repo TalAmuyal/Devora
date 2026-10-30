@@ -1,0 +1,35 @@
+# XcodeGen spec for the thin app target (ADR-010); the generated .xcodeproj is gitignored (`mise run generate`).
+name: DevoraSapphire
+options:
+  bundleIdPrefix: dev.devora
+  deploymentTarget:
+    macOS: "27.0"
+packages:
+  DevoraSapphire:
+    path: ..
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    ARCHS: arm64
+targets:
+  DevoraSapphire:
+    type: application
+    platform: macOS
+    sources:
+      - path: .
+        excludes: ["project.yml", "*.xcodeproj"]
+    dependencies:
+      - package: DevoraSapphire
+        product: AppShell
+    settings:
+      base:
+        PRODUCT_NAME: Devora Sapphire
+        PRODUCT_MODULE_NAME: DevoraSapphire
+        PRODUCT_BUNDLE_IDENTIFIER: dev.devora.sapphire
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Devora Sapphire
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.developer-tools
+        # Ad hoc for local builds; releases need a Developer ID identity.
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "-"
+        ENABLE_HARDENED_RUNTIME: YES

@@ -131,12 +131,16 @@ fn discover_repos_from_repos_dir(profile_path: &Path) -> Vec<RepoInfo> {
 }
 
 pub fn list_profiles() -> Result<Vec<ProfileInfo>, String> {
-    let config_path = global_config_path()?;
+    list_profiles_in(&global_config_path()?)
+}
+
+/// Lists the profiles registered in the global config at `config_path`.
+pub fn list_profiles_in(config_path: &Path) -> Result<Vec<ProfileInfo>, String> {
     if !config_path.exists() {
         return Ok(Vec::new());
     }
 
-    let config = read_json_file(&config_path)?;
+    let config = read_json_file(config_path)?;
 
     let profiles_val = match config.get("profiles") {
         Some(v) => v,
