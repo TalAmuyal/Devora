@@ -1,0 +1,9 @@
+[package]
+name = "devora-app"
+description = "The app process around the core: its log file and panic hook, and what its bundle ships (version, install suffix, user guide)."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

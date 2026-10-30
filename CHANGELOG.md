@@ -25,6 +25,7 @@ Types of changes:
 
 ### Changed
 
+- Ember's log file, error reporting, panic hook, window-title version, user guide lookup and the IPC server behind `debi preview` moved into the shared core (`devora-app` and `devora-ipc`), for Sapphire to reuse
 - The Rust code (core, Judgess, Ember) is formatted with rustfmt, and CI now fails on unformatted Rust code or clippy warnings (`mise run lint`, `mise run ember-lint`)
 - `devora-state` subscriptions can be awaited: `next_batch` is now async and runtime-agnostic, for Sapphire to wrap as a Swift `AsyncSequence`, with `next_batch_blocking` as the blocking variant
 - Ember's terminals are launched from a terminal spec built in the shared core, which also decides a workspace terminal's starting directory and app; Sapphire will launch its terminals from the same spec
@@ -52,6 +53,8 @@ Types of changes:
 
 ### Fixed
 
+- F1 now opens the User Guide in installed apps: it is read from the app bundle instead of the build machine's checkout (#223)
+- A workspace terminal that falls back to a bare shell because the profile config can't be read logs a warning again
 - Neovim now runs in Devora's terminals when Devora itself was launched from a Neovim terminal: the outer `$NVIM` and `$NVIM_LISTEN_ADDRESS` are no longer passed on
 - The app's display name (`CFBundleDisplayName`) is now "Devora" instead of the internal "Devora-Ember"
 - Permission-hook denials now reach the agent (Judge's denials were silently ignored by Claude Code)

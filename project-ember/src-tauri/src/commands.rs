@@ -3,11 +3,12 @@ use std::sync::Mutex;
 use tauri::ipc::Channel;
 use tauri::{Manager, State};
 
+use crate::bundle;
 use crate::config;
 use crate::credentials;
 use crate::health;
-use crate::ipc_server::IpcState;
-use crate::logging::LogState;
+use crate::ipc::IpcServer;
+use crate::logging::{Level, Log};
 use crate::profile;
 use crate::pty::PtyManager;
 use crate::terminal;
@@ -20,7 +21,8 @@ use crate::workspace_creation::{self, WorkspaceCreationManager};
 #[allow(clippy::too_many_arguments)] // Each argument is a named IPC parameter of the frontend's `invoke` call.
 pub fn create_pty(
     state: State<'_, Mutex<PtyManager>>,
-    ipc_state: State<'_, IpcState>,
+    ipc_server: State<'_, IpcServer>,
+    log: State<'_, Log>,
     target: terminal::TerminalTarget,
     profile_path: Option<String>,
     cols: u16,
@@ -36,22 +38,28 @@ pub fn create_pty(
         app: terminal::HostApp::Ember,
         resources_dir: terminal::bundle_resources_dir()
             .map(|dir| dir.to_string_lossy().into_owned()),
-        ipc_port: ipc_state.port,
+        ipc_port: ipc_server.port(),
     };
 
     let mut manager = state
         .lock()
         .map_err(|e| format!("failed to lock pty manager: {e}"))?;
 
-    manager.create_session(
-        |id| terminal::terminal_spec(&request, &host, id),
+    // A setting that can't be read degrades the terminal (to a bare shell) rather than failing it, so it is logged, not bannered.
+    let mut warnings = Vec::new();
+    let result = manager.create_session(
+        |id| terminal::terminal_spec(&request, &host, id, &mut warnings),
         cols,
         rows,
         move |bytes| on_output.send(bytes).map_err(|e| e.to_string()),
         move |id| {
             let _ = on_exit.send(id);
         },
-    )
+    );
+    for warning in &warnings {
+        log.write(Level::Warn, warning);
+    }
+    result
 }
 
 #[tauri::command]
@@ -356,8 +364,8 @@ pub fn save_profiling_report(profile_path: String, report_json: String) -> Resul
 }
 
 #[tauri::command]
-pub fn log_error(state: State<'_, LogState>, level: String, message: String) -> Result<(), String> {
-    state.write(&level, &message);
+pub fn log_error(state: State<'_, Log>, level: String, message: String) -> Result<(), String> {
+    state.write(level.parse::<Level>()?, &message);
     Ok(())
 }
 
@@ -367,18 +375,9 @@ pub fn read_text_file(path: String) -> Result<String, String> {
 }
 
 #[tauri::command]
-pub fn get_user_guide_path() -> Result<String, String> {
-    let manifest_dir = env!("CARGO_MANIFEST_DIR");
-    let path = std::path::Path::new(manifest_dir)
-        .parent() // project-ember/
-        .and_then(|p| p.parent()) // Devora/
-        .map(|p| p.join("USER_GUIDE.md"))
-        .ok_or_else(|| "could not determine repo root".to_string())?;
-    if path.exists() {
-        Ok(path.to_string_lossy().into_owned())
-    } else {
-        Err(format!("USER_GUIDE.md not found at {}", path.display()))
-    }
+pub fn get_user_guide_path(app: tauri::AppHandle) -> Result<String, String> {
+    let resource_dir = app.path().resource_dir().ok();
+    bundle::user_guide_path(resource_dir.as_deref()).map(|path| path.to_string_lossy().into_owned())
 }
 
 #[tauri::command]
