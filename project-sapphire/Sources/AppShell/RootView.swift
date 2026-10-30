@@ -2,12 +2,11 @@ import AppKit
 import CoreBindings
 import Store
 import SwiftUI
-import TerminalKit
 
-/// The window's content: profiles and workspaces in the sidebar, a login shell in the main area.
+/// The window's content: profiles and workspaces in the sidebar; the active tab's terminal over the tab bar in the main area.
 public struct RootView: View {
 	@State private var store = Store()
-	@State private var shell = TerminalSession(command: nil, workingDirectory: NSHomeDirectory())
+	@State private var terminals = Terminals()
 
 	public init() {}
 
@@ -16,14 +15,26 @@ public struct RootView: View {
 			Sidebar(store: store)
 				.navigationSplitViewColumnWidth(min: 220, ideal: 260)
 		} detail: {
-			TerminalPane(session: shell, isFocused: true, router: { _ in false }, onFocus: {})
+			VStack(spacing: 0) {
+				TabContent(store: store, terminals: terminals)
+				TabBar(store: store)
+			}
 		}
+		.background(FrameDriver(store: store))
 		.navigationTitle(store.version.isEmpty ? "Devora Sapphire" : "Devora Sapphire \(store.version)")
 		.frame(minWidth: 900, minHeight: 560)
 		.task {
+			store.dispatch(.openShell)
 			await store.dispatch(.load).value
+			if let path = LaunchOptions.value("--open-workspace") {
+				if let workspace = store.workspaces.first(where: { $0.path == path }) {
+					store.dispatch(.openWorkspace(workspace))
+				} else {
+					NSLog("--open-workspace: %@ is not a workspace of the selected profile", path)
+				}
+			}
 			if let path = LaunchOptions.value("--snapshot") {
-				await Snapshot.run(shell: shell, to: path)
+				await Snapshot.run(store: store, terminals: terminals, to: path)
 			}
 		}
 	}
@@ -44,7 +55,15 @@ private struct Sidebar: View {
 			}
 			Section("Workspaces") {
 				ForEach(store.workspaces, id: \.path) { workspace in
-					WorkspaceRow(workspace: workspace)
+					Button {
+						store.dispatch(.openWorkspace(workspace))
+					} label: {
+						WorkspaceRow(workspace: workspace)
+					}
+					.buttonStyle(.plain)
+					// Activating an inactive workspace (a new task) comes with the Workspace Hub.
+					.disabled(!workspace.active)
+					.help(workspace.active ? "Open in a new tab" : "")
 				}
 			}
 			if let error = store.error {

@@ -10,9 +10,7 @@ import Observation
 @Observable
 public final class TerminalSession: Identifiable {
 	public let id = UUID()
-	/// Passed to the shell (`$SHELL -c` style by libghostty); nil runs the login shell.
-	public let command: String?
-	public let workingDirectory: String?
+	public let launch: TerminalLaunch
 	public internal(set) var title = ""
 	/// The cwd the shell reported through OSC 7, if it does.
 	public internal(set) var reportedPwd: String?
@@ -24,9 +22,8 @@ public final class TerminalSession: Identifiable {
 	@ObservationIgnored weak var view: TerminalView?
 	@ObservationIgnored var startedAt: ContinuousClock.Instant?
 
-	public init(command: String? = nil, workingDirectory: String? = nil) {
-		self.command = command
-		self.workingDirectory = workingDirectory
+	public init(launch: TerminalLaunch) {
+		self.launch = launch
 	}
 
 	func markExited(code: Int32) {

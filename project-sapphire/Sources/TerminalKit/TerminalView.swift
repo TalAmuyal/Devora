@@ -48,11 +48,20 @@ final class TerminalView: NSView, @preconcurrency NSTextInputClient {
 		config.scale_factor = window.backingScaleFactor
 		config.context = GHOSTTY_SURFACE_CONTEXT_SPLIT
 		let app = TerminalRuntime.shared.app
-		surface = withOptionalCString(session.command) { command in
-			withOptionalCString(session.workingDirectory) { cwd in
-				config.command = command
-				config.working_directory = cwd
-				return ghostty_surface_new(app, &config)
+		let launch = session.launch
+		// libghostty copies the strings during `ghostty_surface_new`, so they only need to outlive the call.
+		let env = launch.env.map { (key: strdup($0.key), value: strdup($0.value)) }
+		defer { env.forEach { free($0.key); free($0.value) } }
+		var envVars = env.map { ghostty_env_var_s(key: $0.key, value: $0.value) }
+		surface = launch.shellCommand.withCString { command in
+			launch.cwd.withCString { cwd in
+				envVars.withUnsafeMutableBufferPointer { vars in
+					config.command = command
+					config.working_directory = cwd
+					config.env_vars = vars.baseAddress
+					config.env_var_count = vars.count
+					return ghostty_surface_new(app, &config)
+				}
 			}
 		}
 		session.startedAt = .now
@@ -263,9 +272,4 @@ final class TerminalView: NSView, @preconcurrency NSTextInputClient {
 		if event.hasPreciseScrollingDeltas { dx *= 2; dy *= 2 }
 		ghostty_surface_mouse_scroll(surface, dx, dy, event.hasPreciseScrollingDeltas ? 1 : 0)
 	}
-}
-
-private func withOptionalCString<R>(_ string: String?, _ body: (UnsafePointer<CChar>?) -> R) -> R {
-	guard let string else { return body(nil) }
-	return string.withCString { body($0) }
 }
