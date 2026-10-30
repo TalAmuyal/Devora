@@ -114,3 +114,60 @@ jobs:
           path: project-ember/test-results/failures/
           if-no-files-found: ignore
           retention-days: 14
+
+  sapphire:
+    # macOS 27 with Xcode 27; GitHub names this generation's images after the Xcode major, so there is no macos-27 label.
+    runs-on: xcode-27
+    timeout-minutes: 60
+    env:
+      # The image's default Xcode moves with patch releases; pin the one Sapphire builds with.
+      DEVELOPER_DIR: /Applications/Xcode_27.1.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: jdx/mise-action@v4
+        with:
+          experimental: true
+
+      - name: Resolve the GhosttyKit cache key
+        id: ghostty-key
+        run: echo "key=$(mise run -C project-sapphire ghostty-cache-key)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache GhosttyKit.xcframework
+        id: cache-ghostty
+        uses: actions/cache@v5
+        with:
+          path: project-sapphire/build/GhosttyKit.xcframework
+          key: ${{ steps.ghostty-key.outputs.key }}
+
+      - name: Cache Rust build artifacts
+        uses: actions/cache@v5
+        with:
+          path: project-core/target
+          key: sapphire-rust-${{ hashFiles('project-core/Cargo.lock', 'project-core/rust-toolchain.toml') }}
+          restore-keys: sapphire-rust-
+
+      # Building libghostty is slow and needs the Metal Toolchain (missing from the image, actions/runner-images#14548), so it only happens on a cache miss.
+      - name: Install GhosttyKit prerequisites
+        if: steps.cache-ghostty.outputs.cache-hit != 'true'
+        run: mise run -C project-sapphire ghostty-prereqs
+
+      - name: Build GhosttyKit.xcframework
+        if: steps.cache-ghostty.outputs.cache-hit != 'true'
+        run: mise run -C project-sapphire ghostty-build
+
+      - name: Build the Rust core and its Swift bindings
+        run: mise run -C project-sapphire core
+
+      - name: Build the app
+        run: mise run -C project-sapphire build
+
+      - name: Swift tests
+        run: mise run -C project-sapphire test
+
+      - name: Core tests (macOS)
+        run: mise run -C project-core test
+
+      - name: Disk usage
+        if: always()
+        run: df -h . && du -sh project-sapphire/build project-sapphire/vendor project-sapphire/.build project-core/target 2>/dev/null || true
