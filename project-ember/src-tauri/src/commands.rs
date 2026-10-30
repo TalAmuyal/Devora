@@ -18,6 +18,7 @@ use crate::workspace_creation::{self, WorkspaceCreationManager};
 
 /// Opens a terminal on `target`, launched from the core's terminal spec (`devora_core::terminal`).
 #[tauri::command]
+#[allow(clippy::too_many_arguments)] // Each argument is a named IPC parameter of the frontend's `invoke` call.
 pub fn create_pty(
     state: State<'_, Mutex<PtyManager>>,
     ipc_server: State<'_, IpcServer>,
@@ -35,7 +36,8 @@ pub fn create_pty(
     };
     let host = terminal::TerminalHost {
         app: terminal::HostApp::Ember,
-        resources_dir: terminal::bundle_resources_dir().map(|dir| dir.to_string_lossy().into_owned()),
+        resources_dir: terminal::bundle_resources_dir()
+            .map(|dir| dir.to_string_lossy().into_owned()),
         ipc_port: ipc_server.port(),
     };
 
@@ -102,10 +104,7 @@ pub fn list_profiles() -> Result<Vec<workspace::ProfileInfo>, String> {
 }
 
 #[tauri::command]
-pub fn register_profile(
-    path: String,
-    name: String,
-) -> Result<profile::RegisteredProfile, String> {
+pub fn register_profile(path: String, name: String) -> Result<profile::RegisteredProfile, String> {
     let config_path = config::global_config_path()?;
     profile::register_profile(&config_path, &path, &name)
 }
@@ -156,9 +155,7 @@ pub fn get_all_workspace_statuses(
 }
 
 #[tauri::command]
-pub fn get_registered_repos(
-    profile_path: String,
-) -> Result<Vec<workspace::RepoInfo>, String> {
+pub fn get_registered_repos(profile_path: String) -> Result<Vec<workspace::RepoInfo>, String> {
     workspace::get_registered_repos(&profile_path)
 }
 
@@ -362,10 +359,7 @@ pub fn delete_workspace(workspace_path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn save_profiling_report(
-    profile_path: String,
-    report_json: String,
-) -> Result<String, String> {
+pub fn save_profiling_report(profile_path: String, report_json: String) -> Result<String, String> {
     workspace::save_profiling_report(&profile_path, &report_json)
 }
 
@@ -377,8 +371,7 @@ pub fn log_error(state: State<'_, Log>, level: String, message: String) -> Resul
 
 #[tauri::command]
 pub fn read_text_file(path: String) -> Result<String, String> {
-    std::fs::read_to_string(&path)
-        .map_err(|e| format!("failed to read file {path}: {e}"))
+    std::fs::read_to_string(&path).map_err(|e| format!("failed to read file {path}: {e}"))
 }
 
 #[tauri::command]

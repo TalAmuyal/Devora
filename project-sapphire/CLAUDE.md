@@ -21,6 +21,7 @@ The app is one window: profiles and the selected profile's workspaces in the sid
 	`--snapshot <out.png>` types a command into the shell, captures the window to `<out.png>` and the shell's text to `<out.png>.txt`, then quits.
 - `mise run test`: `swift test`, which runs the store against the real core.
 - `mise run core`, `mise run generate`, `mise run ghostty-fetch`, `mise run ghostty-build`: the build's steps.
-	`ghostty-build` needs Xcode's Metal Toolchain and gettext's `msgfmt`; set `GHOSTTY_CLONE_SOURCE` to clone Ghostty from a local copy instead of GitHub.
+	`ghostty-build` needs Xcode's Metal Toolchain and gettext's `msgfmt` (`mise run ghostty-prereqs` installs whichever is missing; it is meant for CI, since it installs system-wide, so ask before running it on a developer's Mac); set `GHOSTTY_CLONE_SOURCE` to clone Ghostty from a local copy instead of GitHub.
+- `mise run ghostty-cache-key`: the key CI caches `build/GhosttyKit.xcframework` under (the `sapphire` job in `.github/workflows/ci.yml`).
 
 The app reads the global config from `DEVORA_CONFIG_PATH` when set, as Ember does; `Store(configPath:)` overrides it for tests.

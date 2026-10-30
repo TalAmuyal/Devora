@@ -4,6 +4,9 @@ xcodegen = "2.46.0"
 
 [env]
 SAPPHIRE_APP = "build/DerivedData/Build/Products/Release/Devora Sapphire.app"
+# Ghostty v1.4.0; the commit is the source of truth, the tag is informational.
+GHOSTTY_TAG = "v1.4.0"
+GHOSTTY_COMMIT = "83fb95624b0439ee660c2679b43b38c8b63769cd"
 
 [tasks.core]
 description = "Build devora-ffi, its Swift bindings and DevoraCoreFFI.xcframework (outputs are only replaced when they change)"
@@ -13,9 +16,6 @@ run = "./scripts/build-core.sh"
 description = "Clone Ghostty into vendor/ghostty at the pinned commit (GHOSTTY_CLONE_SOURCE overrides the GitHub URL, e.g. with a local clone)"
 run = """
 set -euo pipefail
-# Ghostty v1.4.0; the commit is the source of truth, the tag is informational.
-GHOSTTY_TAG="v1.4.0"
-GHOSTTY_COMMIT="83fb95624b0439ee660c2679b43b38c8b63769cd"
 if [ ! -d vendor/ghostty/.git ]; then
 	mkdir -p vendor
 	git clone "${GHOSTTY_CLONE_SOURCE:-https://github.com/ghostty-org/ghostty.git}" vendor/ghostty
@@ -41,6 +41,20 @@ HEADERS=build/GhosttyKit.xcframework/macos-arm64/Headers
 mkdir -p "$HEADERS/GhosttyKit"
 mv "$HEADERS/ghostty.h" "$HEADERS/module.modulemap" "$HEADERS/GhosttyKit/"
 echo "Built build/GhosttyKit.xcframework"
+"""
+
+[tasks.ghostty-cache-key]
+description = "Print the cache key for build/GhosttyKit.xcframework: the pinned Ghostty commit, the Zig version and the Xcode build"
+run = """
+echo "ghosttykit-$GHOSTTY_COMMIT-zig$(zig version)-xcode$(xcodebuild -version | awk '/Build version/ {print $3}')"
+"""
+
+[tasks.ghostty-prereqs]
+description = "For CI: install what ghostty-build needs beyond mise's tools, when missing: Xcode's Metal Toolchain and gettext's msgfmt (a system-wide Homebrew install)"
+run = """
+set -euo pipefail
+xcodebuild -showComponent MetalToolchain >/dev/null 2>&1 || xcodebuild -downloadComponent MetalToolchain
+command -v msgfmt >/dev/null || brew install gettext
 """
 
 [tasks.generate]

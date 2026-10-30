@@ -188,7 +188,15 @@ pub fn create(
 
     let (ws_path, ws_name, mode) = select_workspace(&workspaces_dir, &repo_names, task_name)?;
 
-    let body = run_body(handle, profile_path, &repos, &ws_path, &mode, on_event, warnings);
+    let body = run_body(
+        handle,
+        profile_path,
+        &repos,
+        &ws_path,
+        &mode,
+        on_event,
+        warnings,
+    );
 
     match body {
         Ok(()) if handle.is_cancelled() => {
@@ -229,8 +237,8 @@ pub fn add_repo(
 ) -> Result<Outcome, String> {
     // Guard against a name that would escape the workspace (e.g. a postfix of "../x").
     let mut components = Path::new(worktree_dir_name).components();
-    let single_normal = matches!(components.next(), Some(Component::Normal(_)))
-        && components.next().is_none();
+    let single_normal =
+        matches!(components.next(), Some(Component::Normal(_))) && components.next().is_none();
     if worktree_dir_name.is_empty() || !single_normal {
         return Err(format!("invalid worktree name: {worktree_dir_name}"));
     }
@@ -376,7 +384,9 @@ fn clone_and_detach(
         if handle.is_cancelled() {
             return Ok(false);
         }
-        return Err(format!("git checkout --detach failed for {dir_name} (see log)"));
+        return Err(format!(
+            "git checkout --detach failed for {dir_name} (see log)"
+        ));
     }
 
     Ok(true)
@@ -425,7 +435,10 @@ fn select_workspace(
 
 /// First reusable workspace: `initialized`, no `task.json` (inactive), and whose worktree set exactly matches the requested repos.
 /// Picks the lowest `ws-N` for determinism.
-pub(crate) fn find_reusable_workspace(workspaces_dir: &Path, repo_names: &[String]) -> Option<PathBuf> {
+pub(crate) fn find_reusable_workspace(
+    workspaces_dir: &Path,
+    repo_names: &[String],
+) -> Option<PathBuf> {
     let mut wanted: Vec<String> = repo_names.to_vec();
     wanted.sort();
 
@@ -503,8 +516,14 @@ fn run_body(
                 on_event(CreationEvent::Step {
                     label: format!("Refreshing {}", spec.name),
                 });
-                refresh_worktree(&worktree_path, &spec.target_ref, spec.fetch_first, on_event, handle)
-                    .map_err(|e| format!("{}: {e}", spec.name))?;
+                refresh_worktree(
+                    &worktree_path,
+                    &spec.target_ref,
+                    spec.fetch_first,
+                    on_event,
+                    handle,
+                )
+                .map_err(|e| format!("{}: {e}", spec.name))?;
                 if handle.is_cancelled() {
                     return Ok(());
                 }
@@ -512,7 +531,14 @@ fn run_body(
         }
     }
 
-    run_prepare(handle, Some(profile_path), repos, ws_path, on_event, warnings)
+    run_prepare(
+        handle,
+        Some(profile_path),
+        repos,
+        ws_path,
+        on_event,
+        warnings,
+    )
 }
 
 /// Create one worktree from `source_repo`, detached at `target_ref`, then trust mise.
@@ -614,7 +640,13 @@ fn run_prepare(
         on_event(CreationEvent::Step {
             label: format!("Preparing {name}"),
         });
-        let ok = run_streamed("sh", &["-c", &prepare_cmd], &worktree_path, on_event, handle)?;
+        let ok = run_streamed(
+            "sh",
+            &["-c", &prepare_cmd],
+            &worktree_path,
+            on_event,
+            handle,
+        )?;
         if !ok && !handle.is_cancelled() {
             warnings.push(format!("{name}: prepare-command failed (see log)"));
         }
@@ -637,7 +669,13 @@ pub(crate) fn refresh_worktree(
             .unwrap_or(target_ref)
             .to_string();
 
-        let ok = run_streamed("git", &["fetch", "origin", &fetch_branch], worktree, on_event, handle)?;
+        let ok = run_streamed(
+            "git",
+            &["fetch", "origin", &fetch_branch],
+            worktree,
+            on_event,
+            handle,
+        )?;
         if !ok {
             if handle.is_cancelled() {
                 return Ok(());
@@ -663,9 +701,7 @@ fn determine_default_branch(repo_dir: &Path) -> String {
         .current_dir(repo_dir)
         .output();
     match output {
-        Ok(out) if out.status.success() => {
-            String::from_utf8_lossy(&out.stdout).trim().to_string()
-        }
+        Ok(out) if out.status.success() => String::from_utf8_lossy(&out.stdout).trim().to_string(),
         _ => "origin/main".to_string(),
     }
 }
@@ -978,7 +1014,10 @@ mod tests {
         git(&bare, &["init", "--bare", "-b", "main"]);
 
         let source = root.join("source");
-        git(root, &["clone", bare.to_str().unwrap(), source.to_str().unwrap()]);
+        git(
+            root,
+            &["clone", bare.to_str().unwrap(), source.to_str().unwrap()],
+        );
         git(&source, &["config", "user.email", "t@t"]);
         git(&source, &["config", "user.name", "t"]);
         fs::write(source.join("file.txt"), "v1\n").unwrap();
@@ -987,7 +1026,16 @@ mod tests {
         git(&source, &["push", "origin", "main"]);
 
         let wt = root.join("wt");
-        git(&source, &["worktree", "add", "--detach", wt.to_str().unwrap(), "origin/main"]);
+        git(
+            &source,
+            &[
+                "worktree",
+                "add",
+                "--detach",
+                wt.to_str().unwrap(),
+                "origin/main",
+            ],
+        );
         let head_before = String::from_utf8_lossy(&git(&wt, &["rev-parse", "HEAD"]).stdout)
             .trim()
             .to_string();
@@ -1004,13 +1052,23 @@ mod tests {
             .trim()
             .to_string();
 
-        refresh_worktree(&wt, "origin/main", true, &noop_channel(), &CreationHandle::new()).unwrap();
+        refresh_worktree(
+            &wt,
+            "origin/main",
+            true,
+            &noop_channel(),
+            &CreationHandle::new(),
+        )
+        .unwrap();
 
         let head_after = String::from_utf8_lossy(&git(&wt, &["rev-parse", "HEAD"]).stdout)
             .trim()
             .to_string();
         assert_ne!(head_after, head_before, "worktree should advance");
-        assert_eq!(head_after, head_upstream, "worktree should be at latest origin");
+        assert_eq!(
+            head_after, head_upstream,
+            "worktree should be at latest origin"
+        );
         assert!(
             wt.join("node_modules_marker").exists(),
             "untracked cache must survive the refresh"
@@ -1025,7 +1083,10 @@ mod tests {
         git(&bare, &["init", "--bare", "-b", "main"]);
 
         let seed = root.join("seed");
-        git(root, &["clone", bare.to_str().unwrap(), seed.to_str().unwrap()]);
+        git(
+            root,
+            &["clone", bare.to_str().unwrap(), seed.to_str().unwrap()],
+        );
         git(&seed, &["config", "user.email", "t@t"]);
         git(&seed, &["config", "user.name", "t"]);
         fs::write(seed.join("file.txt"), "v1\n").unwrap();
@@ -1057,7 +1118,10 @@ mod tests {
         .unwrap();
 
         assert!(ok);
-        assert!(dest.join(".git").exists(), "clone should produce a .git dir");
+        assert!(
+            dest.join(".git").exists(),
+            "clone should produce a .git dir"
+        );
         assert_eq!(fs::read_to_string(dest.join("file.txt")).unwrap(), "v1\n");
         // `git symbolic-ref -q HEAD` exits non-zero exactly when HEAD is detached.
         let head = Command::new("git")
@@ -1148,7 +1212,10 @@ mod tests {
             v.get("type").and_then(|t| t.as_str()) == Some("log")
                 && v.get("line").and_then(|l| l.as_str()) == Some("hello-stream")
         });
-        assert!(found, "expected a log event with 'hello-stream', got {events:?}");
+        assert!(
+            found,
+            "expected a log event with 'hello-stream', got {events:?}"
+        );
     }
 
     #[test]
@@ -1183,7 +1250,10 @@ mod tests {
         git(&bare, &["init", "--bare", "-b", "main"]);
 
         let source = root.join("source");
-        git(root, &["clone", bare.to_str().unwrap(), source.to_str().unwrap()]);
+        git(
+            root,
+            &["clone", bare.to_str().unwrap(), source.to_str().unwrap()],
+        );
         git(&source, &["config", "user.email", "t@t"]);
         git(&source, &["config", "user.name", "t"]);
         fs::write(source.join("file.txt"), "v1\n").unwrap();
@@ -1224,13 +1294,19 @@ mod tests {
         let head = String::from_utf8_lossy(&git(&target, &["rev-parse", "HEAD"]).stdout)
             .trim()
             .to_string();
-        assert_eq!(head, origin_head, "worktree should be at origin's default branch head");
+        assert_eq!(
+            head, origin_head,
+            "worktree should be at origin's default branch head"
+        );
         let symbolic = Command::new("git")
             .args(["symbolic-ref", "-q", "HEAD"])
             .current_dir(&target)
             .output()
             .unwrap();
-        assert!(!symbolic.status.success(), "worktree should be in detached HEAD");
+        assert!(
+            !symbolic.status.success(),
+            "worktree should be in detached HEAD"
+        );
     }
 
     #[test]
@@ -1289,7 +1365,10 @@ mod tests {
 
         ensure_workspace_claude_md(ws).unwrap();
 
-        assert_eq!(fs::read_to_string(ws.join("CLAUDE.md")).unwrap(), "hand-edited\n");
+        assert_eq!(
+            fs::read_to_string(ws.join("CLAUDE.md")).unwrap(),
+            "hand-edited\n"
+        );
     }
 
     #[test]
@@ -1318,7 +1397,10 @@ mod tests {
             &mut Vec::new(),
         )
         .unwrap_err();
-        assert_eq!(err, "Directory 'repo' already exists. Use a different postfix.");
+        assert_eq!(
+            err,
+            "Directory 'repo' already exists. Use a different postfix."
+        );
     }
 
     #[test]
@@ -1336,7 +1418,10 @@ mod tests {
                 &mut Vec::new(),
             )
             .unwrap_err();
-            assert!(err.contains("invalid worktree name"), "for {bad:?} got: {err}");
+            assert!(
+                err.contains("invalid worktree name"),
+                "for {bad:?} got: {err}"
+            );
         }
     }
 
@@ -1360,7 +1445,10 @@ mod tests {
         .unwrap();
 
         assert!(matches!(outcome, Outcome::Done(_)));
-        assert!(ws.join("source").join(".git").exists(), "worktree should be created");
+        assert!(
+            ws.join("source").join(".git").exists(),
+            "worktree should be created"
+        );
         let content = fs::read_to_string(ws.join("CLAUDE.md")).unwrap();
         assert!(content.contains("- `source/`"), "got: {content}");
         assert!(content.contains("- `existing/`"), "got: {content}");
@@ -1375,7 +1463,10 @@ mod tests {
         git(&bare, &["init", "--bare", "-b", "main"]);
 
         let source = root.join(name);
-        git(root, &["clone", bare.to_str().unwrap(), source.to_str().unwrap()]);
+        git(
+            root,
+            &["clone", bare.to_str().unwrap(), source.to_str().unwrap()],
+        );
         git(&source, &["config", "user.email", "t@t"]);
         git(&source, &["config", "user.name", "t"]);
 
@@ -1399,7 +1490,13 @@ mod tests {
         fs::create_dir_all(ws).unwrap();
         git(
             repo,
-            &["worktree", "add", "--detach", ws.join(name).to_str().unwrap(), commit],
+            &[
+                "worktree",
+                "add",
+                "--detach",
+                ws.join(name).to_str().unwrap(),
+                commit,
+            ],
         );
     }
 
@@ -1475,7 +1572,11 @@ mod tests {
         .unwrap();
 
         assert!(completed);
-        assert_eq!(head_of(&target), c1, "worktree should be pinned to the requested commit");
+        assert_eq!(
+            head_of(&target),
+            c1,
+            "worktree should be pinned to the requested commit"
+        );
         assert!(is_detached(&target), "worktree should be detached");
     }
 
@@ -1487,12 +1588,19 @@ mod tests {
 
         // A reused worktree starts at the latest tip (c2); pinning moves it back to c1.
         let wt = root.join("wt");
-        git(&source, &["worktree", "add", "--detach", wt.to_str().unwrap(), &c2]);
+        git(
+            &source,
+            &["worktree", "add", "--detach", wt.to_str().unwrap(), &c2],
+        );
         assert_eq!(head_of(&wt), c2);
 
         refresh_worktree(&wt, &c1, false, &noop_channel(), &CreationHandle::new()).unwrap();
 
-        assert_eq!(head_of(&wt), c1, "reused worktree should be pinned to the requested commit");
+        assert_eq!(
+            head_of(&wt),
+            c1,
+            "reused worktree should be pinned to the requested commit"
+        );
         assert!(is_detached(&wt));
     }
 
@@ -1509,7 +1617,10 @@ mod tests {
 
         copy_source_claude_md(&src, &dst).unwrap();
 
-        assert_eq!(fs::read_to_string(dst.join("CLAUDE.md")).unwrap(), "SOURCE\n");
+        assert_eq!(
+            fs::read_to_string(dst.join("CLAUDE.md")).unwrap(),
+            "SOURCE\n"
+        );
     }
 
     #[test]
@@ -1567,11 +1678,19 @@ mod tests {
         };
 
         let pinned_wt = ws_path.join("pinned");
-        assert_eq!(head_of(&pinned_wt), c1, "source repo should be pinned to the source commit");
+        assert_eq!(
+            head_of(&pinned_wt),
+            c1,
+            "source repo should be pinned to the source commit"
+        );
         assert!(is_detached(&pinned_wt));
 
         let added_wt = ws_path.join("added");
-        assert_eq!(head_of(&added_wt), a_latest, "added repo should be at the latest tip");
+        assert_eq!(
+            head_of(&added_wt),
+            a_latest,
+            "added repo should be at the latest tip"
+        );
         assert!(is_detached(&added_wt));
 
         assert_eq!(

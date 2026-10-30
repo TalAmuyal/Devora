@@ -6,7 +6,7 @@ use std::os::unix::fs::{symlink, PermissionsExt};
 use std::path::Path;
 use std::process::Command;
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 const ENV_KEYS: [&str; 3] = [
     "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC",
@@ -47,7 +47,12 @@ fn run_case(case: &Value, via_symlink: bool) -> Value {
     std::fs::create_dir(&bin).unwrap();
     write_fake_claude(&bin);
 
-    let user_args: Vec<&str> = case["args"].as_array().unwrap().iter().map(|a| a.as_str().unwrap()).collect();
+    let user_args: Vec<&str> = case["args"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|a| a.as_str().unwrap())
+        .collect();
     let mut command = if via_symlink {
         Command::new(root.join("bundled-apps/ccc"))
     } else {
@@ -89,7 +94,11 @@ fn ccc_matches_the_recorded_ccc_sh_behavior() {
                 case["expected"],
                 "case {} (via {})",
                 case["name"],
-                if via_symlink { "ccc symlink" } else { "debi ccc" }
+                if via_symlink {
+                    "ccc symlink"
+                } else {
+                    "debi ccc"
+                }
             );
         }
     }
@@ -112,10 +121,18 @@ fn other_commands_are_delegated_to_debi_go() {
         .spawn()
         .unwrap();
     use std::io::Write;
-    child.stdin.take().unwrap().write_all(b"from-stdin").unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(b"from-stdin")
+        .unwrap();
     let output = child.wait_with_output().unwrap();
 
-    assert_eq!(String::from_utf8_lossy(&output.stdout), "health|--json|a b|from-stdin");
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        "health|--json|a b|from-stdin"
+    );
     assert_eq!(output.status.code(), Some(5));
 }
 
@@ -124,7 +141,11 @@ fn a_missing_debi_go_is_reported() {
     let tmp = tempfile::tempdir().unwrap();
     let debi = tmp.path().join("debi");
     std::fs::copy(env!("CARGO_BIN_EXE_debi"), &debi).unwrap();
-    let output = Command::new(&debi).arg("health").env("PATH", tmp.path()).output().unwrap();
+    let output = Command::new(&debi)
+        .arg("health")
+        .env("PATH", tmp.path())
+        .output()
+        .unwrap();
     assert_eq!(output.status.code(), Some(127));
     assert!(String::from_utf8_lossy(&output.stderr).contains("cannot run debi-go"));
 }

@@ -109,7 +109,9 @@ struct CommandOutcome {
 /// Spawn `cmd`, draining stderr on a side thread (so a full pipe can't block the child), and wait up to `timeout`.
 /// On timeout the child is killed and an error is returned.
 fn run_with_timeout(mut cmd: Command, timeout: Duration) -> Result<CommandOutcome, String> {
-    let mut child = cmd.spawn().map_err(|e| format!("failed to launch health check: {e}"))?;
+    let mut child = cmd
+        .spawn()
+        .map_err(|e| format!("failed to launch health check: {e}"))?;
 
     let stderr_pipe = child.stderr.take();
     let stderr_reader = thread::spawn(move || {

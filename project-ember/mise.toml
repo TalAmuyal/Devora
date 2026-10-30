@@ -52,6 +52,15 @@ dir = "src-tauri"
 run = "cargo test"
 description = "Run Rust tests"
 
+[tasks.lint-rust]
+dir = "src-tauri"
+run = """
+set -e
+cargo fmt --check
+cargo clippy --all-targets -- -D warnings
+"""
+description = "Check Rust formatting (rustfmt) and lint with clippy"
+
 [tasks.test-unit]
 run = "npx vitest run"
 description = "Run frontend unit tests"

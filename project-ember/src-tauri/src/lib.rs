@@ -13,7 +13,7 @@ use tauri::webview::WebviewWindowBuilder;
 use tauri::{Emitter, Manager};
 
 fn is_test_mode() -> bool {
-    std::env::var("DEVORA_TEST_MODE").map_or(false, |v| v == "1")
+    std::env::var("DEVORA_TEST_MODE").is_ok_and(|v| v == "1")
 }
 
 pub fn run() {
@@ -22,7 +22,9 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(Mutex::new(pty::PtyManager::new()))
-        .manage(Mutex::new(workspace_creation::WorkspaceCreationManager::new()))
+        .manage(Mutex::new(
+            workspace_creation::WorkspaceCreationManager::new(),
+        ))
         .manage(log)
         .setup(|app| {
             let handle = app.handle().clone();

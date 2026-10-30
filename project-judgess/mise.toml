@@ -1,5 +1,5 @@
 [tools]
-rust = "1.99.1"
+rust = { version = "1.99.1", components = "rustfmt,clippy" }
 
 [tasks.build]
 run = "cargo build --release"
@@ -8,6 +8,14 @@ description = "Build the judgess binary (release)"
 [tasks.test]
 run = "cargo test"
 description = "Run all tests (including the cases.json regression suite)"
+
+[tasks.lint]
+run = """
+set -e
+cargo fmt --check
+cargo clippy --all-targets -- -D warnings
+"""
+description = "Check formatting (rustfmt) and lint with clippy"
 
 [tasks.classify]
 run = "cargo run --release --quiet -- classify"

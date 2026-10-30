@@ -20,11 +20,13 @@ Types of changes:
 - Architecture decision records ADR-006 to ADR-010 for Project Sapphire, the planned native macOS build, and the shared Rust core it will share with Ember
 - `mise mac-install` accepts `-p/--path` to choose the install directory and `-s/--suffix` to install as `Devora-<suffix>.app`, with the suffix also shown in the window title and as the app name in the menu bar, Dock, and Cmd+Tab
 - `devora-state`, a core crate holding the tab and session model and the active profile as core-owned state, changed by named commands that emit typed events; nothing uses it yet, and Sapphire will render from it
+- CI builds and tests Devora Sapphire on GitHub's hosted macOS 27 runner (`xcode-27`), caching the GhosttyKit build
 - A configurable PR title prefix (`pr.title-prefix`, per-profile with a global fallback) that `debi pr submit` prepends verbatim to the PR title, editable in the Settings Hub's Pull Requests card
 
 ### Changed
 
 - Ember's log file, error reporting, panic hook, window-title version, user guide lookup and the IPC server behind `debi preview` moved into the shared core (`devora-app` and `devora-ipc`), for Sapphire to reuse
+- The Rust code (core, Judgess, Ember) is formatted with rustfmt, and CI now fails on unformatted Rust code or clippy warnings (`mise run lint`, `mise run ember-lint`)
 - `devora-state` subscriptions can be awaited: `next_batch` is now async and runtime-agnostic, for Sapphire to wrap as a Swift `AsyncSequence`, with `next_batch_blocking` as the blocking variant
 - Ember's terminals are launched from a terminal spec built in the shared core, which also decides a workspace terminal's starting directory and app; Sapphire will launch its terminals from the same spec
 - ADR-010 (Sapphire UI stack and build) is accepted, recording the libghostty terminal decision: Ghostty's internal embedding API, pinned and isolated, with upgrades reviewed in #221
