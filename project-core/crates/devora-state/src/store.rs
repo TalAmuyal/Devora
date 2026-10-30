@@ -1,8 +1,10 @@
 //! The shared, thread-safe home of one [`State`], and the batched event subscriptions the UIs pull from (ADR-010).
 
+use crate::persist::Db;
 use crate::{AppState, Command, Event, State, StateError};
 use event_listener::{EventListener, Listener};
 use std::collections::VecDeque;
+use std::path::Path;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 /// One [`State`] shared between threads: commands are applied one at a time, and their events reach every open [`Subscription`] in the order they were applied.
@@ -15,25 +17,58 @@ pub struct Store {
 struct Inner {
     state: State,
     subscribers: Vec<Arc<Queue>>,
+    /// Where every change is committed before it takes effect; `None` for an in-memory store.
+    db: Option<Db>,
 }
 
 impl Store {
+    /// An in-memory store, starting empty and forgotten when dropped.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Opens the store persisted in the SQLite database at `path`, creating it (and its directory) if needed.
+    ///
+    /// The state is restored as the last committed command left it, except that a tab still creating a workspace becomes [`crate::SessionKind::CreationFailed`] with the reason "interrupted".
+    /// Each app passes its own path, since apps never share a state database (ADR-008).
+    pub fn open(path: impl AsRef<Path>) -> Result<Self, StateError> {
+        let (db, state) = Db::open(path.as_ref())?;
+        Ok(Self {
+            inner: Mutex::new(Inner {
+                state,
+                subscribers: Vec::new(),
+                db: Some(db),
+            }),
+        })
+    }
+
     /// Applies a command and returns its events; open subscriptions receive the same events.
+    ///
+    /// A persistent store commits the change before the events go out.
+    /// If that fails, the command takes no effect and returns [`StateError::Storage`].
     pub fn dispatch(&self, command: Command) -> Result<Vec<Event>, StateError> {
-        let mut inner = lock(&self.inner);
-        let events = inner.state.apply(command)?;
-        if !events.is_empty() {
-            inner.subscribers.retain(|queue| queue.push(&events));
+        let inner = &mut *lock(&self.inner);
+        // Applied to a copy, which replaces the state only once committed, so memory never runs ahead of the disk.
+        let mut next = inner.state.clone();
+        let events = next.apply(command)?;
+        if events.is_empty() {
+            return Ok(events);
         }
+        if let Some(db) = &mut inner.db {
+            db.save(&next)?;
+        }
+        inner.state = next;
+        inner.subscribers.retain(|queue| queue.push(&events));
         Ok(events)
     }
 
     pub fn snapshot(&self) -> AppState {
         lock(&self.inner).state.snapshot().clone()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn state(&self) -> State {
+        lock(&self.inner).state.clone()
     }
 
     /// Opens a subscription whose first event is an [`Event::Snapshot`] of the current state, followed by every event from later commands.
@@ -145,7 +180,7 @@ fn take(state: &mut QueueState, max: u32) -> Vec<Event> {
     state.events.drain(..n).collect()
 }
 
-/// A panic while a lock was held can't leave the state half-applied (the reducer validates before it mutates), so a poisoned lock is still safe to use.
+/// A panic while a lock was held can't leave the state half-applied (a command is applied to a copy, and an unfinished transaction rolls back), so a poisoned lock is still safe to use.
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex
         .lock()

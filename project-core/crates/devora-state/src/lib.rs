@@ -5,6 +5,7 @@
 //!
 //! - [`State`] is the pure reducer: no I/O, no threads, testable without a UI.
 //! - [`Store`] shares one `State` between threads and fans its events out to [`Subscription`]s, which are pulled in batches (ADR-010).
+//!   Opened with [`Store::open`], it writes every command through to a SQLite file before its events go out, so the state survives a restart or a crash (ADR-008).
 //!
 //! Everything that crosses this crate's API is owned data (records, plain enums, `String`, `u32`/`u64`), so the UniFFI facade can expose it as is.
 //!
@@ -13,6 +14,7 @@
 
 mod command;
 mod model;
+mod persist;
 mod store;
 
 pub use command::{Command, Event, StateError};
@@ -22,7 +24,7 @@ pub use store::{Store, Subscription};
 use command::apply;
 
 /// The reducer: the current [`AppState`] and the id allocator, changed only through [`State::apply`].
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct State {
     app: AppState,
     next_id: u64,
@@ -44,5 +46,19 @@ impl State {
     /// A failed command leaves the state untouched.
     pub fn apply(&mut self, command: Command) -> Result<Vec<Event>, StateError> {
         apply(&mut self.app, &mut self.next_id, command)
+    }
+
+    /// Fails every workspace creation still in progress, since nothing creates them once the app restarts; returns whether any was.
+    pub(crate) fn interrupt_creations(&mut self) -> bool {
+        let mut interrupted = false;
+        for tab in &mut self.app.window.tabs {
+            if tab.session.kind == SessionKind::CreatingWorkspace {
+                tab.session.kind = SessionKind::CreationFailed {
+                    reason: "interrupted".into(),
+                };
+                interrupted = true;
+            }
+        }
+        interrupted
     }
 }

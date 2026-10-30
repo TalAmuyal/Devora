@@ -20,6 +20,7 @@ Types of changes:
 - Architecture decision records ADR-006 to ADR-010 for Project Sapphire, the planned native macOS build, and the shared Rust core it will share with Ember
 - `mise mac-install` accepts `-p/--path` to choose the install directory and `-s/--suffix` to install as `Devora-<suffix>.app`, with the suffix also shown in the window title and as the app name in the menu bar, Dock, and Cmd+Tab
 - `devora-state`, a core crate holding the tab and session model and the active profile as core-owned state, changed by named commands that emit typed events; nothing uses it yet, and Sapphire will render from it
+- `devora-state` can persist to SQLite (`Store::open`), committing every command before its events go out so the tabs survive a restart or a crash, with a workspace creation left in progress restored as interrupted; nothing opens a persistent store yet
 - CI builds and tests Devora Sapphire on GitHub's hosted macOS 27 runner (`xcode-27`), caching the GhosttyKit build
 - A configurable PR title prefix (`pr.title-prefix`, per-profile with a global fallback) that `debi pr submit` prepends verbatim to the PR title, editable in the Settings Hub's Pull Requests card
 - Devora Sapphire has tabs: its tab bar renders the core-owned tabs from `devora-state`, and each tab's terminal runs the core's terminal spec, a login shell for a new shell tab and the profile's `terminal.default-app` (such as `ccc`) for a workspace opened from the sidebar

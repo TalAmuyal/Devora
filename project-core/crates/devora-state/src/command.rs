@@ -101,6 +101,10 @@ pub enum StateError {
     NotCreating {
         tab: TabId,
     },
+    /// The state database couldn't be opened, read or written; a command that failed to save takes no effect.
+    Storage {
+        message: String,
+    },
 }
 
 impl fmt::Display for StateError {
@@ -111,6 +115,7 @@ impl fmt::Display for StateError {
                 write!(f, "tab index {index} is out of range for {len} tabs")
             }
             Self::NotCreating { tab } => write!(f, "tab {tab} is not creating a workspace"),
+            Self::Storage { message } => f.write_str(message),
         }
     }
 }

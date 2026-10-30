@@ -1,14 +1,16 @@
 [package]
 name = "devora-state"
-description = "The app-state model the UIs render: named commands in, typed events out."
+description = "The app-state model the UIs render: named commands in, typed events out, persisted to SQLite."
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
 
 [dependencies]
 event-listener.workspace = true
+rusqlite.workspace = true
 serde.workspace = true
 
 [dev-dependencies]
 futures-lite.workspace = true
 serde_json.workspace = true
+tempfile.workspace = true
