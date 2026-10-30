@@ -162,11 +162,21 @@ jobs:
       - name: Build the app
         run: mise run -C project-sapphire build
 
-      - name: Swift tests
+      # Unit tests, the acceptance scenarios over the test bridge, and the XCUITests where they can run.
+      - name: Tests
         run: mise run -C project-sapphire test
 
       - name: Core tests (macOS)
         run: mise run -C project-core test
+
+      - name: Upload acceptance failure captures
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sapphire-failure-captures
+          path: project-sapphire/test-results/failures/
+          if-no-files-found: ignore
+          retention-days: 14
 
       - name: Disk usage
         if: always()

@@ -124,6 +124,17 @@ export function createSingleActiveWorkspace(
   return writeRealWorkspace(profilePath, id, true, title, repoName);
 }
 
+/**
+ * Set the profile's `terminal.default-app` to a script that prints `default app in <dir>`, where `<dir>` is its cwd below `workspaces/` (e.g. `ws-1/test-repo`), then stays running.
+ */
+export function setDirectoryPrintingDefaultApp(profilePath: string): void {
+  const script = path.join(profilePath, 'default-app.sh');
+  fs.writeFileSync(script, '#!/bin/sh\necho "default app in ${PWD#*/workspaces/}"\nexec cat\n', { mode: 0o755 });
+  const configPath = path.join(profilePath, 'config.json');
+  const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+  fs.writeFileSync(configPath, JSON.stringify({ ...config, terminal: { 'default-app': script } }));
+}
+
 export function writeTestConfig(configPath: string, profilePaths: string[]): void {
   fs.mkdirSync(path.dirname(configPath), { recursive: true });
   fs.writeFileSync(

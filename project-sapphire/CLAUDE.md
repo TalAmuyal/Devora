@@ -22,6 +22,8 @@ It starts with one shell tab; `+` opens another, and clicking an active workspac
 - `App/`: the thin app target; `project.yml` is its XcodeGen spec (the `.xcodeproj` is gitignored).
 - `Tests/StoreTests`: the store and the event fold against the real core, over a fixture config.
 - `Tests/TerminalKitTests`: the command line libghostty runs.
+- `acceptance/`: the acceptance scenarios' Cucumber.js harness (steps, hooks, the bridge client) and Sapphire-only features; `../acceptance/features/` holds those shared with Ember.
+- `UITests/`: the XCUITests, a UI-test target in `App/project.yml`.
 - `scripts/build-core.sh`: `devora-ffi` → static library → bindings → `build/DevoraCoreFFI.xcframework`.
 - `build/` and `vendor/` (gitignored): the xcframeworks, DerivedData, and the Ghostty checkout.
 
@@ -31,9 +33,22 @@ It starts with one shell tab; `+` opens another, and clicking an active workspac
 - `mise run run`: launches the app through LaunchServices (`open -n`); arguments are `--flag value` pairs, since a bare argument makes AppKit open no window.
 	`--open-workspace <path>` opens a workspace of the selected profile in a new tab.
 	`--snapshot <out.png>` types a command into the first shell tab, captures the window to `<out.png>` and the active tab's text to `<out.png>.txt`, then quits.
-- `mise run test`: `swift test`, which runs the store against the real core.
+- `mise run test`: every test, in order: `test-unit` (`swift test`, the store against the real core), `test-acceptance` (the scenarios over the test bridge) and `test-ui` (the XCUITests); the last two build the app first.
 - `mise run core`, `mise run generate`, `mise run ghostty-fetch`, `mise run ghostty-build`: the build's steps.
 	`ghostty-build` needs Xcode's Metal Toolchain and gettext's `msgfmt` (`mise run ghostty-prereqs` installs whichever is missing; it is meant for CI, since it installs system-wide, so ask before running it on a developer's Mac); set `GHOSTTY_CLONE_SOURCE` to clone Ghostty from a local copy instead of GitHub.
 - `mise run ghostty-cache-key`: the key CI caches `build/GhosttyKit.xcframework` under (the `sapphire` job in `.github/workflows/ci.yml`).
 
 The app reads the global config from `DEVORA_CONFIG_PATH` when set, as Ember does; `Store(configPath:)` overrides it for tests, except in terminal specs, whose settings `devora-config` reads through `DEVORA_CONFIG_PATH` alone.
+
+## Testing
+
+Acceptance tests follow Ember's (ADR-001): Gherkin scenarios run by Cucumber.js against the real, built app, which they drive through a test bridge.
+Real input (key events, focus, the IME, libghostty's key path) is what the bridge can't drive; XCUITests cover it.
+
+- The bridge (`Sources/AppShell/TestBridge.swift`) is a loopback HTTP server that starts only when `DEVORA_TEST_MODE=1`, once the launch is done, and prints `Devora test harness on port <port>` to stderr, as Ember's does.
+	It is compiled into every build, as Ember's is, and does nothing unless the variable is set.
+	Its routes: `GET /test/state` (profiles, workspaces, tabs with their terminal's status and focus, the active tab, the store's error and warnings); `POST /test/dispatch` with a store command (`{"command": "openShell"}`, `load`, `selectProfile` with `path`, `openWorkspace` with a workspace `id`, `activateTab` and `closeTab` with a tab `id`); `GET /test/terminal/text?tab=<id>` and `POST /test/terminal/type` with `{"line", "tab"}` (the active tab when `tab` is omitted; a 409 until its terminal runs).
+	State changes fold on the next frame, so steps poll `state` (`Bridge.waitFor`) rather than reading it once.
+- Every scenario launches a fresh app (`acceptance/support/hooks.ts`), straight from the bundle's binary rather than through `open`, with a config of its own (`DEVORA_CONFIG_PATH`) and only a login session's environment, and starts once the startup tab's terminal runs; failed steps save the state, the active terminal's text and the app's stderr to `test-results/failures/`.
+- Scenarios shared with Ember live in `../acceptance/features/` (see `../acceptance/CLAUDE.md`); Sapphire's steps use the same phrases as Ember's, and reuse Ember's fixture helpers (`project-ember/tests/support/fixture-helper.ts`).
+- The XCUITests launch the app themselves; `scripts/test-ui.sh` skips them, saying why, when the screen is locked or `SAPPHIRE_SKIP_UI_TESTS=1`.

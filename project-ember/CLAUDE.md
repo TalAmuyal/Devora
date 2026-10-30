@@ -6,6 +6,11 @@ All acceptance tests must replicate user actions as closely as possible.
 When tests run, UI changes should look as though a real user is interacting with the app.
 For example, Claude Code must be launched via `ccc` interactively, no shortcuts (like `--print`) that bypass the real user flow; And use `/exit` (not Ctrl+C or Ctrl+D) to shut down Claude Code in tests -- this is the only consistent way to ensure the process exits cleanly.
 
+### Scenarios shared with Sapphire
+
+The suite also runs `../acceptance/features/`, the scenarios Sapphire runs too (see `../acceptance/CLAUDE.md`), minus those tagged `@sapphire-only`.
+Changing the wording of a step those scenarios use means changing Sapphire's step (`project-sapphire/acceptance/steps/`) as well.
+
 ### App bundle freshness
 
 Acceptance tests run a **prebuilt** `.app` bundle — the frontend is embedded at build time, so a stale bundle silently tests stale code.

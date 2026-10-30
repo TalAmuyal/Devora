@@ -1,6 +1,16 @@
+[settings]
+experimental = true # Required for the 'deps' feature
+
 [tools]
 zig = "0.17.0"
 xcodegen = "2.46.0"
+node = "22"
+
+[deps.npm_deps]
+auto = true
+sources = ["package.json", "package-lock.json"]
+run = "npm install"
+description = "Sync the acceptance tests' npm dependencies"
 
 [env]
 SAPPHIRE_APP = "build/DerivedData/Build/Products/Release/Devora Sapphire.app"
@@ -77,6 +87,10 @@ description = "Run the app through LaunchServices; arguments are --flag value pa
 run = 'open -n -W "$SAPPHIRE_APP" --args'
 
 [tasks.test]
+description = "Run every test: the Swift unit tests, the acceptance scenarios over the test bridge, and the XCUITests (skipped where they can't run)"
+run = [{ task = "test-unit" }, { task = "test-acceptance" }, { task = "test-ui" }]
+
+[tasks.test-unit]
 description = "Run the Swift tests against the real core"
 depends = ["core"]
 run = """
@@ -84,3 +98,13 @@ set -euo pipefail
 [ -d build/GhosttyKit.xcframework ] || mise run ghostty-build
 swift test
 """
+
+[tasks.test-acceptance]
+description = "Run the Gherkin acceptance scenarios against the built app, through its test bridge; arguments go to cucumber-js"
+depends = ["build"]
+run = "node --import tsx ./node_modules/.bin/cucumber-js acceptance/features/ ../acceptance/features/ --tags 'not @ember-only' --import 'acceptance/steps/*.ts' --import 'acceptance/support/*.ts' --format progress"
+
+[tasks.test-ui]
+description = "Run the XCUITests, which drive the app with real input; skipped, with the reason, where they can't run"
+depends = ["build"]
+run = "./scripts/test-ui.sh"
