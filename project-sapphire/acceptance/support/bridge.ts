@@ -8,6 +8,8 @@ export interface TabState {
   terminal: string;
   /** Whether the tab's terminal is its window's first responder. */
   focused: boolean;
+  /** The names of the layers on the tab's stack, bottom to top; `terminal` once its terminal runs. */
+  layers: string[];
 }
 
 export interface AppState {
@@ -24,7 +26,13 @@ export interface AppState {
   warnings: string[];
   activeTab: number | null;
   tabs: TabState[];
+  /** The terminals' font size, in points. */
+  fontSize: number;
+  /** The names of the layers on the window stack, bottom to top. */
+  windowLayers: string[];
 }
+
+export type Modifier = 'shift' | 'control' | 'option' | 'command';
 
 export type Command =
   | { command: 'load' }
@@ -74,6 +82,19 @@ export class Bridge {
   /** Types a line into a tab's terminal (the active tab's by default) and presses Return. */
   async typeLine(line: string, tab?: number): Promise<void> {
     await this.request('POST', '/test/terminal/type', { line, tab });
+  }
+
+  /**
+   * Presses a key: the app makes the key-down AppKit would and sends it through its key router, then, unless the router consumes it, to the window's first responder.
+   * `key` is a letter, a digit, `Minus`, `Equal`, `Left`, `Right`, `Escape` or `Return`.
+   */
+  async press(key: string, modifiers: Modifier[] = []): Promise<void> {
+    await this.request('POST', '/test/key', { key, modifiers });
+  }
+
+  /** Opens a stand-in window surface: a page over the whole window, with nothing to focus, that `q` or Escape closes. */
+  async openTestSurface(): Promise<void> {
+    await this.request('POST', '/test/surface');
   }
 
   /** Polls `read` until `done` accepts its value; a `BridgeError` (e.g. a terminal that isn't running yet) counts as not done. */

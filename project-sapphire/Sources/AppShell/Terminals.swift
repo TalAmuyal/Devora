@@ -1,4 +1,5 @@
 import CoreBindings
+import Layers
 import Store
 import SwiftUI
 import TerminalKit
@@ -15,8 +16,8 @@ final class Terminals {
 
 	private(set) var slots: [UInt64: Slot] = [:]
 
-	/// Drops the terminals of closed tabs, and starts one for each new tab that runs a terminal, from the core's spec.
-	func sync(with tabs: [AppTab], store: Store) {
+	/// Drops the terminals of closed tabs, and starts one for each new tab that runs a terminal, from the core's spec; `started` gets each one that runs.
+	func sync(with tabs: [AppTab], store: Store, started: @escaping (AppTab, TerminalSession) -> Void) {
 		let live = Set(tabs.map(\.terminalID))
 		slots = slots.filter { live.contains($0.key) }
 		for tab in tabs where slots[tab.terminalID] == nil && tab.session.kind.runsTerminal {
@@ -30,7 +31,9 @@ final class Terminals {
 					slot = .failed(Store.describe(error))
 				}
 				// The tab may have closed while its spec loaded.
-				if slots[id] != nil { slots[id] = slot }
+				guard slots[id] != nil else { return }
+				slots[id] = slot
+				if case .running(let session) = slot { started(tab, session) }
 			}
 		}
 	}
@@ -60,6 +63,7 @@ extension TerminalLaunch {
 struct TabContent: View {
 	let store: Store
 	let terminals: Terminals
+	let surfaces: Surfaces
 
 	var body: some View {
 		let window = store.app.window
@@ -71,15 +75,19 @@ struct TabContent: View {
 			}
 			ForEach(window.tabs, id: \.terminalID) { tab in
 				let isActive = tab.id == window.activeTab
-				TabPane(tab: tab, slot: terminals.slots[tab.terminalID], isActive: isActive) {
-					store.dispatch(.closeTab(id: tab.id))
-				}
+				TabPane(tab: tab, slot: terminals.slots[tab.terminalID], stack: surfaces.tabStacks[tab.id])
 				.opacity(isActive ? 1 : 0)
 				.allowsHitTesting(isActive)
 			}
 		}
 		.onChange(of: window.tabs, initial: true) { _, tabs in
-			terminals.sync(with: tabs, store: store)
+			surfaces.sync(with: tabs)
+			terminals.sync(with: tabs, store: store) { [store, surfaces] tab, session in
+				surfaces.pushTerminal(session, tab: tab.id) { store.dispatch(.closeTab(id: tab.id)) }
+			}
+		}
+		.onChange(of: window.activeTab) {
+			surfaces.router.focusActiveTab()
 		}
 	}
 }
@@ -87,8 +95,7 @@ struct TabContent: View {
 private struct TabPane: View {
 	let tab: AppTab
 	let slot: Terminals.Slot?
-	let isActive: Bool
-	let onExit: () -> Void
+	let stack: LayerStack?
 
 	var body: some View {
 		switch (tab.session.kind, slot) {
@@ -98,25 +105,11 @@ private struct TabPane: View {
 			Message(title: "The workspace couldn't be created", detail: reason)
 		case (_, .failed(let reason)):
 			Message(title: "The terminal couldn't start", detail: reason)
-		case (_, .running(let session)):
-			TerminalTab(session: session, isActive: isActive, onExit: onExit)
+		case (_, .running):
+			if let stack { LayerHost(stack: stack) }
 		case (_, .starting), (_, nil):
 			Color.clear
 		}
-	}
-}
-
-/// Closes its tab once the terminal's process exits, as Ember does.
-private struct TerminalTab: View {
-	let session: TerminalSession
-	let isActive: Bool
-	let onExit: () -> Void
-
-	var body: some View {
-		TerminalPane(session: session, isFocused: isActive, router: { _ in false }, onFocus: {})
-			.onChange(of: session.exitCode != nil || session.isClosed) { _, ended in
-				if ended { onExit() }
-			}
 	}
 }
 

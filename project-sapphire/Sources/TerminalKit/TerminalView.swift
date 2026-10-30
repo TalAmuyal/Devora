@@ -1,21 +1,14 @@
 import AppKit
 import GhosttyKit
 
-/// Decides whether a key event is one of the host's own chords; returning true consumes it before the terminal sees it.
-public typealias HostKeyRouter = @MainActor (NSEvent) -> Bool
-
 /// The NSView libghostty renders into (it installs its own Metal layer) and the source of its input.
+///
+/// It sees only the keys the host's key router let through: the router runs before AppKit dispatches a key (ADR-003).
 ///
 /// The keyboard and IME path is adapted from Ghostty's macOS app (`SurfaceView_AppKit.swift`, MIT license), trimmed to what Sapphire uses.
 @MainActor
 final class TerminalView: NSView, @preconcurrency NSTextInputClient {
 	let session: TerminalSession
-	var router: HostKeyRouter?
-	var onFocus: (() -> Void)?
-	/// Whether the host wants this terminal focused; applied once the view is in a window.
-	var wantsFocus = false {
-		didSet { claimFocusIfWanted() }
-	}
 	private(set) var surface: ghostty_surface_t?
 	private var markedText = ""
 	/// Non-nil while inside keyDown: text the input method commits is collected here and sent with the key.
@@ -67,13 +60,8 @@ final class TerminalView: NSView, @preconcurrency NSTextInputClient {
 		session.startedAt = .now
 		updateSurfaceSize()
 		updateTrackingAreas()
-		claimFocusIfWanted()
-	}
-
-	/// SwiftUI's first `updateNSView` runs before the view has a window, so focus is applied here too.
-	private func claimFocusIfWanted() {
-		guard wantsFocus, let window, window.firstResponder !== self else { return }
-		window.makeFirstResponder(self)
+		// The host may have focused the terminal before SwiftUI put its view in a window.
+		if session.wantsFocus { session.focus() }
 	}
 
 	override func setFrameSize(_ newSize: NSSize) {
@@ -96,7 +84,6 @@ final class TerminalView: NSView, @preconcurrency NSTextInputClient {
 
 	override func becomeFirstResponder() -> Bool {
 		if let surface { ghostty_surface_set_focus(surface, true) }
-		onFocus?()
 		return true
 	}
 
@@ -109,8 +96,6 @@ final class TerminalView: NSView, @preconcurrency NSTextInputClient {
 
 	override func performKeyEquivalent(with event: NSEvent) -> Bool {
 		guard event.type == .keyDown, window?.firstResponder === self else { return false }
-		// Host chords first (ADR-003: shortcuts are routed before surfaces), then the app menu.
-		if router?(event) == true { return true }
 		if event.modifierFlags.contains(.command), event.charactersIgnoringModifiers == "v" {
 			session.paste(NSPasteboard.general.string(forType: .string) ?? "")
 			return true
@@ -119,7 +104,6 @@ final class TerminalView: NSView, @preconcurrency NSTextInputClient {
 	}
 
 	override func keyDown(with event: NSEvent) {
-		if router?(event) == true { return }
 		guard surface != nil else {
 			interpretKeyEvents([event])
 			return

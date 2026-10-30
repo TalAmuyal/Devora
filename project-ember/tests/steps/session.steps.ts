@@ -46,6 +46,26 @@ Then('the first session should be active', async function (this: EmberWorld) {
   assert.strictEqual(activeId, firstId);
 });
 
+Then('the third session should be active', async function (this: EmberWorld) {
+  await this.driver.pollFor(
+    `const m = window.__test.sessionManager; return m.getActiveSessionId() === m.getSessions()[2]?.id`,
+    true,
+    5_000,
+  );
+});
+
+// Session ids grow with each new session, so a session's rank among them is its creation order, counted from 1.
+Then(
+  'the sessions should be in the order {int}, {int}, {int}',
+  async function (this: EmberWorld, a: number, b: number, c: number) {
+    const ids: number[] = await this.driver.eval(
+      'return window.__test.sessionManager.getSessions().map((s) => s.id)',
+    );
+    const created = [...ids].sort((x, y) => x - y);
+    assert.deepStrictEqual(ids.map((id) => created.indexOf(id) + 1), [a, b, c]);
+  },
+);
+
 When(
   '{string} is typed in the terminal',
   async function (this: EmberWorld, text: string) {

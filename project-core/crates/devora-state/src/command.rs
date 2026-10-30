@@ -26,6 +26,10 @@ pub enum Command {
     ActivateNext,
     /// Activates the tab before the active one, wrapping around to the last.
     ActivatePrevious,
+    /// Moves the active tab one place towards the start of the tab bar; it doesn't wrap, so the first tab stays put.
+    MoveActiveTabBackward,
+    /// Moves the active tab one place towards the end of the tab bar; it doesn't wrap, so the last tab stays put.
+    MoveActiveTabForward,
     /// Moves a tab to `index` in the tab bar, shifting the tabs in between.
     MoveTab {
         tab: TabId,
@@ -185,6 +189,26 @@ pub(crate) fn apply(
                     };
                     let id = window.tabs[target].id;
                     activate(window, id)
+                }
+                _ => vec![],
+            }
+        }
+        Command::MoveActiveTabBackward | Command::MoveActiveTabForward => {
+            let step = if command == Command::MoveActiveTabForward {
+                1
+            } else {
+                -1
+            };
+            let len = window.tabs.len();
+            let from = window.active_tab.and_then(|id| window.index_of(id));
+            match from.and_then(|from| Some((from, from.checked_add_signed(step)?))) {
+                Some((from, to)) if to < len => {
+                    window.tabs.swap(from, to);
+                    vec![Event::TabMoved {
+                        tab: window.tabs[to].id,
+                        from: to_u32(from),
+                        to: to_u32(to),
+                    }]
                 }
                 _ => vec![],
             }
@@ -497,6 +521,47 @@ mod tests {
             Some(c),
             "moving doesn't change the active tab"
         );
+    }
+
+    #[test]
+    fn move_active_tab_moves_it_one_place_without_wrapping() {
+        let mut state = State::new();
+        let a = shell(&mut state, "a");
+        let b = shell(&mut state, "b");
+        let c = shell(&mut state, "c");
+
+        assert_eq!(
+            state.apply(Command::MoveActiveTabForward).unwrap(),
+            vec![],
+            "the last tab stays put"
+        );
+        assert_eq!(
+            state.apply(Command::MoveActiveTabBackward).unwrap(),
+            vec![Event::TabMoved {
+                tab: c,
+                from: 2,
+                to: 1
+            }]
+        );
+        state.apply(Command::MoveActiveTabBackward).unwrap();
+        assert_eq!(order(&state), vec![c, a, b]);
+        assert_eq!(
+            state.apply(Command::MoveActiveTabBackward).unwrap(),
+            vec![],
+            "the first tab stays put"
+        );
+        assert_eq!(
+            active(&state),
+            Some(c),
+            "moving doesn't change the active tab"
+        );
+    }
+
+    #[test]
+    fn move_active_tab_does_nothing_without_an_active_tab() {
+        let mut state = State::new();
+        assert_eq!(state.apply(Command::MoveActiveTabForward).unwrap(), vec![]);
+        assert_eq!(state.apply(Command::MoveActiveTabBackward).unwrap(), vec![]);
     }
 
     #[test]

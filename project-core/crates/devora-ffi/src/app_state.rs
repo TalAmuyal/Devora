@@ -70,6 +70,8 @@ pub enum Command {
     },
     ActivateNext,
     ActivatePrevious,
+    MoveActiveTabBackward,
+    MoveActiveTabForward,
     MoveTab {
         tab: u64,
         index: u32,
