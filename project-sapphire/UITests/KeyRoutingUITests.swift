@@ -44,13 +44,14 @@ final class KeyRoutingUITests: XCTestCase {
 	}
 
 	@MainActor
-	func testCtrlCReachesTheShell() throws {
+	func testCtrlCInterruptsTheForegroundProcess() throws {
 		try launch()
-		_ = try runInShell("echo started >$UITEST_OUT/started; sleep 60; echo late >$UITEST_OUT/late", awaiting: "started")
+		// `/bin/sh` rather than the login shell, whose own handling of an interrupted command list differs between shells.
+		_ = try runInShell(
+			#"sh -c 'trap "echo interrupted >$UITEST_OUT/interrupted; exit" INT; echo started >$UITEST_OUT/started; while :; do sleep 0.1; done'"#,
+			awaiting: "started")
 		app.typeKey("c", modifierFlags: .control)
-		// Within the sleep: only an interrupt lets the shell run the next command this soon.
-		_ = try runInShell("echo after >$UITEST_OUT/after", awaiting: "after")
-		XCTAssertFalse(FileManager.default.fileExists(atPath: scratch.appending(path: "late").path))
+		XCTAssertEqual(try waitForFile("interrupted"), "interrupted")
 	}
 
 	@MainActor
@@ -60,14 +61,18 @@ final class KeyRoutingUITests: XCTestCase {
 		app.typeText("printf %s ")
 		app.typeKey("e", modifierFlags: .option)
 		app.typeKey("e", modifierFlags: [])
-		let composed = try runInShell(" >$UITEST_OUT/composed", awaiting: "composed")
-		XCTAssertEqual(composed, "é", "got the scalars \(composed.unicodeScalars.map { String($0.value, radix: 16) })")
+		XCTAssertEqual(try runInShell(" >$UITEST_OUT/composed", awaiting: "composed"), "é")
 	}
 
 	/// Types a command and Return, then waits for the file it writes in `UITEST_OUT` and returns its contents.
 	@MainActor
 	private func runInShell(_ command: String, awaiting file: String) throws -> String {
 		app.typeText(command + "\n")
+		return try waitForFile(file)
+	}
+
+	/// Waits for a file in `UITEST_OUT` to have contents, and returns them.
+	private func waitForFile(_ file: String) throws -> String {
 		let url = scratch.appending(path: file)
 		let deadline = Date.now.addingTimeInterval(15)
 		while Date.now < deadline {
