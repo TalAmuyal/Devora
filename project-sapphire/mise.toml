@@ -1,16 +1,7 @@
-[settings]
-experimental = true # Required for the 'deps' feature
-
 [tools]
 zig = "0.17.0"
 xcodegen = "2.46.0"
 node = "22"
-
-[deps.npm_deps]
-auto = true
-sources = ["package.json", "package-lock.json"]
-run = "npm install"
-description = "Sync the acceptance tests' npm dependencies"
 
 [env]
 SAPPHIRE_APP = "build/DerivedData/Build/Products/Release/Devora Sapphire.app"
@@ -99,9 +90,15 @@ set -euo pipefail
 swift test
 """
 
+[tasks.npm-install]
+description = "Install the acceptance tests' npm dependencies when package.json or the lock file changed"
+sources = ["package.json", "package-lock.json"]
+outputs = ["node_modules/.package-lock.json"]
+run = "npm install --no-audit --no-fund"
+
 [tasks.test-acceptance]
 description = "Run the Gherkin acceptance scenarios against the built app, through its test bridge; arguments go to cucumber-js"
-depends = ["build"]
+depends = ["build", "npm-install"]
 run = "node --import tsx ./node_modules/.bin/cucumber-js acceptance/features/ ../acceptance/features/ --tags 'not @ember-only' --import 'acceptance/steps/*.ts' --import 'acceptance/support/*.ts' --format progress"
 
 [tasks.test-ui]
