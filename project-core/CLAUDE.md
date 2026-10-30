@@ -12,6 +12,7 @@ It is being extracted from Ember's `src-tauri/` area by area (TalAmuyal/Devora#2
 - `crates/devora-health`: the in-app health check (runs `debi health --json` through a login shell).
 - `crates/devora-platform`: operating-system services (the keychain today).
 - `crates/devora-pty`: terminal sessions on pseudo-terminals, with output delivered through callbacks.
+- `crates/devora-state`: the app-state model the UIs render (tabs, the session behind each, the active profile), changed only by named commands through one reducer, with events pulled from batched subscriptions.
 - `crates/devora-workspace`: workspaces, their repos and status, worktree tasks, and cancellable workspace creation with streamed progress.
 - `crates/devora-theme`: theme files to CSS custom properties.
 
