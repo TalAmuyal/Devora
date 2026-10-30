@@ -3,7 +3,7 @@ experimental = true # Required for the 'deps' feature in sub-project tasks (mise
 
 [tools]
 shellcheck = "latest"
-rust = "latest"
+rust = { version = "latest", components = "rustfmt,clippy" }
 "cargo:tauri-cli" = "2.11.1"
 
 [tasks.build]
