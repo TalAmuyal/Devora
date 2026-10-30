@@ -1,4 +1,5 @@
 import { SessionTab } from './SessionTab';
+import type { TerminalTarget } from '../terminal/TerminalPane';
 
 export class SessionManager {
   private sessions: SessionTab[] = [];
@@ -19,13 +20,12 @@ export class SessionManager {
 
   async createSession(
     title: string = 'Shell',
-    cwd?: string,
-    appCommand?: string,
+    target: TerminalTarget = { kind: 'shell', cwd: null },
     workspacePath: string | null = null,
     profilePath: string | null = null,
   ): Promise<SessionTab> {
     const session = this.addSession(title, workspacePath, profilePath);
-    await session.connect(cwd, appCommand);
+    await session.connect(target);
 
     this.onChangeCallback?.();
     return session;

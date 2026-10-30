@@ -32,7 +32,7 @@ Given(
     setupClaudeHook(workspacePath, hookLogPath, 'PostToolUse');
 
     await this.driver.eval(
-      `await window.__test.sessionManager.createSession('claude-test', ${JSON.stringify(workspacePath)})`,
+      `await window.__test.sessionManager.createSession('claude-test', ${JSON.stringify({ kind: 'shell', cwd: workspacePath })})`,
     );
   },
 );
@@ -111,7 +111,7 @@ Given(
     );
 
     await this.driver.eval(
-      `await window.__test.sessionManager.createSession('claude-test', ${JSON.stringify(workspacePath)})`,
+      `await window.__test.sessionManager.createSession('claude-test', ${JSON.stringify({ kind: 'shell', cwd: workspacePath })})`,
     );
 
     const lastIndex: number = await this.driver.eval(

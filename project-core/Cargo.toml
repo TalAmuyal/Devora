@@ -15,6 +15,7 @@ devora-health = { path = "crates/devora-health" }
 devora-platform = { path = "crates/devora-platform" }
 devora-pty = { path = "crates/devora-pty" }
 devora-state = { path = "crates/devora-state" }
+devora-terminal = { path = "crates/devora-terminal" }
 devora-theme = { path = "crates/devora-theme" }
 devora-workspace = { path = "crates/devora-workspace" }
 base64 = "0.22"

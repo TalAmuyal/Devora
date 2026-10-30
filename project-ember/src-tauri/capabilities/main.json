@@ -18,7 +18,6 @@
     "allow-get-workspace-status",
     "allow-get-all-workspace-statuses",
     "allow-get-registered-repos",
-    "allow-get-default-app",
     "allow-get-claude-settings",
     "allow-set-claude-setting",
     "allow-get-config-settings",

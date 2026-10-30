@@ -1,5 +1,6 @@
 //! Terminal sessions: a login shell (or an app command run by one) on a pseudo-terminal, with output delivered through callbacks.
 
+use devora_terminal::TerminalSpec;
 use portable_pty::{native_pty_system, CommandBuilder, MasterPty, PtySize};
 use std::collections::HashMap;
 use std::io::{Read, Write};
@@ -31,15 +32,12 @@ impl PtyManager {
         }
     }
 
-    #[allow(clippy::too_many_arguments)] // To become a session spec once Sapphire needs this API.
+    /// Spawns a terminal session and returns its id.
+    ///
+    /// `spec_for` builds the session's [`TerminalSpec`] for the id it is given (the spec exposes that id to the terminal, see `devora_terminal::terminal_spec`).
     pub fn create_session(
         &mut self,
-        cwd: Option<&str>,
-        shell: Option<&str>,
-        env: Option<&HashMap<String, String>>,
-        app_command: Option<&str>,
-        git_shortcuts_enabled: bool,
-        ipc_port: u16,
+        spec_for: impl FnOnce(u32) -> TerminalSpec,
         cols: u16,
         rows: u16,
         mut on_output: impl FnMut(Vec<u8>) -> Result<(), String> + Send + 'static,
@@ -47,6 +45,7 @@ impl PtyManager {
     ) -> Result<u32, String> {
         let id = self.next_id;
         self.next_id += 1;
+        let spec = spec_for(id);
 
         let pty_system = native_pty_system();
 
@@ -61,74 +60,15 @@ impl PtyManager {
             .openpty(size)
             .map_err(|e| format!("failed to open pty: {e}"))?;
 
-        let shell_path = shell
-            .map(String::from)
-            .or_else(|| std::env::var("SHELL").ok())
-            .unwrap_or_else(|| "/bin/zsh".to_string());
-
-        let mut cmd = CommandBuilder::new(&shell_path);
-        cmd.args(["-l", "-i"]);
-
-        if let Some(app_cmd) = app_command.filter(|s| !s.is_empty()) {
-            cmd.args(["-c", app_cmd]);
+        let mut cmd = CommandBuilder::new(&spec.program);
+        cmd.args(&spec.args);
+        for name in &spec.env_remove {
+            cmd.env_remove(name);
         }
-
-        cmd.env("TERM", "xterm-256color");
-        cmd.env("COLORTERM", "truecolor");
-        cmd.env("DEVORA_EMBER", "1");
-        cmd.env("DEVORA_IPC_PORT", ipc_port.to_string());
-        cmd.env("DEVORA_PTY_ID", id.to_string());
-
-        let mut extra_paths: Vec<String> = Vec::new();
-
-        if let Ok(exe_path) = std::env::current_exe() {
-            if let Some(contents_dir) = exe_path.parent().and_then(|p| p.parent()) {
-                let resources_dir = contents_dir.join("Resources");
-
-                // Debi git-shortcut shims (gcl -> `debi git checkout-latest`, …).
-                // Prepended first so the bare alias resolves to the shim in any shell that doesn't already alias/function the name.
-                // Gated by the `terminal.git-shortcuts` config (resolved by the caller).
-                if git_shortcuts_enabled {
-                    let git_shortcuts = resources_dir.join("git-shortcuts");
-                    if git_shortcuts.is_dir() {
-                        extra_paths.push(git_shortcuts.to_string_lossy().into_owned());
-                    }
-                }
-
-                let bundled_apps = resources_dir.join("bundled-apps");
-                if bundled_apps.exists() {
-                    extra_paths.push(bundled_apps.to_string_lossy().into_owned());
-                }
-
-                let cc_plugins_dir = resources_dir.join("cc-plugins");
-                if let Ok(entries) = std::fs::read_dir(&cc_plugins_dir) {
-                    for entry in entries.flatten() {
-                        let bin_dir = entry.path().join("bin");
-                        if bin_dir.is_dir() {
-                            extra_paths.push(bin_dir.to_string_lossy().into_owned());
-                        }
-                    }
-                }
-            }
+        for (key, value) in &spec.env {
+            cmd.env(key, value);
         }
-
-        if !extra_paths.is_empty() {
-            let current_path = std::env::var("PATH").unwrap_or_default();
-            let new_path = format!("{}:{current_path}", extra_paths.join(":"));
-            cmd.env("PATH", &new_path);
-        }
-
-        if let Some(extra_env) = env {
-            for (key, value) in extra_env {
-                cmd.env(key, value);
-            }
-        }
-
-        let effective_cwd = cwd
-            .map(String::from)
-            .or_else(|| std::env::var("HOME").ok())
-            .unwrap_or_else(|| "/".to_string());
-        cmd.cwd(&effective_cwd);
+        cmd.cwd(&spec.cwd);
 
         let child = pair
             .slave
@@ -235,7 +175,38 @@ mod tests {
 
     type Collected = Arc<Mutex<Vec<u8>>>;
 
-    fn collecting_channel() -> (impl FnMut(Vec<u8>) -> Result<(), String> + Send + 'static, Collected) {
+    /// A login shell in `/tmp`, running `app` when given; `$DEVORA_PTY_ID` carries the session's id.
+    fn shell(app: Option<&str>) -> impl FnOnce(u32) -> TerminalSpec {
+        let app = app.map(String::from);
+        move |id| {
+            let mut args = vec!["-l".to_string(), "-i".to_string()];
+            args.extend(app.into_iter().flat_map(|app| ["-c".to_string(), app]));
+            TerminalSpec {
+                program: std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string()),
+                args,
+                cwd: "/tmp".to_string(),
+                env: HashMap::from([("DEVORA_PTY_ID".to_string(), id.to_string())]),
+                env_remove: vec![],
+            }
+        }
+    }
+
+    fn wait_for_output(collected: &Collected, needle: &str) -> String {
+        // A login shell's startup time varies by machine (profile scripts), so wait for the output rather than for a fixed time.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        loop {
+            let output = String::from_utf8_lossy(&collected.lock().unwrap()).into_owned();
+            if output.contains(needle) || std::time::Instant::now() >= deadline {
+                return output;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+    }
+
+    fn collecting_channel() -> (
+        impl FnMut(Vec<u8>) -> Result<(), String> + Send + 'static,
+        Collected,
+    ) {
         let collected = Arc::new(Mutex::new(Vec::new()));
         let collected_clone = collected.clone();
         let channel = move |bytes: Vec<u8>| {
@@ -251,7 +222,7 @@ mod tests {
         let (channel, _collected) = collecting_channel();
 
         let id = manager
-            .create_session(Some("/tmp"), None, None, None, false, 0, 80, 24, channel, noop_exit_channel())
+            .create_session(shell(None), 80, 24, channel, noop_exit_channel())
             .expect("should create session");
 
         assert_eq!(id, 1);
@@ -267,12 +238,7 @@ mod tests {
 
         let id = manager
             .create_session(
-                Some("/tmp"),
-                None,
-                None,
-                Some("echo EMBER_TEST_OUTPUT"),
-                false,
-                0,
+                shell(Some("echo EMBER_TEST_OUTPUT")),
                 80,
                 24,
                 channel,
@@ -280,20 +246,32 @@ mod tests {
             )
             .expect("should create session");
 
-        // A login shell's startup time varies by machine (profile scripts), so wait for the output rather than for a fixed time.
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
-        while std::time::Instant::now() < deadline
-            && !String::from_utf8_lossy(&collected.lock().unwrap()).contains("EMBER_TEST_OUTPUT")
-        {
-            std::thread::sleep(std::time::Duration::from_millis(50));
-        }
-
-        let output = collected.lock().unwrap();
-        let output_str = String::from_utf8_lossy(&output);
+        let output_str = wait_for_output(&collected, "EMBER_TEST_OUTPUT");
         assert!(
             output_str.contains("EMBER_TEST_OUTPUT"),
             "expected output to contain 'EMBER_TEST_OUTPUT', got: {output_str}"
         );
+
+        manager.close(id).expect("should close session");
+    }
+
+    #[test]
+    fn test_spec_gets_the_session_id_and_its_env_reaches_the_shell() {
+        let mut manager = PtyManager::new();
+        let (channel, collected) = collecting_channel();
+
+        let id = manager
+            .create_session(
+                shell(Some("echo pty-id=$DEVORA_PTY_ID")),
+                80,
+                24,
+                channel,
+                noop_exit_channel(),
+            )
+            .expect("should create session");
+
+        let output = wait_for_output(&collected, &format!("pty-id={id}"));
+        assert!(output.contains(&format!("pty-id={id}")), "got: {output}");
 
         manager.close(id).expect("should close session");
     }
@@ -304,12 +282,10 @@ mod tests {
         let (channel, _collected) = collecting_channel();
 
         let id = manager
-            .create_session(Some("/tmp"), None, None, None, false, 0, 80, 24, channel, noop_exit_channel())
+            .create_session(shell(None), 80, 24, channel, noop_exit_channel())
             .expect("should create session");
 
-        manager
-            .resize(id, 120, 40)
-            .expect("resize should not fail");
+        manager.resize(id, 120, 40).expect("resize should not fail");
 
         manager.close(id).expect("should close session");
     }
@@ -320,7 +296,7 @@ mod tests {
         let (channel, _collected) = collecting_channel();
 
         let id = manager
-            .create_session(Some("/tmp"), None, None, None, false, 0, 80, 24, channel, noop_exit_channel())
+            .create_session(shell(None), 80, 24, channel, noop_exit_channel())
             .expect("should create session");
 
         manager.close(id).expect("should close session");
@@ -353,10 +329,10 @@ mod tests {
         let (channel2, _) = collecting_channel();
 
         let id1 = manager
-            .create_session(Some("/tmp"), None, None, Some("true"), false, 0, 80, 24, channel1, noop_exit_channel())
+            .create_session(shell(Some("true")), 80, 24, channel1, noop_exit_channel())
             .expect("should create session 1");
         let id2 = manager
-            .create_session(Some("/tmp"), None, None, Some("true"), false, 0, 80, 24, channel2, noop_exit_channel())
+            .create_session(shell(Some("true")), 80, 24, channel2, noop_exit_channel())
             .expect("should create session 2");
 
         assert_eq!(id1, 1);

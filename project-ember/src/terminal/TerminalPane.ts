@@ -7,6 +7,14 @@ import { ClipboardAddon } from '@xterm/addon-clipboard';
 import { SearchAddon } from '@xterm/addon-search';
 import { invoke, invokeLogOnly, Channel } from '../invoke';
 
+/**
+ * What a terminal opens on; the core turns it into the process to launch (`devora_core::terminal`).
+ * A workspace terminal starts in its only repo's worktree (or the workspace root) and runs the profile's `terminal.default-app`.
+ */
+export type TerminalTarget =
+  | { kind: 'shell'; cwd: string | null }
+  | { kind: 'workspace'; path: string; repos: string[] };
+
 function getThemeFromCSS(): ITheme {
   const style = getComputedStyle(document.documentElement);
   const get = (prop: string) => style.getPropertyValue(prop).trim();
@@ -126,7 +134,7 @@ export class TerminalPane {
     }
   }
 
-  async connect(cwd?: string, appCommand?: string, profilePath?: string): Promise<void> {
+  async connect(target: TerminalTarget, profilePath?: string): Promise<void> {
     this.fit();
 
     const outputChannel = new Channel<number[]>();
@@ -144,13 +152,12 @@ export class TerminalPane {
     };
 
     const params: Record<string, unknown> = {
+      target,
       cols: this.terminal.cols,
       rows: this.terminal.rows,
       onOutput: outputChannel,
       onExit: exitChannel,
     };
-    if (cwd) params.cwd = cwd;
-    if (appCommand) params.appCommand = appCommand;
     if (profilePath) params.profilePath = profilePath;
 
     try {

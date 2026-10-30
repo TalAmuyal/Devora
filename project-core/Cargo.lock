@@ -224,6 +224,7 @@ dependencies = [
  "devora-platform",
  "devora-pty",
  "devora-state",
+ "devora-terminal",
  "devora-theme",
  "devora-workspace",
 ]
@@ -252,6 +253,7 @@ dependencies = [
 name = "devora-pty"
 version = "0.1.0"
 dependencies = [
+ "devora-terminal",
  "portable-pty",
 ]
 
@@ -261,6 +263,16 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "devora-terminal"
+version = "0.1.0"
+dependencies = [
+ "devora-config",
+ "serde",
+ "serde_json",
+ "tempfile",
 ]
 
 [[package]]
