@@ -78,11 +78,20 @@ pub struct TerminalSettings {
 }
 
 impl TerminalSettings {
-    /// Reads the settings for a profile (or the user level when `None`); an unreadable `default-app` falls back to a bare shell.
-    pub fn resolve(profile_path: Option<&str>) -> Self {
+    /// Reads the settings for a profile (or the user level when `None`).
+    /// An unreadable `default-app` falls back to a bare shell, with a warning pushed to `warnings`.
+    pub fn resolve(profile_path: Option<&str>, warnings: &mut Vec<String>) -> Self {
+        let default_app = profile_path.and_then(|path| {
+            config::get_default_app(path).unwrap_or_else(|e| {
+                warnings.push(format!(
+                    "terminal.default-app is unreadable, so the terminal runs a bare shell: {e}"
+                ));
+                None
+            })
+        });
         Self {
             git_shortcuts: config::get_git_shortcuts_enabled(profile_path),
-            default_app: profile_path.and_then(|path| config::get_default_app(path).ok().flatten()),
+            default_app,
             claude_env: config::claude_launch_env(profile_path),
         }
     }
@@ -91,12 +100,14 @@ impl TerminalSettings {
 /// Builds the spec from the config files and the app's own environment.
 ///
 /// `terminal_id` is the owner's id for the session, exposed as `DEVORA_PTY_ID` so that IPC requests from inside the terminal (`debi preview`) can name their tab.
+/// Settings that can't be read fall back to their defaults, with a warning pushed to `warnings` for the UI to report (ADR-002).
 pub fn terminal_spec(
     request: &TerminalRequest,
     host: &TerminalHost,
     terminal_id: u32,
+    warnings: &mut Vec<String>,
 ) -> TerminalSpec {
-    let settings = TerminalSettings::resolve(request.profile_path.as_deref());
+    let settings = TerminalSettings::resolve(request.profile_path.as_deref(), warnings);
     build(request, host, &settings, terminal_id, &|name| {
         std::env::var(name).ok()
     })
@@ -451,6 +462,45 @@ mod tests {
             &inherited,
         );
         assert!(!s.env.contains_key("PATH"));
+    }
+
+    /// Serializes the tests that point `DEVORA_CONFIG_PATH` at their own config.
+    static ENV_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    /// Resolves the settings of a profile whose `config.json` holds `profile_config`, with no user config.
+    fn resolve_with_profile_config(profile_config: &str) -> (TerminalSettings, Vec<String>) {
+        let _guard = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        let tmp = tempfile::tempdir().unwrap();
+        let profile = tmp.path().join("profile");
+        std::fs::create_dir(&profile).unwrap();
+        std::fs::write(profile.join("config.json"), profile_config).unwrap();
+        let original = std::env::var("DEVORA_CONFIG_PATH").ok();
+        std::env::set_var("DEVORA_CONFIG_PATH", tmp.path().join("no-user-config.json"));
+
+        let mut warnings = Vec::new();
+        let settings = TerminalSettings::resolve(profile.to_str(), &mut warnings);
+
+        match original {
+            Some(v) => std::env::set_var("DEVORA_CONFIG_PATH", v),
+            None => std::env::remove_var("DEVORA_CONFIG_PATH"),
+        }
+        (settings, warnings)
+    }
+
+    #[test]
+    fn the_profile_default_app_is_read_without_warnings() {
+        let (settings, warnings) =
+            resolve_with_profile_config(r#"{"terminal": {"default-app": "nvim"}}"#);
+        assert_eq!(settings.default_app.as_deref(), Some("nvim"));
+        assert!(warnings.is_empty(), "{warnings:?}");
+    }
+
+    #[test]
+    fn an_unreadable_profile_config_falls_back_to_a_shell_with_a_warning() {
+        let (settings, warnings) = resolve_with_profile_config("{not json");
+        assert_eq!(settings.default_app, None);
+        assert_eq!(warnings.len(), 1, "{warnings:?}");
+        assert!(warnings[0].contains("failed to parse"), "{warnings:?}");
     }
 
     #[test]

@@ -96,11 +96,10 @@ When Claude Code's behavior changes or new `@real-claude` scenarios are added:
 | `workspace_creation.rs` | Entry points for workspace creation, repo addition and cloning: runs the core's work and reports its outcome to the frontend |
 | `commands.rs` | Tauri command handlers (IPC bridge between frontend and Rust) |
 | `theme.rs` | Serves the bundled theme, parsed by the core's `devora-theme` |
-| `ipc_server.rs` | Lightweight HTTP server for external tools (e.g., `debi preview`) to open preview panes |
-| `logging.rs` | Logging setup |
-| `lib.rs` | App setup and command registration |
+| `logging.rs` | Opens the core's log and routes its reported errors to the frontend's error banner |
+| `lib.rs` | App setup (window title, the core's IPC server for `debi preview`) and command registration |
 
-Non-UI logic (workspaces, profiles, settings, credentials, theme parsing, terminal sessions, the health check, workspace creation) lives in the shared Rust core, `project-core/` (ADR-007), which Ember reaches through the `devora-core` crate.
+Non-UI logic (workspaces, profiles, settings, credentials, theme parsing, terminal sessions, the health check, workspace creation, the log file, the IPC server, the bundle's version and user guide) lives in the shared Rust core, `project-core/` (ADR-007), which Ember reaches through the `devora-core` crate.
 
 ### TypeScript Frontend (`src/`)
 
@@ -179,7 +178,7 @@ project-ember/
 │       ├── main.rs, lib.rs
 │       ├── commands.rs
 │       ├── workspace_creation.rs, theme.rs
-│       ├── ipc_server.rs, logging.rs
+│       ├── logging.rs
 │       └── capabilities/
 ├── src/
 │   ├── index.html, main.ts
