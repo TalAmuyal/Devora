@@ -91,7 +91,9 @@ public final class Store {
 	public func terminalSpec(id: UInt64) async throws -> TerminalSpec {
 		guard let core else { throw CoreError.Failed(message: error ?? "the core failed to start") }
 		let resources = Bundle.main.resourcePath
-		return try await Self.offMain { try core.terminalSpec(pane: id, resourcesDir: resources) }
+		let launch = try await Self.offMain { try core.terminalSpec(pane: id, resourcesDir: resources) }
+		for warning in launch.warnings { NSLog("terminal %llu: %@", id, warning) }
+		return launch.spec
 	}
 
 	/// State commands apply in order and quickly (an in-memory reducer), so they run synchronously; their changes arrive through the subscription.
