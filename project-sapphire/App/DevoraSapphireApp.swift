@@ -6,6 +6,12 @@ import SwiftUI
 struct DevoraSapphireApp: App {
 	@NSApplicationDelegateAdaptor private var delegate: AppDelegate
 
+	init() {
+		// AppKit still saves its window state while the app runs, and only drops it on a clean quit; after a crash or a kill, it found that state at launch, restored no window (restoration is disabled) and so opened none.
+		// This is the flag Xcode's "launch without state restoration" sets: AppKit ignores whatever state it saved.
+		UserDefaults.standard.register(defaults: ["ApplePersistenceIgnoreState": true])
+	}
+
 	var body: some Scene {
 		WindowGroup("Devora Sapphire") {
 			RootView()

@@ -21,6 +21,8 @@ targets:
     dependencies:
       - package: DevoraSapphire
         product: AppShell
+    scheme:
+      testTargets: [DevoraSapphireUITests]
     settings:
       base:
         PRODUCT_NAME: Devora Sapphire
@@ -33,3 +35,18 @@ targets:
         CODE_SIGN_STYLE: Manual
         CODE_SIGN_IDENTITY: "-"
         ENABLE_HARDENED_RUNTIME: YES
+  # UI tests for what the test bridge can't drive: real key events, focus and libghostty's input path (`mise run test-ui`).
+  DevoraSapphireUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    sources:
+      - path: ../UITests
+    dependencies:
+      - target: DevoraSapphire
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.devora.sapphire.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: DevoraSapphire
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "-"

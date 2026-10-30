@@ -1,10 +1,11 @@
 Feature: Session management
   Users create, switch between, and close terminal sessions.
-  Each session is a tab with its own PTY.
+  Each session is a tab with its own terminal.
 
   Background:
-    Given Ember is running
+    Given Devora is running with no sessions open
 
+  @ember-only
   Scenario: Create a new session
     When a new session is created with title "test-session"
     Then there should be 1 session
@@ -25,6 +26,7 @@ Feature: Session management
     And "echo EMBER_BDD_TEST" is typed in the terminal
     Then the terminal should contain "EMBER_BDD_TEST"
 
+  @ember-only
   Scenario: A backgrounded session is not squashed when the font size changes
     Given a session exists
     And the active session's terminal width is recorded

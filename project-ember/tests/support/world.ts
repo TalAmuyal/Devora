@@ -9,6 +9,8 @@ export class EmberWorld extends World {
   workspacePath?: string;
   hookLogPath?: string;
   fixtureRoot?: string;
+  // The profile the latest fixture step created.
+  profilePath?: string;
   testConfigPath?: string;
   stopAutoApprove?: () => void;
   lastKeyDefaultPrevented?: boolean;

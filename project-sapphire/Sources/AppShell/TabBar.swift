@@ -22,6 +22,7 @@ struct TabBar: View {
 			}
 			.buttonStyle(.borderless)
 			.help("New Shell")
+			.accessibilityLabel("New Shell")
 			Spacer(minLength: 0)
 		}
 		.padding(.horizontal, 6)

@@ -1,0 +1,9 @@
+{
+  "name": "devora-sapphire-acceptance",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "@cucumber/cucumber": "^11",
+    "tsx": "^4"
+  }
+}

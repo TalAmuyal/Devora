@@ -8,7 +8,7 @@ import { UIDriver } from '../support/ui-driver';
 import {
   createTestFixtureRoot, createTestProfile, createTestRepo,
   createTestWorkspaces,
-  createInvalidWorkspaces, createSingleActiveWorkspace, writeTestConfig,
+  createInvalidWorkspaces, createSingleActiveWorkspace, setDirectoryPrintingDefaultApp, writeTestConfig,
 } from '../support/fixture-helper';
 import {
   reloadWsHub, getFocusedWorkspaceId,
@@ -27,8 +27,29 @@ Given(
     createTestRepo(profilePath, TEST_REPO_NAME);
     createTestWorkspaces(profilePath, count, { active: count }, TEST_REPO_NAME);
     writeTestConfig(this.testConfigPath!, [profilePath]);
+    this.profilePath = profilePath;
   },
 );
+
+Given("the profile's default app prints the directory it starts in", function (this: EmberWorld) {
+  setDirectoryPrintingDefaultApp(this.profilePath!);
+});
+
+When('the user opens the workspace {string}', async function (this: EmberWorld, id: string) {
+  await reloadWsHub(this.driver);
+  const ui = new UIDriver(this.driver);
+  const count = await getWorkspaceItemCount(this.driver);
+  for (let i = 0; i < count && (await getFocusedWorkspaceId(this.driver)) !== id; i++) {
+    await ui.pressKey('j');
+  }
+  assert.strictEqual(await getFocusedWorkspaceId(this.driver), id);
+  await ui.pressKey('Enter');
+  await this.driver.pollFor(
+    `return window.__test.sessionManager.getActiveSession()?.workspacePath?.endsWith(${JSON.stringify(`/${id}`)}) ?? false`,
+    true,
+    5_000,
+  );
+});
 
 Given(
   'a profile {string} with {int} active and {int} inactive workspaces',

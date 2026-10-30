@@ -61,6 +61,12 @@ public final class TerminalSession: Identifiable {
 		return name.ptr.map { String(cString: $0) }
 	}
 
+	/// Whether the terminal is its window's first responder, that is, where typed keys go.
+	public var hasFocus: Bool {
+		guard let view else { return false }
+		return view.window?.firstResponder === view
+	}
+
 	/// The scrollback plus the visible screen, as text: what restore would snapshot.
 	public func allText() -> String? {
 		guard let surface = view?.surface else { return nil }

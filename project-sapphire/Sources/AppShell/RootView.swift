@@ -33,6 +33,10 @@ public struct RootView: View {
 					NSLog("--open-workspace: %@ is not a workspace of the selected profile", path)
 				}
 			}
+			// Started after the launch's commands, so that the harness finds them dispatched.
+			if TestBridge.isEnabled {
+				TestBridge.start(store: store, terminals: terminals)
+			}
 			if let path = LaunchOptions.value("--snapshot") {
 				await Snapshot.run(store: store, terminals: terminals, to: path)
 			}

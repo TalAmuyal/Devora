@@ -76,7 +76,8 @@ description = "Run all tests (Rust + frontend unit)"
 
 [tasks._cucumber]
 dir = "."
-run = "node --import tsx ./node_modules/.bin/cucumber-js tests/features/ --import 'tests/steps/*.ts' --import 'tests/support/*.ts' --publish-quiet \"${@}\""
+# ../acceptance/features/ holds the scenarios shared with Sapphire.
+run = "node --import tsx ./node_modules/.bin/cucumber-js tests/features/ ../acceptance/features/ --tags 'not @sapphire-only' --import 'tests/steps/*.ts' --import 'tests/support/*.ts' --publish-quiet \"${@}\""
 hide = true
 
 [tasks.test-e2e]
