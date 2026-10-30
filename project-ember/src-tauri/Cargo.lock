@@ -531,6 +531,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "devora-app"
+version = "0.1.0"
+
+[[package]]
 name = "devora-config"
 version = "0.1.0"
 dependencies = [
@@ -542,8 +546,10 @@ dependencies = [
 name = "devora-core"
 version = "0.1.0"
 dependencies = [
+ "devora-app",
  "devora-config",
  "devora-health",
+ "devora-ipc",
  "devora-platform",
  "devora-pty",
  "devora-state",
@@ -574,6 +580,18 @@ name = "devora-health"
 version = "0.1.0"
 
 [[package]]
+name = "devora-ipc"
+version = "0.1.0"
+dependencies = [
+ "http-body-util",
+ "hyper",
+ "hyper-util",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "devora-platform"
 version = "0.1.0"
 dependencies = [
@@ -592,6 +610,7 @@ dependencies = [
 name = "devora-state"
 version = "0.1.0"
 dependencies = [
+ "event-listener",
  "serde",
 ]
 
@@ -812,6 +831,16 @@ checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "event-listener"
+version = "5.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5a23add41df1562121a9393cb065eab5146a1242410f23a644851e90cfd669d2"
+dependencies = [
+ "parking",
+ "pin-project-lite",
 ]
 
 [[package]]
@@ -2239,6 +2268,12 @@ dependencies = [
  "libc",
  "system-deps",
 ]
+
+[[package]]
+name = "parking"
+version = "2.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f38d5652c16fde515bb1ecef450ab0f6a219d619a7274976324d5e377f7dceba"
 
 [[package]]
 name = "parking_lot"

@@ -3,8 +3,10 @@
 //! For now it re-exports the modules extracted from Ember as-is.
 //! The `DevoraCore` object (commands in, events out) replaces these re-exports as the core grows.
 
+pub use devora_app::{bundle, log};
 pub use devora_config::{config, profile};
 pub use devora_health as health;
+pub use devora_ipc as ipc;
 pub use devora_platform::credentials;
 pub use devora_pty as pty;
 pub use devora_state as state;

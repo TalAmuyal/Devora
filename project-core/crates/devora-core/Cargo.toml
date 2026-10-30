@@ -6,8 +6,10 @@ edition.workspace = true
 publish.workspace = true
 
 [dependencies]
+devora-app.workspace = true
 devora-config.workspace = true
 devora-health.workspace = true
+devora-ipc.workspace = true
 devora-platform.workspace = true
 devora-pty.workspace = true
 devora-state.workspace = true

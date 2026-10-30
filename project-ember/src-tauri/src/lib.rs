@@ -1,47 +1,32 @@
 mod commands;
 mod http_util;
-mod ipc_server;
 mod logging;
 mod test_harness;
 mod theme;
 mod workspace_creation;
 
 // The non-UI modules live in the shared core (`project-core/`, ADR-007); importing them here keeps their `crate::` paths stable.
-use devora_core::{config, credentials, health, profile, pty, terminal, workspace};
+use devora_core::{bundle, config, credentials, health, ipc, profile, pty, terminal, workspace};
 
 use std::sync::Mutex;
 use tauri::webview::WebviewWindowBuilder;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 fn is_test_mode() -> bool {
     std::env::var("DEVORA_TEST_MODE").map_or(false, |v| v == "1")
 }
 
 pub fn run() {
-    let log_path = logging::init();
-    eprintln!("Devora Ember log: {log_path}");
-
-    let crash_log = log_path.clone();
-    std::panic::set_hook(Box::new(move |info| {
-        let msg = format!("PANIC: {info}\n{:?}", std::backtrace::Backtrace::force_capture());
-        eprintln!("{msg}");
-        let _ = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&crash_log)
-            .and_then(|mut f| {
-                use std::io::Write;
-                writeln!(f, "[CRASH] {msg}")
-            });
-    }));
+    let log = logging::init();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(Mutex::new(pty::PtyManager::new()))
         .manage(Mutex::new(workspace_creation::WorkspaceCreationManager::new()))
-        .manage(logging::LogState::new(&log_path))
+        .manage(log)
         .setup(|app| {
             let handle = app.handle().clone();
+            logging::listen_for_errors(&handle);
 
             let window_config = app
                 .config()
@@ -50,31 +35,31 @@ pub fn run() {
                 .first()
                 .expect("tauri.conf.json must have at least one window config")
                 .clone();
-            let read_resource = |name: &str| {
-                app.path()
-                    .resource_dir()
-                    .ok()
-                    .and_then(|dir| std::fs::read_to_string(dir.join(name)).ok())
-                    .map(|v| v.trim().to_string())
-            };
-            let version = read_resource("VERSION")
-                .unwrap_or_else(|| app.package_info().version.to_string());
-
-            // INSTALL_SUFFIX is written by `mise mac-install --suffix` to tell side-by-side installs apart.
-            let title = match read_resource("INSTALL_SUFFIX") {
-                Some(suffix) => format!("Devora {version} [{suffix}]"),
-                None => format!("Devora {version}"),
-            };
+            let resource_dir = app.path().resource_dir().ok();
+            let version = bundle::AppVersion::read(
+                resource_dir.as_deref(),
+                &app.package_info().version.to_string(),
+            );
 
             WebviewWindowBuilder::from_config(&handle, &window_config)
                 .expect("failed to create WebviewWindowBuilder from config")
-                .title(&title)
+                .title(version.window_title())
                 .build()
                 .expect("failed to build main window");
 
-            let ipc_state = ipc_server::start(handle.clone());
-            eprintln!("Devora IPC server on port {}", ipc_state.port);
-            app.manage(ipc_state);
+            let preview_handle = handle.clone();
+            let error_handle = handle.clone();
+            let ipc_server = ipc::start(ipc::IpcHandlers {
+                on_preview_open: Box::new(move |request| {
+                    preview_handle
+                        .emit("preview-open", request)
+                        .map_err(|e| format!("failed to emit event: {e}"))
+                }),
+                on_error: Box::new(move |message| logging::report_error(&error_handle, message)),
+            })
+            .expect("failed to start the IPC server");
+            eprintln!("Devora IPC server on port {}", ipc_server.port());
+            app.manage(ipc_server);
 
             if is_test_mode() {
                 let webview = app
