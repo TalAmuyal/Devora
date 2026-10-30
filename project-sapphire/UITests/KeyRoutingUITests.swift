@@ -44,19 +44,24 @@ final class KeyRoutingUITests: XCTestCase {
 	}
 
 	@MainActor
-	func testCtrlCAndOptionComposedTextReachTheShell() throws {
+	func testCtrlCReachesTheShell() throws {
 		try launch()
 		_ = try runInShell("echo started >$UITEST_OUT/started; sleep 60; echo late >$UITEST_OUT/late", awaiting: "started")
 		app.typeKey("c", modifierFlags: .control)
 		// Within the sleep: only an interrupt lets the shell run the next command this soon.
 		_ = try runInShell("echo after >$UITEST_OUT/after", awaiting: "after")
 		XCTAssertFalse(FileManager.default.fileExists(atPath: scratch.appending(path: "late").path))
+	}
 
+	@MainActor
+	func testOptionComposedTextReachesTheShell() throws {
+		try launch()
 		// Option-e then e is the dead-key accent of the US layouts: the input method composes it into one character.
 		app.typeText("printf %s ")
 		app.typeKey("e", modifierFlags: .option)
 		app.typeKey("e", modifierFlags: [])
-		XCTAssertEqual(try runInShell(" >$UITEST_OUT/composed", awaiting: "composed"), "é")
+		let composed = try runInShell(" >$UITEST_OUT/composed", awaiting: "composed")
+		XCTAssertEqual(composed, "é", "got the scalars \(composed.unicodeScalars.map { String($0.value, radix: 16) })")
 	}
 
 	/// Types a command and Return, then waits for the file it writes in `UITEST_OUT` and returns its contents.

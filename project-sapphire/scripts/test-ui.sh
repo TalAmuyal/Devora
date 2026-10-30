@@ -16,6 +16,13 @@ if ioreg -n Root -d1 | grep -q '"CGSSessionScreenIsLocked"=Yes'; then
 	skip "the screen is locked"
 fi
 
-xcodebuild -project App/DevoraSapphire.xcodeproj -scheme DevoraSapphire -configuration Release \
-	-derivedDataPath build/DerivedData -destination 'platform=macOS,arch=arm64' test -quiet
+results=build/ui-tests.xcresult
+rm -rf "$results"
+if ! xcodebuild -project App/DevoraSapphire.xcodeproj -scheme DevoraSapphire -configuration Release \
+	-derivedDataPath build/DerivedData -destination 'platform=macOS,arch=arm64' -resultBundlePath "$results" test -quiet; then
+	# `-quiet` names the failing tests but not why they failed; the result bundle has the messages.
+	xcrun xcresulttool get test-results summary --path "$results" --compact |
+		jq -r '.testFailures[] | "\(.testIdentifierString): \(.failureText)"' || true
+	exit 1
+fi
 echo "The XCUITests passed"
