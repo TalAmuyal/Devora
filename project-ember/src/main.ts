@@ -77,27 +77,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (hub) layers.remove(hub);
   };
 
-  // Resolve the per-profile terminal app command (e.g. nvim); undefined falls back to a plain shell.
-  const resolveAppCommand = async (profilePath: string | null): Promise<string | undefined> => {
-    if (!profilePath) return undefined;
-    try {
-      const defaultApp = await invokeLogOnly<string | null>('get_default_app', { profilePath });
-      if (defaultApp && defaultApp !== 'shell') {
-        return defaultApp;
-      }
-    } catch (_) {
-      // fall back to plain shell
-    }
-    return undefined;
-  };
-
   const openWorkspace = async (wsPath: string, title: string, repos: string[], profilePath?: string) => {
     dismissWsHub();
 
-    const appCommand = await resolveAppCommand(profilePath ?? null);
-    const cwd = repos.length === 1 ? `${wsPath}/${repos[0]}` : wsPath;
+    const target = { kind: 'workspace', path: wsPath, repos } as const;
     try {
-      await sessionManager.createSession(title, cwd, appCommand, wsPath, profilePath ?? null);
+      await sessionManager.createSession(title, target, wsPath, profilePath ?? null);
     } catch (e) {
       showError(`Failed to create session: ${e}`);
     }
@@ -105,7 +90,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   const taskCreationController = new TaskCreationController({
     sessionManager,
-    resolveAppCommand,
     onChange: () => tabBar.render(),
   });
 
@@ -352,7 +336,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         description: 'Open a fresh shell tab',
         icon: '❯',
         shortcut: ['⌃', '⇧', 'S'],
-        run: closePaletteThen(() => void sessionManager.createSession('Shell', undefined, undefined, null)),
+        run: closePaletteThen(() => void sessionManager.createSession('Shell')),
       },
       {
         id: 'repurpose-session',

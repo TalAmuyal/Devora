@@ -1,4 +1,4 @@
-import { TerminalPane } from '../terminal/TerminalPane';
+import { TerminalPane, TerminalTarget } from '../terminal/TerminalPane';
 import { LayerStack } from '../ui/layers/LayerStack';
 import { terminalLayer } from '../ui/layers/presets';
 import { createPreviewPane, PreviewPaneHandle } from '../ui/components/PreviewPane';
@@ -104,8 +104,8 @@ export class SessionTab {
     return this.terminalPane.getPtyId();
   }
 
-  async connect(cwd?: string, appCommand?: string): Promise<void> {
-    await this.terminalPane.connect(cwd, appCommand, this.profilePath ?? undefined);
+  async connect(target: TerminalTarget): Promise<void> {
+    await this.terminalPane.connect(target, this.profilePath ?? undefined);
   }
 
   /**

@@ -31,8 +31,6 @@ interface InFlightCreation {
 
 export interface TaskCreationControllerDeps {
   sessionManager: SessionManager;
-  /** Resolve the per-profile terminal app command (mirrors opening an existing workspace). */
-  resolveAppCommand: (profilePath: string | null) => Promise<string | undefined>;
   /** Re-render the tab bar after tabs/overlays change. */
   onChange: () => void;
 }
@@ -141,13 +139,8 @@ export class TaskCreationController {
     if (!session) return;
     session.setWorkspacePath(workspace.path);
 
-    const cwd =
-      creation.repoNames.length === 1
-        ? `${workspace.path}/${creation.repoNames[0]}`
-        : workspace.path;
-    const appCommand = await this.deps.resolveAppCommand(creation.profilePath);
     try {
-      await session.connect(cwd, appCommand);
+      await session.connect({ kind: 'workspace', path: workspace.path, repos: creation.repoNames });
     } catch (e) {
       showError(`Failed to create session: ${e}`);
     }

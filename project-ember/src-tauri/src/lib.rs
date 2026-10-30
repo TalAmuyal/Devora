@@ -7,7 +7,7 @@ mod theme;
 mod workspace_creation;
 
 // The non-UI modules live in the shared core (`project-core/`, ADR-007); importing them here keeps their `crate::` paths stable.
-use devora_core::{config, credentials, health, profile, pty, workspace};
+use devora_core::{config, credentials, health, profile, pty, terminal, workspace};
 
 use std::sync::Mutex;
 use tauri::webview::WebviewWindowBuilder;
@@ -104,7 +104,6 @@ pub fn run() {
             commands::get_workspace_status,
             commands::get_all_workspace_statuses,
             commands::get_registered_repos,
-            commands::get_default_app,
             commands::get_claude_settings,
             commands::set_claude_setting,
             commands::get_config_settings,
