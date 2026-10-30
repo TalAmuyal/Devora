@@ -92,15 +92,17 @@ if [[ ${#INPUTS[@]} -eq 0 ]]; then
 fi
 
 cd "$REPO_ROOT"
+# Hashes the sorted "<content sha256>  <path>" lines, so both content edits and
+# renames change the fingerprint. A single shasum hashes all the files; a
+# process per file made this take ~1s for a few hundred files.
 git ls-files -z --cached --others --exclude-standard -- "${INPUTS[@]}" \
 	| LC_ALL=C sort -uz \
 	| while IFS= read -r -d '' file; do
 		# --cached lists tracked files even when deleted from disk; skip those.
 		if [[ -f "$file" ]]; then
 			printf '%s\0' "$file"
-			cat "$file"
-			printf '\0'
 		fi
 	done \
+	| xargs -0 shasum -a 256 -- \
 	| shasum -a 256 \
 	| cut -d' ' -f1
