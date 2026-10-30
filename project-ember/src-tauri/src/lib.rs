@@ -14,7 +14,7 @@ use tauri::webview::WebviewWindowBuilder;
 use tauri::Manager;
 
 fn is_test_mode() -> bool {
-    std::env::var("DEVORA_TEST_MODE").map_or(false, |v| v == "1")
+    std::env::var("DEVORA_TEST_MODE").is_ok_and(|v| v == "1")
 }
 
 pub fn run() {
@@ -23,7 +23,10 @@ pub fn run() {
 
     let crash_log = log_path.clone();
     std::panic::set_hook(Box::new(move |info| {
-        let msg = format!("PANIC: {info}\n{:?}", std::backtrace::Backtrace::force_capture());
+        let msg = format!(
+            "PANIC: {info}\n{:?}",
+            std::backtrace::Backtrace::force_capture()
+        );
         eprintln!("{msg}");
         let _ = std::fs::OpenOptions::new()
             .create(true)
@@ -38,7 +41,9 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(Mutex::new(pty::PtyManager::new()))
-        .manage(Mutex::new(workspace_creation::WorkspaceCreationManager::new()))
+        .manage(Mutex::new(
+            workspace_creation::WorkspaceCreationManager::new(),
+        ))
         .manage(logging::LogState::new(&log_path))
         .setup(|app| {
             let handle = app.handle().clone();
@@ -57,8 +62,8 @@ pub fn run() {
                     .and_then(|dir| std::fs::read_to_string(dir.join(name)).ok())
                     .map(|v| v.trim().to_string())
             };
-            let version = read_resource("VERSION")
-                .unwrap_or_else(|| app.package_info().version.to_string());
+            let version =
+                read_resource("VERSION").unwrap_or_else(|| app.package_info().version.to_string());
 
             // INSTALL_SUFFIX is written by `mise mac-install --suffix` to tell side-by-side installs apart.
             let title = match read_resource("INSTALL_SUFFIX") {

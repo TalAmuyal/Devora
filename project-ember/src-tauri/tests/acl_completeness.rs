@@ -39,7 +39,11 @@ fn invoke_handler_commands() -> BTreeSet<String> {
 fn build_manifest_commands() -> BTreeSet<String> {
     let source = read("build.rs");
     let body = slice_between(&source, ".commands(&[", "]", "build.rs");
-    body.split('"').skip(1).step_by(2).map(str::to_string).collect()
+    body.split('"')
+        .skip(1)
+        .step_by(2)
+        .map(str::to_string)
+        .collect()
 }
 
 fn capability_commands() -> BTreeSet<String> {
@@ -50,7 +54,10 @@ fn capability_commands() -> BTreeSet<String> {
         .as_array()
         .expect("capabilities/main.json: permissions must be an array")
         .iter()
-        .map(|p| p.as_str().expect("capabilities/main.json: permissions must be strings"))
+        .map(|p| {
+            p.as_str()
+                .expect("capabilities/main.json: permissions must be strings")
+        })
         .filter_map(|p| p.strip_prefix("allow-"))
         .map(|name| name.replace('-', "_"))
         .collect()
@@ -76,13 +83,29 @@ fn all_commands_registered_in_handler_manifest_and_capabilities() {
     let manifest = build_manifest_commands();
     let capabilities = capability_commands();
 
-    assert!(!handler.is_empty(), "no commands parsed from src/lib.rs — marker drift?");
-    assert!(!manifest.is_empty(), "no commands parsed from build.rs — marker drift?");
+    assert!(
+        !handler.is_empty(),
+        "no commands parsed from src/lib.rs — marker drift?"
+    );
+    assert!(
+        !manifest.is_empty(),
+        "no commands parsed from build.rs — marker drift?"
+    );
     assert!(
         !capabilities.is_empty(),
         "no permissions parsed from capabilities/main.json — marker drift?"
     );
 
-    assert_sets_match("lib.rs invoke_handler", &handler, "build.rs manifest", &manifest);
-    assert_sets_match("lib.rs invoke_handler", &handler, "capabilities/main.json", &capabilities);
+    assert_sets_match(
+        "lib.rs invoke_handler",
+        &handler,
+        "build.rs manifest",
+        &manifest,
+    );
+    assert_sets_match(
+        "lib.rs invoke_handler",
+        &handler,
+        "capabilities/main.json",
+        &capabilities,
+    );
 }

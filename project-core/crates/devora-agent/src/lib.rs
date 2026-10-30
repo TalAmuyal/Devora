@@ -42,7 +42,11 @@ pub struct LaunchSpec {
 /// - Then `--effort` and `--permission-mode` from `DEVORA_CCC_EFFORT` / `DEVORA_CCC_PERMISSION_MODE`, unless the user passed their own (`--flag value` or `--flag=value`).
 ///
 /// `env_var` reads the launching environment; it is a parameter so the resolution is testable.
-pub fn ccc(user_args: &[OsString], plugins_dir: Option<&Path>, env_var: impl Fn(&str) -> Option<String>) -> Ccc {
+pub fn ccc(
+    user_args: &[OsString],
+    plugins_dir: Option<&Path>,
+    env_var: impl Fn(&str) -> Option<String>,
+) -> Ccc {
     let mut user_set_effort = false;
     let mut user_set_permission_mode = false;
     for arg in user_args {
@@ -76,7 +80,10 @@ pub fn ccc(user_args: &[OsString], plugins_dir: Option<&Path>, env_var: impl Fn(
 }
 
 fn is_flag(arg: &str, flag: &str) -> bool {
-    arg == flag || arg.strip_prefix(flag).is_some_and(|rest| rest.starts_with('='))
+    arg == flag
+        || arg
+            .strip_prefix(flag)
+            .is_some_and(|rest| rest.starts_with('='))
 }
 
 /// The plugin directories under `plugins_dir`, sorted by name; non-directories are skipped and a missing directory yields none.
@@ -84,7 +91,11 @@ fn plugin_dirs(plugins_dir: Option<&Path>) -> Vec<OsString> {
     let Some(entries) = plugins_dir.and_then(|dir| std::fs::read_dir(dir).ok()) else {
         return Vec::new();
     };
-    let mut dirs: Vec<_> = entries.flatten().map(|entry| entry.path()).filter(|path| path.is_dir()).collect();
+    let mut dirs: Vec<_> = entries
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|path| path.is_dir())
+        .collect();
     dirs.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
     dirs.into_iter().map(|path| path.into_os_string()).collect()
 }
@@ -99,7 +110,10 @@ mod tests {
     }
 
     fn launch(user_args: &[&str], env: &[(&str, &str)]) -> LaunchSpec {
-        let env: HashMap<String, String> = env.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect();
+        let env: HashMap<String, String> = env
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect();
         match ccc(&args(user_args), None, |name| env.get(name).cloned()) {
             Ccc::Launch(spec) => spec,
             Ccc::Update => panic!("expected a launch"),
@@ -115,27 +129,60 @@ mod tests {
 
     #[test]
     fn env_effort_and_mode_follow_user_args() {
-        let spec = launch(&["-p", "hi"], &[(EFFORT_ENV, "high"), (PERMISSION_MODE_ENV, "plan")]);
-        assert_eq!(spec.args, args(&["-p", "hi", "--effort", "high", "--permission-mode", "plan"]));
+        let spec = launch(
+            &["-p", "hi"],
+            &[(EFFORT_ENV, "high"), (PERMISSION_MODE_ENV, "plan")],
+        );
+        assert_eq!(
+            spec.args,
+            args(&["-p", "hi", "--effort", "high", "--permission-mode", "plan"])
+        );
     }
 
     #[test]
     fn user_flags_win_in_both_forms() {
         let env = [(EFFORT_ENV, "high"), (PERMISSION_MODE_ENV, "plan")];
-        assert_eq!(launch(&["--effort", "low"], &env).args, args(&["--effort", "low", "--permission-mode", "plan"]));
-        assert_eq!(launch(&["--permission-mode=auto"], &env).args, args(&["--permission-mode=auto", "--effort", "high"]));
+        assert_eq!(
+            launch(&["--effort", "low"], &env).args,
+            args(&["--effort", "low", "--permission-mode", "plan"])
+        );
+        assert_eq!(
+            launch(&["--permission-mode=auto"], &env).args,
+            args(&["--permission-mode=auto", "--effort", "high"])
+        );
         // A flag that merely starts with the same letters is not the user's effort.
-        assert_eq!(launch(&["--effortless"], &env).args, args(&["--effortless", "--effort", "high", "--permission-mode", "plan"]));
+        assert_eq!(
+            launch(&["--effortless"], &env).args,
+            args(&[
+                "--effortless",
+                "--effort",
+                "high",
+                "--permission-mode",
+                "plan"
+            ])
+        );
     }
 
     #[test]
     fn telemetry_defaults_fill_only_unset_or_empty() {
-        let spec = launch(&[], &[("CLAUDE_CODE_ENABLE_TELEMETRY", "1"), ("CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS", "")]);
+        let spec = launch(
+            &[],
+            &[
+                ("CLAUDE_CODE_ENABLE_TELEMETRY", "1"),
+                ("CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS", ""),
+            ],
+        );
         assert_eq!(
             spec.env,
             vec![
-                ("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC".to_string(), "1".to_string()),
-                ("CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS".to_string(), "1".to_string()),
+                (
+                    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC".to_string(),
+                    "1".to_string()
+                ),
+                (
+                    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS".to_string(),
+                    "1".to_string()
+                ),
             ]
         );
     }
@@ -147,10 +194,17 @@ mod tests {
             std::fs::create_dir(tmp.path().join(name)).unwrap();
         }
         std::fs::write(tmp.path().join("notes.txt"), "").unwrap();
-        let Ccc::Launch(spec) = ccc(&[], Some(tmp.path()), |_| None) else { panic!("expected a launch") };
+        let Ccc::Launch(spec) = ccc(&[], Some(tmp.path()), |_| None) else {
+            panic!("expected a launch")
+        };
         let expected: Vec<OsString> = ["code-cleanup", "judgess"]
             .iter()
-            .flat_map(|name| ["--plugin-dir".into(), tmp.path().join(name).into_os_string()])
+            .flat_map(|name| {
+                [
+                    "--plugin-dir".into(),
+                    tmp.path().join(name).into_os_string(),
+                ]
+            })
             .collect();
         assert_eq!(spec.args, expected);
     }

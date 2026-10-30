@@ -237,8 +237,7 @@ mod tests {
         let config_path = config_in(tmp.path());
         let root = tmp.path().join("my-profile");
 
-        let result =
-            register_profile(&config_path, &root.to_string_lossy(), "Work").unwrap();
+        let result = register_profile(&config_path, &root.to_string_lossy(), "Work").unwrap();
 
         assert_eq!(result.name, "Work");
         assert_eq!(result.path, root.to_string_lossy());
@@ -270,10 +269,13 @@ mod tests {
         let config_path = config_in(tmp.path());
         let root = tmp.path().join("existing");
         fs::create_dir_all(&root).unwrap();
-        fs::write(root.join("config.json"), r#"{"name": "Legacy", "repos": []}"#).unwrap();
+        fs::write(
+            root.join("config.json"),
+            r#"{"name": "Legacy", "repos": []}"#,
+        )
+        .unwrap();
 
-        let result =
-            register_profile(&config_path, &root.to_string_lossy(), "Ignored").unwrap();
+        let result = register_profile(&config_path, &root.to_string_lossy(), "Ignored").unwrap();
 
         assert_eq!(result.name, "Legacy");
         // config.json untouched (repos key still present)
@@ -319,7 +321,10 @@ mod tests {
         let result = register_profile(&config_path, &root.to_string_lossy(), "A");
 
         assert!(result.is_err());
-        assert!(!root.exists(), "validation error must not create the profile dir");
+        assert!(
+            !root.exists(),
+            "validation error must not create the profile dir"
+        );
     }
 
     #[test]
@@ -365,7 +370,10 @@ mod tests {
             read_profiles_list(&config_path),
             vec![root_b.to_string_lossy().to_string()]
         );
-        assert!(root_a.join("config.json").exists(), "directory must remain on disk");
+        assert!(
+            root_a.join("config.json").exists(),
+            "directory must remain on disk"
+        );
     }
 
     #[test]
@@ -478,6 +486,9 @@ mod tests {
         register_profile(&config_path, &root.to_string_lossy(), "A").unwrap();
 
         let raw = fs::read_to_string(&config_path).unwrap();
-        assert!(raw.contains("\n    \"profiles\""), "expected 4-space indent, got: {raw}");
+        assert!(
+            raw.contains("\n    \"profiles\""),
+            "expected 4-space indent, got: {raw}"
+        );
     }
 }

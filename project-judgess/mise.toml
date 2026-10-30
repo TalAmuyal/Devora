@@ -9,6 +9,14 @@ description = "Build the judgess binary (release)"
 run = "cargo test"
 description = "Run all tests (including the cases.json regression suite)"
 
+[tasks.lint]
+run = """
+set -e
+cargo fmt --check
+cargo clippy --all-targets -- -D warnings
+"""
+description = "Check formatting (rustfmt) and lint with clippy"
+
 [tasks.classify]
 run = "cargo run --release --quiet -- classify"
 description = "Interactively label the queue of requests Judgess did not know how to decide"

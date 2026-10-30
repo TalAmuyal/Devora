@@ -126,11 +126,7 @@ pub fn describe(raw: &Value) -> String {
     )
 }
 
-pub fn run(
-    store: &Store,
-    input: &mut impl BufRead,
-    output: &mut impl Write,
-) -> io::Result<()> {
+pub fn run(store: &Store, input: &mut impl BufRead, output: &mut impl Write) -> io::Result<()> {
     let queue = pending(store);
     if queue.is_empty() {
         writeln!(output, "Nothing to classify.")?;

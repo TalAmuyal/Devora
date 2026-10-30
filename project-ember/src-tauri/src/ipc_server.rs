@@ -61,12 +61,16 @@ async fn handle_request(
                 ));
             }
 
-            Ok(http_util::json_response(StatusCode::OK, &PreviewOpenResponse { ok: true }))
+            Ok(http_util::json_response(
+                StatusCode::OK,
+                &PreviewOpenResponse { ok: true },
+            ))
         }
 
-        _ => {
-            Ok(http_util::error_response(StatusCode::NOT_FOUND, "not found"))
-        }
+        _ => Ok(http_util::error_response(
+            StatusCode::NOT_FOUND,
+            "not found",
+        )),
     }
 }
 
@@ -101,9 +105,7 @@ pub fn start(app_handle: AppHandle) -> IpcState {
             let handle_for_conn = app_handle.clone();
 
             tokio::spawn(async move {
-                let service = service_fn(move |req| {
-                    handle_request(req, handle_for_conn.clone())
-                });
+                let service = service_fn(move |req| handle_request(req, handle_for_conn.clone()));
 
                 let _ = http1::Builder::new().serve_connection(io, service).await;
             });

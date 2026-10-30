@@ -7,5 +7,9 @@ run = "cargo test"
 description = "Run the core's tests"
 
 [tasks.lint]
-run = "cargo clippy --all-targets -- -D warnings"
-description = "Lint the core with clippy"
+run = """
+set -e
+cargo fmt --check
+cargo clippy --all-targets -- -D warnings
+"""
+description = "Check the core's formatting (rustfmt) and lint it with clippy"

@@ -22,7 +22,10 @@ fn main() -> ExitCode {
     let invoked_as = argv.next().unwrap_or_default();
     let args: Vec<OsString> = argv.collect();
 
-    if Path::new(&invoked_as).file_name().is_some_and(|name| name == "ccc") {
+    if Path::new(&invoked_as)
+        .file_name()
+        .is_some_and(|name| name == "ccc")
+    {
         return ccc(&args);
     }
     match args.split_first() {
@@ -39,8 +42,11 @@ fn own_dir() -> Option<PathBuf> {
 
 fn ccc(args: &[OsString]) -> ExitCode {
     // In the app bundle: `Resources/bundled-apps/debi` next to `Resources/cc-plugins/`.
-    let plugins_dir = own_dir().and_then(|dir| dir.parent().map(|parent| parent.join("cc-plugins")));
-    match devora_agent::ccc(args, plugins_dir.as_deref(), |name| std::env::var(name).ok()) {
+    let plugins_dir =
+        own_dir().and_then(|dir| dir.parent().map(|parent| parent.join("cc-plugins")));
+    match devora_agent::ccc(args, plugins_dir.as_deref(), |name| {
+        std::env::var(name).ok()
+    }) {
         Ccc::Update => match Command::new(CLAUDE).arg("--update").status() {
             Ok(status) => exit_code(status),
             Err(error) => cannot_run(CLAUDE, &error),
@@ -53,7 +59,9 @@ fn ccc(args: &[OsString]) -> ExitCode {
 }
 
 fn delegate(args: &[OsString]) -> ExitCode {
-    let sibling = own_dir().map(|dir| dir.join(DEBI_GO)).filter(|path| path.is_file());
+    let sibling = own_dir()
+        .map(|dir| dir.join(DEBI_GO))
+        .filter(|path| path.is_file());
     let program = sibling.map_or_else(|| OsString::from(DEBI_GO), PathBuf::into_os_string);
     let error = Command::new(&program).args(args).exec();
     cannot_run(DEBI_GO, &error)
@@ -61,7 +69,9 @@ fn delegate(args: &[OsString]) -> ExitCode {
 
 /// A child's exit status as a shell reports it: its code, or 128 + the signal that killed it.
 fn exit_code(status: ExitStatus) -> ExitCode {
-    let code = status.code().or_else(|| status.signal().map(|signal| 128 + signal));
+    let code = status
+        .code()
+        .or_else(|| status.signal().map(|signal| 128 + signal));
     ExitCode::from(code.and_then(|c| u8::try_from(c).ok()).unwrap_or(1))
 }
 

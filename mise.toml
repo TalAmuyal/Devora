@@ -33,6 +33,14 @@ mise run -C project-status-line test
 """
 description = "Run tests for all sub-projects"
 
+[tasks.lint]
+run = """
+set -e
+mise run -C project-core lint
+mise run -C project-judgess lint
+"""
+description = "Check Rust formatting and lint with clippy (core, judgess; Ember has ember-lint)"
+
 [tasks.lint-shell]
 run = "shellcheck install.sh bundler/macos-ember/populate-app-resources.sh bundler/macos-ember/install-completions.sh"
 description = "Lint shell scripts with shellcheck"
@@ -76,6 +84,10 @@ run = "mise run -C project-ember create-dmg"
 [tasks.ember-test]
 description = "Run Devora Ember tests"
 run = "mise run -C project-ember test-all"
+
+[tasks.ember-lint]
+description = "Check Devora Ember's Rust formatting and lint it with clippy"
+run = "mise run -C project-ember lint-rust"
 
 [tasks.ember-bundle]
 description = "Build the complete Devora Ember.app bundle with all resources"

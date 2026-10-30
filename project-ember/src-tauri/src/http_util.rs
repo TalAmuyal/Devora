@@ -27,6 +27,7 @@ pub fn ok_response() -> Response<BoxBody> {
         .unwrap()
 }
 
+#[allow(clippy::result_large_err)] // The error is the ready-to-send HTTP response, returned once per request.
 pub async fn parse_json_body<T: DeserializeOwned>(body: Incoming) -> Result<T, Response<BoxBody>> {
     let body_bytes = body
         .collect()

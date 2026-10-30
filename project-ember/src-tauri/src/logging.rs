@@ -72,7 +72,11 @@ mod tests {
         let received = Arc::new(AtomicBool::new(false));
         let received_clone = received.clone();
         app.listen_any("app-error", move |event| {
-            assert!(event.payload().contains("boom"), "payload: {}", event.payload());
+            assert!(
+                event.payload().contains("boom"),
+                "payload: {}",
+                event.payload()
+            );
             received_clone.store(true, Ordering::SeqCst);
         });
 
@@ -80,6 +84,9 @@ mod tests {
 
         let contents = std::fs::read_to_string(&log_path).unwrap();
         assert!(contents.contains("[ERROR] boom"), "log: {contents}");
-        assert!(received.load(Ordering::SeqCst), "app-error event not received");
+        assert!(
+            received.load(Ordering::SeqCst),
+            "app-error event not received"
+        );
     }
 }
