@@ -1,0 +1,259 @@
+//! The shared, thread-safe home of one [`State`], and the batched event subscriptions the UIs pull from (ADR-010).
+
+use crate::{AppState, Command, Event, State, StateError};
+use std::collections::VecDeque;
+use std::sync::{Arc, Condvar, Mutex, MutexGuard};
+
+/// One [`State`] shared between threads: commands are applied one at a time, and their events reach every open [`Subscription`] in the order they were applied.
+#[derive(Default)]
+pub struct Store {
+    inner: Mutex<Inner>,
+}
+
+#[derive(Default)]
+struct Inner {
+    state: State,
+    subscribers: Vec<Arc<Queue>>,
+}
+
+impl Store {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Applies a command and returns its events; open subscriptions receive the same events.
+    pub fn dispatch(&self, command: Command) -> Result<Vec<Event>, StateError> {
+        let mut inner = lock(&self.inner);
+        let events = inner.state.apply(command)?;
+        if !events.is_empty() {
+            inner.subscribers.retain(|queue| queue.push(&events));
+        }
+        Ok(events)
+    }
+
+    pub fn snapshot(&self) -> AppState {
+        lock(&self.inner).state.snapshot().clone()
+    }
+
+    /// Opens a subscription whose first event is an [`Event::Snapshot`] of the current state, followed by every event from later commands.
+    ///
+    /// Taking the snapshot and registering happen under one lock, so no event is missed or seen twice.
+    pub fn subscribe(&self) -> Subscription {
+        let mut inner = lock(&self.inner);
+        let queue = Arc::new(Queue::default());
+        queue.push(&[Event::Snapshot {
+            state: inner.state.snapshot().clone(),
+        }]);
+        inner.subscribers.push(queue.clone());
+        Subscription { queue }
+    }
+}
+
+/// A stream of a [`Store`]'s events, pulled in batches.
+///
+/// Events queue up until pulled, so a slow consumer never stalls a command.
+/// Dropping a subscription closes it.
+pub struct Subscription {
+    queue: Arc<Queue>,
+}
+
+impl Subscription {
+    /// Waits until at least one event is queued, then takes up to `max` of them (at least one).
+    ///
+    /// Returns an empty batch once the subscription is closed, from this thread or another one.
+    pub fn next_batch(&self, max: u32) -> Vec<Event> {
+        let mut state = lock(&self.queue.state);
+        while state.events.is_empty() && !state.closed {
+            state = self
+                .queue
+                .ready
+                .wait(state)
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+        }
+        take(&mut state, max)
+    }
+
+    /// Takes up to `max` queued events without waiting; empty when none are queued.
+    pub fn try_next_batch(&self, max: u32) -> Vec<Event> {
+        take(&mut lock(&self.queue.state), max)
+    }
+
+    /// Stops delivery and wakes a pending [`Subscription::next_batch`]; events still queued are dropped.
+    pub fn close(&self) {
+        let mut state = lock(&self.queue.state);
+        state.closed = true;
+        state.events.clear();
+        self.queue.ready.notify_all();
+    }
+
+    pub fn is_closed(&self) -> bool {
+        lock(&self.queue.state).closed
+    }
+}
+
+impl Drop for Subscription {
+    fn drop(&mut self) {
+        self.close();
+    }
+}
+
+#[derive(Default)]
+struct Queue {
+    state: Mutex<QueueState>,
+    ready: Condvar,
+}
+
+#[derive(Default)]
+struct QueueState {
+    events: VecDeque<Event>,
+    closed: bool,
+}
+
+impl Queue {
+    /// Queues the events; returns false once the subscription is closed, so the store can forget it.
+    fn push(&self, events: &[Event]) -> bool {
+        let mut state = lock(&self.state);
+        if state.closed {
+            return false;
+        }
+        state.events.extend(events.iter().cloned());
+        self.ready.notify_all();
+        true
+    }
+}
+
+fn take(state: &mut QueueState, max: u32) -> Vec<Event> {
+    let n = state.events.len().min(max.max(1) as usize);
+    state.events.drain(..n).collect()
+}
+
+/// A panic while a lock was held can't leave the state half-applied (the reducer validates before it mutates), so a poisoned lock is still safe to use.
+fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    mutex
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::SessionKind;
+    use std::thread;
+
+    fn open_shell(store: &Store, title: &str) -> Vec<Event> {
+        store
+            .dispatch(Command::OpenSession {
+                title: title.into(),
+                kind: SessionKind::Shell,
+                profile_path: None,
+            })
+            .unwrap()
+    }
+
+    #[test]
+    fn a_subscription_starts_with_a_snapshot_then_receives_every_event_in_order() {
+        let store = Store::new();
+        open_shell(&store, "before");
+        let subscription = store.subscribe();
+        let opened = open_shell(&store, "after");
+
+        let batch = subscription.try_next_batch(100);
+        let mut expected = vec![Event::Snapshot {
+            state: batch_snapshot(&batch),
+        }];
+        expected.extend(opened);
+        assert_eq!(batch, expected);
+        assert_eq!(
+            batch_snapshot(&batch).window.tabs.len(),
+            1,
+            "the snapshot predates the second command"
+        );
+        assert_eq!(subscription.try_next_batch(100), vec![]);
+    }
+
+    fn batch_snapshot(batch: &[Event]) -> AppState {
+        match &batch[0] {
+            Event::Snapshot { state } => state.clone(),
+            other => panic!("expected a snapshot first, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn batches_hold_at_most_max_events_and_at_least_one() {
+        let store = Store::new();
+        let subscription = store.subscribe();
+        open_shell(&store, "a");
+        open_shell(&store, "b");
+
+        assert_eq!(
+            subscription.try_next_batch(0).len(),
+            1,
+            "max 0 still takes one event"
+        );
+        assert_eq!(subscription.try_next_batch(2).len(), 2);
+        assert_eq!(subscription.try_next_batch(100).len(), 2);
+    }
+
+    #[test]
+    fn rejected_and_no_op_commands_reach_no_subscriber() {
+        let store = Store::new();
+        let subscription = store.subscribe();
+        subscription.try_next_batch(100);
+        assert!(store.dispatch(Command::ActivateTab { tab: 1 }).is_err());
+        store.dispatch(Command::ActivateNext).unwrap();
+        assert_eq!(subscription.try_next_batch(100), vec![]);
+    }
+
+    #[test]
+    fn next_batch_waits_for_an_event_from_another_thread() {
+        let store = Arc::new(Store::new());
+        let subscription = store.subscribe();
+        subscription.next_batch(100);
+
+        let dispatcher = {
+            let store = store.clone();
+            thread::spawn(move || open_shell(&store, "a"))
+        };
+        let batch = subscription.next_batch(100);
+        let expected = dispatcher.join().unwrap();
+        // The dispatcher's two events are queued under one lock, so a woken consumer sees both.
+        assert_eq!(batch, expected);
+    }
+
+    #[test]
+    fn close_wakes_a_waiting_next_batch_with_an_empty_batch() {
+        let store = Store::new();
+        let subscription = Arc::new(store.subscribe());
+        subscription.next_batch(100);
+
+        let waiter = {
+            let subscription = subscription.clone();
+            thread::spawn(move || subscription.next_batch(100))
+        };
+        subscription.close();
+        assert_eq!(waiter.join().unwrap(), vec![]);
+        assert!(subscription.is_closed());
+    }
+
+    #[test]
+    fn a_closed_subscription_receives_nothing_and_is_forgotten() {
+        let store = Store::new();
+        let kept = store.subscribe();
+        let closed = store.subscribe();
+        closed.close();
+        drop(store.subscribe());
+        open_shell(&store, "a");
+
+        assert_eq!(closed.try_next_batch(100), vec![]);
+        assert_eq!(kept.try_next_batch(100).len(), 3);
+        assert_eq!(lock(&store.inner).subscribers.len(), 1);
+    }
+
+    #[test]
+    fn dispatch_returns_the_events_and_snapshot_reflects_them() {
+        let store = Store::new();
+        let events = open_shell(&store, "a");
+        assert_eq!(events.len(), 2);
+        assert_eq!(store.snapshot().window.tabs[0].title, "a");
+    }
+}
