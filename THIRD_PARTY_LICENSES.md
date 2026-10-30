@@ -37,3 +37,11 @@ Devora bundles and depends on the following third-party software and assets.
 - **License:** MIT
 - **Source:** https://github.com/catppuccin/kitty
 - **Note:** The Macchiato variant in `themes/catppuccin-macchiato.conf` is taken from this port.
+
+## Devora Sapphire
+
+### Ghostty
+
+- **License:** MIT
+- **Source:** https://github.com/ghostty-org/ghostty
+- **Note:** libghostty is built from source at a pinned commit and linked into Devora Sapphire; `project-sapphire/Sources/TerminalKit/TerminalView.swift` adapts the keyboard and IME handling of Ghostty's macOS app.

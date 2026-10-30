@@ -9,6 +9,7 @@ It is being extracted from Ember's `src-tauri/` area by area (TalAmuyal/Devora#2
 - `crates/devora-agent`: how Devora launches Claude Code: the `ccc` command line resolved into arguments and environment.
 - `crates/devora-config`: the global and per-profile config files, registered profiles, and the settings resolved from them (Claude settings, config fields, the prepare-command, git shortcuts).
 - `crates/devora-core`: the facade. A UI depends on this crate alone, never on the crates behind it.
+- `crates/devora-ffi`: the facade's UniFFI side, the `DevoraCore` object Sapphire binds; the records Swift sees are mapped here, so the other crates stay UniFFI-free.
 - `crates/devora-health`: the in-app health check (runs `debi health --json` through a login shell).
 - `crates/devora-platform`: operating-system services (the keychain today).
 - `crates/devora-pty`: terminal sessions on pseudo-terminals, with output delivered through callbacks.
