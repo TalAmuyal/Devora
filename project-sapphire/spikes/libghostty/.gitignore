@@ -1,0 +1,5 @@
+/vendor/
+/build/
+*.xcodeproj/
+DerivedData/
+.build/

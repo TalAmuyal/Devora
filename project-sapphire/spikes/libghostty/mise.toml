@@ -1,0 +1,52 @@
+[tools]
+zig = "0.17.0"
+xcodegen = "2.46.0"
+
+[tasks.ghostty-fetch]
+description = "Clone Ghostty into vendor/ghostty at the pinned commit"
+run = """
+set -euo pipefail
+# Ghostty v1.4.0; the commit is the source of truth, the tag is informational.
+GHOSTTY_TAG="v1.4.0"
+GHOSTTY_COMMIT="83fb95624b0439ee660c2679b43b38c8b63769cd"
+if [ ! -d vendor/ghostty/.git ]; then
+  mkdir -p vendor
+  git clone https://github.com/ghostty-org/ghostty.git vendor/ghostty
+  git -C vendor/ghostty checkout --detach "$GHOSTTY_COMMIT"
+fi
+HEAD_COMMIT=$(git -C vendor/ghostty rev-parse HEAD)
+if [ "$HEAD_COMMIT" != "$GHOSTTY_COMMIT" ]; then
+  echo "ERROR: vendor/ghostty is at $HEAD_COMMIT, expected $GHOSTTY_COMMIT ($GHOSTTY_TAG)" >&2
+  exit 1
+fi
+"""
+
+[tasks.ghostty-build]
+description = "Build GhosttyKit.xcframework (native arch) and copy it to build/"
+depends = ["ghostty-fetch"]
+run = """
+set -euo pipefail
+(cd vendor/ghostty && zig build -Doptimize=ReleaseFast -Demit-xcframework=true -Dxcframework-target=native -Demit-macos-app=false)
+mkdir -p build
+rsync -a --delete vendor/ghostty/macos/GhosttyKit.xcframework/ build/GhosttyKit.xcframework/
+echo "GhosttyKit.xcframework: $PWD/build/GhosttyKit.xcframework"
+"""
+
+[tasks.generate]
+description = "Generate the thin app target's Xcode project with XcodeGen"
+run = "xcodegen generate --quiet --spec App/project.yml"
+
+[tasks.build]
+description = "Build the spike app (runs ghostty-build first if the xcframework is missing)"
+depends = ["generate"]
+run = """
+set -euo pipefail
+[ -d build/GhosttyKit.xcframework ] || mise run ghostty-build
+xcodebuild -project App/LibghosttySpike.xcodeproj -scheme LibghosttySpike -configuration Release \
+	-derivedDataPath build/DerivedData -destination 'platform=macOS,arch=arm64' build -quiet
+echo "Built build/DerivedData/Build/Products/Release/LibghosttySpike.app"
+"""
+
+[tasks.run]
+description = "Run the spike app through LaunchServices (args as --flag value pairs: --selftest <out.json>, --bench <out.json>)"
+run = "open -n -W build/DerivedData/Build/Products/Release/LibghosttySpike.app --args"

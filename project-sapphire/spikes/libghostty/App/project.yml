@@ -1,0 +1,31 @@
+# XcodeGen spec for the thin app target (ADR-010). The generated .xcodeproj is gitignored; run `mise run generate`.
+name: LibghosttySpike
+options:
+  bundleIdPrefix: dev.devora
+  deploymentTarget:
+    macOS: "27.0"
+packages:
+  LibghosttySpike:
+    path: ..
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    ARCHS: arm64
+targets:
+  LibghosttySpike:
+    type: application
+    platform: macOS
+    sources:
+      - path: .
+        excludes: ["project.yml", "*.xcodeproj"]
+    dependencies:
+      - package: LibghosttySpike
+        product: AppShell
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.devora.libghostty-spike
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: libghostty spike
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "-"
+        ENABLE_HARDENED_RUNTIME: YES
