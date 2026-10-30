@@ -20,6 +20,13 @@ pub struct TerminalSpec {
     pub env_remove: Vec<String>,
 }
 
+/// A terminal's [`TerminalSpec`], plus the warnings met while building it (a setting that couldn't be read degrades the terminal rather than failing it).
+#[derive(uniffi::Record)]
+pub struct TerminalLaunchSpec {
+    pub spec: TerminalSpec,
+    pub warnings: Vec<String>,
+}
+
 #[uniffi::export]
 impl DevoraCore {
     /// The launch spec for the terminal shown in pane `pane`, from its tab's session.
@@ -29,7 +36,7 @@ impl DevoraCore {
         &self,
         pane: u64,
         resources_dir: Option<String>,
-    ) -> Result<TerminalSpec, CoreError> {
+    ) -> Result<TerminalLaunchSpec, CoreError> {
         let state = self.state.snapshot();
         let tab = state
             .window
@@ -59,7 +66,9 @@ impl DevoraCore {
         };
         let terminal_id =
             u32::try_from(pane).map_err(|_| format!("pane id {pane} doesn't fit DEVORA_PTY_ID"))?;
-        Ok(terminal::terminal_spec(&request, &host, terminal_id))
+        let mut warnings = Vec::new();
+        let spec = terminal::terminal_spec(&request, &host, terminal_id, &mut warnings);
+        Ok(TerminalLaunchSpec { spec, warnings })
     }
 }
 
@@ -107,7 +116,7 @@ mod tests {
             Some(profile.to_string_lossy().into_owned()),
         );
 
-        let spec = core.terminal_spec(pane, None).unwrap();
+        let spec = core.terminal_spec(pane, None).unwrap().spec;
 
         assert_eq!(spec.cwd, format!("{ws}/api"));
         assert_eq!(spec.args, ["-l", "-i", "-c", "ccc"]);
@@ -120,7 +129,7 @@ mod tests {
         let core = core();
         let pane = open(&core, SessionKind::Shell, None);
 
-        let spec = core.terminal_spec(pane, None).unwrap();
+        let spec = core.terminal_spec(pane, None).unwrap().spec;
 
         assert_eq!(spec.args, ["-l", "-i"]);
     }
