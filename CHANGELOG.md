@@ -22,6 +22,7 @@ Types of changes:
 - `devora-state`, a core crate holding the tab and session model and the active profile as core-owned state, changed by named commands that emit typed events; nothing uses it yet, and Sapphire will render from it
 - CI builds and tests Devora Sapphire on GitHub's hosted macOS 27 runner (`xcode-27`), caching the GhosttyKit build
 - A configurable PR title prefix (`pr.title-prefix`, per-profile with a global fallback) that `debi pr submit` prepends verbatim to the PR title, editable in the Settings Hub's Pull Requests card
+- Devora Sapphire has tabs: its tab bar renders the core-owned tabs from `devora-state`, and each tab's terminal runs the core's terminal spec, a login shell for a new shell tab and the profile's `terminal.default-app` (such as `ccc`) for a workspace opened from the sidebar
 
 ### Changed
 

@@ -40,9 +40,6 @@ public final class TerminalRuntime {
 	private var config: ghostty_config_t?
 
 	private init() {
-		// Terminals inherit this process's environment. A `$NVIM` inherited from a terminal inside Neovim makes flatten.nvim-style plugins hand files to that parent and exit, so drop it (as the embedded editor's spawn spec does).
-		unsetenv("NVIM")
-		unsetenv("NVIM_LISTEN_ADDRESS")
 		// libghostty parses argv for its own CLI actions; give it only the program name so Sapphire's flags stay ours.
 		var argv: [UnsafeMutablePointer<CChar>?] = [strdup(CommandLine.arguments.first ?? "sapphire"), nil]
 		guard ghostty_init(1, &argv) == GHOSTTY_SUCCESS else { fatalError("ghostty_init failed") }
