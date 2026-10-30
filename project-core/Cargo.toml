@@ -19,7 +19,9 @@ devora-terminal = { path = "crates/devora-terminal" }
 devora-theme = { path = "crates/devora-theme" }
 devora-workspace = { path = "crates/devora-workspace" }
 base64 = "0.22"
+event-listener = "5"
 fs2 = "0.4"
+futures-lite = "2"
 portable-pty = "0.8"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
