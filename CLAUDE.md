@@ -7,6 +7,7 @@ You can read `./USER_GUIDE.md` for high-level understanding of the project.
 **Devora**: The name of the application we develop. The published product is the Ember build (see below)
 **Devora-Ember** / **Ember**: The Tauri + xterm.js build, which is published as "Devora"
 	- It keeps the "Ember" name internally (the `project-ember/` directory, the `devora-ember` binary, some `ember-*` mise tasks)
+**Devora Sapphire** / **Sapphire**: The native macOS build in progress (SwiftUI + libghostty over the shared Rust core, `project-sapphire/`); not published yet
 
 Below are terms that have a specific meaning in the context of Devora:
 - **Workspace**: A directory that houses one or more git worktrees; it is the root directory from which work is being done in Devora (could be active or inactive) and is where Claude Code is invoked. Workspaces that failed initialization appear as Invalid in the Workspace Hub

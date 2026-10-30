@@ -1,0 +1,12 @@
+[package]
+name = "devora-state"
+description = "The app-state model the UIs render: named commands in, typed events out."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+serde.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

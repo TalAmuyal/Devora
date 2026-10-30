@@ -16,8 +16,10 @@ Types of changes:
 
 ### Added
 
+- The start of Devora Sapphire, the native macOS build (`project-sapphire/`): one window listing profiles and workspaces from the shared core and a libghostty login shell, built with `mise run -C project-sapphire build` over `devora-ffi`, the core's new UniFFI facade
 - Architecture decision records ADR-006 to ADR-010 for Project Sapphire, the planned native macOS build, and the shared Rust core it will share with Ember
 - `mise mac-install` accepts `-p/--path` to choose the install directory and `-s/--suffix` to install as `Devora-<suffix>.app`, with the suffix also shown in the window title and as the app name in the menu bar, Dock, and Cmd+Tab
+- `devora-state`, a core crate holding the tab and session model and the active profile as core-owned state, changed by named commands that emit typed events; nothing uses it yet, and Sapphire will render from it
 - A configurable PR title prefix (`pr.title-prefix`, per-profile with a global fallback) that `debi pr submit` prepends verbatim to the PR title, editable in the Settings Hub's Pull Requests card
 
 ### Changed

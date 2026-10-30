@@ -1,0 +1,28 @@
+[package]
+name = "devora-ffi"
+description = "The UniFFI side of the facade: the `DevoraCore` object Sapphire binds (ADR-010)."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[lib]
+name = "devora_ffi"
+# Sapphire links the staticlib; the cdylib only exists so uniffi-bindgen can read the metadata in library mode.
+crate-type = ["staticlib", "cdylib", "lib"]
+
+# Not under src/bin/: the repo's .gitignore ignores every bin/ directory.
+# Behind a feature, so the library Sapphire links doesn't build the bindgen CLI.
+[[bin]]
+name = "uniffi-bindgen"
+path = "uniffi-bindgen.rs"
+required-features = ["bindgen"]
+
+[features]
+bindgen = ["uniffi/cli"]
+
+[dependencies]
+devora-core.workspace = true
+uniffi = "=0.32.2"
+
+[dev-dependencies]
+tempfile.workspace = true

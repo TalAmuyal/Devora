@@ -10,6 +10,7 @@ devora-config.workspace = true
 devora-health.workspace = true
 devora-platform.workspace = true
 devora-pty.workspace = true
+devora-state.workspace = true
 devora-terminal.workspace = true
 devora-theme.workspace = true
 devora-workspace.workspace = true

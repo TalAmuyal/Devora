@@ -74,6 +74,7 @@ This builds Devora.app and installs it to `/Applications`.
 Devora builds upon the following tools:
 - Claude Code, as the agentic coding tool
 - Ember (Tauri + xterm.js), as the UI framework
+- Sapphire (`./project-sapphire/`), the native macOS build in progress (SwiftUI + libghostty over the shared Rust core)
 - Core (`./project-core/`), the shared Rust core that holds Devora's non-UI logic
 - Debi (`./project-debi/`), Devora's CLI for workspace management and utilities
 - Judgess (`./project-judgess/`), a Claude Code plugin for auto-approving/rejecting permission requests aiming to reduce permission fatigue and speed up the development process

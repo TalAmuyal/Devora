@@ -1,0 +1,72 @@
+[tools]
+zig = "0.17.0"
+xcodegen = "2.46.0"
+
+[env]
+SAPPHIRE_APP = "build/DerivedData/Build/Products/Release/Devora Sapphire.app"
+
+[tasks.core]
+description = "Build devora-ffi, its Swift bindings and DevoraCoreFFI.xcframework (outputs are only replaced when they change)"
+run = "./scripts/build-core.sh"
+
+[tasks.ghostty-fetch]
+description = "Clone Ghostty into vendor/ghostty at the pinned commit (GHOSTTY_CLONE_SOURCE overrides the GitHub URL, e.g. with a local clone)"
+run = """
+set -euo pipefail
+# Ghostty v1.4.0; the commit is the source of truth, the tag is informational.
+GHOSTTY_TAG="v1.4.0"
+GHOSTTY_COMMIT="83fb95624b0439ee660c2679b43b38c8b63769cd"
+if [ ! -d vendor/ghostty/.git ]; then
+	mkdir -p vendor
+	git clone "${GHOSTTY_CLONE_SOURCE:-https://github.com/ghostty-org/ghostty.git}" vendor/ghostty
+	git -C vendor/ghostty checkout --detach "$GHOSTTY_COMMIT"
+fi
+HEAD_COMMIT=$(git -C vendor/ghostty rev-parse HEAD)
+if [ "$HEAD_COMMIT" != "$GHOSTTY_COMMIT" ]; then
+	echo "ERROR: vendor/ghostty is at $HEAD_COMMIT, expected $GHOSTTY_COMMIT ($GHOSTTY_TAG)" >&2
+	exit 1
+fi
+"""
+
+[tasks.ghostty-build]
+description = "Build GhosttyKit.xcframework (native arch) into build/; needs Xcode's Metal Toolchain and gettext's msgfmt"
+depends = ["ghostty-fetch"]
+run = """
+set -euo pipefail
+(cd vendor/ghostty && zig build -Doptimize=ReleaseFast -Demit-xcframework=true -Dxcframework-target=native -Demit-macos-app=false)
+mkdir -p build
+rsync -a --delete vendor/ghostty/macos/GhosttyKit.xcframework/ build/GhosttyKit.xcframework/
+# SwiftPM merges every xcframework's headers into one include/ directory; in a subdirectory, Ghostty's umbrella header doesn't claim the core's headers.
+HEADERS=build/GhosttyKit.xcframework/macos-arm64/Headers
+mkdir -p "$HEADERS/GhosttyKit"
+mv "$HEADERS/ghostty.h" "$HEADERS/module.modulemap" "$HEADERS/GhosttyKit/"
+echo "Built build/GhosttyKit.xcframework"
+"""
+
+[tasks.generate]
+description = "Generate the thin app target's Xcode project with XcodeGen"
+run = "xcodegen generate --quiet --spec App/project.yml"
+
+[tasks.build]
+description = "Build Devora Sapphire.app (builds GhosttyKit first if it is missing)"
+depends = ["core", "generate"]
+run = """
+set -euo pipefail
+[ -d build/GhosttyKit.xcframework ] || mise run ghostty-build
+xcodebuild -project App/DevoraSapphire.xcodeproj -scheme DevoraSapphire -configuration Release \
+	-derivedDataPath build/DerivedData -destination 'platform=macOS,arch=arm64' build -quiet
+echo "Built $SAPPHIRE_APP"
+"""
+
+[tasks.run]
+description = "Run the app through LaunchServices; arguments are --flag value pairs (e.g. --snapshot <out.png>)"
+run = 'open -n -W "$SAPPHIRE_APP" --args'
+
+[tasks.test]
+description = "Run the Swift tests against the real core"
+depends = ["core"]
+run = """
+set -euo pipefail
+[ -d build/GhosttyKit.xcframework ] || mise run ghostty-build
+swift test
+"""
