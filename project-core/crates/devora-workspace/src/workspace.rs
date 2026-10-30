@@ -195,8 +195,8 @@ pub fn list_workspaces(
         return Ok(Vec::new());
     }
 
-    let entries = fs::read_dir(&workspaces_dir)
-        .map_err(|e| format!("failed to read workspaces dir: {e}"))?;
+    let entries =
+        fs::read_dir(&workspaces_dir).map_err(|e| format!("failed to read workspaces dir: {e}"))?;
 
     let mut workspaces = Vec::new();
     for entry in entries {
@@ -343,9 +343,7 @@ pub fn get_all_workspace_statuses(
                 thread::spawn(move || {
                     let (lock, cvar) = &*sem;
                     {
-                        let mut slots = cvar
-                            .wait_while(lock.lock().unwrap(), |s| *s == 0)
-                            .unwrap();
+                        let mut slots = cvar.wait_while(lock.lock().unwrap(), |s| *s == 0).unwrap();
                         *slots -= 1;
                     }
                     let result = get_single_repo_status(&name, &repo_path);
@@ -598,8 +596,7 @@ pub fn remove_task(workspace_path: &str) -> Result<(), String> {
         }
     }
 
-    fs::remove_file(&task_path)
-        .map_err(|e| format!("failed to delete task.json: {e}"))?;
+    fs::remove_file(&task_path).map_err(|e| format!("failed to delete task.json: {e}"))?;
 
     Ok(())
 }
@@ -721,14 +718,11 @@ pub fn delete_workspace(workspace_path: &str) -> Result<(), String> {
         match handle.join() {
             Ok(Ok(())) => {}
             Ok(Err(e)) => return Err(e),
-            Err(_) => {
-                return Err("thread panicked during worktree removal".to_string())
-            }
+            Err(_) => return Err("thread panicked during worktree removal".to_string()),
         }
     }
 
-    fs::remove_dir_all(ws_dir)
-        .map_err(|e| format!("failed to remove workspace directory: {e}"))?;
+    fs::remove_dir_all(ws_dir).map_err(|e| format!("failed to remove workspace directory: {e}"))?;
 
     Ok(())
 }
@@ -776,11 +770,7 @@ fn parse_git_status_branch_porcelain(output: &str) -> GitStatusBranchPorcelain {
             } else if let Some(rest) = header.strip_prefix("No commits yet on ") {
                 branch = rest.to_string();
             } else {
-                branch = header
-                    .split("...")
-                    .next()
-                    .unwrap_or("")
-                    .to_string();
+                branch = header.split("...").next().unwrap_or("").to_string();
             }
         } else if line.starts_with("??") {
             untracked += 1;
@@ -887,8 +877,16 @@ mod tests {
 
         // …but the parse failure is reported instead of swallowed.
         assert_eq!(warnings.len(), 1);
-        assert!(warnings[0].contains("failed to parse"), "warning: {}", warnings[0]);
-        assert!(warnings[0].contains("task.json"), "warning: {}", warnings[0]);
+        assert!(
+            warnings[0].contains("failed to parse"),
+            "warning: {}",
+            warnings[0]
+        );
+        assert!(
+            warnings[0].contains("task.json"),
+            "warning: {}",
+            warnings[0]
+        );
     }
 
     #[test]
@@ -1117,11 +1115,8 @@ mod tests {
         }
 
         // Only pass repo-a; repo-b exists on disk but should be ignored
-        let result = get_workspace_status(
-            &ws_path.to_string_lossy(),
-            vec!["repo-a".to_string()],
-        )
-        .unwrap();
+        let result =
+            get_workspace_status(&ws_path.to_string_lossy(), vec!["repo-a".to_string()]).unwrap();
 
         assert_eq!(result.statuses.len(), 1);
         assert_eq!(result.statuses[0].name, "repo-a");
@@ -1257,7 +1252,10 @@ mod tests {
         repurpose_task(&tmp.path().to_string_lossy(), "Follow-up task").unwrap();
 
         let task = read_json_file(&tmp.path().join("task.json")).unwrap();
-        assert_eq!(task.get("title").unwrap().as_str().unwrap(), "Follow-up task");
+        assert_eq!(
+            task.get("title").unwrap().as_str().unwrap(),
+            "Follow-up task"
+        );
 
         let uid = task.get("uid").unwrap().as_str().unwrap();
         assert_ne!(uid, "old-uid");
@@ -1281,7 +1279,10 @@ mod tests {
         write_task_json(tmp.path(), "Some task").unwrap();
 
         let raw = fs::read_to_string(tmp.path().join("task.json")).unwrap();
-        assert!(raw.contains("\n    \"title\""), "expected 4-space indent, got: {raw}");
+        assert!(
+            raw.contains("\n    \"title\""),
+            "expected 4-space indent, got: {raw}"
+        );
     }
 
     #[test]

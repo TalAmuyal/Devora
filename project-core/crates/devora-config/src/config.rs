@@ -36,8 +36,7 @@ pub fn global_config_path() -> Result<PathBuf, String> {
 pub fn read_json_file(path: &Path) -> Result<Value, String> {
     let content =
         fs::read_to_string(path).map_err(|e| format!("failed to read {}: {e}", path.display()))?;
-    serde_json::from_str(&content)
-        .map_err(|e| format!("failed to parse {}: {e}", path.display()))
+    serde_json::from_str(&content).map_err(|e| format!("failed to parse {}: {e}", path.display()))
 }
 
 pub fn write_pretty_json(path: &Path, value: &Value) -> Result<(), String> {
@@ -77,15 +76,19 @@ pub fn get_default_app(profile_path: &str) -> Result<Option<String>, String> {
     let profile_cfg = read_config_opt(&profile_config_path(profile_path))?;
     let spec = config_field("terminal.default-app")
         .expect("terminal.default-app is a registered config field");
-    Ok(resolve_config(profile_cfg.as_ref(), user_cfg.as_ref(), spec)
-        .and_then(|v| v.as_str().map(str::to_string)))
+    Ok(
+        resolve_config(profile_cfg.as_ref(), user_cfg.as_ref(), spec)
+            .and_then(|v| v.as_str().map(str::to_string)),
+    )
 }
 
 /// Resolves the configured prepare-command (`prepare-command`, profile → user).
 /// Returns `None` when unset at both scopes.
 /// A malformed/unreadable config degrades to `None` (prepare is skipped) rather than failing workspace creation.
 pub fn get_prepare_command(profile_path: Option<&str>) -> Option<String> {
-    let user_cfg = global_config_path().ok().and_then(|p| read_config_lenient(&p));
+    let user_cfg = global_config_path()
+        .ok()
+        .and_then(|p| read_config_lenient(&p));
     let profile_cfg = profile_path.and_then(|p| read_config_lenient(&profile_config_path(p)));
     let spec = config_field("prepare-command")?;
     resolve_config(profile_cfg.as_ref(), user_cfg.as_ref(), spec)
@@ -104,7 +107,8 @@ pub fn get_git_shortcuts_enabled(profile_path: Option<&str>) -> bool {
         let profile_config_path = Path::new(profile_path).join("config.json");
         if profile_config_path.exists() {
             if let Ok(profile_config) = read_json_file(&profile_config_path) {
-                if let Some(val) = get_value_by_dot_path(&profile_config, "terminal.git-shortcuts") {
+                if let Some(val) = get_value_by_dot_path(&profile_config, "terminal.git-shortcuts")
+                {
                     if let Some(b) = val.as_bool() {
                         return b;
                     }
@@ -237,7 +241,8 @@ pub fn claude_launch_env(profile_path: Option<&str>) -> HashMap<String, String> 
 
     let mut env = HashMap::new();
     for spec in &CLAUDE_SETTINGS {
-        if let ResolvedSetting::Value(v) = resolve_one(profile_cfg.as_ref(), user_cfg.as_ref(), spec)
+        if let ResolvedSetting::Value(v) =
+            resolve_one(profile_cfg.as_ref(), user_cfg.as_ref(), spec)
         {
             env.insert(spec.env_var.to_string(), v);
         }
@@ -262,10 +267,16 @@ pub fn read_claude_settings(profile_path: Option<&str>) -> Result<ClaudeSettings
     };
 
     let mut stored = serde_json::Map::new();
-    if let Some(claude) = own_cfg.and_then(|c| c.get("claude")).and_then(|v| v.as_object()) {
+    if let Some(claude) = own_cfg
+        .and_then(|c| c.get("claude"))
+        .and_then(|v| v.as_object())
+    {
         for spec in &CLAUDE_SETTINGS {
             // Preserve string and null verbatim; ignore malformed types.
-            if let Some(val) = claude.get(spec.key).filter(|v| v.is_string() || v.is_null()) {
+            if let Some(val) = claude
+                .get(spec.key)
+                .filter(|v| v.is_string() || v.is_null())
+            {
                 stored.insert(spec.key.to_string(), val.clone());
             }
         }
@@ -302,8 +313,8 @@ pub fn write_claude_setting(
         None => global_config_path()?,
     };
 
-    let mut config = read_config_opt(&config_path)?
-        .unwrap_or_else(|| Value::Object(serde_json::Map::new()));
+    let mut config =
+        read_config_opt(&config_path)?.unwrap_or_else(|| Value::Object(serde_json::Map::new()));
     let obj = config
         .as_object_mut()
         .ok_or("config is not a JSON object")?;
@@ -743,7 +754,10 @@ mod tests {
 
     #[test]
     fn test_claude_effort_levels_are_canonical() {
-        assert_eq!(CLAUDE_EFFORT_LEVELS, ["low", "medium", "high", "xhigh", "max"]);
+        assert_eq!(
+            CLAUDE_EFFORT_LEVELS,
+            ["low", "medium", "high", "xhigh", "max"]
+        );
     }
 
     #[test]
@@ -844,12 +858,21 @@ mod tests {
         // 6. write_claude_setting round-trips value/none/default and preserves siblings.
         write_claude_setting(None, "sonnet-model", "value", Some("claude-opus-4-7")).unwrap();
         let cfg = read_json_file(&global_config).unwrap();
-        assert_eq!(cfg["claude"]["sonnet-model"], Value::String("claude-opus-4-7".into()));
-        assert_eq!(cfg["claude"]["opus-model"], Value::String("claude-fable-5".into())); // sibling kept
+        assert_eq!(
+            cfg["claude"]["sonnet-model"],
+            Value::String("claude-opus-4-7".into())
+        );
+        assert_eq!(
+            cfg["claude"]["opus-model"],
+            Value::String("claude-fable-5".into())
+        ); // sibling kept
         assert_eq!(cfg["profiles"], serde_json::json!([])); // unrelated key kept
 
         write_claude_setting(None, "opus-model", "none", None).unwrap();
-        assert_eq!(read_json_file(&global_config).unwrap()["claude"]["opus-model"], Value::Null);
+        assert_eq!(
+            read_json_file(&global_config).unwrap()["claude"]["opus-model"],
+            Value::Null
+        );
 
         write_claude_setting(None, "sonnet-model", "default", None).unwrap();
         assert!(read_json_file(&global_config).unwrap()["claude"]
@@ -891,18 +914,29 @@ mod tests {
             Some(Value::String("99".into())),
         )
         .unwrap();
-        assert_eq!(cfg["task-tracker"]["asana"]["project-id"], Value::String("99".into()));
+        assert_eq!(
+            cfg["task-tracker"]["asana"]["project-id"],
+            Value::String("99".into())
+        );
         assert_eq!(cfg["name"], Value::String("p".into()));
 
         // A second leaf under the same branch + a top-level bool branch.
-        write_dot_path(&mut cfg, "task-tracker.provider", Some(Value::String("asana".into()))).unwrap();
+        write_dot_path(
+            &mut cfg,
+            "task-tracker.provider",
+            Some(Value::String("asana".into())),
+        )
+        .unwrap();
         write_dot_path(&mut cfg, "pr.auto-merge", Some(Value::Bool(false))).unwrap();
         assert_eq!(cfg["pr"]["auto-merge"], Value::Bool(false));
 
         // Removing the deep leaf prunes the now-empty `asana` object but keeps `task-tracker` (still has provider).
         write_dot_path(&mut cfg, "task-tracker.asana.project-id", None).unwrap();
         assert!(cfg["task-tracker"].get("asana").is_none());
-        assert_eq!(cfg["task-tracker"]["provider"], Value::String("asana".into()));
+        assert_eq!(
+            cfg["task-tracker"]["provider"],
+            Value::String("asana".into())
+        );
 
         // Removing the last leaf prunes the whole branch.
         write_dot_path(&mut cfg, "task-tracker.provider", None).unwrap();
@@ -924,7 +958,10 @@ mod tests {
         // 1. Nothing stored: resolved uses built-ins (git-shortcuts true), null for Debi-owned keys.
         let s = read_config_settings(None).unwrap();
         assert!(s.stored.is_empty());
-        assert_eq!(s.resolved.get("terminal.git-shortcuts"), Some(&Value::Bool(true)));
+        assert_eq!(
+            s.resolved.get("terminal.git-shortcuts"),
+            Some(&Value::Bool(true))
+        );
         assert_eq!(s.resolved.get("terminal.default-app"), Some(&Value::Null));
         assert_eq!(s.resolved.get("pr.auto-merge"), Some(&Value::Null));
         assert_eq!(s.resolved.get("feature.branch-prefix"), Some(&Value::Null));
@@ -935,11 +972,20 @@ mod tests {
         write_config_setting(None, "terminal.default-app", "value", Some("nvim")).unwrap();
         let cfg = read_json_file(&global_config).unwrap();
         assert_eq!(cfg["terminal"]["git-shortcuts"], Value::Bool(false));
-        assert_eq!(cfg["feature"]["branch-prefix"], Value::String("feat".into()));
+        assert_eq!(
+            cfg["feature"]["branch-prefix"],
+            Value::String("feat".into())
+        );
         assert_eq!(cfg["terminal"]["default-app"], Value::String("nvim".into()));
         let s = read_config_settings(None).unwrap();
-        assert_eq!(s.stored.get("terminal.git-shortcuts"), Some(&Value::Bool(false)));
-        assert_eq!(s.resolved.get("terminal.git-shortcuts"), Some(&Value::Bool(false)));
+        assert_eq!(
+            s.stored.get("terminal.git-shortcuts"),
+            Some(&Value::Bool(false))
+        );
+        assert_eq!(
+            s.resolved.get("terminal.git-shortcuts"),
+            Some(&Value::Bool(false))
+        );
 
         // A text value is trimmed; a fragment keeps its whitespace.
         write_config_setting(None, "terminal.default-app", "value", Some(" nvim ")).unwrap();
@@ -953,31 +999,76 @@ mod tests {
         fs::create_dir_all(&profile_dir).unwrap();
         let profile_path = profile_dir.to_string_lossy().to_string();
         fs::write(profile_dir.join("config.json"), r#"{"name":"p"}"#).unwrap();
-        write_config_setting(Some(&profile_path), "feature.branch-prefix", "value", Some("hotfix")).unwrap();
+        write_config_setting(
+            Some(&profile_path),
+            "feature.branch-prefix",
+            "value",
+            Some("hotfix"),
+        )
+        .unwrap();
         let s = read_config_settings(Some(&profile_path)).unwrap();
-        assert_eq!(s.stored.get("feature.branch-prefix"), Some(&Value::String("hotfix".into())));
-        assert_eq!(s.resolved.get("feature.branch-prefix"), Some(&Value::String("hotfix".into())));
+        assert_eq!(
+            s.stored.get("feature.branch-prefix"),
+            Some(&Value::String("hotfix".into()))
+        );
+        assert_eq!(
+            s.resolved.get("feature.branch-prefix"),
+            Some(&Value::String("hotfix".into()))
+        );
         assert!(!s.stored.contains_key("terminal.git-shortcuts")); // absent at profile
-        assert_eq!(s.resolved.get("terminal.git-shortcuts"), Some(&Value::Bool(false))); // from user
-        // get_default_app routes through the same resolver: profile unset → user "nvim".
-        assert_eq!(get_default_app(&profile_path).unwrap().as_deref(), Some("nvim"));
+        assert_eq!(
+            s.resolved.get("terminal.git-shortcuts"),
+            Some(&Value::Bool(false))
+        ); // from user
+           // get_default_app routes through the same resolver: profile unset → user "nvim".
+        assert_eq!(
+            get_default_app(&profile_path).unwrap().as_deref(),
+            Some("nvim")
+        );
 
         // 4. Enum: empty value = explicit "none"; a valid value accepted; an invalid one rejected.
-        write_config_setting(Some(&profile_path), "task-tracker.provider", "value", Some("asana")).unwrap();
+        write_config_setting(
+            Some(&profile_path),
+            "task-tracker.provider",
+            "value",
+            Some("asana"),
+        )
+        .unwrap();
         assert_eq!(
             read_json_file(&profile_dir.join("config.json")).unwrap()["task-tracker"]["provider"],
             Value::String("asana".into())
         );
-        write_config_setting(Some(&profile_path), "task-tracker.provider", "value", Some("")).unwrap();
+        write_config_setting(
+            Some(&profile_path),
+            "task-tracker.provider",
+            "value",
+            Some(""),
+        )
+        .unwrap();
         assert_eq!(
             read_json_file(&profile_dir.join("config.json")).unwrap()["task-tracker"]["provider"],
             Value::String(String::new())
         );
-        assert!(write_config_setting(Some(&profile_path), "task-tracker.provider", "value", Some("jira")).is_err());
+        assert!(write_config_setting(
+            Some(&profile_path),
+            "task-tracker.provider",
+            "value",
+            Some("jira")
+        )
+        .is_err());
 
         // 5. `default` removes the key and prunes empties; bad inputs are rejected.
-        write_config_setting(Some(&profile_path), "task-tracker.provider", "default", None).unwrap();
-        assert!(read_json_file(&profile_dir.join("config.json")).unwrap().get("task-tracker").is_none());
+        write_config_setting(
+            Some(&profile_path),
+            "task-tracker.provider",
+            "default",
+            None,
+        )
+        .unwrap();
+        assert!(read_json_file(&profile_dir.join("config.json"))
+            .unwrap()
+            .get("task-tracker")
+            .is_none());
         assert!(write_config_setting(None, "feature.branch-prefix", "value", Some("   ")).is_err());
         assert!(write_config_setting(None, "pr.title-prefix", "value", Some("   ")).is_err());
         assert!(write_config_setting(None, "unknown.key", "value", Some("x")).is_err());
@@ -987,7 +1078,10 @@ mod tests {
         // 6. Bool write round-trips and reads back typed.
         write_config_setting(None, "pr.auto-merge", "value", Some("true")).unwrap();
         assert_eq!(
-            read_config_settings(None).unwrap().resolved.get("pr.auto-merge"),
+            read_config_settings(None)
+                .unwrap()
+                .resolved
+                .get("pr.auto-merge"),
             Some(&Value::Bool(true))
         );
 

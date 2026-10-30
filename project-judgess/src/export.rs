@@ -60,10 +60,7 @@ pub fn run(
 }
 
 /// `Ok(None)` for entries that are not cases (deleted ones).
-fn export_one(
-    entry: &Value,
-    redactor: &Redactor,
-) -> Result<Option<Case>, String> {
+fn export_one(entry: &Value, redactor: &Redactor) -> Result<Option<Case>, String> {
     let label = entry
         .get("label")
         .and_then(Value::as_str)

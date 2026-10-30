@@ -8,8 +8,10 @@ use std::sync::{Arc, Mutex};
 use tauri::ipc::Channel;
 use tauri::Manager;
 
-pub use devora_core::workspace_creation::{CreationEvent, CreationHandle, WorkspaceCreationManager};
 use devora_core::workspace_creation::{self as creation, EventSink, Outcome};
+pub use devora_core::workspace_creation::{
+    CreationEvent, CreationHandle, WorkspaceCreationManager,
+};
 
 /// Adapts the frontend's channel to the core's event sink; a send that fails (the frontend went away) is dropped, as before.
 fn sink(on_event: &Channel<CreationEvent>) -> EventSink {
@@ -21,6 +23,7 @@ fn sink(on_event: &Channel<CreationEvent>) -> EventSink {
 
 /// Worker-thread entry point: run the creation, deregister, report warnings, and emit the terminal event.
 /// Spawned by the `create_workspace` command.
+#[allow(clippy::too_many_arguments)] // The `create_workspace` command's IPC parameters, forwarded as-is.
 pub fn run(
     app: tauri::AppHandle,
     id: u32,
@@ -65,7 +68,6 @@ pub fn run(
         }
     }
 }
-
 
 /// Worker-thread entry point for adding a single repo as a worktree to an existing workspace.
 /// Spawned by the `add_repo_to_workspace` command.
@@ -120,7 +122,6 @@ pub fn run_add_repo(
         }
     }
 }
-
 
 /// Spawned by the `clone_repo_into_profile` command.
 /// Clones a git repo into `<profile>/repos/<name>`, detached, streaming progress; deregisters, then emits the terminal event.

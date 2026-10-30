@@ -24,7 +24,9 @@ pub fn parse_clone_target(input: &str) -> Result<CloneTarget, String> {
     }
 
     // ssh:// / git:// / file:// — pass the URL through, deriving the dir from the last path segment.
-    if trimmed.starts_with("ssh://") || trimmed.starts_with("git://") || trimmed.starts_with("file://")
+    if trimmed.starts_with("ssh://")
+        || trimmed.starts_with("git://")
+        || trimmed.starts_with("file://")
     {
         return Ok(CloneTarget {
             clone_url: trimmed.to_string(),

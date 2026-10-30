@@ -25,6 +25,8 @@ jobs:
         with:
           experimental: true
 
+      - run: mise run lint
+
       - run: mise run test
 
   test-ember:
@@ -54,6 +56,9 @@ jobs:
       - name: Install npm dependencies
         if: steps.cache-npm.outputs.cache-hit != 'true'
         run: mise exec -C project-ember -- npm ci
+
+      - name: Rust format and lint
+        run: mise run ember-lint
 
       - name: Rust tests
         run: mise run ember-test

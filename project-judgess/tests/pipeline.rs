@@ -32,12 +32,7 @@ fn classified_requests_are_exported_redacted() {
         store.append(UNKNOWN, &request).unwrap();
     }
     let mut output = Vec::new();
-    classify::run(
-        &store,
-        &mut Cursor::new("a\nneeds network\n"),
-        &mut output,
-    )
-    .unwrap();
+    classify::run(&store, &mut Cursor::new("a\nneeds network\n"), &mut output).unwrap();
     let labelled = store.read(LABELLED);
     assert_eq!(
         labelled.len(),

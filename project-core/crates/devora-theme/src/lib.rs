@@ -24,8 +24,16 @@ fn css_properties_for(key: &str) -> &'static [&'static str] {
         "tab_bar_background" => &["--color-tab-bar-bg", "--color-crust"],
         "color0" => &["--color-ansi-black", "--color-surface1", "--color-border"],
         "color1" => &["--color-ansi-red", "--color-red", "--color-status-error"],
-        "color2" => &["--color-ansi-green", "--color-green", "--color-status-clean"],
-        "color3" => &["--color-ansi-yellow", "--color-yellow", "--color-status-modified"],
+        "color2" => &[
+            "--color-ansi-green",
+            "--color-green",
+            "--color-status-clean",
+        ],
+        "color3" => &[
+            "--color-ansi-yellow",
+            "--color-yellow",
+            "--color-status-modified",
+        ],
         "color4" => &["--color-ansi-blue", "--color-blue", "--color-status-info"],
         "color5" => &["--color-ansi-magenta", "--color-pink"],
         "color6" => &["--color-ansi-cyan", "--color-teal"],
@@ -94,8 +102,10 @@ pub fn load_theme(theme_path: &Path) -> Result<HashMap<String, String>, String> 
 mod tests {
     use super::*;
 
-    const REPO_THEME_PATH: &str =
-        concat!(env!("CARGO_MANIFEST_DIR"), "/../../../themes/catppuccin-macchiato.conf");
+    const REPO_THEME_PATH: &str = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../../themes/catppuccin-macchiato.conf"
+    );
 
     #[test]
     fn parse_actual_theme_file() {
@@ -103,28 +113,61 @@ mod tests {
             .expect("should be able to parse the actual catppuccin-macchiato.conf");
 
         // Verify a selection of key mappings exist with correct values from the file
-        assert_eq!(theme.get("--color-terminal-fg"), Some(&"#CAD3F5".to_string()));
+        assert_eq!(
+            theme.get("--color-terminal-fg"),
+            Some(&"#CAD3F5".to_string())
+        );
         assert_eq!(theme.get("--color-text"), Some(&"#CAD3F5".to_string()));
         assert_eq!(theme.get("--color-fg"), Some(&"#CAD3F5".to_string()));
 
-        assert_eq!(theme.get("--color-terminal-bg"), Some(&"#24273A".to_string()));
+        assert_eq!(
+            theme.get("--color-terminal-bg"),
+            Some(&"#24273A".to_string())
+        );
         assert_eq!(theme.get("--color-bg"), Some(&"#24273A".to_string()));
         assert_eq!(theme.get("--color-base"), Some(&"#24273A".to_string()));
 
-        assert_eq!(theme.get("--color-terminal-selection-fg"), Some(&"#24273A".to_string()));
-        assert_eq!(theme.get("--color-terminal-selection-bg"), Some(&"#F4DBD6".to_string()));
-        assert_eq!(theme.get("--color-terminal-cursor"), Some(&"#F4DBD6".to_string()));
+        assert_eq!(
+            theme.get("--color-terminal-selection-fg"),
+            Some(&"#24273A".to_string())
+        );
+        assert_eq!(
+            theme.get("--color-terminal-selection-bg"),
+            Some(&"#F4DBD6".to_string())
+        );
+        assert_eq!(
+            theme.get("--color-terminal-cursor"),
+            Some(&"#F4DBD6".to_string())
+        );
 
-        assert_eq!(theme.get("--color-tab-active-fg"), Some(&"#181926".to_string()));
-        assert_eq!(theme.get("--color-tab-active-bg"), Some(&"#C6A0F6".to_string()));
+        assert_eq!(
+            theme.get("--color-tab-active-fg"),
+            Some(&"#181926".to_string())
+        );
+        assert_eq!(
+            theme.get("--color-tab-active-bg"),
+            Some(&"#C6A0F6".to_string())
+        );
         assert_eq!(theme.get("--color-accent"), Some(&"#C6A0F6".to_string()));
 
-        assert_eq!(theme.get("--color-tab-inactive-fg"), Some(&"#CAD3F5".to_string()));
-        assert_eq!(theme.get("--color-tab-inactive-bg"), Some(&"#1E2030".to_string()));
-        assert_eq!(theme.get("--color-bg-secondary"), Some(&"#1E2030".to_string()));
+        assert_eq!(
+            theme.get("--color-tab-inactive-fg"),
+            Some(&"#CAD3F5".to_string())
+        );
+        assert_eq!(
+            theme.get("--color-tab-inactive-bg"),
+            Some(&"#1E2030".to_string())
+        );
+        assert_eq!(
+            theme.get("--color-bg-secondary"),
+            Some(&"#1E2030".to_string())
+        );
         assert_eq!(theme.get("--color-mantle"), Some(&"#1E2030".to_string()));
 
-        assert_eq!(theme.get("--color-tab-bar-bg"), Some(&"#181926".to_string()));
+        assert_eq!(
+            theme.get("--color-tab-bar-bg"),
+            Some(&"#181926".to_string())
+        );
 
         // macos_titlebar_color should also map to --color-crust (value is #181926, not "system")
         // But tab_bar_background also maps to --color-crust. Since both map #181926, the
@@ -132,41 +175,77 @@ mod tests {
         assert_eq!(theme.get("--color-crust"), Some(&"#181926".to_string()));
 
         // ANSI colors
-        assert_eq!(theme.get("--color-ansi-black"), Some(&"#494D64".to_string()));
+        assert_eq!(
+            theme.get("--color-ansi-black"),
+            Some(&"#494D64".to_string())
+        );
         assert_eq!(theme.get("--color-surface1"), Some(&"#494D64".to_string()));
         assert_eq!(theme.get("--color-border"), Some(&"#494D64".to_string()));
 
         assert_eq!(theme.get("--color-ansi-red"), Some(&"#ED8796".to_string()));
         assert_eq!(theme.get("--color-red"), Some(&"#ED8796".to_string()));
-        assert_eq!(theme.get("--color-status-error"), Some(&"#ED8796".to_string()));
+        assert_eq!(
+            theme.get("--color-status-error"),
+            Some(&"#ED8796".to_string())
+        );
 
-        assert_eq!(theme.get("--color-ansi-green"), Some(&"#A6DA95".to_string()));
+        assert_eq!(
+            theme.get("--color-ansi-green"),
+            Some(&"#A6DA95".to_string())
+        );
         assert_eq!(theme.get("--color-green"), Some(&"#A6DA95".to_string()));
-        assert_eq!(theme.get("--color-status-clean"), Some(&"#A6DA95".to_string()));
+        assert_eq!(
+            theme.get("--color-status-clean"),
+            Some(&"#A6DA95".to_string())
+        );
 
-        assert_eq!(theme.get("--color-ansi-yellow"), Some(&"#EED49F".to_string()));
+        assert_eq!(
+            theme.get("--color-ansi-yellow"),
+            Some(&"#EED49F".to_string())
+        );
         assert_eq!(theme.get("--color-yellow"), Some(&"#EED49F".to_string()));
-        assert_eq!(theme.get("--color-status-modified"), Some(&"#EED49F".to_string()));
+        assert_eq!(
+            theme.get("--color-status-modified"),
+            Some(&"#EED49F".to_string())
+        );
 
         assert_eq!(theme.get("--color-ansi-blue"), Some(&"#8AADF4".to_string()));
         assert_eq!(theme.get("--color-blue"), Some(&"#8AADF4".to_string()));
-        assert_eq!(theme.get("--color-status-info"), Some(&"#8AADF4".to_string()));
+        assert_eq!(
+            theme.get("--color-status-info"),
+            Some(&"#8AADF4".to_string())
+        );
 
-        assert_eq!(theme.get("--color-ansi-magenta"), Some(&"#F5BDE6".to_string()));
+        assert_eq!(
+            theme.get("--color-ansi-magenta"),
+            Some(&"#F5BDE6".to_string())
+        );
         assert_eq!(theme.get("--color-pink"), Some(&"#F5BDE6".to_string()));
 
         assert_eq!(theme.get("--color-ansi-cyan"), Some(&"#8BD5CA".to_string()));
         assert_eq!(theme.get("--color-teal"), Some(&"#8BD5CA".to_string()));
 
-        assert_eq!(theme.get("--color-ansi-white"), Some(&"#B8C0E0".to_string()));
+        assert_eq!(
+            theme.get("--color-ansi-white"),
+            Some(&"#B8C0E0".to_string())
+        );
         assert_eq!(theme.get("--color-subtext1"), Some(&"#B8C0E0".to_string()));
 
-        assert_eq!(theme.get("--color-ansi-bright-black"), Some(&"#5B6078".to_string()));
+        assert_eq!(
+            theme.get("--color-ansi-bright-black"),
+            Some(&"#5B6078".to_string())
+        );
         assert_eq!(theme.get("--color-surface2"), Some(&"#5B6078".to_string()));
 
-        assert_eq!(theme.get("--color-ansi-bright-white"), Some(&"#A5ADCB".to_string()));
+        assert_eq!(
+            theme.get("--color-ansi-bright-white"),
+            Some(&"#A5ADCB".to_string())
+        );
         assert_eq!(theme.get("--color-subtext0"), Some(&"#A5ADCB".to_string()));
-        assert_eq!(theme.get("--color-fg-secondary"), Some(&"#A5ADCB".to_string()));
+        assert_eq!(
+            theme.get("--color-fg-secondary"),
+            Some(&"#A5ADCB".to_string())
+        );
     }
 
     #[test]
@@ -181,7 +260,10 @@ mod tests {
 
         let theme = load_theme(&path).unwrap();
 
-        assert_eq!(theme.get("--color-terminal-fg"), Some(&"#AABBCC".to_string()));
+        assert_eq!(
+            theme.get("--color-terminal-fg"),
+            Some(&"#AABBCC".to_string())
+        );
         assert_eq!(theme.get("--color-text"), Some(&"#AABBCC".to_string()));
         assert_eq!(theme.get("--color-fg"), Some(&"#AABBCC".to_string()));
         assert_eq!(theme.len(), 3);

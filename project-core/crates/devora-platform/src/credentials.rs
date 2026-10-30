@@ -47,11 +47,13 @@ fn decode_secret(raw: &str) -> Result<String, String> {
         let bytes = BASE64
             .decode(rest)
             .map_err(|e| format!("failed to decode keychain token: {e}"))?;
-        return String::from_utf8(bytes).map_err(|e| format!("keychain token is not valid UTF-8: {e}"));
+        return String::from_utf8(bytes)
+            .map_err(|e| format!("keychain token is not valid UTF-8: {e}"));
     }
     if let Some(rest) = raw.strip_prefix(HEX_PREFIX) {
         let bytes = decode_hex(rest)?;
-        return String::from_utf8(bytes).map_err(|e| format!("keychain token is not valid UTF-8: {e}"));
+        return String::from_utf8(bytes)
+            .map_err(|e| format!("keychain token is not valid UTF-8: {e}"));
     }
     Ok(raw.to_string())
 }
@@ -73,7 +75,13 @@ fn decode_hex(s: &str) -> Result<Vec<u8>, String> {
 pub fn get_asana_token() -> Result<Option<String>, String> {
     let account = account()?;
     let out = Command::new(SECURITY_BIN)
-        .args(["find-generic-password", "-wa", &account, "-s", ASANA_SERVICE])
+        .args([
+            "find-generic-password",
+            "-wa",
+            &account,
+            "-s",
+            ASANA_SERVICE,
+        ])
         .output()
         .map_err(|e| format!("failed to run security: {e}"))?;
 
@@ -120,10 +128,7 @@ pub fn set_asana_token(token: &str) -> Result<(), String> {
         .spawn()
         .map_err(|e| format!("failed to run security: {e}"))?;
     {
-        let mut stdin = child
-            .stdin
-            .take()
-            .ok_or("failed to open security stdin")?;
+        let mut stdin = child.stdin.take().ok_or("failed to open security stdin")?;
         stdin
             .write_all(command.as_bytes())
             .map_err(|e| format!("failed to send command to security: {e}"))?;
@@ -145,7 +150,13 @@ pub fn set_asana_token(token: &str) -> Result<(), String> {
 pub fn clear_asana_token() -> Result<(), String> {
     let account = account()?;
     let out = Command::new(SECURITY_BIN)
-        .args(["delete-generic-password", "-a", &account, "-s", ASANA_SERVICE])
+        .args([
+            "delete-generic-password",
+            "-a",
+            &account,
+            "-s",
+            ASANA_SERVICE,
+        ])
         .output()
         .map_err(|e| format!("failed to run security: {e}"))?;
 

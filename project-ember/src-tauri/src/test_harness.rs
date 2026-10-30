@@ -160,10 +160,7 @@ async fn handle_request(
                 Err(resp) => return Ok(resp),
             };
 
-            if app_handle
-                .emit(&req_body.event, req_body.payload)
-                .is_err()
-            {
+            if app_handle.emit(&req_body.event, req_body.payload).is_err() {
                 return Ok(http_util::error_response(
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "failed to emit event",
@@ -173,7 +170,10 @@ async fn handle_request(
             Ok(http_util::ok_response())
         }
 
-        _ => Ok(http_util::error_response(StatusCode::NOT_FOUND, "not found")),
+        _ => Ok(http_util::error_response(
+            StatusCode::NOT_FOUND,
+            "not found",
+        )),
     }
 }
 
