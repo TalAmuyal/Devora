@@ -11,8 +11,29 @@ public enum Command: Sendable {
 	case openShell
 	/// Opens a tab on a workspace of the selected profile.
 	case openWorkspace(Workspace)
+	/// Opens a shell tab when there are no tabs, as at a launch that restored none.
+	case openShellIfNoTabs
 	case activateTab(id: UInt64)
 	case closeTab(id: UInt64)
+	/// Answers `StartupProblem.stateUnreadable`: moves the unreadable app state aside, keeping it, and opens a fresh one in its place.
+	case startFresh
+}
+
+/// Where the app state (the tabs) is kept.
+public enum StateStorage: Sendable {
+	/// Forgotten when the store goes.
+	case inMemory
+	case file(path: String)
+	/// The app's own, from `sapphireStatePath`: per install suffix, or in `DEVORA_STATE_DIR`.
+	case app
+}
+
+/// Why the store couldn't open the app state; it has no core until the problem is resolved.
+public enum StartupProblem: Equatable, Sendable {
+	/// Another process (another Devora Sapphire) holds the state; this one can only quit.
+	case stateInUse(path: String)
+	/// The state couldn't be opened; the user either starts fresh (`Command.startFresh`) or quits.
+	case stateUnreadable(path: String, reason: String)
 }
 
 /// The single app store: views read its state and dispatch `Command`s; only the store calls the core.
@@ -29,28 +50,38 @@ public final class Store {
 	public private(set) var error: String?
 	/// The core-owned app state (tabs and their sessions), folded from the core's events.
 	public private(set) var app = AppState.empty
+	public private(set) var startupProblem: StartupProblem?
 
 	/// Asks the window's display link to call `foldPending()` on its next frame; without one, events fold on the main actor's next turn.
 	@ObservationIgnored public var requestFrame: (@MainActor () -> Void)?
 
-	@ObservationIgnored private let core: DevoraCore?
+	@ObservationIgnored private let configPath: String?
+	@ObservationIgnored private var core: DevoraCore?
 	@ObservationIgnored private let inbox = Inbox()
 	@ObservationIgnored private var stateEvents: Task<Void, Never>?
 
-	/// `configPath` overrides the global config file (by default `DEVORA_CONFIG_PATH`, then `~/.config/devora/config.json`).
-	public init(configPath: String? = nil) {
+	/// `configPath` overrides the global config file (`nil`: `DEVORA_CONFIG_PATH`, then `~/.config/devora/config.json`).
+	public init(configPath: String?, state: StateStorage) {
+		self.configPath = configPath
+		open(state)
+	}
+
+	private func open(_ state: StateStorage) {
 		do {
-			core = try DevoraCore(configPath: configPath)
-		} catch {
-			core = nil
-			self.error = Self.describe(error)
-		}
-		if let core {
-			do {
-				stateEvents = pullStateEvents(from: try core.subscribe())
-			} catch {
-				self.error = Self.describe(error)
+			let statePath: String? = switch state {
+			case .inMemory: nil
+			case .file(let path): path
+			case .app: try sapphireStatePath(resourcesDir: Bundle.main.resourcePath)
 			}
+			let core = try DevoraCore(configPath: configPath, statePath: statePath)
+			self.core = core
+			stateEvents = pullStateEvents(from: try core.subscribe())
+		} catch CoreError.StateInUse(let path, _) {
+			startupProblem = .stateInUse(path: path)
+		} catch CoreError.StateUnreadable(let path, let message) {
+			startupProblem = .stateUnreadable(path: path, reason: message)
+		} catch {
+			self.error = Self.describe(error)
 		}
 	}
 
@@ -64,7 +95,16 @@ public final class Store {
 		case .load, .selectProfile:
 			return Task { await perform(command) }
 		case .openShell:
-			apply(.openSession(title: "Shell", kind: .shell, profilePath: nil))
+			apply(Self.openShell)
+		case .openShellIfNoTabs:
+			guard let core else { break }
+			do {
+				if try core.snapshot().window.tabs.isEmpty { apply(Self.openShell) }
+			} catch {
+				self.error = Self.describe(error)
+			}
+		case .startFresh:
+			startFresh()
 		case .openWorkspace(let workspace):
 			apply(.openSession(
 				title: workspace.title.isEmpty ? workspace.id : workspace.title,
@@ -96,7 +136,23 @@ public final class Store {
 		return launch.spec
 	}
 
-	/// State commands apply in order and quickly (an in-memory reducer), so they run synchronously; their changes arrive through the subscription.
+	private static let openShell = StateCommand.openSession(title: "Shell", kind: .shell, profilePath: nil)
+
+	private func startFresh() {
+		guard case .stateUnreadable(let path, _) = startupProblem else { return }
+		do {
+			let aside = try setAsideState(path: path)
+			NSLog("Moved the unreadable app state aside to %@", aside)
+		} catch {
+			self.error = Self.describe(error)
+			return
+		}
+		error = nil
+		startupProblem = nil
+		open(.file(path: path))
+	}
+
+	/// State commands apply in order and quickly (a reducer and one small SQLite transaction), so they run synchronously; their changes arrive through the subscription.
 	private func apply(_ command: StateCommand) {
 		guard let core else { return }
 		do {
@@ -177,8 +233,10 @@ public final class Store {
 	}
 
 	public nonisolated static func describe(_ error: any Error) -> String {
-		if case .Failed(let message) = error as? CoreError { return message }
-		return String(describing: error)
+		switch error as? CoreError {
+		case .Failed(let message), .StateInUse(_, let message), .StateUnreadable(_, let message): message
+		case nil: String(describing: error)
+		}
 	}
 }
 

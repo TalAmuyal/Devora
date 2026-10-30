@@ -5,41 +5,60 @@ import SwiftUI
 
 /// The window's content: profiles and workspaces in the sidebar; the active tab's terminal over the tab bar in the main area.
 public struct RootView: View {
-	@State private var store = Store()
+	@State private var store = Store(configPath: nil, state: .app)
 	@State private var terminals = Terminals()
 
 	public init() {}
 
 	public var body: some View {
-		NavigationSplitView {
-			Sidebar(store: store)
-				.navigationSplitViewColumnWidth(min: 220, ideal: 260)
-		} detail: {
-			VStack(spacing: 0) {
-				TabContent(store: store, terminals: terminals)
-				TabBar(store: store)
+		Group {
+			if let problem = store.startupProblem {
+				StartupProblemView(problem: problem, store: store)
+			} else {
+				NavigationSplitView {
+					Sidebar(store: store)
+						.navigationSplitViewColumnWidth(min: 220, ideal: 260)
+				} detail: {
+					VStack(spacing: 0) {
+						TabContent(store: store, terminals: terminals)
+						TabBar(store: store)
+					}
+				}
 			}
 		}
 		.background(FrameDriver(store: store))
 		.navigationTitle(store.version.isEmpty ? "Devora Sapphire" : "Devora Sapphire \(store.version)")
 		.frame(minWidth: 900, minHeight: 560)
 		.task {
-			store.dispatch(.openShell)
-			await store.dispatch(.load).value
-			if let path = LaunchOptions.value("--open-workspace") {
-				if let workspace = store.workspaces.first(where: { $0.path == path }) {
-					store.dispatch(.openWorkspace(workspace))
-				} else {
-					NSLog("--open-workspace: %@ is not a workspace of the selected profile", path)
-				}
-			}
-			// Started after the launch's commands, so that the harness finds them dispatched.
-			if TestBridge.isEnabled {
+			if store.startupProblem == nil {
+				await launch()
+			} else if TestBridge.isEnabled {
+				// Early, so that the harness can see the problem and answer it.
 				TestBridge.start(store: store, terminals: terminals)
 			}
-			if let path = LaunchOptions.value("--snapshot") {
-				await Snapshot.run(store: store, terminals: terminals, to: path)
+		}
+		.onChange(of: store.startupProblem) { problem, resolved in
+			if problem != nil, resolved == nil { Task { await launch() } }
+		}
+	}
+
+	/// Runs once the app state is open: the restored tabs are already in the core, so a shell tab opens only if none was restored.
+	private func launch() async {
+		store.dispatch(.openShellIfNoTabs)
+		await store.dispatch(.load).value
+		if let path = LaunchOptions.value("--open-workspace") {
+			if let workspace = store.workspaces.first(where: { $0.path == path }) {
+				store.dispatch(.openWorkspace(workspace))
+			} else {
+				NSLog("--open-workspace: %@ is not a workspace of the selected profile", path)
 			}
+		}
+		// Started after the launch's commands, so that the harness finds them dispatched.
+		if TestBridge.isEnabled {
+			TestBridge.start(store: store, terminals: terminals)
+		}
+		if let path = LaunchOptions.value("--snapshot") {
+			await Snapshot.run(store: store, terminals: terminals, to: path)
 		}
 	}
 }

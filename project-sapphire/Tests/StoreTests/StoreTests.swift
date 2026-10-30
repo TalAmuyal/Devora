@@ -56,7 +56,7 @@ struct StoreTests {
 		try fixture.makeWorkspace(profile: work, id: "ws-2", title: nil)
 		try fixture.registerProfiles([work, home])
 
-		let store = Store(configPath: fixture.configPath)
+		let store = Store(configPath: fixture.configPath, state: .inMemory)
 		await store.dispatch(.load).value
 
 		#expect(store.error == nil)
@@ -75,7 +75,7 @@ struct StoreTests {
 		try fixture.makeWorkspace(profile: work, id: "ws-1", title: "Work task")
 		try fixture.makeWorkspace(profile: home, id: "ws-7", title: "Home task")
 		try fixture.registerProfiles([work, home])
-		let store = Store(configPath: fixture.configPath)
+		let store = Store(configPath: fixture.configPath, state: .inMemory)
 		await store.dispatch(.load).value
 
 		await store.dispatch(.selectProfile(path: home)).value
@@ -88,7 +88,7 @@ struct StoreTests {
 		let fixture = try Fixture()
 		try fixture.writeConfig("{not json")
 
-		let store = Store(configPath: fixture.configPath)
+		let store = Store(configPath: fixture.configPath, state: .inMemory)
 		await store.dispatch(.load).value
 
 		let error = try #require(store.error)

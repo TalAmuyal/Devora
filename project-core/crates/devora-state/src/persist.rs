@@ -2,12 +2,14 @@
 //!
 //! Each command's resulting state is written in one transaction, replacing every row: the state is a handful of rows, and a full rewrite can't drift from the reducer the way a per-event mapping could.
 //! WAL mode with `synchronous=NORMAL` keeps every committed command across a process crash or `kill -9`; a power loss may drop the last few.
+//! A store holds its database exclusively until it is dropped or its process dies, so a second store on the same file, in any process, fails to open with [`StateError::InUse`].
 
 use crate::model::{AppState, Pane, Session, SessionKind, Tab, Window};
 use crate::{State, StateError};
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, ErrorCode, TransactionBehavior};
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 /// Entry `i` migrates the schema from version `i` to `i + 1`, the version being the database's `user_version`.
 ///
@@ -42,8 +44,19 @@ pub(crate) struct Db {
 impl Db {
     /// Opens (or creates) the database at `path` and loads its state, failing any workspace creation a previous run left in progress.
     pub(crate) fn open(path: &Path) -> Result<(Self, State), StateError> {
-        let fail = |error: Error| StateError::Storage {
-            message: format!("couldn't open the app state at {}: {error}", path.display()),
+        let fail = |error: Error| {
+            if error.is_busy() {
+                StateError::InUse {
+                    message: format!(
+                        "the app state at {} is in use by another process",
+                        path.display()
+                    ),
+                }
+            } else {
+                StateError::Storage {
+                    message: format!("couldn't open the app state at {}: {error}", path.display()),
+                }
+            }
         };
         let mut db = Self {
             conn: connect(path).map_err(fail)?,
@@ -60,6 +73,49 @@ impl Db {
             message: format!("couldn't save the app state: {error}"),
         })
     }
+}
+
+/// Renames the database at `path` to `<stem>-unreadable-<UTC time>.<extension>` beside it, with its WAL and shared-memory files, so that a fresh store can open at `path` while the old database stays recoverable; returns the new path.
+///
+/// The WAL goes first: left behind, it would be replayed into the fresh database.
+pub fn set_aside(path: &Path) -> Result<PathBuf, StateError> {
+    let fail = |why: String| StateError::Storage {
+        message: format!(
+            "couldn't move the app state at {} aside: {why}",
+            path.display()
+        ),
+    };
+    let stamp: String = Connection::open_in_memory()
+        .and_then(|conn| {
+            conn.query_row("SELECT strftime('%Y%m%dT%H%M%SZ', 'now')", [], |row| {
+                row.get(0)
+            })
+        })
+        .map_err(|error| fail(error.to_string()))?;
+    let stem = path.file_stem().unwrap_or_default().to_string_lossy();
+    let mut name = format!("{stem}-unreadable-{stamp}");
+    if let Some(extension) = path.extension() {
+        name = format!("{name}.{}", extension.to_string_lossy());
+    }
+    let aside = path.with_file_name(name);
+    let with_suffix = |path: &Path, suffix: &str| {
+        let mut name = path.as_os_str().to_owned();
+        name.push(suffix);
+        PathBuf::from(name)
+    };
+    let moves: Vec<_> = ["-wal", "-shm", ""]
+        .into_iter()
+        .map(|suffix| (with_suffix(path, suffix), with_suffix(&aside, suffix)))
+        .filter(|(from, _)| from == path || from.exists())
+        .collect();
+    // `rename` replaces its target, and a database set aside earlier must never be lost.
+    if let Some((_, taken)) = moves.iter().find(|(_, to)| to.exists()) {
+        return Err(fail(format!("{} already exists", taken.display())));
+    }
+    for (from, to) in moves {
+        std::fs::rename(&from, &to).map_err(|error| fail(error.to_string()))?;
+    }
+    Ok(aside)
 }
 
 #[derive(Debug)]
@@ -79,6 +135,16 @@ impl std::fmt::Display for Error {
     }
 }
 
+impl Error {
+    fn is_busy(&self) -> bool {
+        matches!(
+            self,
+            Self::Sqlite(rusqlite::Error::SqliteFailure(error, _))
+                if matches!(error.code, ErrorCode::DatabaseBusy | ErrorCode::DatabaseLocked)
+        )
+    }
+}
+
 fn inconsistent(why: String) -> Error {
     Error::Invalid(format!("the stored state is inconsistent: {why}"))
 }
@@ -94,6 +160,11 @@ fn connect(path: &Path) -> Result<Connection, Error> {
         std::fs::create_dir_all(dir).map_err(Error::Io)?;
     }
     let mut conn = Connection::open(path)?;
+    // Held until the connection closes (or its process dies), so a second process fails to open the database rather than writing it too.
+    // Set before WAL mode, so that WAL keeps its index in this process's memory rather than in a shared-memory file.
+    conn.pragma_update(None, "locking_mode", "EXCLUSIVE")?;
+    // Long enough for a quitting instance to let go of the database when the app is reopened right away.
+    conn.busy_timeout(Duration::from_secs(1))?;
     let mode: String =
         conn.pragma_update_and_check(None, "journal_mode", "WAL", |row| row.get(0))?;
     if !mode.eq_ignore_ascii_case("wal") {
@@ -106,7 +177,8 @@ fn connect(path: &Path) -> Result<Connection, Error> {
 }
 
 fn migrate(conn: &mut Connection) -> Result<(), Error> {
-    let tx = conn.transaction()?;
+    // Exclusive, so that the exclusive locking mode takes its lock now, at open.
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Exclusive)?;
     let version: usize = tx.pragma_query_value(None, "user_version", |row| row.get(0))?;
     if version > MIGRATIONS.len() {
         return Err(Error::Invalid(format!(
@@ -403,15 +475,18 @@ mod tests {
         let store = Store::open(&path).unwrap();
         open_tab(&store, "a", SessionKind::Shell);
         let before = store.state();
-        let subscription = store.subscribe();
-        subscription.try_next_batch(100);
-
-        let saboteur = Connection::open(&path).unwrap();
-        saboteur
+        drop(store);
+        // The store holds the database exclusively, so the saboteur goes in while it is closed.
+        Connection::open(&path)
+            .unwrap()
             .execute_batch(
                 "CREATE TRIGGER fail BEFORE INSERT ON tabs BEGIN SELECT RAISE(ABORT, 'disk full'); END;",
             )
             .unwrap();
+        let store = Store::open(&path).unwrap();
+        let subscription = store.subscribe();
+        subscription.try_next_batch(100);
+
         let result = store.dispatch(Command::OpenSession {
             title: "b".into(),
             kind: SessionKind::Shell,
@@ -424,9 +499,76 @@ mod tests {
         assert_eq!(store.state(), before);
         assert_eq!(subscription.try_next_batch(100), vec![]);
 
-        saboteur.execute_batch("DROP TRIGGER fail;").unwrap();
         drop(store);
+        Connection::open(&path)
+            .unwrap()
+            .execute_batch("DROP TRIGGER fail;")
+            .unwrap();
         assert_eq!(Store::open(&path).unwrap().state(), before);
+    }
+
+    fn in_use_error(result: Result<Store, StateError>) -> String {
+        match result {
+            Err(StateError::InUse { message }) => message,
+            Err(other) => panic!("expected an in-use error, got {other:?}"),
+            Ok(_) => panic!("expected an in-use error, got a store"),
+        }
+    }
+
+    #[test]
+    fn a_database_open_in_another_process_is_in_use_until_that_process_dies() {
+        let (_dir, path) = db_path();
+        let mut child = KillChild::start(&path);
+        child.wait_for(1);
+
+        let message = in_use_error(Store::open(&path));
+        assert_eq!(
+            message,
+            format!(
+                "the app state at {} is in use by another process",
+                path.display()
+            )
+        );
+
+        child.kill();
+        Store::open(&path).expect("the killed process let go of the database");
+    }
+
+    #[test]
+    fn a_database_is_in_use_while_another_store_of_this_process_has_it_open() {
+        let (_dir, path) = db_path();
+        let store = Store::open(&path).unwrap();
+        in_use_error(Store::open(&path));
+        drop(store);
+        Store::open(&path).unwrap();
+    }
+
+    #[test]
+    fn a_database_set_aside_is_kept_with_its_wal_and_a_fresh_one_opens_in_its_place() {
+        let (_dir, path) = db_path();
+        let mut child = KillChild::start(&path);
+        child.wait_for(50);
+        child.kill();
+        let wal = PathBuf::from(format!("{}-wal", path.display()));
+        assert!(wal.exists(), "a killed store leaves its WAL behind");
+
+        let aside = super::set_aside(&path).unwrap();
+
+        let name = aside.file_name().unwrap().to_string_lossy().into_owned();
+        assert!(
+            name.starts_with("state-unreadable-") && name.ends_with(".db"),
+            "{name}"
+        );
+        assert_eq!(aside.parent(), path.parent());
+        assert!(!path.exists() && !wal.exists());
+        let tab_count = |path: &Path| Store::open(path).unwrap().snapshot().window.tabs.len();
+        assert_eq!(
+            tab_count(&path),
+            0,
+            "the fresh database replayed the old WAL"
+        );
+        // The script keeps at least two tabs, and they were only in the WAL.
+        assert!(tab_count(&aside) >= 2);
     }
 
     /// Set to the database path when this test binary runs as the child of the `kill -9` test.
@@ -483,39 +625,60 @@ mod tests {
         }
     }
 
-    /// Runs [`kill_child`] in a child process and `kill -9`s it once it reports `kill_after` dispatched commands; returns how many it had reported.
-    fn run_and_kill_child(path: &Path, kill_after: u64) -> u64 {
-        let mut child = std::process::Command::new(std::env::current_exe().unwrap())
-            .args([
-                "--exact",
-                "persist::tests::kill_child",
-                "--ignored",
-                "--nocapture",
-            ])
-            .env(KILL_CHILD_DB, path)
-            .stdout(Stdio::piped())
-            .spawn()
-            .unwrap();
-        let mut reported = 0;
-        for line in BufReader::new(child.stdout.take().unwrap()).lines() {
-            if let Some(n) = line.unwrap().strip_prefix("dispatched ") {
-                reported = n.parse().unwrap();
-                if reported >= kill_after {
-                    break;
-                }
+    /// [`kill_child`], running in a child process.
+    struct KillChild {
+        process: std::process::Child,
+        lines: std::io::Lines<BufReader<std::process::ChildStdout>>,
+        reported: u64,
+    }
+
+    impl KillChild {
+        fn start(path: &Path) -> Self {
+            let mut process = std::process::Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "persist::tests::kill_child",
+                    "--ignored",
+                    "--nocapture",
+                ])
+                .env(KILL_CHILD_DB, path)
+                .stdout(Stdio::piped())
+                .spawn()
+                .unwrap();
+            let lines = BufReader::new(process.stdout.take().unwrap()).lines();
+            Self {
+                process,
+                lines,
+                reported: 0,
             }
         }
-        child.kill().unwrap();
-        child.wait().unwrap();
-        reported
+
+        /// Waits until the child reports at least `count` dispatched commands; returns how many it reported.
+        fn wait_for(&mut self, count: u64) -> u64 {
+            while self.reported < count {
+                let Some(line) = self.lines.next() else {
+                    panic!("the child stopped after {}", self.reported);
+                };
+                if let Some(n) = line.unwrap().strip_prefix("dispatched ") {
+                    self.reported = n.parse().unwrap();
+                }
+            }
+            self.reported
+        }
+
+        fn kill(mut self) {
+            self.process.kill().unwrap();
+            self.process.wait().unwrap();
+        }
     }
 
     #[test]
     fn kill_9_mid_dispatch_keeps_a_prefix_of_the_commands() {
         for kill_after in [1, 50, 500] {
             let (_dir, path) = db_path();
-            let reported = run_and_kill_child(&path, kill_after);
-            assert!(reported >= kill_after, "the child stopped after {reported}");
+            let mut child = KillChild::start(&path);
+            let reported = child.wait_for(kill_after);
+            child.kill();
             let restored = Store::open(&path).unwrap().state();
 
             // Every reported command is committed, and the child may have committed more before the kill, but never part of one.

@@ -16,6 +16,11 @@ export interface AppState {
   selectedProfile: string | null;
   workspaces: { id: string; title: string; path: string; active: boolean }[];
   error: string | null;
+  /** Why the app state couldn't be opened at launch; the app waits for an answer (`startFresh`, or `quit`) meanwhile. */
+  startupProblem:
+    | { kind: 'stateInUse'; path: string }
+    | { kind: 'stateUnreadable'; path: string; reason: string }
+    | null;
   warnings: string[];
   activeTab: number | null;
   tabs: TabState[];
@@ -27,7 +32,8 @@ export type Command =
   | { command: 'selectProfile'; path: string }
   | { command: 'openWorkspace'; id: string }
   | { command: 'activateTab'; id: number }
-  | { command: 'closeTab'; id: number };
+  | { command: 'closeTab'; id: number }
+  | { command: 'startFresh' };
 
 export class BridgeError extends Error {
   constructor(
@@ -48,6 +54,15 @@ export class Bridge {
   /** Dispatches a store command and waits for it to finish; state changes reach `state()` on the next frame. */
   async dispatch(command: Command): Promise<void> {
     await this.request('POST', '/test/dispatch', command);
+  }
+
+  /** Asks the app to quit, as the app menu's Quit does; the app may exit before it answers, so callers wait for the process to exit. */
+  async quit(): Promise<void> {
+    try {
+      await this.request('POST', '/test/quit');
+    } catch (error) {
+      if (error instanceof BridgeError) throw error;
+    }
   }
 
   /** The scrollback and screen of a tab's terminal (the active tab's by default). */

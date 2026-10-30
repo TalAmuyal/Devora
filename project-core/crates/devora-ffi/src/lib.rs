@@ -17,13 +17,27 @@ uniffi::setup_scaffolding!();
 
 #[derive(Debug, PartialEq, uniffi::Error)]
 pub enum CoreError {
-    Failed { message: String },
+    Failed {
+        message: String,
+    },
+    /// Another process holds the app state at `path`, so this one must not write it too.
+    StateInUse {
+        path: String,
+        message: String,
+    },
+    /// The app state at `path` couldn't be opened (corrupt, from a newer build, unreadable); `set_aside_state` makes way for a fresh one.
+    StateUnreadable {
+        path: String,
+        message: String,
+    },
 }
 
 impl fmt::Display for CoreError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            CoreError::Failed { message } => f.write_str(message),
+            CoreError::Failed { message }
+            | CoreError::StateInUse { message, .. }
+            | CoreError::StateUnreadable { message, .. } => f.write_str(message),
         }
     }
 }
@@ -86,23 +100,29 @@ pub struct WorkspaceList {
 #[derive(uniffi::Object)]
 pub struct DevoraCore {
     config_path: PathBuf,
-    /// The app state (ADR-008); in memory until it is persisted.
+    /// The app state (ADR-008).
     state: state::Store,
 }
 
 #[uniffi::export]
 impl DevoraCore {
     /// `config_path` overrides the global config file; without it, `DEVORA_CONFIG_PATH` or `~/.config/devora/config.json` is used.
+    ///
+    /// `state_path` is the app state's database (`sapphire_state_path`), which this process then holds alone; without it, the state lives in memory.
     #[uniffi::constructor]
-    pub fn new(config_path: Option<String>) -> Result<Arc<Self>, CoreError> {
+    pub fn new(
+        config_path: Option<String>,
+        state_path: Option<String>,
+    ) -> Result<Arc<Self>, CoreError> {
         let config_path = match config_path {
             Some(path) => PathBuf::from(path),
             None => config::global_config_path()?,
         };
-        Ok(Arc::new(DevoraCore {
-            config_path,
-            state: state::Store::new(),
-        }))
+        let state = match state_path {
+            Some(path) => app_state::open(path)?,
+            None => state::Store::new(),
+        };
+        Ok(Arc::new(DevoraCore { config_path, state }))
     }
 
     pub fn version(&self) -> Result<String, CoreError> {
@@ -161,7 +181,7 @@ mod tests {
     fn core_with_config(root: &Path, contents: &str) -> Arc<DevoraCore> {
         let config_path = root.join("config.json");
         fs::write(&config_path, contents).unwrap();
-        DevoraCore::new(Some(config_path.to_string_lossy().into_owned())).unwrap()
+        DevoraCore::new(Some(config_path.to_string_lossy().into_owned()), None).unwrap()
     }
 
     #[test]
@@ -192,7 +212,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let core = core_with_config(tmp.path(), "{not json");
 
-        let CoreError::Failed { message } = core.list_profiles().unwrap_err();
+        let message = core.list_profiles().unwrap_err().to_string();
 
         assert!(message.contains("failed to parse"), "{message}");
     }

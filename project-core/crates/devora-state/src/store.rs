@@ -31,6 +31,7 @@ impl Store {
     ///
     /// The state is restored as the last committed command left it, except that a tab still creating a workspace becomes [`crate::SessionKind::CreationFailed`] with the reason "interrupted".
     /// Each app passes its own path, since apps never share a state database (ADR-008).
+    /// The store holds the database until it is dropped: opening it while another store, in this process or another, holds it fails with [`StateError::InUse`].
     pub fn open(path: impl AsRef<Path>) -> Result<Self, StateError> {
         let (db, state) = Db::open(path.as_ref())?;
         Ok(Self {

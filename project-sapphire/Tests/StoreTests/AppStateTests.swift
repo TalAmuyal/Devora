@@ -7,7 +7,7 @@ import Testing
 @MainActor
 struct AppStateTests {
 	@Test func foldingTheEventsReproducesTheCoresState() async throws {
-		let core = try DevoraCore(configPath: "/nonexistent/config.json")
+		let core = try DevoraCore(configPath: "/nonexistent/config.json", statePath: nil)
 		let shell = StateCommand.openSession(title: "Shell", kind: .shell, profilePath: nil)
 		try core.dispatch(command: shell)
 		let subscription = try core.subscribe()
@@ -37,7 +37,7 @@ struct AppStateTests {
 	}
 
 	@Test func cancellingTheConsumerClosesTheSubscriptionAndEndsTheSequence() async throws {
-		let core = try DevoraCore(configPath: "/nonexistent/config.json")
+		let core = try DevoraCore(configPath: "/nonexistent/config.json", statePath: nil)
 		let subscription = try core.subscribe()
 		let (received, signal) = AsyncStream<Void>.makeStream()
 		let consumer = Task {
@@ -60,7 +60,7 @@ struct AppStateTests {
 	}
 
 	@Test func theStoreRendersTabsFromTheCore() async throws {
-		let store = Store(configPath: "/nonexistent/config.json")
+		let store = Store(configPath: "/nonexistent/config.json", state: .inMemory)
 		let workspace = Workspace(id: "ws-1", path: "/ws/1", title: "Fix the build", repos: ["api"], active: true)
 
 		store.dispatch(.openShell)
