@@ -23,12 +23,10 @@ Types of changes:
 - `devora-state` can persist to SQLite (`Store::open`), committing every command before its events go out so the tabs survive a restart or a crash, with a workspace creation left in progress restored as interrupted; nothing opens a persistent store yet
 - CI builds and tests Devora Sapphire on GitHub's hosted macOS 27 runner (`xcode-27`), caching the GhosttyKit build
 - A configurable PR title prefix (`pr.title-prefix`, per-profile with a global fallback) that `debi pr submit` prepends verbatim to the PR title, editable in the Settings Hub's Pull Requests card
+- Devora Sapphire has tabs: its tab bar renders the core-owned tabs from `devora-state`, and each tab's terminal runs the core's terminal spec, a login shell for a new shell tab and the profile's `terminal.default-app` (such as `ccc`) for a workspace opened from the sidebar
 
 ### Changed
 
-- The Rust code (core, Judgess, Ember) is formatted with rustfmt, and CI now fails on unformatted Rust code or clippy warnings (`mise run lint`, `mise run ember-lint`)
-- `devora-state` subscriptions can be awaited: `next_batch` is now async and runtime-agnostic, for Sapphire to wrap as a Swift `AsyncSequence`, with `next_batch_blocking` as the blocking variant
-- Ember's terminals are launched from a terminal spec built in the shared core, which also decides a workspace terminal's starting directory and app; Sapphire will launch its terminals from the same spec
 - ADR-010 (Sapphire UI stack and build) is accepted, recording the libghostty terminal decision: Ghostty's internal embedding API, pinned and isolated, with upgrades reviewed in #221
 - ADR-010 records the embedded Neovim spike's findings: Sapphire's prompt editor runs a Neovim config vendored in Sapphire rather than the user's own
 - `ccc` is now part of the Rust `debi` (`debi ccc`, still installed as `ccc`), replacing `ccc.sh` with identical behavior; the bundled `debi` runs it and passes every other command to the Go CLI, now bundled as `debi-go`
@@ -53,6 +51,8 @@ Types of changes:
 
 ### Fixed
 
+- F1 now opens the User Guide in installed apps: it is read from the app bundle instead of the build machine's checkout (#223)
+- A workspace terminal that falls back to a bare shell because the profile config can't be read logs a warning again
 - Neovim now runs in Devora's terminals when Devora itself was launched from a Neovim terminal: the outer `$NVIM` and `$NVIM_LISTEN_ADDRESS` are no longer passed on
 - The app's display name (`CFBundleDisplayName`) is now "Devora" instead of the internal "Devora-Ember"
 - Permission-hook denials now reach the agent (Judge's denials were silently ignored by Claude Code)

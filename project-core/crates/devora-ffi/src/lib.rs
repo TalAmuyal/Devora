@@ -8,7 +8,10 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use devora_core::{config, theme, workspace};
+use devora_core::{config, state, theme, workspace};
+
+mod app_state;
+mod terminal;
 
 uniffi::setup_scaffolding!();
 
@@ -83,6 +86,8 @@ pub struct WorkspaceList {
 #[derive(uniffi::Object)]
 pub struct DevoraCore {
     config_path: PathBuf,
+    /// The app state (ADR-008); in memory until it is persisted.
+    state: state::Store,
 }
 
 #[uniffi::export]
@@ -94,7 +99,10 @@ impl DevoraCore {
             Some(path) => PathBuf::from(path),
             None => config::global_config_path()?,
         };
-        Ok(Arc::new(DevoraCore { config_path }))
+        Ok(Arc::new(DevoraCore {
+            config_path,
+            state: state::Store::new(),
+        }))
     }
 
     pub fn version(&self) -> Result<String, CoreError> {

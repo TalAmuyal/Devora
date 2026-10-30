@@ -24,5 +24,6 @@ let package = Package(
 		.target(name: "AppShell", dependencies: ["Store", "TerminalKit"]),
 
 		.testTarget(name: "StoreTests", dependencies: ["Store", "CoreBindings"]),
+		.testTarget(name: "TerminalKitTests", dependencies: ["TerminalKit"]),
 	]
 )

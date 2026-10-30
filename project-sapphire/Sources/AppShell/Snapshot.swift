@@ -1,6 +1,6 @@
 import AppKit
 import ScreenCaptureKit
-import TerminalKit
+import Store
 
 /// Launch arguments come in `--flag value` pairs: a bare argument makes AppKit open it as a file, and SwiftUI then opens no window.
 enum LaunchOptions {
@@ -11,15 +11,20 @@ enum LaunchOptions {
 	}
 }
 
-/// `--snapshot <path>`: runs a command in the shell, captures the window to `<path>` (PNG) and the shell's text to `<path>.txt`, then quits.
+/// `--snapshot <path>`: runs a command in the first shell tab, captures the window to `<path>` (PNG) and the active tab's text to `<path>.txt`, then quits.
 @MainActor
 enum Snapshot {
-	static func run(shell: TerminalSession, to path: String) async {
+	static func run(store: Store, terminals: Terminals, to path: String) async {
 		try? await Task.sleep(for: .seconds(3))
-		shell.typeLine("echo SAPPHIRE-$((40+2))")
+		let window = store.app.window
+		if let shell = window.tabs.first(where: { $0.session.kind == .shell }) {
+			terminals.session(for: shell)?.typeLine("echo SAPPHIRE-$((40+2))")
+		}
 		try? await Task.sleep(for: .seconds(1))
 		await captureWindow(to: path)
-		try? (shell.allText() ?? "").write(toFile: path + ".txt", atomically: true, encoding: .utf8)
+		let active = window.tabs.first { $0.id == window.activeTab }
+		let text = active.flatMap { terminals.session(for: $0)?.allText() } ?? ""
+		try? text.write(toFile: path + ".txt", atomically: true, encoding: .utf8)
 		NSApp.terminate(nil)
 	}
 

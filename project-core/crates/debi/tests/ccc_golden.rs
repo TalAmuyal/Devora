@@ -4,7 +4,8 @@
 
 use std::os::unix::fs::{symlink, PermissionsExt};
 use std::path::Path;
-use std::process::Command;
+use std::process::{Child, Command, Output, Stdio};
+use std::sync::{PoisonError, RwLock};
 
 use serde_json::{json, Value};
 
@@ -14,22 +15,50 @@ const ENV_KEYS: [&str; 3] = [
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS",
 ];
 
+/// Taken for writing by every write of an executable and for reading by every spawn, like Go's `syscall.ForkLock`.
+/// A child forked while another thread still has an executable open for writing inherits that descriptor until its own exec, and exec'ing the executable meanwhile fails on Linux with "Text file busy".
+static EXEC_LOCK: RwLock<()> = RwLock::new(());
+
+fn write_script(path: &Path, script: &str) {
+    let _guard = EXEC_LOCK.write().unwrap_or_else(PoisonError::into_inner);
+    std::fs::write(path, script).unwrap();
+    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).unwrap();
+}
+
+fn copy_debi(dest: &Path) {
+    let _guard = EXEC_LOCK.write().unwrap_or_else(PoisonError::into_inner);
+    std::fs::copy(env!("CARGO_BIN_EXE_debi"), dest).unwrap();
+}
+
+/// `spawn` returns only once the child has exec'd, by which point it no longer holds any inherited descriptor.
+fn spawn(command: &mut Command) -> Child {
+    let _guard = EXEC_LOCK.read().unwrap_or_else(PoisonError::into_inner);
+    command.spawn().unwrap()
+}
+
+/// Like [`Command::output`], but spawned through [`spawn`].
+fn output(command: &mut Command) -> Output {
+    command
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    spawn(command).wait_with_output().unwrap()
+}
+
 /// A fake `claude` that prints the arguments and the relevant environment it received as JSON.
 fn write_fake_claude(dir: &Path) {
     let script = format!(
         "#!/usr/bin/env python3\nimport json, os, sys\nkeys = {keys:?}\nprint(json.dumps({{\"args\": sys.argv[1:], \"env\": {{k: os.environ.get(k) for k in keys}}}}))\nsys.exit(int(os.environ.get(\"FAKE_CLAUDE_EXIT\", \"0\")))\n",
         keys = ENV_KEYS
     );
-    let path = dir.join("claude");
-    std::fs::write(&path, script).unwrap();
-    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    write_script(&dir.join("claude"), &script);
 }
 
 /// `<root>/bundled-apps/{debi, ccc -> debi}` and, unless `no_plugins`, three plugin directories and a stray file in `<root>/cc-plugins`.
 fn fake_bundle(root: &Path, no_plugins: bool) {
     let apps = root.join("bundled-apps");
     std::fs::create_dir_all(&apps).unwrap();
-    std::fs::copy(env!("CARGO_BIN_EXE_debi"), apps.join("debi")).unwrap();
+    copy_debi(&apps.join("debi"));
     symlink("debi", apps.join("ccc")).unwrap();
     if !no_plugins {
         for plugin in ["judgess", "detached-flow", "code-cleanup"] {
@@ -68,7 +97,7 @@ fn run_case(case: &Value, via_symlink: bool) -> Value {
     for (key, value) in case["env"].as_object().unwrap() {
         command.env(key, value.as_str().unwrap());
     }
-    let output = command.output().unwrap();
+    let output = output(&mut command);
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let claude = stdout.lines().last().map_or(Value::Null, |line| {
@@ -109,17 +138,18 @@ fn other_commands_are_delegated_to_debi_go() {
     let tmp = tempfile::tempdir().unwrap();
     let apps = tmp.path().join("bundled-apps");
     std::fs::create_dir_all(&apps).unwrap();
-    std::fs::copy(env!("CARGO_BIN_EXE_debi"), apps.join("debi")).unwrap();
-    let debi_go = apps.join("debi-go");
-    std::fs::write(&debi_go, "#!/bin/sh\nprintf '%s|' \"$@\"\ncat\nexit 5\n").unwrap();
-    std::fs::set_permissions(&debi_go, std::fs::Permissions::from_mode(0o755)).unwrap();
+    copy_debi(&apps.join("debi"));
+    write_script(
+        &apps.join("debi-go"),
+        "#!/bin/sh\nprintf '%s|' \"$@\"\ncat\nexit 5\n",
+    );
 
-    let mut child = Command::new(apps.join("debi"))
-        .args(["health", "--json", "a b"])
-        .stdin(std::process::Stdio::piped())
-        .stdout(std::process::Stdio::piped())
-        .spawn()
-        .unwrap();
+    let mut child = spawn(
+        Command::new(apps.join("debi"))
+            .args(["health", "--json", "a b"])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped()),
+    );
     use std::io::Write;
     child
         .stdin
@@ -140,12 +170,8 @@ fn other_commands_are_delegated_to_debi_go() {
 fn a_missing_debi_go_is_reported() {
     let tmp = tempfile::tempdir().unwrap();
     let debi = tmp.path().join("debi");
-    std::fs::copy(env!("CARGO_BIN_EXE_debi"), &debi).unwrap();
-    let output = Command::new(&debi)
-        .arg("health")
-        .env("PATH", tmp.path())
-        .output()
-        .unwrap();
+    copy_debi(&debi);
+    let output = output(Command::new(&debi).arg("health").env("PATH", tmp.path()));
     assert_eq!(output.status.code(), Some(127));
     assert!(String::from_utf8_lossy(&output.stderr).contains("cannot run debi-go"));
 }
