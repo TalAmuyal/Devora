@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::sync::Mutex;
 
 use tauri::ipc::Channel;
@@ -11,49 +10,39 @@ use crate::ipc_server::IpcState;
 use crate::logging::LogState;
 use crate::profile;
 use crate::pty::PtyManager;
+use crate::terminal;
 use crate::test_harness::TestHarnessState;
 use crate::workspace;
 use crate::workspace_creation::{self, WorkspaceCreationManager};
 
+/// Opens a terminal on `target`, launched from the core's terminal spec (`devora_core::terminal`).
 #[tauri::command]
 pub fn create_pty(
     state: State<'_, Mutex<PtyManager>>,
     ipc_state: State<'_, IpcState>,
-    cwd: Option<String>,
-    shell: Option<String>,
-    env: Option<HashMap<String, String>>,
-    app_command: Option<String>,
+    target: terminal::TerminalTarget,
     profile_path: Option<String>,
     cols: u16,
     rows: u16,
     on_output: Channel<Vec<u8>>,
     on_exit: Channel<u32>,
 ) -> Result<u32, String> {
-    let ipc_port = ipc_state.port;
-    let git_shortcuts_enabled = config::get_git_shortcuts_enabled(profile_path.as_deref());
-
-    // Inject the resolved Claude launch env vars (profile → user → Devora default).
-    // An explicit frontend-supplied `env` still wins on key collision.
-    let mut session_env = config::claude_launch_env(profile_path.as_deref());
-    // Expose the session's profile to debi so a command typed in the terminal (e.g. `debi health`) resolves the same profile as the in-app UI.
-    if let Some(path) = profile_path.as_deref() {
-        session_env.insert("DEBI_PROFILE_PATH".to_string(), path.to_string());
-    }
-    if let Some(extra) = env {
-        session_env.extend(extra);
-    }
+    let request = terminal::TerminalRequest {
+        target,
+        profile_path,
+    };
+    let host = terminal::TerminalHost {
+        app: terminal::HostApp::Ember,
+        resources_dir: terminal::bundle_resources_dir().map(|dir| dir.to_string_lossy().into_owned()),
+        ipc_port: ipc_state.port,
+    };
 
     let mut manager = state
         .lock()
         .map_err(|e| format!("failed to lock pty manager: {e}"))?;
 
     manager.create_session(
-        cwd.as_deref(),
-        shell.as_deref(),
-        Some(&session_env),
-        app_command.as_deref(),
-        git_shortcuts_enabled,
-        ipc_port,
+        |id| terminal::terminal_spec(&request, &host, id),
         cols,
         rows,
         move |bytes| on_output.send(bytes).map_err(|e| e.to_string()),
@@ -163,11 +152,6 @@ pub fn get_registered_repos(
     profile_path: String,
 ) -> Result<Vec<workspace::RepoInfo>, String> {
     workspace::get_registered_repos(&profile_path)
-}
-
-#[tauri::command]
-pub fn get_default_app(profile_path: String) -> Result<Option<String>, String> {
-    config::get_default_app(&profile_path)
 }
 
 /// Reads the Claude model/effort settings for one scope (a profile path, or `None` for the user-level/global scope): the raw stored values plus the effective resolved values.

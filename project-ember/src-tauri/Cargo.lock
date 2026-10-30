@@ -546,6 +546,7 @@ dependencies = [
  "devora-health",
  "devora-platform",
  "devora-pty",
+ "devora-terminal",
  "devora-theme",
  "devora-workspace",
 ]
@@ -582,7 +583,16 @@ dependencies = [
 name = "devora-pty"
 version = "0.1.0"
 dependencies = [
+ "devora-terminal",
  "portable-pty",
+]
+
+[[package]]
+name = "devora-terminal"
+version = "0.1.0"
+dependencies = [
+ "devora-config",
+ "serde",
 ]
 
 [[package]]

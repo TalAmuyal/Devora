@@ -14,7 +14,6 @@ fn main() {
                 "get_workspace_status",
                 "get_all_workspace_statuses",
                 "get_registered_repos",
-                "get_default_app",
                 "get_claude_settings",
                 "set_claude_setting",
                 "get_config_settings",
