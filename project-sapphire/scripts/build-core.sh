@@ -8,7 +8,6 @@ BUILD_DIR="$SAPPHIRE_DIR/build"
 TARGET=aarch64-apple-darwin
 LIB=devora_ffi
 
-# Cargo runs from the core so its rust-toolchain.toml applies.
 (cd "$CORE_DIR" && cargo build --release --target "$TARGET" -p devora-ffi --lib)
 LIB_DIR="$CORE_DIR/target/$TARGET/release"
 
