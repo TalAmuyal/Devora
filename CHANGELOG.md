@@ -52,6 +52,7 @@ Types of changes:
 
 ### Fixed
 
+- A "Text file busy" race that made debi's `ccc` tests flaky on Linux: writing a test executable could overlap another test's spawn, whose forked child briefly held the write descriptor
 - Neovim now runs in Devora's terminals when Devora itself was launched from a Neovim terminal: the outer `$NVIM` and `$NVIM_LISTEN_ADDRESS` are no longer passed on
 - The app's display name (`CFBundleDisplayName`) is now "Devora" instead of the internal "Devora-Ember"
 - Permission-hook denials now reach the agent (Judge's denials were silently ignored by Claude Code)
