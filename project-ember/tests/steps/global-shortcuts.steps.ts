@@ -10,6 +10,29 @@ When('the user presses Ctrl+{int}', async function (this: EmberWorld, digit: num
   await new Promise((r) => setTimeout(r, 150));
 });
 
+// The chords of the shared `keyboard-shortcuts.feature`; `code` is the physical key, which the shortcuts match on.
+const CHORDS: Record<string, { key: string; code: string; shiftKey?: boolean }> = {
+  'Ctrl+Left': { key: 'ArrowLeft', code: 'ArrowLeft' },
+  'Ctrl+Shift+Left': { key: 'ArrowLeft', code: 'ArrowLeft', shiftKey: true },
+  'Ctrl+Shift+Right': { key: 'ArrowRight', code: 'ArrowRight', shiftKey: true },
+  'Ctrl+Shift+S': { key: 'S', code: 'KeyS', shiftKey: true },
+  'Ctrl+=': { key: '=', code: 'Equal' },
+  'Ctrl+Shift+=': { key: '+', code: 'Equal', shiftKey: true },
+  'Ctrl+Shift+-': { key: '_', code: 'Minus', shiftKey: true },
+};
+for (const [chord, { key, code, shiftKey }] of Object.entries(CHORDS)) {
+  When(`the user presses ${chord}`, async function (this: EmberWorld) {
+    const ui = new UIDriver(this.driver);
+    await ui.pressKeyRaw(key, { ctrlKey: true, shiftKey, code });
+    await new Promise((r) => setTimeout(r, 150));
+  });
+}
+
+Then('the terminal font size should be {int}', async function (this: EmberWorld, size: number) {
+  const actual = await this.driver.eval('return window.__test.sessionManager.getActiveSession()?.getFontSize()');
+  assert.strictEqual(actual, size);
+});
+
 When('the user presses F1', async function (this: EmberWorld) {
   const ui = new UIDriver(this.driver);
   await ui.pressKeyRaw('F1', { code: 'F1' });

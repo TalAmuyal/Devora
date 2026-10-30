@@ -21,9 +21,13 @@ let package = Package(
 			linkerSettings: [.linkedLibrary("c++"), .linkedFramework("Carbon")]
 		),
 		.target(name: "Store", dependencies: ["CoreBindings"]),
-		.target(name: "AppShell", dependencies: ["Store", "TerminalKit"]),
+		// The layer system (ADR-003): the stacks, the key router and the presets; it knows no surface and no domain.
+		.target(name: "Layers"),
+		.target(name: "AppShell", dependencies: ["Store", "TerminalKit", "Layers"]),
 
 		.testTarget(name: "StoreTests", dependencies: ["Store", "CoreBindings"]),
 		.testTarget(name: "TerminalKitTests", dependencies: ["TerminalKit"]),
+		.testTarget(name: "LayersTests", dependencies: ["Layers"]),
+		.testTarget(name: "AppShellTests", dependencies: ["AppShell", "Layers"]),
 	]
 )

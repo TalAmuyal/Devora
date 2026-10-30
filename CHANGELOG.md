@@ -26,6 +26,7 @@ Types of changes:
 - Devora Sapphire has tabs: its tab bar renders the core-owned tabs from `devora-state`, and each tab's terminal runs the core's terminal spec, a login shell for a new shell tab and the profile's `terminal.default-app` (such as `ccc`) for a workspace opened from the sidebar
 - Acceptance tests for Devora Sapphire, run by `mise run -C project-sapphire test` and in CI: Gherkin scenarios that drive the app through a test-mode bridge, some of them shared with Ember (`acceptance/features/`), and XCUITests for real keyboard input and focus
 - Devora Sapphire restores its tabs and the active tab after a quit, a crash or a `kill -9`, starting a fresh terminal in each; it keeps them in `~/Library/Application Support/Devora Sapphire/state.db` (per install suffix), tells a second instance that the state is in use, and offers to quit or start fresh (keeping the old state aside) when the state can't be opened; closing its window now quits it
+- Devora Sapphire routes keys through Ember's layer system (ADR-003) and has Ember's tab and font-size shortcuts: `Ctrl+←/→` switch tabs, `Ctrl+Shift+←/→` move the active tab, `Ctrl+Shift+S` opens a shell, and `Ctrl+1/2/3`, `Ctrl+=` and `Ctrl+Shift+=`/`-` set the terminals' font size (now 15 by default, as in Ember)
 
 ### Changed
 

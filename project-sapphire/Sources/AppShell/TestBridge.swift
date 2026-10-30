@@ -1,7 +1,9 @@
 import AppKit
 import CoreBindings
 import Foundation
+import Layers
 import Network
+import SwiftUI
 import Store
 import TerminalKit
 
@@ -17,13 +19,14 @@ final class TestBridge {
 
 	private let store: Store
 	private let terminals: Terminals
+	private let surfaces: Surfaces
 	private let listener: NWListener
 
 	/// Starts the bridge, unless it is running, and prints its port to stderr, where the harness reads it, as Ember does.
-	static func start(store: Store, terminals: Terminals) {
+	static func start(store: Store, terminals: Terminals, surfaces: Surfaces) {
 		guard running == nil else { return }
 		do {
-			let bridge = try TestBridge(store: store, terminals: terminals)
+			let bridge = try TestBridge(store: store, terminals: terminals, surfaces: surfaces)
 			running = bridge
 			bridge.listen()
 		} catch {
@@ -31,9 +34,10 @@ final class TestBridge {
 		}
 	}
 
-	private init(store: Store, terminals: Terminals) throws {
+	private init(store: Store, terminals: Terminals, surfaces: Surfaces) throws {
 		self.store = store
 		self.terminals = terminals
+		self.surfaces = surfaces
 		let parameters = NWParameters.tcp
 		parameters.requiredLocalEndpoint = .hostPort(host: .ipv4(.loopback), port: .any)
 		listener = try NWListener(using: parameters)
@@ -79,6 +83,12 @@ final class TestBridge {
 				let session = try terminal((body["tab"] as? NSNumber)?.uint64Value)
 				guard let line = body["line"] as? String else { throw BridgeError(status: 400, "missing line") }
 				session.typeLine(line)
+				return .init(status: 200, body: [:])
+			case ("POST", "/test/key"):
+				try press(request.json())
+				return .init(status: 200, body: [:])
+			case ("POST", "/test/surface"):
+				openTestSurface()
 				return .init(status: 200, body: [:])
 			default:
 				return .init(status: 404, body: ["error": "no route \(request.method) \(request.path)"])
@@ -128,9 +138,40 @@ final class TestBridge {
 		return session
 	}
 
+	/// Presses a key in the window: a key-down event enters the router as AppKit's would, and, unless it is consumed, goes on to the window, which dispatches it to its first responder.
+	private func press(_ body: [String: Any]) throws {
+		guard let name = body["key"] as? String, let key = TestKey(name) else {
+			throw BridgeError(status: 400, "unknown key \(String(describing: body["key"]))")
+		}
+		var modifiers: KeyModifiers = []
+		for modifier in body["modifiers"] as? [String] ?? [] {
+			switch modifier {
+			case "shift": modifiers.insert(.shift)
+			case "control": modifiers.insert(.control)
+			case "option": modifiers.insert(.option)
+			case "command": modifiers.insert(.command)
+			default: throw BridgeError(status: 400, "unknown modifier \(modifier)")
+			}
+		}
+		guard let window = NSApp.windows.first(where: { $0.isVisible && $0.contentView != nil }) else {
+			throw BridgeError(status: 409, "no window")
+		}
+		let event = try key.event(modifiers: modifiers, window: window)
+		if !surfaces.router.handle(KeyPress(event)) { window.sendEvent(event) }
+	}
+
+	/// A page over the whole window with nothing to focus, standing in for a window surface (a hub, the palette) until there is one; `q` or Escape closes it.
+	private func openTestSurface() {
+		surfaces.windowStack.push(pageLayer(LayerSpec(name: "test-surface") {
+			Rectangle().fill(.background).overlay { Text("Test surface") }
+		}))
+	}
+
 	private func state() -> [String: Any] {
 		let window = store.app.window
 		return [
+			"fontSize": TerminalRuntime.shared.fontSize,
+			"windowLayers": surfaces.windowStack.layers.map(\.spec.name),
 			"version": store.version,
 			"profiles": store.profiles.map { ["name": $0.name, "path": $0.path] },
 			"selectedProfile": store.selectedProfilePath ?? NSNull(),
@@ -147,6 +188,7 @@ final class TestBridge {
 					"kind": Self.name(tab.session.kind),
 					"terminal": Self.name(terminals.slots[tab.terminalID]),
 					"focused": session?.hasFocus ?? false,
+					"layers": surfaces.tabStacks[tab.id]?.layers.map(\.spec.name) ?? [],
 				] as [String: Any]
 			},
 		]
@@ -175,6 +217,75 @@ final class TestBridge {
 		case .failed(let reason): "failed: \(reason)"
 		case .running: "running"
 		}
+	}
+}
+
+/// A key the bridge can press, by the name the harness uses: a letter or a digit, `Minus`, `Equal`, `Left`, `Right`, `Escape` or `Return`.
+private struct TestKey {
+	let keyCode: UInt16
+	/// What the key types unshifted, and with Shift (on a US layout).
+	let plain: String
+	let shifted: String
+	/// Arrows are function keys on the numeric pad, as far as AppKit's flags go.
+	var isArrow = false
+
+	init?(_ name: String) {
+		let named: [String: TestKey] = [
+			"Minus": TestKey(keyCode: KeyCode.minus, plain: "-", shifted: "_"),
+			"Equal": TestKey(keyCode: KeyCode.equal, plain: "=", shifted: "+"),
+			"Left": TestKey(keyCode: KeyCode.leftArrow, plain: "\u{F702}", shifted: "\u{F702}", isArrow: true),
+			"Right": TestKey(keyCode: KeyCode.rightArrow, plain: "\u{F703}", shifted: "\u{F703}", isArrow: true),
+			"Escape": TestKey(keyCode: KeyCode.escape, plain: "\u{1B}", shifted: "\u{1B}"),
+			"Return": TestKey(keyCode: 0x24, plain: "\r", shifted: "\r"),
+		]
+		// kVK_ANSI_* codes follow the keyboard's physical layout, not the alphabet.
+		let letters: [Character: UInt16] = [
+			"a": 0x00, "s": 0x01, "d": 0x02, "f": 0x03, "h": 0x04, "g": 0x05, "z": 0x06, "x": 0x07, "c": 0x08, "v": 0x09,
+			"b": 0x0B, "q": 0x0C, "w": 0x0D, "e": 0x0E, "r": 0x0F, "y": 0x10, "t": 0x11, "o": 0x1F, "u": 0x20, "i": 0x22,
+			"p": 0x23, "l": 0x25, "j": 0x26, "k": 0x28, "n": 0x2D, "m": 0x2E,
+		]
+		let digits: [Character: (UInt16, String)] = [
+			"1": (0x12, "!"), "2": (0x13, "@"), "3": (0x14, "#"), "4": (0x15, "$"), "5": (0x17, "%"),
+			"6": (0x16, "^"), "7": (0x1A, "&"), "8": (0x1C, "*"), "9": (0x19, "("), "0": (0x1D, ")"),
+		]
+		if let key = named[name] {
+			self = key
+		} else if name.count == 1, let c = name.first, let code = letters[c] {
+			self.init(keyCode: code, plain: String(c), shifted: c.uppercased())
+		} else if name.count == 1, let c = name.first, let (code, shifted) = digits[c] {
+			self.init(keyCode: code, plain: String(c), shifted: shifted)
+		} else {
+			return nil
+		}
+	}
+
+	private init(keyCode: UInt16, plain: String, shifted: String, isArrow: Bool = false) {
+		self.keyCode = keyCode
+		self.plain = plain
+		self.shifted = shifted
+		self.isArrow = isArrow
+	}
+
+	/// The key-down AppKit would make: `charactersIgnoringModifiers` keeps Shift, and Control turns a letter into its control character.
+	@MainActor
+	func event(modifiers: KeyModifiers, window: NSWindow) throws -> NSEvent {
+		var flags: NSEvent.ModifierFlags = []
+		if modifiers.contains(.shift) { flags.insert(.shift) }
+		if modifiers.contains(.control) { flags.insert(.control) }
+		if modifiers.contains(.option) { flags.insert(.option) }
+		if modifiers.contains(.command) { flags.insert(.command) }
+		if isArrow { flags.formUnion([.function, .numericPad]) }
+		let ignoringModifiers = modifiers.contains(.shift) ? shifted : plain
+		var characters = ignoringModifiers
+		if modifiers.contains(.control), let scalar = ignoringModifiers.unicodeScalars.first, scalar.properties.isAlphabetic, scalar.isASCII {
+			characters = String(UnicodeScalar(UInt8(scalar.value) & 0x1F))
+		}
+		guard let event = NSEvent.keyEvent(
+			with: .keyDown, location: .zero, modifierFlags: flags, timestamp: ProcessInfo.processInfo.systemUptime,
+			windowNumber: window.windowNumber, context: nil, characters: characters,
+			charactersIgnoringModifiers: ignoringModifiers, isARepeat: false, keyCode: keyCode)
+		else { throw BridgeError(status: 500, "couldn't make a key event") }
+		return event
 	}
 }
 

@@ -15,6 +15,10 @@ Given('Devora is running with no sessions open', async function (this: SapphireW
   await waitForSessionCount(this, 0);
 });
 
+Given('a session exists', async function (this: SapphireWorld) {
+  await openShell(this);
+});
+
 Given('{int} sessions exist', async function (this: SapphireWorld, count: number) {
   for (let i = 0; i < count; i++) await openShell(this);
 });
@@ -35,10 +39,33 @@ When('the user switches to the previous session', async function (this: Sapphire
   await waitForActiveTab(this, previous.id);
 });
 
-Then('the first session should be active', async function (this: SapphireWorld) {
-  const first = (await this.bridge.state()).tabs[0];
-  await waitForActiveTab(this, first.id);
+const ORDINALS: Record<string, number> = { first: 0, second: 1, third: 2 };
+
+Then('the {word} session should be active', async function (this: SapphireWorld, ordinal: string) {
+  const index = ORDINALS[ordinal];
+  if (index === undefined) throw new Error(`Unknown ordinal: ${ordinal}`);
+  await this.bridge.waitFor(
+    `the ${ordinal} tab to be active`,
+    () => this.bridge.state(),
+    (s) => s.activeTab !== null && s.tabs[index]?.id === s.activeTab,
+  );
 });
+
+// Tab ids grow with each new tab, so a tab's rank among them is its creation order, counted from 1.
+Then(
+  'the sessions should be in the order {int}, {int}, {int}',
+  async function (this: SapphireWorld, a: number, b: number, c: number) {
+    const order = [a, b, c];
+    await this.bridge.waitFor(
+      `the tabs in the order ${order.join(', ')}`,
+      () => this.bridge.state(),
+      (s) => {
+        const created = s.tabs.map((tab) => tab.id).sort((x, y) => x - y);
+        return s.tabs.map((tab) => created.indexOf(tab.id) + 1).join() === order.join();
+      },
+    );
+  },
+);
 
 When('the active session is closed', async function (this: SapphireWorld) {
   const { activeTab } = await this.bridge.state();

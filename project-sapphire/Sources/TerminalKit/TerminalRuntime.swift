@@ -37,6 +37,10 @@ public final class TerminalRuntime {
 
 	let app: ghostty_app_t
 	public private(set) var palette = TerminalPalette.dark
+	/// The size terminals start with, in points (Ember's default, which `Ctrl+=` returns to).
+	public nonisolated static let defaultFontSize: Double = 15
+	/// The font size of every terminal, in points.
+	public private(set) var fontSize = defaultFontSize
 	private var config: ghostty_config_t?
 
 	private init() {
@@ -44,7 +48,7 @@ public final class TerminalRuntime {
 		var argv: [UnsafeMutablePointer<CChar>?] = [strdup(CommandLine.arguments.first ?? "sapphire"), nil]
 		guard ghostty_init(1, &argv) == GHOSTTY_SUCCESS else { fatalError("ghostty_init failed") }
 
-		let config = Self.makeConfig(palette: .dark)
+		let config = Self.makeConfig(palette: .dark, fontSize: Self.defaultFontSize)
 		var runtime = Self.runtimeCallbacks()
 		guard let app = ghostty_app_new(&runtime, config) else { fatalError("ghostty_app_new failed") }
 		self.app = app
@@ -91,7 +95,18 @@ public final class TerminalRuntime {
 	/// Applies new colors to every terminal at once, through a regenerated config.
 	public func apply(_ palette: TerminalPalette) {
 		self.palette = palette
-		let config = Self.makeConfig(palette: palette)
+		reconfigure()
+	}
+
+	/// Resizes every terminal's font at once, through a regenerated config; new terminals start with it too.
+	public func setFontSize(_ points: Double) {
+		guard points != fontSize else { return }
+		fontSize = points
+		reconfigure()
+	}
+
+	private func reconfigure() {
+		let config = Self.makeConfig(palette: palette, fontSize: fontSize)
 		ghostty_app_update_config(app, config)
 		if let old = self.config { ghostty_config_free(old) }
 		self.config = config
@@ -102,12 +117,12 @@ public final class TerminalRuntime {
 	}
 
 	/// libghostty has no setter API: a config is built by loading a file, so write ours to a temporary file.
-	private static func makeConfig(palette: TerminalPalette) -> ghostty_config_t {
+	private static func makeConfig(palette: TerminalPalette, fontSize: Double) -> ghostty_config_t {
 		let lines = [
 			// Sapphire routes its own chords before the terminal (ADR-003), and binds only copy here.
 			"keybind = clear",
 			"keybind = super+c=copy_to_clipboard",
-			"font-size = 13",
+			"font-size = \(fontSize)",
 			"window-padding-x = 4",
 			"window-padding-y = 4",
 			"confirm-close-surface = false",

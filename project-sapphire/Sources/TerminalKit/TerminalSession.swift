@@ -21,6 +21,8 @@ public final class TerminalSession: Identifiable {
 
 	@ObservationIgnored weak var view: TerminalView?
 	@ObservationIgnored var startedAt: ContinuousClock.Instant?
+	/// A focus request made before the view was in a window, claimed once it is.
+	@ObservationIgnored private(set) var wantsFocus = false
 
 	public init(launch: TerminalLaunch) {
 		self.launch = launch
@@ -59,6 +61,16 @@ public final class TerminalSession: Identifiable {
 		let name = ghostty_surface_tty_name(surface)
 		defer { ghostty_string_free(name) }
 		return name.ptr.map { String(cString: $0) }
+	}
+
+	/// Makes the terminal its window's first responder, so typed keys go to it; before its view is in a window, it does so once it is.
+	public func focus() {
+		guard let view, let window = view.window else {
+			wantsFocus = true
+			return
+		}
+		wantsFocus = false
+		if window.firstResponder !== view { window.makeFirstResponder(view) }
 	}
 
 	/// Whether the terminal is its window's first responder, that is, where typed keys go.

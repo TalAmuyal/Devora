@@ -1,14 +1,20 @@
 import AppKit
 import CoreBindings
+import Layers
 import Store
 import SwiftUI
 
 /// The window's content: profiles and workspaces in the sidebar; the active tab's terminal over the tab bar in the main area.
 public struct RootView: View {
-	@State private var store = Store(configPath: nil, state: .app)
+	@State private var store: Store
 	@State private var terminals = Terminals()
+	@State private var surfaces: Surfaces
 
-	public init() {}
+	public init() {
+		let store = Store(configPath: nil, state: .app)
+		_store = State(initialValue: store)
+		_surfaces = State(initialValue: Surfaces(store: store))
+	}
 
 	public var body: some View {
 		Group {
@@ -20,10 +26,12 @@ public struct RootView: View {
 						.navigationSplitViewColumnWidth(min: 220, ideal: 260)
 				} detail: {
 					VStack(spacing: 0) {
-						TabContent(store: store, terminals: terminals)
+						TabContent(store: store, terminals: terminals, surfaces: surfaces)
 						TabBar(store: store)
 					}
 				}
+				.overlay { LayerHost(stack: surfaces.windowStack) }
+				.background(KeyRouterInstaller(router: surfaces.router))
 			}
 		}
 		.background(FrameDriver(store: store))
@@ -34,7 +42,7 @@ public struct RootView: View {
 				await launch()
 			} else if TestBridge.isEnabled {
 				// Early, so that the harness can see the problem and answer it.
-				TestBridge.start(store: store, terminals: terminals)
+				TestBridge.start(store: store, terminals: terminals, surfaces: surfaces)
 			}
 		}
 		.onChange(of: store.startupProblem) { problem, resolved in
@@ -55,7 +63,7 @@ public struct RootView: View {
 		}
 		// Started after the launch's commands, so that the harness finds them dispatched.
 		if TestBridge.isEnabled {
-			TestBridge.start(store: store, terminals: terminals)
+			TestBridge.start(store: store, terminals: terminals, surfaces: surfaces)
 		}
 		if let path = LaunchOptions.value("--snapshot") {
 			await Snapshot.run(store: store, terminals: terminals, to: path)

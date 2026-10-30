@@ -14,6 +14,12 @@ public enum Command: Sendable {
 	/// Opens a shell tab when there are no tabs, as at a launch that restored none.
 	case openShellIfNoTabs
 	case activateTab(id: UInt64)
+	/// Activates the tab after the active one, wrapping around to the first; `activatePreviousTab` goes the other way.
+	case activateNextTab
+	case activatePreviousTab
+	/// Moves the active tab one place towards the end of the tab bar, without wrapping; `moveActiveTabBackward` goes the other way.
+	case moveActiveTabForward
+	case moveActiveTabBackward
 	case closeTab(id: UInt64)
 	/// Answers `StartupProblem.stateUnreadable`: moves the unreadable app state aside, keeping it, and opens a fresh one in its place.
 	case startFresh
@@ -112,6 +118,14 @@ public final class Store {
 				profilePath: selectedProfilePath))
 		case .activateTab(let id):
 			apply(.activateTab(tab: id))
+		case .activateNextTab:
+			apply(.activateNext)
+		case .activatePreviousTab:
+			apply(.activatePrevious)
+		case .moveActiveTabForward:
+			apply(.moveActiveTabForward)
+		case .moveActiveTabBackward:
+			apply(.moveActiveTabBackward)
 		case .closeTab(let id):
 			apply(.closeSession(tab: id))
 		}
