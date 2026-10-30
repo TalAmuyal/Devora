@@ -1,8 +1,9 @@
 //! The shared, thread-safe home of one [`State`], and the batched event subscriptions the UIs pull from (ADR-010).
 
 use crate::{AppState, Command, Event, State, StateError};
+use event_listener::{EventListener, Listener};
 use std::collections::VecDeque;
-use std::sync::{Arc, Condvar, Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard};
 
 /// One [`State`] shared between threads: commands are applied one at a time, and their events reach every open [`Subscription`] in the order they were applied.
 #[derive(Default)]
@@ -61,16 +62,33 @@ impl Subscription {
     /// Waits until at least one event is queued, then takes up to `max` of them (at least one).
     ///
     /// Returns an empty batch once the subscription is closed, from this thread or another one.
-    pub fn next_batch(&self, max: u32) -> Vec<Event> {
-        let mut state = lock(&self.queue.state);
-        while state.events.is_empty() && !state.closed {
-            state = self
-                .queue
-                .ready
-                .wait(state)
-                .unwrap_or_else(|poisoned| poisoned.into_inner());
+    /// Needs no particular async runtime; dropping the future abandons the wait, but only [`Subscription::close`] ends the subscription.
+    pub async fn next_batch(&self, max: u32) -> Vec<Event> {
+        loop {
+            match self.take_or_listen(max) {
+                Ok(batch) => return batch,
+                Err(listener) => listener.await,
+            }
         }
-        take(&mut state, max)
+    }
+
+    /// Like [`Subscription::next_batch`], but blocks the calling thread.
+    pub fn next_batch_blocking(&self, max: u32) -> Vec<Event> {
+        loop {
+            match self.take_or_listen(max) {
+                Ok(batch) => return batch,
+                Err(listener) => listener.wait(),
+            }
+        }
+    }
+
+    /// Takes a batch if one is ready, or else starts listening; the listener is registered under the queue's lock, so no notification is missed.
+    fn take_or_listen(&self, max: u32) -> Result<Vec<Event>, EventListener> {
+        let mut state = lock(&self.queue.state);
+        if state.events.is_empty() && !state.closed {
+            return Err(self.queue.ready.listen());
+        }
+        Ok(take(&mut state, max))
     }
 
     /// Takes up to `max` queued events without waiting; empty when none are queued.
@@ -78,12 +96,12 @@ impl Subscription {
         take(&mut lock(&self.queue.state), max)
     }
 
-    /// Stops delivery and wakes a pending [`Subscription::next_batch`]; events still queued are dropped.
+    /// Stops delivery and wakes every pending [`Subscription::next_batch`] and [`Subscription::next_batch_blocking`]; events still queued are dropped.
     pub fn close(&self) {
         let mut state = lock(&self.queue.state);
         state.closed = true;
         state.events.clear();
-        self.queue.ready.notify_all();
+        self.queue.ready.notify(usize::MAX);
     }
 
     pub fn is_closed(&self) -> bool {
@@ -100,7 +118,7 @@ impl Drop for Subscription {
 #[derive(Default)]
 struct Queue {
     state: Mutex<QueueState>,
-    ready: Condvar,
+    ready: event_listener::Event,
 }
 
 #[derive(Default)]
@@ -117,7 +135,7 @@ impl Queue {
             return false;
         }
         state.events.extend(events.iter().cloned());
-        self.ready.notify_all();
+        self.ready.notify(usize::MAX);
         true
     }
 }
@@ -138,6 +156,9 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 mod tests {
     use super::*;
     use crate::SessionKind;
+    use futures_lite::future::{block_on, poll_once};
+    use std::pin::pin;
+    use std::sync::mpsc;
     use std::thread;
 
     fn open_shell(store: &Store, title: &str) -> Vec<Event> {
@@ -205,34 +226,74 @@ mod tests {
     }
 
     #[test]
-    fn next_batch_waits_for_an_event_from_another_thread() {
+    fn next_batch_blocking_waits_for_an_event_from_another_thread() {
         let store = Arc::new(Store::new());
         let subscription = store.subscribe();
-        subscription.next_batch(100);
+        subscription.next_batch_blocking(100);
 
         let dispatcher = {
             let store = store.clone();
             thread::spawn(move || open_shell(&store, "a"))
         };
-        let batch = subscription.next_batch(100);
+        let batch = subscription.next_batch_blocking(100);
         let expected = dispatcher.join().unwrap();
         // The dispatcher's two events are queued under one lock, so a woken consumer sees both.
         assert_eq!(batch, expected);
     }
 
     #[test]
-    fn close_wakes_a_waiting_next_batch_with_an_empty_batch() {
+    fn close_wakes_a_blocked_next_batch_with_an_empty_batch() {
         let store = Store::new();
         let subscription = Arc::new(store.subscribe());
-        subscription.next_batch(100);
+        subscription.next_batch_blocking(100);
 
         let waiter = {
             let subscription = subscription.clone();
-            thread::spawn(move || subscription.next_batch(100))
+            thread::spawn(move || subscription.next_batch_blocking(100))
         };
         subscription.close();
         assert_eq!(waiter.join().unwrap(), vec![]);
         assert!(subscription.is_closed());
+    }
+
+    /// Awaits `next_batch` on another thread, and returns once that wait is known to be pending.
+    fn await_next_batch_on_another_thread(
+        subscription: &Arc<Subscription>,
+    ) -> thread::JoinHandle<Vec<Event>> {
+        let (pending_tx, pending_rx) = mpsc::channel();
+        let subscription = subscription.clone();
+        let waiter = thread::spawn(move || {
+            block_on(async {
+                let mut next = pin!(subscription.next_batch(100));
+                assert!(poll_once(next.as_mut()).await.is_none());
+                pending_tx.send(()).unwrap();
+                next.await
+            })
+        });
+        pending_rx.recv().unwrap();
+        waiter
+    }
+
+    #[test]
+    fn a_pending_next_batch_wakes_on_dispatch() {
+        let store = Store::new();
+        let subscription = Arc::new(store.subscribe());
+        block_on(subscription.next_batch(100));
+
+        let waiter = await_next_batch_on_another_thread(&subscription);
+        let expected = open_shell(&store, "a");
+        assert_eq!(waiter.join().unwrap(), expected);
+    }
+
+    #[test]
+    fn close_wakes_a_pending_next_batch_with_an_empty_batch() {
+        let store = Store::new();
+        let subscription = Arc::new(store.subscribe());
+        block_on(subscription.next_batch(100));
+
+        let waiter = await_next_batch_on_another_thread(&subscription);
+        subscription.close();
+        assert_eq!(waiter.join().unwrap(), vec![]);
     }
 
     #[test]
