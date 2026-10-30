@@ -105,6 +105,10 @@ pub enum StateError {
     Storage {
         message: String,
     },
+    /// The state database is held by another process: another instance of the same app, since apps never share one (ADR-008).
+    InUse {
+        message: String,
+    },
 }
 
 impl fmt::Display for StateError {
@@ -115,7 +119,7 @@ impl fmt::Display for StateError {
                 write!(f, "tab index {index} is out of range for {len} tabs")
             }
             Self::NotCreating { tab } => write!(f, "tab {tab} is not creating a workspace"),
-            Self::Storage { message } => f.write_str(message),
+            Self::Storage { message } | Self::InUse { message } => f.write_str(message),
         }
     }
 }

@@ -13,7 +13,8 @@ struct DevoraSapphireApp: App {
 	}
 
 	var body: some Scene {
-		WindowGroup("Devora Sapphire") {
+		// One window: it renders the core's one window state, and its store is the app state's only writer.
+		Window("Devora Sapphire", id: "main") {
 			RootView()
 		}
 		.restorationBehavior(.disabled)
@@ -25,4 +26,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 	func application(_ app: NSApplication, shouldSaveSecureApplicationState coder: NSCoder) -> Bool { false }
 	func application(_ app: NSApplication, shouldRestoreSecureApplicationState coder: NSCoder) -> Bool { false }
 	func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool { true }
+	/// Closing the window quits, keeping the tabs for the next launch, as Cmd+Q does.
+	func applicationShouldTerminateAfterLastWindowClosed(_ app: NSApplication) -> Bool { true }
 }

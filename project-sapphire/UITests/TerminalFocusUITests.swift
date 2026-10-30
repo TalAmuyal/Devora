@@ -20,6 +20,8 @@ final class TerminalFocusUITests: XCTestCase {
 		try #"{"profiles": []}"#.write(to: config, atomically: true, encoding: .utf8)
 		let app = XCUIApplication()
 		app.launchEnvironment["DEVORA_CONFIG_PATH"] = config.path
+		// A fresh app state, so the app starts with one shell tab, and the developer's own tabs stay out of the test.
+		app.launchEnvironment["DEVORA_STATE_DIR"] = scratch.appending(path: "state").path
 		// The shells inherit it, which keeps the typed commands short.
 		app.launchEnvironment["UITEST_OUT"] = scratch.path
 		app.launch()

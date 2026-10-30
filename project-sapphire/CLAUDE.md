@@ -2,11 +2,19 @@
 
 The native macOS build (ADR-006, ADR-010): SwiftUI and AppKit over the shared Rust core (`../project-core/`), bound through UniFFI by the `devora-ffi` crate.
 The app is one window: profiles and the selected profile's workspaces in the sidebar, and the active tab's terminal (libghostty) over a tab bar in the main area.
-It starts with one shell tab; `+` opens another, and clicking an active workspace in the sidebar opens it in a new tab.
+It reopens the tabs it had when it last quit, crashed or was killed, or one shell tab when it had none; `+` opens another, and clicking an active workspace in the sidebar opens it in a new tab.
+Closing the window quits the app.
 
 ## State and terminals
 
 - The tabs are core-owned state (`devora-state`, ADR-008): the store dispatches a `StateCommand` to the core and never changes `Store.app` itself.
+- The core commits every command to `state.db` (SQLite) before its events go out, in `~/Library/Application Support/Devora Sapphire/`, or `Devora Sapphire <suffix>/` for a bundle with an install suffix; `DEVORA_STATE_DIR` replaces the directory (tests).
+	The core resolves that path (`sapphireStatePath`, from the bundle's `Resources`); `Store(configPath:state:)` takes `.app` for it, `.file` or `.inMemory` (tests).
+	A failed command, including one that couldn't be saved, takes no effect and shows as `Store.error`.
+- The app state has one writer: the core holds `state.db` exclusively while it runs, so a second instance on it gets `StartupProblem.stateInUse` and can only quit.
+	A state that can't be opened (corrupt, from a newer build) is `StartupProblem.stateUnreadable`: Quit leaves it untouched, Start Fresh (`Command.startFresh`) renames it, with its WAL, to `state-unreadable-<UTC time>.db` beside it and opens a fresh one.
+	Until the problem is answered, the store has no core and `StartupProblemView` fills the window.
+- The launch (`RootView`) runs once the state is open: `openShellIfNoTabs`, then the profiles; restored tabs get fresh terminals from their specs (a terminal's contents aren't restored), and a workspace creation the app stopped in the middle of comes back as failed ("interrupted").
 - The store pulls the core's events through `StateEvents`.
 	Events wait in an off-main inbox until `FrameDriver`'s display link folds them into `Store.app`, once per frame and only while events are pending.
 	Without a display link (tests), they fold on the main actor's next turn.
@@ -47,8 +55,10 @@ Real input (key events, focus, the IME, libghostty's key path) is what the bridg
 
 - The bridge (`Sources/AppShell/TestBridge.swift`) is a loopback HTTP server that starts only when `DEVORA_TEST_MODE=1`, once the launch is done, and prints `Devora test harness on port <port>` to stderr, as Ember's does.
 	It is compiled into every build, as Ember's is, and does nothing unless the variable is set.
-	Its routes: `GET /test/state` (profiles, workspaces, tabs with their terminal's status and focus, the active tab, the store's error and warnings); `POST /test/dispatch` with a store command (`{"command": "openShell"}`, `load`, `selectProfile` with `path`, `openWorkspace` with a workspace `id`, `activateTab` and `closeTab` with a tab `id`); `GET /test/terminal/text?tab=<id>` and `POST /test/terminal/type` with `{"line", "tab"}` (the active tab when `tab` is omitted; a 409 until its terminal runs).
+	Its routes: `GET /test/state` (profiles, workspaces, tabs with their terminal's status and focus, the active tab, the store's error, warnings and startup problem); `POST /test/dispatch` with a store command (`{"command": "openShell"}`, `load`, `selectProfile` with `path`, `openWorkspace` with a workspace `id`, `activateTab` and `closeTab` with a tab `id`, `startFresh`); `POST /test/quit` (the app menu's Quit; the app may exit before it answers); `GET /test/terminal/text?tab=<id>` and `POST /test/terminal/type` with `{"line", "tab"}` (the active tab when `tab` is omitted; a 409 until its terminal runs).
+	It starts early when the launch meets a startup problem, so that a scenario can answer it.
 	State changes fold on the next frame, so steps poll `state` (`Bridge.waitFor`) rather than reading it once.
-- Every scenario launches a fresh app (`acceptance/support/hooks.ts`), straight from the bundle's binary rather than through `open`, with a config of its own (`DEVORA_CONFIG_PATH`) and only a login session's environment, and starts once the startup tab's terminal runs; failed steps save the state, the active terminal's text and the app's stderr to `test-results/failures/`.
+- Every scenario launches a fresh app (`acceptance/support/hooks.ts`, `app.ts`), straight from the bundle's binary rather than through `open`, with a config and an app state of its own (`DEVORA_CONFIG_PATH`, `DEVORA_STATE_DIR`) and only a login session's environment, and starts once the startup tab's terminal runs; failed steps save the state, the active terminal's text and the app's stderr to `test-results/failures/`.
+	Relaunches within a scenario (`persistence.feature`) keep its state directory.
 - Scenarios shared with Ember live in `../acceptance/features/` (see `../acceptance/CLAUDE.md`); Sapphire's steps use the same phrases as Ember's, and reuse Ember's fixture helpers (`project-ember/tests/support/fixture-helper.ts`).
-- The XCUITests launch the app themselves; `scripts/test-ui.sh` skips them, saying why, when the screen is locked or `SAPPHIRE_SKIP_UI_TESTS=1`.
+- The XCUITests launch the app themselves, each on a state directory of its own; `scripts/test-ui.sh` skips them, saying why, when the screen is locked or `SAPPHIRE_SKIP_UI_TESTS=1`.

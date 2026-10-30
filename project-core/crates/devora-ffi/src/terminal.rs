@@ -80,7 +80,7 @@ mod tests {
     use std::sync::Arc;
 
     fn core() -> Arc<DevoraCore> {
-        DevoraCore::new(Some("/nonexistent/config.json".into())).unwrap()
+        DevoraCore::new(Some("/nonexistent/config.json".into()), None).unwrap()
     }
 
     /// Opens a tab and returns its pane id.

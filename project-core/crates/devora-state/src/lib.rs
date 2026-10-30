@@ -19,6 +19,7 @@ mod store;
 
 pub use command::{Command, Event, StateError};
 pub use model::{AppState, Pane, PaneId, Session, SessionKind, Tab, TabId, Window};
+pub use persist::set_aside;
 pub use store::{Store, Subscription};
 
 use command::apply;

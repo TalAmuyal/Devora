@@ -1,3 +1,4 @@
+import AppKit
 import CoreBindings
 import Foundation
 import Network
@@ -18,8 +19,9 @@ final class TestBridge {
 	private let terminals: Terminals
 	private let listener: NWListener
 
-	/// Starts the bridge and prints its port to stderr, where the harness reads it, as Ember does.
+	/// Starts the bridge, unless it is running, and prints its port to stderr, where the harness reads it, as Ember does.
 	static func start(store: Store, terminals: Terminals) {
+		guard running == nil else { return }
 		do {
 			let bridge = try TestBridge(store: store, terminals: terminals)
 			running = bridge
@@ -65,6 +67,10 @@ final class TestBridge {
 			case ("POST", "/test/dispatch"):
 				try await dispatch(request.json())
 				return .init(status: 200, body: [:])
+			case ("POST", "/test/quit"):
+				// The app may exit before the response is out, so the harness waits for the exit instead.
+				Task { NSApp.terminate(nil) }
+				return .init(status: 200, body: [:])
 			case ("GET", "/test/terminal/text"):
 				let session = try terminal(request.query["tab"].flatMap { UInt64($0) })
 				return .init(status: 200, body: ["text": session.allText() ?? ""])
@@ -100,6 +106,7 @@ final class TestBridge {
 			command = .openWorkspace(workspace)
 		case "activateTab": command = .activateTab(id: try tabID(body))
 		case "closeTab": command = .closeTab(id: try tabID(body))
+		case "startFresh": command = .startFresh
 		default:
 			throw BridgeError(status: 400, "unknown command \(String(describing: body["command"]))")
 		}
@@ -129,6 +136,7 @@ final class TestBridge {
 			"selectedProfile": store.selectedProfilePath ?? NSNull(),
 			"workspaces": store.workspaces.map { ["id": $0.id, "title": $0.title, "path": $0.path, "active": $0.active] },
 			"error": store.error ?? NSNull(),
+			"startupProblem": store.startupProblem.map(Self.describe) ?? NSNull(),
 			"warnings": store.warnings,
 			"activeTab": window.activeTab.map { NSNumber(value: $0) } ?? NSNull(),
 			"tabs": window.tabs.map { tab in
@@ -142,6 +150,13 @@ final class TestBridge {
 				] as [String: Any]
 			},
 		]
+	}
+
+	private static func describe(_ problem: StartupProblem) -> [String: Any] {
+		switch problem {
+		case .stateInUse(let path): ["kind": "stateInUse", "path": path]
+		case .stateUnreadable(let path, let reason): ["kind": "stateUnreadable", "path": path, "reason": reason]
+		}
 	}
 
 	private static func name(_ kind: SessionKind) -> String {
