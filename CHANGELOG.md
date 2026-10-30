@@ -24,7 +24,7 @@ Types of changes:
 - CI builds and tests Devora Sapphire on GitHub's hosted macOS 27 runner (`xcode-27`), caching the GhosttyKit build
 - A configurable PR title prefix (`pr.title-prefix`, per-profile with a global fallback) that `debi pr submit` prepends verbatim to the PR title, editable in the Settings Hub's Pull Requests card
 - Devora Sapphire has tabs: its tab bar renders the core-owned tabs from `devora-state`, and each tab's terminal runs the core's terminal spec, a login shell for a new shell tab and the profile's `terminal.default-app` (such as `ccc`) for a workspace opened from the sidebar
-- Acceptance tests for Devora Sapphire, run by `mise run -C project-sapphire test` and in CI: Gherkin scenarios that drive the app through a test-mode bridge, some of them shared with Ember (`acceptance/features/`), and XCUITests for real keyboard input and focus, which run locally
+- Acceptance tests for Devora Sapphire, run by `mise run -C project-sapphire test` and in CI: Gherkin scenarios that drive the app through a test-mode bridge, some of them shared with Ember (`acceptance/features/`), and XCUITests for real keyboard input and focus
 
 ### Changed
 
