@@ -50,7 +50,7 @@ echo "ghosttykit-$GHOSTTY_COMMIT-zig$(zig version)-xcode$(xcodebuild -version | 
 """
 
 [tasks.ghostty-prereqs]
-description = "Install what ghostty-build needs beyond mise's tools, when missing: Xcode's Metal Toolchain and gettext's msgfmt (through Homebrew)"
+description = "For CI: install what ghostty-build needs beyond mise's tools, when missing: Xcode's Metal Toolchain and gettext's msgfmt (a system-wide Homebrew install)"
 run = """
 set -euo pipefail
 xcodebuild -showComponent MetalToolchain >/dev/null 2>&1 || xcodebuild -downloadComponent MetalToolchain
