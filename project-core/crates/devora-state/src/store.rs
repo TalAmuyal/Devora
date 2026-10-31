@@ -1,11 +1,10 @@
 //! The shared, thread-safe home of one [`State`], and the batched event subscriptions the UIs pull from (ADR-010).
 
+use crate::feed::{feed, Feed, Subscription};
 use crate::persist::Db;
 use crate::{AppState, Command, Event, State, StateError};
-use event_listener::{EventListener, Listener};
-use std::collections::VecDeque;
 use std::path::Path;
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Mutex, MutexGuard};
 
 /// One [`State`] shared between threads: commands are applied one at a time, and their events reach every open [`Subscription`] in the order they were applied.
 #[derive(Default)]
@@ -16,7 +15,7 @@ pub struct Store {
 #[derive(Default)]
 struct Inner {
     state: State,
-    subscribers: Vec<Arc<Queue>>,
+    subscribers: Vec<Feed<Event>>,
     /// Where every change is committed before it takes effect; `None` for an in-memory store.
     db: Option<Db>,
 }
@@ -59,7 +58,7 @@ impl Store {
             db.save(&next)?;
         }
         inner.state = next;
-        inner.subscribers.retain(|queue| queue.push(&events));
+        inner.subscribers.retain(|feed| feed.push(&events));
         Ok(events)
     }
 
@@ -75,114 +74,19 @@ impl Store {
     /// Opens a subscription whose first event is an [`Event::Snapshot`] of the current state, followed by every event from later commands.
     ///
     /// Taking the snapshot and registering happen under one lock, so no event is missed or seen twice.
-    pub fn subscribe(&self) -> Subscription {
+    pub fn subscribe(&self) -> Subscription<Event> {
         let mut inner = lock(&self.inner);
-        let queue = Arc::new(Queue::default());
-        queue.push(&[Event::Snapshot {
+        let (feed, subscription) = feed();
+        feed.push(&[Event::Snapshot {
             state: inner.state.snapshot().clone(),
         }]);
-        inner.subscribers.push(queue.clone());
-        Subscription { queue }
+        inner.subscribers.push(feed);
+        subscription
     }
 }
 
-/// A stream of a [`Store`]'s events, pulled in batches.
-///
-/// Events queue up until pulled, so a slow consumer never stalls a command.
-/// Dropping a subscription closes it.
-pub struct Subscription {
-    queue: Arc<Queue>,
-}
-
-impl Subscription {
-    /// Waits until at least one event is queued, then takes up to `max` of them (at least one).
-    ///
-    /// Returns an empty batch once the subscription is closed, from this thread or another one.
-    /// Needs no particular async runtime; dropping the future abandons the wait, but only [`Subscription::close`] ends the subscription.
-    pub async fn next_batch(&self, max: u32) -> Vec<Event> {
-        loop {
-            match self.take_or_listen(max) {
-                Ok(batch) => return batch,
-                Err(listener) => listener.await,
-            }
-        }
-    }
-
-    /// Like [`Subscription::next_batch`], but blocks the calling thread.
-    pub fn next_batch_blocking(&self, max: u32) -> Vec<Event> {
-        loop {
-            match self.take_or_listen(max) {
-                Ok(batch) => return batch,
-                Err(listener) => listener.wait(),
-            }
-        }
-    }
-
-    /// Takes a batch if one is ready, or else starts listening; the listener is registered under the queue's lock, so no notification is missed.
-    fn take_or_listen(&self, max: u32) -> Result<Vec<Event>, EventListener> {
-        let mut state = lock(&self.queue.state);
-        if state.events.is_empty() && !state.closed {
-            return Err(self.queue.ready.listen());
-        }
-        Ok(take(&mut state, max))
-    }
-
-    /// Takes up to `max` queued events without waiting; empty when none are queued.
-    pub fn try_next_batch(&self, max: u32) -> Vec<Event> {
-        take(&mut lock(&self.queue.state), max)
-    }
-
-    /// Stops delivery and wakes every pending [`Subscription::next_batch`] and [`Subscription::next_batch_blocking`]; events still queued are dropped.
-    pub fn close(&self) {
-        let mut state = lock(&self.queue.state);
-        state.closed = true;
-        state.events.clear();
-        self.queue.ready.notify(usize::MAX);
-    }
-
-    pub fn is_closed(&self) -> bool {
-        lock(&self.queue.state).closed
-    }
-}
-
-impl Drop for Subscription {
-    fn drop(&mut self) {
-        self.close();
-    }
-}
-
-#[derive(Default)]
-struct Queue {
-    state: Mutex<QueueState>,
-    ready: event_listener::Event,
-}
-
-#[derive(Default)]
-struct QueueState {
-    events: VecDeque<Event>,
-    closed: bool,
-}
-
-impl Queue {
-    /// Queues the events; returns false once the subscription is closed, so the store can forget it.
-    fn push(&self, events: &[Event]) -> bool {
-        let mut state = lock(&self.state);
-        if state.closed {
-            return false;
-        }
-        state.events.extend(events.iter().cloned());
-        self.ready.notify(usize::MAX);
-        true
-    }
-}
-
-fn take(state: &mut QueueState, max: u32) -> Vec<Event> {
-    let n = state.events.len().min(max.max(1) as usize);
-    state.events.drain(..n).collect()
-}
-
-/// A panic while a lock was held can't leave the state half-applied (a command is applied to a copy, and an unfinished transaction rolls back), so a poisoned lock is still safe to use.
-fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+/// A panic while a lock was held can't leave the state half-applied (a command is applied to a copy, and an unfinished transaction rolls back), nor a queue (an item is pushed or taken whole), so a poisoned lock is still safe to use.
+pub(crate) fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
@@ -195,6 +99,7 @@ mod tests {
     use futures_lite::future::{block_on, poll_once};
     use std::pin::pin;
     use std::sync::mpsc;
+    use std::sync::Arc;
     use std::thread;
 
     fn open_shell(store: &Store, title: &str) -> Vec<Event> {
@@ -294,7 +199,7 @@ mod tests {
 
     /// Awaits `next_batch` on another thread, and returns once that wait is known to be pending.
     fn await_next_batch_on_another_thread(
-        subscription: &Arc<Subscription>,
+        subscription: &Arc<Subscription<Event>>,
     ) -> thread::JoinHandle<Vec<Event>> {
         let (pending_tx, pending_rx) = mpsc::channel();
         let subscription = subscription.clone();

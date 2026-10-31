@@ -35,6 +35,9 @@ public struct TerminalPalette: Sendable, Equatable {
 public final class TerminalRuntime {
 	public static let shared = TerminalRuntime()
 
+	/// Where libghostty's complaints about the generated config go: the app sets its log before the first terminal starts.
+	public static var logWarning: (String) -> Void = { NSLog("%@", $0) }
+
 	let app: ghostty_app_t
 	public private(set) var palette = TerminalPalette.dark
 	/// The size terminals start with, in points (Ember's default, which `Ctrl+=` returns to).
@@ -142,7 +145,7 @@ public final class TerminalRuntime {
 		ghostty_config_finalize(config)
 		for i in 0..<ghostty_config_diagnostics_count(config) {
 			let diagnostic = ghostty_config_get_diagnostic(config, i)
-			NSLog("ghostty config: %@", String(cString: diagnostic.message))
+			logWarning("ghostty config: \(String(cString: diagnostic.message))")
 		}
 		return config
 	}

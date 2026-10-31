@@ -13,14 +13,16 @@
 //! Inner tabs, splits, overlays and agent sessions (ADR-008) grow out of [`Tab`] and [`Pane`] later.
 
 mod command;
+mod feed;
 mod model;
 mod persist;
 mod store;
 
 pub use command::{Command, Event, StateError};
+pub use feed::{feed, Feed, Subscription};
 pub use model::{AppState, Pane, PaneId, Session, SessionKind, Tab, TabId, Window};
 pub use persist::set_aside;
-pub use store::{Store, Subscription};
+pub use store::Store;
 
 use command::apply;
 

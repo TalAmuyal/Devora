@@ -87,6 +87,8 @@ final class TestBridge {
 			case ("POST", "/test/key"):
 				try press(request.json())
 				return .init(status: 200, body: [:])
+			case ("POST", "/test/errors/scrape"):
+				return .init(status: 200, body: ["errors": store.scrapeErrors()])
 			case ("POST", "/test/surface"):
 				openTestSurface()
 				return .init(status: 200, body: [:])
@@ -114,18 +116,19 @@ final class TestBridge {
 				throw BridgeError(status: 404, "no workspace \(id ?? "nil") in the selected profile")
 			}
 			command = .openWorkspace(workspace)
-		case "activateTab": command = .activateTab(id: try tabID(body))
-		case "closeTab": command = .closeTab(id: try tabID(body))
+		case "activateTab": command = .activateTab(id: try uint64(body, "id"))
+		case "closeTab": command = .closeTab(id: try uint64(body, "id"))
 		case "startFresh": command = .startFresh
+		case "dismissError": command = .dismissError(id: try uint64(body, "id"))
 		default:
 			throw BridgeError(status: 400, "unknown command \(String(describing: body["command"]))")
 		}
 		await store.dispatch(command).value
 	}
 
-	private func tabID(_ body: [String: Any]) throws -> UInt64 {
-		guard let id = (body["id"] as? NSNumber)?.uint64Value else { throw BridgeError(status: 400, "missing id") }
-		return id
+	private func uint64(_ body: [String: Any], _ key: String) throws -> UInt64 {
+		guard let value = (body[key] as? NSNumber)?.uint64Value else { throw BridgeError(status: 400, "missing \(key)") }
+		return value
 	}
 
 	/// The terminal of the tab with this id (the active tab by default); a 409 until it is running, so that callers poll.
@@ -176,9 +179,9 @@ final class TestBridge {
 			"profiles": store.profiles.map { ["name": $0.name, "path": $0.path] },
 			"selectedProfile": store.selectedProfilePath ?? NSNull(),
 			"workspaces": store.workspaces.map { ["id": $0.id, "title": $0.title, "path": $0.path, "active": $0.active] },
-			"error": store.error ?? NSNull(),
+			"errorBanners": store.errorBanners.visible.map { ["id": NSNumber(value: $0.id), "message": $0.message, "count": $0.count] },
+			"logPath": (try? store.log.path()) ?? NSNull(),
 			"startupProblem": store.startupProblem.map(Self.describe) ?? NSNull(),
-			"warnings": store.warnings,
 			"activeTab": window.activeTab.map { NSNumber(value: $0) } ?? NSNull(),
 			"tabs": window.tabs.map { tab in
 				let session = terminals.session(for: tab)

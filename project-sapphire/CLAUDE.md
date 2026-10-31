@@ -10,18 +10,32 @@ Closing the window quits the app.
 
 - The tabs are core-owned state (`devora-state`, ADR-008): the store dispatches a `StateCommand` to the core and never changes `Store.app` itself.
 - The core commits every command to `state.db` (SQLite) before its events go out, in `~/Library/Application Support/Devora Sapphire/`, or `Devora Sapphire <suffix>/` for a bundle with an install suffix; `DEVORA_STATE_DIR` replaces the directory (tests).
-	The core resolves that path (`sapphireStatePath`, from the bundle's `Resources`); `Store(configPath:state:)` takes `.app` for it, `.file` or `.inMemory` (tests).
-	A failed command, including one that couldn't be saved, takes no effect and shows as `Store.error`.
+	The core resolves that path (`sapphireStatePath`, from the bundle's `Resources`); `Store(configPath:state:log:)` takes `.app` for it, `.file` or `.inMemory` (tests).
+	A failed command, including one that couldn't be saved, takes no effect and shows as an error banner.
 - The app state has one writer: the core holds `state.db` exclusively while it runs, so a second instance on it gets `StartupProblem.stateInUse` and can only quit.
 	A state that can't be opened (corrupt, from a newer build) is `StartupProblem.stateUnreadable`: Quit leaves it untouched, Start Fresh (`Command.startFresh`) renames it, with its WAL, to `state-unreadable-<UTC time>.db` beside it and opens a fresh one.
 	Until the problem is answered, the store has no core and `StartupProblemView` fills the window.
 - The launch (`RootView`) runs once the state is open: `openShellIfNoTabs`, then the profiles; restored tabs get fresh terminals from their specs (a terminal's contents aren't restored), and a workspace creation the app stopped in the middle of comes back as failed ("interrupted").
-- The store pulls the core's events through `StateEvents`.
+- The store pulls the core's events through `Batches`, the `AsyncSequence` over a core subscription.
 	Events wait in an off-main inbox until `FrameDriver`'s display link folds them into `Store.app`, once per frame and only while events are pending.
 	Without a display link (tests), they fold on the main actor's next turn.
 - `Terminals` (in `AppShell`) holds the live terminals, keyed by the terminal id of each tab's pane: it starts one from the core's `terminalSpec` when a tab appears and drops it when the tab leaves the state, which frees the libghostty surface and ends its process.
 	Every tab's terminal stays in the view tree, so switching tabs keeps them running; a terminal whose process exits closes its tab, as in Ember.
 - `Surfaces` (in `AppShell`) holds the key router and one layer stack per tab, with the tab's terminal as its bottom layer; the active tab's top layer has the keyboard focus unless a window surface is open.
+
+## Errors and the log
+
+Sapphire follows Ember's error reporting (ADR-002).
+
+- The log is `/tmp/devora-sapphire-<YYYYMMDD-HHMMSS>.log`, `[timestamp] [LEVEL] message` lines, opened at launch through `AppLog.openSession()` (`devora-ffi`, over `devora-app`), which prints its path to stderr and writes every Rust panic to it as a `[CRASH]` line.
+	The core writes its own warnings to it (a terminal setting that couldn't be read); the store's `logWarning` and libghostty's config diagnostics (`TerminalRuntime.logWarning`) go there too.
+- `Store.showError` is THE way to surface an error: it records it for the tests (`scrapeErrors`), writes it to the log, and shows it on a banner.
+	Banners stack at the top of the window above everything else, the layer stacks and the startup problem included (`ErrorBannerStack`); an identical message counts on its banner (×N) while it is up, and × dismisses it (`Command.dismissError`).
+- A failing core call shows `<call> failed: <error>`, by the core call's Rust name (`list_workspaces failed: …`), as Ember's `invoke` does; the store's `call` wraps every one.
+	Nothing opts out to log-only yet, as Ember's `invokeLogOnly` does for its frequent calls.
+- An error the core reports (`AppLog::report_error`, e.g. a corrupt `task.json` while listing workspaces) is already in the log, so it only gets its banner.
+	It reaches the store through `AppLog.errors()`, a subscription pulled in batches like the state's events (ADR-010's facade rules), not a callback; one stream per log, so errors reported before the store pulls wait for it.
+- A Swift error has no uncaught path: every core call is wrapped, and the store's event pulls show their own failure.
 
 ## Layout
 
@@ -60,12 +74,13 @@ Real input (key events, focus, the IME, libghostty's key path) is what the bridg
 
 - The bridge (`Sources/AppShell/TestBridge.swift`) is a loopback HTTP server that starts only when `DEVORA_TEST_MODE=1`, once the launch is done, and prints `Devora test harness on port <port>` to stderr, as Ember's does.
 	It is compiled into every build, as Ember's is, and does nothing unless the variable is set.
-	Its routes: `GET /test/state` (profiles, workspaces, tabs with their terminal's status, focus and layers, the active tab, the window stack's layers, the font size, the store's error, warnings and startup problem); `POST /test/dispatch` with a store command (`{"command": "openShell"}`, `load`, `selectProfile` with `path`, `openWorkspace` with a workspace `id`, `activateTab` and `closeTab` with a tab `id`, `startFresh`); `POST /test/quit` (the app menu's Quit; the app may exit before it answers); `GET /test/terminal/text?tab=<id>` and `POST /test/terminal/type` with `{"line", "tab"}` (the active tab when `tab` is omitted; a 409 until its terminal runs).
+	Its routes: `GET /test/state` (profiles, workspaces, tabs with their terminal's status, focus and layers, the active tab, the window stack's layers, the font size, the error banners, the log's path and the startup problem); `POST /test/dispatch` with a store command (`{"command": "openShell"}`, `load`, `selectProfile` with `path`, `openWorkspace` with a workspace `id`, `activateTab` and `closeTab` with a tab `id`, `startFresh`, `dismissError` with a banner `id`); `POST /test/errors/scrape` (the errors shown since the last scrape, which it clears, as Ember's `__scrapeErrors`); `POST /test/quit` (the app menu's Quit; the app may exit before it answers); `GET /test/terminal/text?tab=<id>` and `POST /test/terminal/type` with `{"line", "tab"}` (the active tab when `tab` is omitted; a 409 until its terminal runs).
 	`POST /test/key` with `{"key", "modifiers"}` presses a key: it makes the key-down AppKit would (key code, characters, flags) and hands it to `LayerRouter.handle`, the monitor's own entry point, then, unless consumed, to the window's `sendEvent`, which delivers it to the first responder; it skips the event monitor's plumbing and the menu's key equivalents, which the XCUITests cover.
 	`POST /test/surface` opens a stand-in window surface (a page with nothing to focus, closed by `q` or Escape) until Sapphire has real ones.
 	It starts early when the launch meets a startup problem, so that a scenario can answer it.
 	State changes fold on the next frame, so steps poll `state` (`Bridge.waitFor`) rather than reading it once.
 - Every scenario launches a fresh app (`acceptance/support/hooks.ts`, `app.ts`), straight from the bundle's binary rather than through `open`, with a config and an app state of its own (`DEVORA_CONFIG_PATH`, `DEVORA_STATE_DIR`) and only a login session's environment, and starts once the startup tab's terminal runs; failed steps save the state, the active terminal's text and the app's stderr to `test-results/failures/`.
+	As in Ember, a scenario fails if an error was shown that no step scraped ("the recorded errors should include").
 	Relaunches within a scenario (`persistence.feature`) keep its state directory.
 - Scenarios shared with Ember live in `../acceptance/features/` (see `../acceptance/CLAUDE.md`); Sapphire's steps use the same phrases as Ember's, and reuse Ember's fixture helpers (`project-ember/tests/support/fixture-helper.ts`).
 - The XCUITests launch the app themselves, each on a state directory of its own; `scripts/test-ui.sh` skips them, saying why, when the screen is locked or `SAPPHIRE_SKIP_UI_TESTS=1`.

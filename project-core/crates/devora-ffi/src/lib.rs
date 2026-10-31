@@ -11,7 +11,10 @@ use std::sync::Arc;
 use devora_core::{config, state, theme, workspace};
 
 mod app_state;
+mod log;
 mod terminal;
+
+pub use log::{AppLog, ErrorSubscription};
 
 uniffi::setup_scaffolding!();
 
@@ -90,18 +93,12 @@ impl From<workspace::WorkspaceInfo> for Workspace {
     }
 }
 
-#[derive(Debug, PartialEq, uniffi::Record)]
-pub struct WorkspaceList {
-    pub workspaces: Vec<Workspace>,
-    /// Problems that didn't stop the listing, such as a corrupt `task.json`.
-    pub warnings: Vec<String>,
-}
-
 #[derive(uniffi::Object)]
 pub struct DevoraCore {
     config_path: PathBuf,
     /// The app state (ADR-008).
     state: state::Store,
+    log: Arc<AppLog>,
 }
 
 #[uniffi::export]
@@ -109,10 +106,13 @@ impl DevoraCore {
     /// `config_path` overrides the global config file; without it, `DEVORA_CONFIG_PATH` or `~/.config/devora/config.json` is used.
     ///
     /// `state_path` is the app state's database (`sapphire_state_path`), which this process then holds alone; without it, the state lives in memory.
+    ///
+    /// `log` is where the core reports the problems that don't fail a call, as Ember's commands do.
     #[uniffi::constructor]
     pub fn new(
         config_path: Option<String>,
         state_path: Option<String>,
+        log: Arc<AppLog>,
     ) -> Result<Arc<Self>, CoreError> {
         let config_path = match config_path {
             Some(path) => PathBuf::from(path),
@@ -122,7 +122,11 @@ impl DevoraCore {
             Some(path) => app_state::open(path)?,
             None => state::Store::new(),
         };
-        Ok(Arc::new(DevoraCore { config_path, state }))
+        Ok(Arc::new(DevoraCore {
+            config_path,
+            state,
+            log,
+        }))
     }
 
     pub fn version(&self) -> Result<String, CoreError> {
@@ -134,13 +138,14 @@ impl DevoraCore {
         Ok(profiles.into_iter().map(Profile::from).collect())
     }
 
-    pub fn list_workspaces(&self, profile_path: String) -> Result<WorkspaceList, CoreError> {
+    /// Problems that don't stop the listing, such as a corrupt `task.json`, are reported to the log, as errors.
+    pub fn list_workspaces(&self, profile_path: String) -> Result<Vec<Workspace>, CoreError> {
         let mut warnings = Vec::new();
-        let workspaces = workspace::list_workspaces(&profile_path, &mut warnings)?;
-        Ok(WorkspaceList {
-            workspaces: workspaces.into_iter().map(Workspace::from).collect(),
-            warnings,
-        })
+        let workspaces = workspace::list_workspaces(&profile_path, &mut warnings);
+        for warning in &warnings {
+            self.log.report(warning);
+        }
+        Ok(workspaces?.into_iter().map(Workspace::from).collect())
     }
 
     /// The theme file's colors, keyed by the CSS custom property names the UIs share.
@@ -152,6 +157,7 @@ impl DevoraCore {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use futures_lite::future::block_on;
     use std::fs;
 
     fn write_profile(root: &Path, name: &str) -> PathBuf {
@@ -181,7 +187,12 @@ mod tests {
     fn core_with_config(root: &Path, contents: &str) -> Arc<DevoraCore> {
         let config_path = root.join("config.json");
         fs::write(&config_path, contents).unwrap();
-        DevoraCore::new(Some(config_path.to_string_lossy().into_owned()), None).unwrap()
+        DevoraCore::new(
+            Some(config_path.to_string_lossy().into_owned()),
+            None,
+            crate::log::test_log(),
+        )
+        .unwrap()
     }
 
     #[test]
@@ -218,7 +229,7 @@ mod tests {
     }
 
     #[test]
-    fn lists_workspaces_with_title_activity_and_warnings() {
+    fn lists_workspaces_with_title_and_activity_reporting_a_corrupt_task() {
         let tmp = tempfile::tempdir().unwrap();
         let profile = write_profile(tmp.path(), "alpha");
         write_workspace(
@@ -229,14 +240,15 @@ mod tests {
         );
         write_workspace(&profile, "ws-2", None, &[]);
         write_workspace(&profile, "ws-3", Some("{corrupt"), &[]);
-        let core = core_with_config(tmp.path(), r#"{"profiles": []}"#);
+        let log = log::test_log();
+        let core =
+            DevoraCore::new(Some("/nonexistent/config.json".into()), None, log.clone()).unwrap();
 
-        let list = core
+        let workspaces = core
             .list_workspaces(profile.to_string_lossy().into_owned())
             .unwrap();
 
-        let summary: Vec<_> = list
-            .workspaces
+        let summary: Vec<_> = workspaces
             .iter()
             .map(|w| (w.id.as_str(), w.title.as_str(), w.active, w.repos.clone()))
             .collect();
@@ -248,7 +260,9 @@ mod tests {
                 ("ws-3", "", true, vec![]),
             ]
         );
-        assert_eq!(list.warnings.len(), 1);
+        let reported = block_on(log.errors().unwrap().next_batch(10)).unwrap();
+        assert_eq!(reported.len(), 1, "{reported:?}");
+        assert!(reported[0].contains("failed to parse"), "{reported:?}");
     }
 
     #[test]

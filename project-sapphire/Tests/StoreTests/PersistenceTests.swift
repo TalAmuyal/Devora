@@ -9,7 +9,7 @@ struct PersistenceTests {
 	@Test func aLaunchRestoresTheTabsAndOpensNoShellOfItsOwn() async throws {
 		let fixture = try Fixture()
 		let statePath = fixture.root.appending(path: "state/state.db").path
-		var first: Store? = Store(configPath: fixture.configPath, state: .file(path: statePath))
+		var first: Store? = Store(configPath: fixture.configPath, state: .file(path: statePath), log: try fixture.log())
 		first!.dispatch(.openShellIfNoTabs)
 		first!.dispatch(.openShell)
 		try await eventually { first!.app.window.tabs.count == 2 }
@@ -18,7 +18,7 @@ struct PersistenceTests {
 		let left = first!.app
 		first = nil
 
-		let second = Store(configPath: fixture.configPath, state: .file(path: statePath))
+		let second = Store(configPath: fixture.configPath, state: .file(path: statePath), log: try fixture.log())
 		second.dispatch(.openShellIfNoTabs)
 		try await eventually { !second.app.window.tabs.isEmpty }
 
@@ -32,7 +32,7 @@ struct PersistenceTests {
 		let corrupt = Data(repeating: 0x5a, count: 8192)
 		try corrupt.write(to: URL(filePath: statePath))
 
-		let store = Store(configPath: fixture.configPath, state: .file(path: statePath))
+		let store = Store(configPath: fixture.configPath, state: .file(path: statePath), log: try fixture.log())
 		guard case .stateUnreadable(let path, let reason) = store.startupProblem else {
 			Issue.record("expected an unreadable state, got \(String(describing: store.startupProblem))")
 			return
@@ -53,9 +53,9 @@ struct PersistenceTests {
 	@Test func aStateHeldByAnotherStoreIsInUse() throws {
 		let fixture = try Fixture()
 		let statePath = fixture.root.appending(path: "state.db").path
-		let first = Store(configPath: fixture.configPath, state: .file(path: statePath))
+		let first = Store(configPath: fixture.configPath, state: .file(path: statePath), log: try fixture.log())
 
-		let second = Store(configPath: fixture.configPath, state: .file(path: statePath))
+		let second = Store(configPath: fixture.configPath, state: .file(path: statePath), log: try fixture.log())
 
 		#expect(first.startupProblem == nil)
 		#expect(second.startupProblem == .stateInUse(path: statePath))
