@@ -95,6 +95,14 @@ final class TestBridge {
 			case ("POST", "/test/new-task"):
 				try newTaskAction(request.json())
 				return .init(status: 200, body: [:])
+			case ("POST", "/test/profile-form"):
+				try profileFormAction(request.json())
+				return .init(status: 200, body: [:])
+			case ("POST", "/test/layers/clear"):
+				// Teardown, as Ember's `__test.layers.clear()`: it closes even the first-run welcome, which refuses `q` and Escape.
+				surfaces.windowStack.clear()
+				surfaces.router.focusActiveTab()
+				return .init(status: 200, body: [:])
 			case ("POST", "/test/progress"):
 				try progressAction(request.json())
 				return .init(status: 200, body: [:])
@@ -240,6 +248,53 @@ final class TestBridge {
 		}
 	}
 
+	/// The open profile form: the New Profile dialog's, or else the first-run welcome's.
+	private var profileForm: ProfileFormModel? {
+		surfaces.newProfile ?? surfaces.hub?.welcome
+	}
+
+	/// Fills in the open profile form's fields, as typing into them does (`setName`, `setPath` with a `value`), or clicks its buttons (`submit`, `cancel`).
+	private func profileFormAction(_ body: [String: Any]) throws {
+		guard let form = profileForm else { throw BridgeError(status: 409, "no profile form is open") }
+		let value = body["value"] as? String
+		switch body["action"] as? String {
+		case "setName":
+			guard let value else { throw BridgeError(status: 400, "missing value") }
+			form.typedName = value
+		case "setPath":
+			guard let value else { throw BridgeError(status: 400, "missing value") }
+			form.editPath(value)
+		case "submit":
+			guard form.canSubmit else { throw BridgeError(status: 409, "the submit button is disabled") }
+			form.submit()
+		case "cancel":
+			guard form.hasCancel else { throw BridgeError(status: 409, "the form has no Cancel button") }
+			form.cancel()
+		default:
+			throw BridgeError(status: 400, "unknown profile form action \(String(describing: body["action"]))")
+		}
+	}
+
+	private func profileFormState() -> Any {
+		guard let form = profileForm else { return NSNull() }
+		let status: Any = switch form.status {
+		case .new: ["kind": "new"]
+		case .existing(let name): ["kind": "existing", "name": name]
+		case .invalid(let error): ["kind": "invalid", "error": error]
+		case nil: NSNull()
+		}
+		return [
+			"name": form.name,
+			"nameLocked": form.isNameLocked,
+			"path": form.path,
+			"status": status,
+			"validating": form.validating,
+			"submitLabel": form.submitLabel,
+			"canSubmit": form.canSubmit,
+			"focus": form.focus.map { "\($0)" } ?? NSNull(),
+		] as [String: Any]
+	}
+
 	/// Clicks the button of a tab's progress page (the active tab's by default): Cancel while its creation runs, Close once it has failed.
 	private func progressAction(_ body: [String: Any]) throws {
 		guard let id = (body["tab"] as? NSNumber)?.uint64Value ?? store.app.window.activeTab,
@@ -306,6 +361,7 @@ final class TestBridge {
 			"profileLabel": store.profiles.first { $0.path == store.selectedProfilePath }?.name ?? NSNull(),
 			"menu": menuState(of: hub),
 			"loading": !hub.loaded,
+			"welcome": hub.welcome != nil,
 			"category": hub.category.label,
 			"filter": hub.filter,
 			"filterFocused": surfaces.router.isEditingText,
@@ -337,6 +393,7 @@ final class TestBridge {
 			"hub": hubState(),
 			"dialog": dialogState(),
 			"newTask": newTaskState(),
+			"profileForm": profileFormState(),
 			"fontSize": TerminalRuntime.shared.fontSize,
 			"windowLayers": surfaces.windowStack.layers.map(\.spec.name),
 			"editingText": surfaces.router.isEditingText,

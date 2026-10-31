@@ -2,22 +2,7 @@ Feature: Profile management
   Profiles can be created, registered, switched, and deleted in Devora-Ember:
   via the first-run welcome card, the Settings Hub overlay (P from the hub,
   the hub's profile dropdown, or the hub's burger menu), and the command palette.
-
-  Scenario: First-run welcome appears and cannot be dismissed
-    Given no profiles are configured
-    And the Workspace Hub is open
-    Then the first-run welcome card should be visible
-    And pressing "q" should not close the Workspace Hub
-
-  Scenario: Creating the first profile from the welcome card
-    Given no profiles are configured
-    And the Workspace Hub is open
-    When the user enters profile name "Work" and path "work" under the fixture root
-    And the user submits the profile form
-    Then the profile dropdown should be labeled "Work"
-    And the directory "work/repos" should exist under the fixture root
-    And the directory "work/workspaces" should exist under the fixture root
-    And the global config should list 1 profile
+  The first-run welcome and the dropdown's "New Profile…" are in `acceptance/features/first-run-and-new-profile.feature`, shared with Sapphire.
 
   Scenario: Opening the Settings Hub with P and returning with q
     Given a profile "Work" with 1 active workspaces

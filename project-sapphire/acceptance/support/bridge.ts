@@ -33,6 +33,27 @@ export interface NewTaskState {
   repos: { name: string; selected: boolean; active: boolean }[];
 }
 
+/** The open profile form: the New Profile dialog's, or else the first-run welcome's; `status` is null while the path is empty or unvalidated. */
+export interface ProfileFormState {
+  name: string;
+  /** An existing profile's name replaces the one typed, and can't be edited. */
+  nameLocked: boolean;
+  path: string;
+  status: { kind: 'new' } | { kind: 'existing'; name: string } | { kind: 'invalid'; error: string } | null;
+  /** From an edit of the path until its validation is back. */
+  validating: boolean;
+  submitLabel: 'Create Profile' | 'Register Profile';
+  canSubmit: boolean;
+  focus: 'name' | 'path' | 'browse' | 'submit' | 'cancel' | null;
+}
+
+/** Fills in a field of the open profile form, as typing into it does, or clicks one of its buttons. */
+export type ProfileFormAction =
+  | { action: 'setName'; value: string }
+  | { action: 'setPath'; value: string }
+  | { action: 'submit' }
+  | { action: 'cancel' };
+
 /** A click on what the open New Task dialog draws. */
 export type NewTaskAction = { action: 'toggleRepo'; name: string } | { action: 'create' } | { action: 'cancel' };
 
@@ -40,6 +61,8 @@ export type NewTaskAction = { action: 'toggleRepo'; name: string } | { action: '
 export interface HubState {
   /** Until the first load is done, the list shows its placeholder. */
   loading: boolean;
+  /** The first-run welcome, which shows instead of the list while there are no profiles. */
+  welcome: boolean;
   category: 'Active' | 'Inactive' | 'All';
   filter: string;
   /** Whether a text field (the filter) has the keyboard focus. */
@@ -88,6 +111,7 @@ export interface AppState {
   hub: HubState | null;
   dialog: DialogState | null;
   newTask: NewTaskState | null;
+  profileForm: ProfileFormState | null;
   version: string;
   profiles: { name: string; path: string }[];
   selectedProfile: string | null;
@@ -181,6 +205,16 @@ export class Bridge {
   /** Clicks what the open Workspace Hub draws, as its buttons do; a disabled dropdown row is a 409. */
   async hub(action: HubAction): Promise<void> {
     await this.request('POST', '/test/hub', action);
+  }
+
+  /** Fills in or clicks the open profile form; a disabled submit is a 409. */
+  async profileForm(action: ProfileFormAction): Promise<void> {
+    await this.request('POST', '/test/profile-form', action);
+  }
+
+  /** Teardown: removes every window surface, the first-run welcome included, as Ember's `__test.layers.clear()`. */
+  async clearWindowSurfaces(): Promise<void> {
+    await this.request('POST', '/test/layers/clear');
   }
 
   /** Clicks what the open New Task dialog draws. */

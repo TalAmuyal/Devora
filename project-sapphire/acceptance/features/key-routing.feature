@@ -25,8 +25,10 @@ Feature: Key routing through the layers
     And the second session should be active
     And no session should have the keyboard focus
 
+  # With a profile, since the first-run welcome can't be closed.
   Scenario: Closing the Workspace Hub gives the keyboard focus back to the active session's terminal
-    Given 2 sessions exist
+    Given a profile "Work" with 0 active workspaces
+    And 2 sessions exist
     And the Workspace Hub is open
     When the user presses "q"
     Then the Workspace Hub should not be visible

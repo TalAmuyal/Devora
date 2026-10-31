@@ -16,8 +16,7 @@ final class TerminalFocusUITests: XCTestCase {
 
 	@MainActor
 	func testTypedKeysFollowTheActiveTab() throws {
-		let config = scratch.appending(path: "config.json")
-		try #"{"profiles": []}"#.write(to: config, atomically: true, encoding: .utf8)
+		let config = try writeConfigWithAProfile(in: scratch)
 		let app = XCUIApplication()
 		app.launchEnvironment["DEVORA_CONFIG_PATH"] = config.path
 		// A fresh app state, so the developer's own tabs stay out of the test.

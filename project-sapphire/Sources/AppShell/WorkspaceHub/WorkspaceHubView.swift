@@ -34,18 +34,25 @@ struct WorkspaceHubView: View {
 		VStack(spacing: 0) {
 			HubHeader(model: model)
 			Divider()
-			HSplitView {
-				WorkspaceListPanel(model: model)
-					.frame(minWidth: 280, idealWidth: 340, maxWidth: 480)
-				WorkspaceDetailPanel(model: model)
-					.frame(minWidth: 360, maxWidth: .infinity)
+			if let welcome = model.welcome {
+				WelcomeCard(form: welcome)
+				Divider()
+				KeyHintBar(hints: [("Tab", "next field"), ("Enter", "create profile")])
+					.accessibilityIdentifier("hub-hint-bar")
+			} else {
+				HSplitView {
+					WorkspaceListPanel(model: model)
+						.frame(minWidth: 280, idealWidth: 340, maxWidth: 480)
+					WorkspaceDetailPanel(model: model)
+						.frame(minWidth: 360, maxWidth: .infinity)
+				}
+				Divider()
+				KeyHintBar(hints: [
+					("j/k", "navigate"), ("Enter", "open"), ("f", "filter"), ("1/2/3", "active/inactive/all"),
+					("n", "new task"), ("R", "refresh"), ("q/Esc", "close"), ("?", "all shortcuts"),
+				])
+				.accessibilityIdentifier("hub-hint-bar")
 			}
-			Divider()
-			KeyHintBar(hints: [
-				("j/k", "navigate"), ("Enter", "open"), ("f", "filter"), ("1/2/3", "active/inactive/all"),
-				("n", "new task"), ("R", "refresh"), ("q/Esc", "close"), ("?", "all shortcuts"),
-			])
-			.accessibilityIdentifier("hub-hint-bar")
 		}
 		.background(.windowBackground)
 		.overlay(alignment: .bottom) {
@@ -147,9 +154,6 @@ private struct WorkspaceListPanel: View {
 		let items = model.items
 		if !model.loaded {
 			placeholder("Loading workspaces...")
-		} else if model.store.profiles.isEmpty {
-			// Creating the first profile comes with the welcome screen.
-			placeholder("No profiles")
 		} else if items.isEmpty {
 			placeholder("No workspaces found")
 		} else {

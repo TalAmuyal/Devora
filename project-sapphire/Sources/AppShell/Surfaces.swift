@@ -21,6 +21,8 @@ final class Surfaces {
 	@ObservationIgnored private(set) var dialog: ConfirmationDialogModel?
 	/// The open New Task dialog; nil while none is.
 	@ObservationIgnored private(set) var newTask: NewTaskDialogModel?
+	/// The open New Profile dialog's form; nil while none is.
+	@ObservationIgnored private(set) var newProfile: ProfileFormModel?
 	/// From the New Task dialog's opening until its repos have loaded, so that a held or repeated `n` opens one dialog.
 	@ObservationIgnored private var newTaskOpening = false
 	@ObservationIgnored private var hubMenu: LayerHandle?
@@ -82,6 +84,7 @@ final class Surfaces {
 		var spec = pageLayer(LayerSpec(name: WorkspaceHubModel.layerName) { WorkspaceHubView(model: model) })
 		spec.onKey = model.handleKey
 		spec.onReveal = model.reload
+		spec.onUserDismissRequest = model.dismissDecision
 		spec.onCleanup = { [unowned self] in
 			model.close()
 			if hub === model { hub = nil }
@@ -98,6 +101,7 @@ final class Surfaces {
 		model.closeMenu = { [unowned self] in closeHubMenu() }
 		model.confirm = { [unowned self] confirmation, action in confirm(confirmation, then: action) }
 		model.newTask = { [unowned self] source in openNewTaskDialog(duplicating: source) }
+		model.newProfile = { [unowned self, unowned model] in openNewProfileDialog(over: model) }
 		hub = model
 		model.load()
 	}
@@ -175,6 +179,39 @@ final class Surfaces {
 			handle = windowStack.push(spec)
 			newTask = model
 		}
+	}
+
+	/// Opens the New Profile dialog over the hub, a modal layer with the profile form, which stands in for the Settings Hub's inline form that Ember's "New Profile…" opens.
+	/// Registering closes it and selects the new profile, as Ember's closes the Settings Hub over the hub; Escape cancels, as the New Task dialog's does.
+	private func openNewProfileDialog(over hub: WorkspaceHubModel) {
+		guard windowStack.find(NewProfileDialog.layerName) == nil else { return }
+		var handle: LayerHandle?
+		let close = { [unowned self] in
+			if let handle { windowStack.remove(handle) }
+		}
+		let router = router!
+		let form = ProfileFormModel(
+			store: store, hasCancel: true, onCancel: close, clearFocus: { router.clearFocus() },
+			onRegistered: { [unowned hub] path in
+				close()
+				hub.profileRegistered(path)
+			})
+		var spec = modalLayer(LayerSpec(name: NewProfileDialog.layerName) { NewProfileDialog(form: form) })
+		spec.onKey = { key in
+			guard key.keyCode == KeyCode.escape, key.modifiers.isDisjoint(with: [.control, .option, .command]) else {
+				return form.handleKey(key)
+			}
+			form.cancel()
+			return true
+		}
+		spec.cycleFocus = { form.cycleFocus(backward: $0) }
+		spec.focus = { form.focus = .name }
+		spec.onCleanup = { [unowned self] in
+			if newProfile === form { newProfile = nil }
+		}
+		closeHubMenu()
+		handle = windowStack.push(spec)
+		newProfile = form
 	}
 
 	/// The hub's shortcuts on a page of their own; `?` closes it as it opened it, and the hub's keys reach nothing meanwhile.

@@ -1,5 +1,17 @@
 import XCTest
 
+/// Writes a global config in `dir` with one empty profile, and returns its URL: with none, the Workspace Hub a launch opens is the first-run welcome, which can't be closed.
+func writeConfigWithAProfile(in dir: URL) throws -> URL {
+	let profile = dir.appending(path: "Work")
+	for subdirectory in ["repos", "workspaces"] {
+		try FileManager.default.createDirectory(at: profile.appending(path: subdirectory), withIntermediateDirectories: true)
+	}
+	try #"{"name": "Work"}"#.write(to: profile.appending(path: "config.json"), atomically: true, encoding: .utf8)
+	let config = dir.appending(path: "config.json")
+	try #"{"profiles": ["\#(profile.path)"]}"#.write(to: config, atomically: true, encoding: .utf8)
+	return config
+}
+
 extension XCUIApplication {
 	/// The Workspace Hub, which a launch with no tabs to restore opens.
 	@MainActor
