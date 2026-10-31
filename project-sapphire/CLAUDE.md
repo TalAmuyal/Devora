@@ -9,7 +9,8 @@ Closing the window quits the app.
 
 ## State and terminals
 
-- The tabs are core-owned state (`devora-state`, ADR-008): the store dispatches a `StateCommand` to the core and never changes `Store.app` itself.
+- The tabs are core-owned state (`devora-state`, ADR-008): the store dispatches a `StateCommand` to the core and changes `Store.app` only by folding the core's events.
+	The one early fold is a profile selection's own `ActiveProfileChanged`, applied as soon as `SetActiveProfile` succeeds so that the hub and the New Task dialog see it once the workspaces are listed; the core's copy of that event folds later and sets the same value.
 - The core commits every command to `state.db` (SQLite) before its events go out, in `~/Library/Application Support/Devora Sapphire/`, or `Devora Sapphire <suffix>/` for a bundle with an install suffix; `DEVORA_STATE_DIR` replaces the directory (tests).
 	The core resolves that path (`sapphireStatePath`, from the bundle's `Resources`); `Store(configPath:state:log:)` takes `.app` for it, `.file` or `.inMemory` (tests).
 	A failed command, including one that couldn't be saved, takes no effect and shows as an error banner.
