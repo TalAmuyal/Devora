@@ -44,6 +44,28 @@ struct LayerRoutingTests {
 		return (router, stack)
 	}
 
+	@Test func aLayerInsertedAtTheBottomTakesTheFocusOnlyOnceRevealed() {
+		let tab = LayerStack(fallbackFocus: { [log] in log.focused.append("nothing") })
+		tab.push(layer("progress", preset: pageLayer))
+
+		tab.insertAtBottom(layer("terminal", preset: terminalLayer))
+		#expect(tab.layers.map(\.spec.name) == ["terminal", "progress"])
+		#expect(log.focused == ["progress"], "the layer over it keeps the focus")
+		#expect(tab.route(q) == .consumed, "and its keys: q dismisses the top layer, not the terminal")
+
+		#expect(tab.layers.map(\.spec.name) == ["terminal"])
+		#expect(log.focused == ["progress", "terminal"])
+	}
+
+	@Test func aLayerInsertedIntoAnEmptyStackIsPushed() {
+		let tab = LayerStack()
+
+		tab.insertAtBottom(layer("terminal", preset: terminalLayer))
+
+		#expect(tab.top?.spec.name == "terminal")
+		#expect(log.focused == ["terminal"])
+	}
+
 	@Test func shortcutsRunBeforeAnyLayer() {
 		let (router, _) = routerWithTab()
 		router.windowStack.push(layer("hub", claims: [""], preset: pageLayer))

@@ -55,7 +55,7 @@ pub struct WorkspaceStatusResult {
     pub handler_total_ms: f64,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RepoInfo {
     pub name: String,
@@ -63,7 +63,7 @@ pub struct RepoInfo {
     pub source: String, // "registered" | "auto-discovered"
 }
 
-#[derive(Debug, Serialize, Clone)]
+#[derive(Debug, PartialEq, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct CreatedWorkspace {
     pub path: String,

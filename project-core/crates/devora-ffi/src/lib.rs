@@ -11,6 +11,7 @@ use std::sync::Arc;
 use devora_core::{config, state, theme, workspace};
 
 mod app_state;
+mod creation;
 mod log;
 mod terminal;
 
@@ -129,6 +130,7 @@ pub struct DevoraCore {
     /// The app state (ADR-008).
     state: state::Store,
     log: Arc<AppLog>,
+    creations: creation::Creations,
 }
 
 #[uniffi::export]
@@ -156,6 +158,7 @@ impl DevoraCore {
             config_path,
             state,
             log,
+            creations: Default::default(),
         }))
     }
 

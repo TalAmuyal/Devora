@@ -16,7 +16,7 @@ final class Terminals {
 	func sync(with tabs: [AppTab], store: Store, started: (AppTab, TerminalSession) -> Void) {
 		let live = Set(tabs.map(\.terminalID))
 		sessions = sessions.filter { live.contains($0.key) }
-		for tab in tabs where sessions[tab.terminalID] == nil && tab.session.kind.runsTerminal {
+		for tab in tabs where sessions[tab.terminalID] == nil && !tab.session.kind.isCreation {
 			let id = tab.terminalID
 			let session = TerminalSession()
 			sessions[id] = session
@@ -35,15 +35,6 @@ final class Terminals {
 
 	func session(for tab: AppTab) -> TerminalSession? {
 		sessions[tab.terminalID]
-	}
-}
-
-extension SessionKind {
-	var runsTerminal: Bool {
-		switch self {
-		case .shell, .workspace: true
-		case .creatingWorkspace, .creationFailed: false
-		}
 	}
 }
 
@@ -69,7 +60,7 @@ struct TabContent: View {
 			}
 			ForEach(window.tabs, id: \.terminalID) { tab in
 				let isActive = tab.id == window.activeTab
-				TabPane(tab: tab, session: terminals.sessions[tab.terminalID], stack: surfaces.tabStacks[tab.id])
+				TabPane(session: terminals.sessions[tab.terminalID], stack: surfaces.tabStacks[tab.id])
 				.opacity(isActive ? 1 : 0)
 				.allowsHitTesting(isActive)
 			}
@@ -81,6 +72,7 @@ struct TabContent: View {
 			terminals.sync(with: tabs, store: store) { [store, surfaces] tab, session in
 				surfaces.pushTerminal(session, tab: tab.id) { store.dispatch(.closeTab(id: tab.id)) }
 			}
+			surfaces.retireProgressPages(of: tabs)
 		}
 		.onChange(of: window.activeTab) {
 			surfaces.router.focusActiveTab()
@@ -89,20 +81,14 @@ struct TabContent: View {
 }
 
 private struct TabPane: View {
-	let tab: AppTab
 	let session: TerminalSession?
 	let stack: LayerStack?
 
 	var body: some View {
-		switch (tab.session.kind, session?.startFailure) {
-		case (.creatingWorkspace, _):
-			ProgressView("Creating the workspace…")
-		case (.creationFailed(let reason), _):
-			Message(title: "The workspace couldn't be created", detail: reason)
-		case (_, let reason?):
+		if let reason = session?.startFailure {
 			Message(title: "The terminal couldn't start", detail: reason)
-		case (_, nil):
-			if session != nil, let stack { LayerHost(stack: stack) }
+		} else if let stack {
+			LayerHost(stack: stack)
 		}
 	}
 }

@@ -43,7 +43,7 @@ struct WorkspaceHubView: View {
 			Divider()
 			KeyHintBar(hints: [
 				("j/k", "navigate"), ("Enter", "open"), ("f", "filter"), ("1/2/3", "active/inactive/all"),
-				("R", "refresh"), ("q/Esc", "close"), ("?", "all shortcuts"),
+				("n", "new task"), ("R", "refresh"), ("q/Esc", "close"), ("?", "all shortcuts"),
 			])
 			.accessibilityIdentifier("hub-hint-bar")
 		}
@@ -131,10 +131,8 @@ private struct WorkspaceListPanel: View {
 					}
 					.pickerStyle(.segmented)
 					.labelsHidden()
-					// Task creation isn't in Sapphire yet.
-					Button("+ New Task") {}
-						.disabled(true)
-						.help(WorkspaceHubModel.notYet)
+					Button("+ New Task") { model.newTask(nil) }
+						.accessibilityIdentifier("hub-new-task")
 				}
 			}
 			.padding(12)
@@ -272,10 +270,7 @@ private struct WorkspaceDetail: View {
 				Button("Open") { model.openWorkspace(workspace) }
 					.buttonStyle(.borderedProminent)
 				if workspace.active {
-					// Duplicating opens the New Task dialog, which isn't in Sapphire yet.
-					Button("Duplicate") {}
-						.disabled(true)
-						.help(WorkspaceHubModel.notYet)
+					Button("Duplicate") { model.newTask(workspace) }
 					Button("Remove Task") { model.removeTask(workspace) }
 				} else {
 					Button("Delete") { model.deleteWorkspace(workspace) }

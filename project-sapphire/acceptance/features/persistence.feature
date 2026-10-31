@@ -28,10 +28,16 @@ Feature: Tabs survive a restart
     Then there should be 0 sessions
     And the Workspace Hub should be visible
 
-  Scenario: A workspace still being created when Sapphire stopped comes back as failed
-    Given Sapphire stopped while a session was creating its workspace
-    When Sapphire is launched
+  Scenario: A workspace still being created when Sapphire stopped comes back as failed, and closes
+    Given an origin-backed profile "Work" with repo "test-repo"
+    And the prepare-command sleeps
+    And the Workspace Hub is open
+    And the user creates a task "New task" selecting repo "test-repo"
+    And the task creation is preparing
+    When Sapphire is killed and relaunched
     Then that session should show that its workspace creation was interrupted
+    When the user presses "q"
+    Then there should be 0 sessions
 
   Scenario: An unreadable app state is kept aside and Sapphire starts fresh
     Given a new session is created

@@ -6,7 +6,7 @@ Feature: Non-blocking task creation with reuse and refresh
   otherwise a fresh workspace is built. Creation can be cancelled mid-flight.
 
   Background:
-    Given Ember is running
+    Given Devora is running with no sessions open
 
   Scenario: A task with no reusable workspace opens a progress tab and builds fresh
     Given an origin-backed profile "Work" with repo "test-repo"
