@@ -59,7 +59,7 @@ Ember's profile form and first-run welcome (`Sources/AppShell/Profiles/`).
 	The burger menu has no "Settings" and the header no profile dropdown, as in Ember.
 - The profile dropdown's "New Profile…" opens the form in the New Profile dialog, a modal layer over the hub, where Ember opens the Settings Hub's inline form; Escape cancels it, and registering closes it.
 - The selected profile is the core's active profile (`AppState.activeProfile`, which `Store.selectedProfilePath` reads): selecting one dispatches `SetActiveProfile`, so a launch restores it, where Ember always starts on the first profile.
-	A load selects the restored profile while it is registered, otherwise the first profile, or none, and dispatches that in its place; it reads the active profile from the core, since the state's events fold on a later frame, so a selection shows once its event has folded.
+	A load selects the restored profile while it is registered, otherwise the first profile, or none, and dispatches that in its place; it reads the active profile from the core, since the state's events fold on a later frame, and folds its own selection at once, so that the New Task dialog and the hub see it as soon as the workspaces are listed.
 - Deleting a profile is the Settings Hub's (`d`, behind "Manage Profiles…"); the store already has its side: `Store.unregisterProfile` (`unregister_profile`, which leaves the directory on disk, then loads again, so the selection moves to the first profile, as a launch's does, and the hub shows the welcome after the last one), and `Store.tabs(usingProfile:)`, the open tabs that make Ember refuse the deletion.
 
 ## Task creation

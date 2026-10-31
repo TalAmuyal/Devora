@@ -58,7 +58,6 @@ public final class Store {
 	/// Whether the profiles have been listed once: with none, Ember's first-run welcome shows only after a listing that succeeded.
 	public private(set) var profilesListed = false
 	/// The core-owned active profile, which a launch restores: it decides what the hub lists and where new tasks go, not which profile a workspace opens with.
-	/// It follows `app`, so a selection shows once its event folds.
 	public var selectedProfilePath: String? { app.activeProfile }
 	public private(set) var workspaces: [Workspace] = []
 	/// The statuses loaded so far, by workspace path; a workspace without one is still loading.
@@ -350,9 +349,10 @@ public final class Store {
 	}
 
 	/// State commands apply in order and quickly (a reducer and one small SQLite transaction), so they run synchronously; their changes arrive through the subscription.
-	private func apply(_ command: StateCommand) {
-		guard let core else { return }
-		try? call("dispatch") { try core.dispatch(command: command) }
+	@discardableResult
+	private func apply(_ command: StateCommand) -> Bool {
+		guard let core else { return false }
+		return (try? call("dispatch") { try core.dispatch(command: command) }) != nil
 	}
 
 	private func pullStateEvents(from subscription: StateSubscription) -> Task<Void, Never> {
@@ -412,7 +412,8 @@ public final class Store {
 		listProfiles: LoadingLatencies.Phase = .zero
 	) async -> Bool {
 		if path != selectedProfilePath { dropWorkspaceStatuses() }
-		apply(.setActiveProfile(profilePath: path))
+		// Folded at once, so that whatever reads the selection once the workspaces are listed sees it; its event, folded later, sets it again.
+		if apply(.setActiveProfile(profilePath: path)) { app.apply(.activeProfileChanged(profilePath: path)) }
 		selectionGeneration += 1
 		let generation = selectionGeneration
 		guard let path else {

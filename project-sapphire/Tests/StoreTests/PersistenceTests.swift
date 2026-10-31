@@ -42,7 +42,7 @@ struct PersistenceTests {
 		let second = Store(configPath: fixture.configPath, state: .file(path: statePath), log: try fixture.log())
 		await second.dispatch(.load).value
 
-		try await eventually { second.selectedProfilePath == home }
+		#expect(second.selectedProfilePath == home)
 		#expect(second.workspaces.map(\.title) == ["Home task"])
 	}
 
@@ -61,14 +61,14 @@ struct PersistenceTests {
 
 		store = Store(configPath: fixture.configPath, state: .file(path: statePath), log: try fixture.log())
 		await store!.dispatch(.load).value
-		try await eventually { store!.selectedProfilePath == work }
+		#expect(store!.selectedProfilePath == work)
 		store = nil
 		try FileManager.default.moveItem(atPath: moved, toPath: home)
 		try fixture.registerProfiles([work, home])
 
 		let relaunched = Store(configPath: fixture.configPath, state: .file(path: statePath), log: try fixture.log())
 		await relaunched.dispatch(.load).value
-		try await eventually { relaunched.selectedProfilePath == work }
+		#expect(relaunched.selectedProfilePath == work)
 		#expect(relaunched.scrapeErrors() == [])
 	}
 
