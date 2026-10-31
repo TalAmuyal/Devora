@@ -11,7 +11,7 @@ public enum Command: Sendable {
 	case loadWorkspaceStatuses(fresh: Bool)
 	/// Opens a tab with a login shell, outside any profile.
 	case openShell
-	/// Opens a tab on a workspace of the selected profile.
+	/// Opens a tab on a workspace, with the workspace's own profile: the selection may have moved on from the profile it was listed for.
 	case openWorkspace(Workspace)
 	case activateTab(id: UInt64)
 	/// Activates the tab after the active one, wrapping around to the first; `activatePreviousTab` goes the other way.
@@ -143,7 +143,7 @@ public final class Store {
 			apply(.openSession(
 				title: workspace.title.isEmpty ? workspace.id : workspace.title,
 				kind: .workspace(path: workspace.path),
-				profilePath: selectedProfilePath))
+				profilePath: workspace.profilePath))
 		case .activateTab(let id):
 			apply(.activateTab(tab: id))
 		case .activateNextTab:

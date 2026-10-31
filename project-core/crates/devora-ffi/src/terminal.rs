@@ -127,6 +127,43 @@ mod tests {
     }
 
     #[test]
+    fn a_workspace_opened_while_another_profile_is_active_takes_its_own_profiles_settings() {
+        let tmp = tempfile::tempdir().unwrap();
+        let profile = |name: &str, opus: &str| {
+            let root = tmp.path().join(name);
+            fs::create_dir_all(root.join("workspaces/ws-1")).unwrap();
+            fs::write(root.join("workspaces/ws-1/initialized"), "").unwrap();
+            fs::write(
+                root.join("config.json"),
+                format!(r#"{{"claude": {{"opus-model": "{opus}"}}}}"#),
+            )
+            .unwrap();
+            root.to_string_lossy().into_owned()
+        };
+        let work = profile("work", "opus-for-work");
+        let home = profile("home", "opus-for-home");
+        let core = core();
+        let listed = core.list_workspaces(work.clone()).unwrap();
+        core.dispatch(Command::SetActiveProfile {
+            profile_path: Some(home),
+        })
+        .unwrap();
+
+        let ws = &listed[0];
+        let pane = open(
+            &core,
+            SessionKind::Workspace {
+                path: ws.path.clone(),
+            },
+            Some(ws.profile_path.clone()),
+        );
+        let spec = core.terminal_spec(pane, None).unwrap();
+
+        assert_eq!(spec.env["ANTHROPIC_DEFAULT_OPUS_MODEL"], "opus-for-work");
+        assert_eq!(spec.env["DEBI_PROFILE_PATH"], work);
+    }
+
+    #[test]
     fn a_shell_tab_runs_a_bare_login_shell() {
         let core = core();
         let pane = open(&core, SessionKind::Shell, None);

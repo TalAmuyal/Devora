@@ -45,6 +45,9 @@ Each profile is a self-contained directory with the following structure:
 - `repos/` is where auto-discovered repositories live
 - `workspaces/` contains the worktrees Devora creates for your workspaces
 
+Each workspace belongs to the profile it lives in.
+A session opened on a workspace uses that profile's settings (Claude models and effort, default app, git shortcuts, and the profile `debi` commands run with), whichever profile is selected at the time.
+
 You can have multiple profiles.
 To select a profile (or manage them) go to the **Settings Hub**.
 That can be done from the Workspace Hub by pressing `P` (uppercase), the profile dropdown's "Manage Profiles…" item, or the burger (☰) menu's "Settings" item in the top-right corner.

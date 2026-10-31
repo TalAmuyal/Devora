@@ -108,7 +108,7 @@ type CategoryFilter = 'active' | 'inactive' | 'all';
 
 export class WorkspaceHub {
   private containerEl: HTMLElement;
-  private onOpenWorkspace: (path: string, title: string, repos: string[]) => void;
+  private onOpenWorkspace: (ws: WorkspaceInfo) => void;
   // Hand off a new task: the controller opens a tab + progress overlay and runs creation asynchronously.
   // `sourceWorkspacePath` is set when duplicating a session, else null.
   private onStartTaskCreation: (
@@ -156,7 +156,7 @@ export class WorkspaceHub {
   private burgerMenu: DropdownMenuHandle | null = null;
 
   constructor(
-    onOpenWorkspace: (path: string, title: string, repos: string[]) => void,
+    onOpenWorkspace: (ws: WorkspaceInfo) => void,
     onStartTaskCreation: (
       taskName: string,
       repoPaths: string[],
@@ -608,7 +608,7 @@ export class WorkspaceHub {
       case 'Enter':
         if (this.focusedCardIndex >= 0 && this.focusedCardIndex < filtered.length) {
           const ws = filtered[this.focusedCardIndex];
-          this.onOpenWorkspace(ws.path, ws.taskTitle, ws.repos);
+          this.onOpenWorkspace(ws);
         }
         return true;
       case 'n':
@@ -1129,7 +1129,7 @@ export class WorkspaceHub {
     openBtn.className = 'ws-open-btn';
     openBtn.textContent = 'Open';
     openBtn.addEventListener('click', () => {
-      this.onOpenWorkspace(ws.path, ws.taskTitle, ws.repos);
+      this.onOpenWorkspace(ws);
     });
     actionRow.appendChild(openBtn);
 
