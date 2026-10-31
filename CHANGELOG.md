@@ -16,6 +16,7 @@ Types of changes:
 
 ### Added
 
+- Codex `AGENTS.md` pointers alongside every `CLAUDE.md`, with a GitHub Actions check that requires each context file to have an adjacent pointer
 - The start of Devora Sapphire, the native macOS build (`project-sapphire/`): one window listing profiles and workspaces from the shared core and a libghostty login shell, built with `mise run -C project-sapphire build` over `devora-ffi`, the core's new UniFFI facade
 - Architecture decision records ADR-006 to ADR-010 for Project Sapphire, the planned native macOS build, and the shared Rust core it will share with Ember
 - `mise mac-install` accepts `-p/--path` to choose the install directory and `-s/--suffix` to install as `Devora-<suffix>.app`, with the suffix also shown in the window title and as the app name in the menu bar, Dock, and Cmd+Tab
