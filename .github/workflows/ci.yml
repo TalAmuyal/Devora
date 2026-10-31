@@ -115,7 +115,38 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+  # Decides whether the Sapphire job (the slowest, on a macOS runner) can be skipped: only on a pull request whose changed files all can't affect Sapphire (scripts/ci/sapphire-affected.sh); a push to master always runs it.
+  # A job skipped by its condition counts as passing for required checks.
+  sapphire-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      affected: ${{ steps.affected.outputs.affected }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Check the path classifier
+        run: scripts/ci/sapphire-affected.test.sh
+
+      - name: Classify the changed files
+        id: affected
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "$EVENT" = pull_request ] && changed=$(git diff --name-only "$BASE...$HEAD"); then
+            affected=$(printf '%s\n' "$changed" | scripts/ci/sapphire-affected.sh)
+          else
+            affected=true
+          fi
+          echo "affected=$affected" >> "$GITHUB_OUTPUT"
+          echo "Sapphire affected: $affected"
+
   sapphire:
+    needs: sapphire-changes
+    if: needs.sapphire-changes.outputs.affected == 'true'
     # macOS 27 with Xcode 27; GitHub names this generation's images after the Xcode major, so there is no macos-27 label.
     runs-on: xcode-27
     timeout-minutes: 60
