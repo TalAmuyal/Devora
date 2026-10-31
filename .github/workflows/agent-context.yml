@@ -1,0 +1,16 @@
+name: Agent context
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check-agent-context:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Check adjacent agent instructions
+        run: python3 scripts/check-agent-context.py
