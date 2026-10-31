@@ -89,9 +89,6 @@ final class TestBridge {
 				return .init(status: 200, body: [:])
 			case ("POST", "/test/errors/scrape"):
 				return .init(status: 200, body: ["errors": store.scrapeErrors()])
-			case ("POST", "/test/surface"):
-				openTestSurface()
-				return .init(status: 200, body: [:])
 			default:
 				return .init(status: 404, body: ["error": "no route \(request.method) \(request.path)"])
 			}
@@ -163,16 +160,40 @@ final class TestBridge {
 		if !surfaces.router.handle(KeyPress(event)) { window.sendEvent(event) }
 	}
 
-	/// A page over the whole window with nothing to focus, standing in for a window surface (a hub, the palette) until there is one; `q` or Escape closes it.
-	private func openTestSurface() {
-		surfaces.windowStack.push(pageLayer(LayerSpec(name: "test-surface") {
-			Rectangle().fill(.background).overlay { Text("Test surface") }
-		}))
+	private func hubState() -> Any {
+		guard let hub = surfaces.hub else { return NSNull() }
+		let focused = hub.focused
+		return [
+			"loading": !hub.loaded,
+			"category": hub.category.label,
+			"filter": hub.filter,
+			"filterFocused": surfaces.router.isEditingText,
+			"items": hub.items.map { ["id": $0.id, "title": $0.title, "dot": $0.dot(status: hub.status(of: $0)).rawValue] },
+			"focused": focused?.id ?? NSNull(),
+			"detail": focused.map { workspace -> [String: Any] in
+				let status = hub.status(of: workspace)
+				return [
+					"id": workspace.id,
+					"error": status?.error ?? NSNull(),
+					"repos": status.map { status in
+						status.repos.map {
+							["name": $0.name, "branch": $0.branch, "detached": $0.isDetached, "modified": $0.modified, "untracked": $0.untracked]
+						}
+					} ?? NSNull(),
+				]
+			} ?? NSNull(),
+			"toast": hub.toast ?? NSNull(),
+			"cheatsheet": surfaces.cheatsheet.map { scroll -> [String: Any] in
+				let geometry = scroll.geometry
+				return ["offset": geometry.offset, "contentHeight": geometry.contentHeight, "viewportHeight": geometry.viewportHeight]
+			} ?? NSNull(),
+		] as [String: Any]
 	}
 
 	private func state() -> [String: Any] {
 		let window = store.app.window
 		return [
+			"hub": hubState(),
 			"fontSize": TerminalRuntime.shared.fontSize,
 			"windowLayers": surfaces.windowStack.layers.map(\.spec.name),
 			"version": store.version,
@@ -223,7 +244,7 @@ final class TestBridge {
 	}
 }
 
-/// A key the bridge can press, by the name the harness uses: a letter or a digit, `Minus`, `Equal`, `Left`, `Right`, `Escape` or `Return`.
+/// A key the bridge can press, by the name the harness uses: a letter or a digit, `Minus`, `Equal`, `Slash`, `Space`, `Left`, `Right`, `Down`, `Up`, `Escape` or `Return`.
 private struct TestKey {
 	let keyCode: UInt16
 	/// What the key types unshifted, and with Shift (on a US layout).
@@ -238,8 +259,12 @@ private struct TestKey {
 			"Equal": TestKey(keyCode: KeyCode.equal, plain: "=", shifted: "+"),
 			"Left": TestKey(keyCode: KeyCode.leftArrow, plain: "\u{F702}", shifted: "\u{F702}", isArrow: true),
 			"Right": TestKey(keyCode: KeyCode.rightArrow, plain: "\u{F703}", shifted: "\u{F703}", isArrow: true),
+			"Down": TestKey(keyCode: KeyCode.downArrow, plain: "\u{F701}", shifted: "\u{F701}", isArrow: true),
+			"Up": TestKey(keyCode: KeyCode.upArrow, plain: "\u{F700}", shifted: "\u{F700}", isArrow: true),
 			"Escape": TestKey(keyCode: KeyCode.escape, plain: "\u{1B}", shifted: "\u{1B}"),
-			"Return": TestKey(keyCode: 0x24, plain: "\r", shifted: "\r"),
+			"Return": TestKey(keyCode: KeyCode.returnKey, plain: "\r", shifted: "\r"),
+			"Space": TestKey(keyCode: 0x31, plain: " ", shifted: " "),
+			"Slash": TestKey(keyCode: 0x2C, plain: "/", shifted: "?"),
 		]
 		// kVK_ANSI_* codes follow the keyboard's physical layout, not the alphabet.
 		let letters: [Character: UInt16] = [

@@ -45,14 +45,21 @@ public struct KeyModifiers: OptionSet, Sendable, Hashable {
 /// The physical keys Sapphire's own chords and the layers use (`kVK_*` from Carbon's `Events.h`).
 public enum KeyCode {
 	public static let s: UInt16 = 0x01
+	public static let d: UInt16 = 0x02
+	public static let u: UInt16 = 0x20
 	public static let digit1: UInt16 = 0x12
 	public static let digit2: UInt16 = 0x13
 	public static let digit3: UInt16 = 0x14
 	public static let equal: UInt16 = 0x18
 	public static let minus: UInt16 = 0x1B
+	public static let returnKey: UInt16 = 0x24
+	public static let tab: UInt16 = 0x30
 	public static let escape: UInt16 = 0x35
 	public static let keypadPlus: UInt16 = 0x45
+	public static let keypadEnter: UInt16 = 0x4C
 	public static let keypadMinus: UInt16 = 0x4E
 	public static let leftArrow: UInt16 = 0x7B
 	public static let rightArrow: UInt16 = 0x7C
+	public static let downArrow: UInt16 = 0x7D
+	public static let upArrow: UInt16 = 0x7E
 }

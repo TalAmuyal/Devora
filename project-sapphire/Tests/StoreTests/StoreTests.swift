@@ -94,6 +94,40 @@ struct StoreTests {
 		#expect(store.workspaces.map(\.title) == ["Home task"])
 	}
 
+	@Test func loadsEachWorkspacesStatusAndOneThatCantBeReadIsInvalidWithoutABanner() async throws {
+		let fixture = try Fixture()
+		let work = try fixture.makeProfile("work")
+		try fixture.makeWorkspace(profile: work, id: "ws-1", title: "Readable")
+		try fixture.makeWorkspace(profile: work, id: "ws-2", title: "Unreadable")
+		let api = "\(work)/workspaces/ws-1/api"
+		let web = "\(work)/workspaces/ws-2/web"
+		for repo in [api, web] {
+			try FileManager.default.createDirectory(atPath: repo, withIntermediateDirectories: true)
+		}
+		let initialize = try Process.run(URL(filePath: "/usr/bin/git"), arguments: ["init", "-q", api])
+		initialize.waitUntilExit()
+		try Data().write(to: URL(filePath: "\(api)/new.txt"))
+		try fixture.registerProfiles([work])
+		let store = Store(configPath: fixture.configPath, state: .inMemory, log: try fixture.log())
+		await store.dispatch(.load).value
+		// Gone between the listing and the status, as when a repo is removed under the hub.
+		try FileManager.default.removeItem(atPath: web)
+
+		store.dispatch(.loadWorkspaceStatuses(fresh: false))
+		try await eventually { store.workspaceStatuses.count == 2 }
+
+		let readable = try #require(store.workspaceStatuses["\(work)/workspaces/ws-1"])
+		#expect(readable.error == nil)
+		#expect(readable.repos.map { "\($0.name) +\($0.untracked)" } == ["api +1"])
+		let unreadable = try #require(store.workspaceStatuses["\(work)/workspaces/ws-2"])
+		#expect(unreadable.error?.contains("web") == true)
+		#expect(store.scrapeErrors() == [])
+
+		store.dispatch(.loadWorkspaceStatuses(fresh: true))
+		#expect(store.workspaceStatuses.isEmpty, "a fresh load drops the statuses it is replacing")
+		try await eventually { store.workspaceStatuses.count == 2 }
+	}
+
 	@Test func aFailingCoreCallIsShownOnABannerAndLogged() async throws {
 		let fixture = try Fixture()
 		try fixture.writeConfig("{not json")

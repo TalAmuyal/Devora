@@ -28,6 +28,6 @@ let package = Package(
 		.testTarget(name: "StoreTests", dependencies: ["Store", "CoreBindings"]),
 		.testTarget(name: "TerminalKitTests", dependencies: ["TerminalKit"]),
 		.testTarget(name: "LayersTests", dependencies: ["Layers"]),
-		.testTarget(name: "AppShellTests", dependencies: ["AppShell", "Layers"]),
+		.testTarget(name: "AppShellTests", dependencies: ["AppShell", "Layers", "Store", "CoreBindings"]),
 	]
 )

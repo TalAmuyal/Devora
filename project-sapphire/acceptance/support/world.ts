@@ -27,6 +27,8 @@ export class SapphireWorld extends World {
   fixtureRoot?: string;
   /** The profile the latest fixture step created. */
   profilePath?: string;
+  /** The profiles the fixture steps registered in the config, in order. */
+  profilePaths: string[] = [];
 
   /** Launches the app on the scenario's config and state; it becomes the app the steps drive. */
   async launch(): Promise<void> {

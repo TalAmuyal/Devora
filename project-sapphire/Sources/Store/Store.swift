@@ -7,6 +7,8 @@ public enum Command: Sendable {
 	/// Loads the version and the profiles, then the workspaces of the selected (or first) profile.
 	case load
 	case selectProfile(path: String)
+	/// Loads the status of each workspace that has none yet, a few workspaces at a time, each kept as it arrives; `fresh` drops the statuses already loaded first.
+	case loadWorkspaceStatuses(fresh: Bool)
 	/// Opens a tab with a login shell, outside any profile.
 	case openShell
 	/// Opens a tab on a workspace of the selected profile.
@@ -52,6 +54,8 @@ public final class Store {
 	public private(set) var profiles: [Profile] = []
 	public private(set) var selectedProfilePath: String?
 	public private(set) var workspaces: [Workspace] = []
+	/// The statuses loaded so far, by workspace path; a workspace without one is still loading.
+	public private(set) var workspaceStatuses: [String: WorkspaceStatus] = [:]
 	/// The core-owned app state (tabs and their sessions), folded from the core's events.
 	public private(set) var app = AppState.empty
 	public private(set) var startupProblem: StartupProblem?
@@ -66,6 +70,9 @@ public final class Store {
 	@ObservationIgnored private let inbox = Inbox()
 	@ObservationIgnored private var stateEvents: Task<Void, Never>?
 	@ObservationIgnored private var reportedErrors: Task<Void, Never>?
+	/// Bumped whenever the statuses are dropped, so that the loads started before can't store theirs.
+	@ObservationIgnored private var statusGeneration = 0
+	@ObservationIgnored private var statusesLoading: Set<String> = []
 	/// Every error shown since the last `scrapeErrors()`, for the acceptance tests, as Ember records them.
 	@ObservationIgnored private var recordedErrors: [String] = []
 
@@ -105,8 +112,15 @@ public final class Store {
 	@discardableResult
 	public func dispatch(_ command: Command) -> Task<Void, Never> {
 		switch command {
-		case .load, .selectProfile:
-			return Task { await perform(command) }
+		case .load:
+			return Task { await load() }
+		case .selectProfile(let path):
+			return Task {
+				guard let core else { return }
+				await select(path, core: core)
+			}
+		case .loadWorkspaceStatuses(let fresh):
+			loadWorkspaceStatuses(fresh: fresh)
 		case .openShell:
 			apply(Self.openShell)
 		case .openShellIfNoTabs:
@@ -227,34 +241,85 @@ public final class Store {
 		for message in messages { banner(message) }
 	}
 
-	private func perform(_ command: Command) async {
-		guard let core else { return }
-		switch command {
-		case .load:
-			guard let version = try? await call("version", { try core.version() }),
-			      let profiles = try? await call("list_profiles", { try core.listProfiles() })
-			else { return }
-			self.version = version
-			self.profiles = profiles
-			let selected = profiles.first { $0.path == selectedProfilePath } ?? profiles.first
-			await select(selected?.path, core: core)
-		case .selectProfile(let path):
-			await select(path, core: core)
-		default:
-			return
-		}
+	/// Loads the version and the profiles, then the workspaces of the selected (or first) profile; returns whether every call succeeded.
+	@discardableResult
+	public func load() async -> Bool {
+		guard let core,
+		      let version = try? await call("version", { try core.version() }),
+		      let profiles = try? await call("list_profiles", { try core.listProfiles() })
+		else { return false }
+		self.version = version
+		self.profiles = profiles
+		let selected = profiles.first { $0.path == selectedProfilePath } ?? profiles.first
+		return await select(selected?.path, core: core)
 	}
 
-	private func select(_ path: String?, core: DevoraCore) async {
+	@discardableResult
+	private func select(_ path: String?, core: DevoraCore) async -> Bool {
+		if path != selectedProfilePath { dropWorkspaceStatuses() }
 		selectedProfilePath = path
 		guard let path else {
 			workspaces = []
-			return
+			return true
 		}
 		let list = try? await call("list_workspaces") { try core.listWorkspaces(profilePath: path) }
 		// A later selection wins over a slower, earlier one.
-		guard selectedProfilePath == path else { return }
+		guard selectedProfilePath == path else { return false }
 		workspaces = list ?? []
+		return list != nil
+	}
+
+	private func dropWorkspaceStatuses() {
+		workspaceStatuses = [:]
+		statusesLoading = []
+		statusGeneration += 1
+	}
+
+	private nonisolated static let concurrentStatusLoads = 4
+
+	/// Each workspace's repos are read in parallel, so taking a few workspaces at a time bounds the processes, as Ember's single batch does.
+	private func loadWorkspaceStatuses(fresh: Bool) {
+		guard let core else { return }
+		if fresh { dropWorkspaceStatuses() }
+		// The active ones first, since the hub opens on them.
+		let pending = (workspaces.filter(\.active) + workspaces.filter { !$0.active })
+			.filter { workspaceStatuses[$0.path] == nil && !statusesLoading.contains($0.path) }
+		guard !pending.isEmpty else { return }
+		statusesLoading.formUnion(pending.map(\.path))
+		let generation = statusGeneration
+		let requests = pending.map { StatusRequest(path: $0.path, repos: $0.repos) }
+		Task.detached { [weak self] in
+			await withTaskGroup(of: (String, Result<WorkspaceStatus, any Error>).self) { group in
+				var next = requests.makeIterator()
+				func start(_ request: StatusRequest) {
+					group.addTask {
+						(request.path, Result { try core.workspaceStatus(workspacePath: request.path, repoNames: request.repos) })
+					}
+				}
+				for _ in 0..<Self.concurrentStatusLoads {
+					guard let request = next.next() else { break }
+					start(request)
+				}
+				for await (path, result) in group {
+					guard let self, await self.statusArrived(path: path, result: result, generation: generation) else { return }
+					if let request = next.next() { start(request) }
+				}
+			}
+		}
+	}
+
+	/// Keeps a workspace's status; returns false once its load was superseded, so that it starts no more.
+	private func statusArrived(path: String, result: Result<WorkspaceStatus, any Error>, generation: Int) -> Bool {
+		guard generation == statusGeneration else { return false }
+		statusesLoading.remove(path)
+		switch result {
+		case .success(let status):
+			workspaceStatuses[path] = status
+		case .failure(let error):
+			showError("workspace_status failed: \(Self.describe(error))")
+			workspaceStatuses[path] = WorkspaceStatus(repos: [], error: Self.describe(error))
+		}
+		return true
 	}
 
 	/// A core call, whose failure is shown as `<name> failed: <error>`, then rethrown for the caller's flow.
@@ -286,6 +351,11 @@ public final class Store {
 		case nil: String(describing: error)
 		}
 	}
+}
+
+private struct StatusRequest: Sendable {
+	let path: String
+	let repos: [String]
 }
 
 /// Events buffered off the main actor until the next fold.

@@ -20,10 +20,6 @@ Given('the task.json of workspace {string} is malformed', function (this: Sapphi
   fs.writeFileSync(taskPath, '{not json');
 });
 
-When('the workspaces are reloaded', async function (this: SapphireWorld) {
-  await this.bridge.dispatch({ command: 'load' });
-});
-
 function bannerContaining(state: AppState, text: string) {
   return state.errorBanners.find((banner) => banner.message.includes(text));
 }

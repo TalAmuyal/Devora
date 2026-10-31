@@ -93,6 +93,36 @@ impl From<workspace::WorkspaceInfo> for Workspace {
     }
 }
 
+#[derive(Debug, PartialEq, uniffi::Record)]
+pub struct RepoStatus {
+    pub name: String,
+    /// The branch, or the short commit hash when the HEAD is detached.
+    pub branch: String,
+    pub is_detached: bool,
+    pub modified: u32,
+    pub untracked: u32,
+}
+
+impl From<workspace::RepoStatus> for RepoStatus {
+    fn from(status: workspace::RepoStatus) -> Self {
+        RepoStatus {
+            name: status.name,
+            branch: status.branch,
+            is_detached: status.is_detached,
+            modified: u32::try_from(status.modified).unwrap_or(u32::MAX),
+            untracked: u32::try_from(status.untracked).unwrap_or(u32::MAX),
+        }
+    }
+}
+
+/// A workspace's repos as git sees them; a workspace whose status couldn't be read is invalid, which doesn't fail the call.
+#[derive(Debug, PartialEq, uniffi::Record)]
+pub struct WorkspaceStatus {
+    /// Sorted by name; empty when `error` is set.
+    pub repos: Vec<RepoStatus>,
+    pub error: Option<String>,
+}
+
 #[derive(uniffi::Object)]
 pub struct DevoraCore {
     config_path: PathBuf,
@@ -146,6 +176,32 @@ impl DevoraCore {
             self.log.report(warning);
         }
         Ok(workspaces?.into_iter().map(Workspace::from).collect())
+    }
+
+    /// Runs `git status` in each of the workspace's repos, at most five at once, as Ember's `get_all_workspace_statuses` does.
+    /// It takes one workspace, so that a UI can show each workspace's status as it arrives.
+    pub fn workspace_status(
+        &self,
+        workspace_path: String,
+        repo_names: Vec<String>,
+    ) -> Result<WorkspaceStatus, CoreError> {
+        let mut warnings = Vec::new();
+        let input = workspace::WorkspaceStatusInput {
+            workspace_path,
+            repo_names,
+        };
+        let result = workspace::get_all_workspace_statuses(vec![input], &mut warnings);
+        for warning in &warnings {
+            self.log.report(warning);
+        }
+        let status = result?
+            .workspace_statuses
+            .pop()
+            .ok_or_else(|| "no status for the workspace".to_string())?;
+        Ok(WorkspaceStatus {
+            repos: status.statuses.into_iter().map(RepoStatus::from).collect(),
+            error: status.error,
+        })
     }
 
     /// The theme file's colors, keyed by the CSS custom property names the UIs share.
@@ -263,6 +319,63 @@ mod tests {
         let reported = block_on(log.errors().unwrap().next_batch(10)).unwrap();
         assert_eq!(reported.len(), 1, "{reported:?}");
         assert!(reported[0].contains("failed to parse"), "{reported:?}");
+    }
+
+    fn git(dir: &Path, args: &[&str]) {
+        let status = std::process::Command::new("git")
+            .args(["-c", "user.name=t", "-c", "user.email=t@t"])
+            .args(args)
+            .current_dir(dir)
+            .status()
+            .unwrap();
+        assert!(status.success(), "git {args:?}");
+    }
+
+    #[test]
+    fn reads_each_repos_branch_and_changes_sorted_by_name() {
+        let tmp = tempfile::tempdir().unwrap();
+        let ws = tmp.path().join("ws-1");
+        for repo in ["beta", "alpha"] {
+            let dir = ws.join(repo);
+            fs::create_dir_all(&dir).unwrap();
+            git(&dir, &["init", "-q", "-b", "main"]);
+            git(&dir, &["commit", "-q", "--allow-empty", "-m", "init"]);
+        }
+        git(&ws.join("beta"), &["checkout", "-q", "--detach"]);
+        fs::write(ws.join("alpha").join("new.txt"), "").unwrap();
+        let core = core_with_config(tmp.path(), "{}");
+
+        let status = core
+            .workspace_status(
+                ws.to_string_lossy().into_owned(),
+                vec!["beta".into(), "alpha".into()],
+            )
+            .unwrap();
+
+        assert_eq!(status.error, None);
+        let summary: Vec<_> = status
+            .repos
+            .iter()
+            .map(|r| (r.name.as_str(), r.is_detached, r.modified, r.untracked))
+            .collect();
+        assert_eq!(summary, vec![("alpha", false, 0, 1), ("beta", true, 0, 0)]);
+        assert_eq!(status.repos[0].branch, "main");
+        assert!(!status.repos[1].branch.is_empty());
+    }
+
+    #[test]
+    fn a_repo_that_is_gone_makes_the_workspace_invalid_rather_than_failing_the_call() {
+        let tmp = tempfile::tempdir().unwrap();
+        let ws = tmp.path().join("ws-1");
+        fs::create_dir_all(&ws).unwrap();
+        let core = core_with_config(tmp.path(), "{}");
+
+        let status = core
+            .workspace_status(ws.to_string_lossy().into_owned(), vec!["gone".into()])
+            .unwrap();
+
+        assert_eq!(status.repos, vec![]);
+        assert!(status.error.is_some_and(|e| e.contains("gone")));
     }
 
     #[test]

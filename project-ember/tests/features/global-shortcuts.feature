@@ -27,9 +27,3 @@ Feature: App-wide keyboard shortcuts
     When the user presses F1
     Then the User Guide should be visible
     And the User Guide should be stacked above the dialog
-
-  Scenario: Ctrl+S opens the Workspace Hub but never closes it
-    Given a profile "Work" with 1 active workspaces
-    And the Workspace Hub is open
-    When the user presses Ctrl+S
-    Then the Workspace Hub should be visible

@@ -13,12 +13,18 @@ import TerminalKit
 final class Surfaces {
 	@ObservationIgnored private(set) var router: LayerRouter!
 	private(set) var tabStacks: [UInt64: LayerStack] = [:]
+	/// The open Workspace Hub's model; nil while it is closed.
+	@ObservationIgnored private(set) var hub: WorkspaceHubModel?
+	/// The open cheatsheet's scrolling; nil while it is closed.
+	@ObservationIgnored private(set) var cheatsheet: VimScroll?
 	@ObservationIgnored private let store: Store
 
 	init(store: Store) {
 		self.store = store
 		router = LayerRouter { [unowned self] in store.app.window.activeTab.flatMap { tabStacks[$0] } }
-		router.shortcuts = AppShortcuts(store: store, windowStack: router.windowStack).handle
+		router.shortcuts = AppShortcuts(store: store, windowStack: router.windowStack) { [unowned self] in
+			openWorkspaceHub()
+		}.handle
 	}
 
 	var windowStack: LayerStack { router.windowStack }
@@ -34,6 +40,50 @@ final class Surfaces {
 			let id = tab.id
 			tabStacks[id] = router.makeTabStack { [store] in store.app.window.activeTab == id }
 		}
+	}
+
+	/// Opens the Workspace Hub over the window and loads it; it is a page, so a page closing over it reloads it.
+	func openWorkspaceHub() {
+		guard windowStack.find(WorkspaceHubModel.layerName) == nil else { return }
+		let router = router!
+		let model = WorkspaceHubModel(
+			store: store, isEditingText: { router.isEditingText }, clearFocus: { router.clearFocus() })
+		var spec = pageLayer(LayerSpec(name: WorkspaceHubModel.layerName) { WorkspaceHubView(model: model) })
+		spec.onKey = model.handleKey
+		spec.onReveal = model.reload
+		spec.onCleanup = { [unowned self] in
+			model.close()
+			if hub === model { hub = nil }
+		}
+		let handle = windowStack.push(spec)
+		// Opening a workspace closes the hub without asking it, as Ember's `dismissWsHub` does.
+		model.openWorkspace = { [unowned self, store] workspace in
+			windowStack.remove(handle)
+			store.dispatch(.openWorkspace(workspace))
+		}
+		model.showCheatsheet = { [unowned self] in openCheatsheet() }
+		hub = model
+		model.load()
+	}
+
+	/// The hub's shortcuts on a page of their own; `?` closes it as it opened it, and the hub's keys reach nothing meanwhile.
+	private func openCheatsheet() {
+		guard windowStack.find(Cheatsheet.layerName) == nil else { return }
+		let scroll = VimScroll()
+		var spec = pageLayer(LayerSpec(name: Cheatsheet.layerName) { Cheatsheet(scroll: scroll) })
+		var handle: LayerHandle?
+		spec.onKey = { [unowned self] key in
+			if key.characters == "?", key.modifiers.isDisjoint(with: [.control, .option, .command]) {
+				if let handle { windowStack.remove(handle) }
+				return true
+			}
+			return scroll.handle(key) || key.isUnusedOnAPage
+		}
+		spec.onCleanup = { [unowned self] in
+			if cheatsheet === scroll { cheatsheet = nil }
+		}
+		handle = windowStack.push(spec)
+		cheatsheet = scroll
 	}
 
 	/// Puts a tab's terminal at the bottom of its stack, once the terminal runs.

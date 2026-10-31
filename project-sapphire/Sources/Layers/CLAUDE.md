@@ -5,7 +5,7 @@ The contract is Ember's ([`project-ember/src/ui/layers/CLAUDE.md`](../../../proj
 
 ## Topology: n + 1 stacks
 
-- **The window stack** (`LayerRouter.windowStack`), drawn by a `LayerHost` overlaid on the whole window (sidebar included): hubs, the Command Palette, the User Guide, dialogs.
+- **The window stack** (`LayerRouter.windowStack`), drawn by a `LayerHost` overlaid on the whole window (the tab bar included): hubs, the Command Palette, the User Guide, dialogs.
 - **One stack per tab** (`Surfaces.tabStacks` in `AppShell`), made when the tab enters the core's state and cleared when it leaves; its bottom layer is the tab's terminal, pushed once the terminal runs, so a tab's stack is empty until then.
 
 A surface covers the window iff it is in the window stack; the presets declare behavior, never extent.
@@ -31,7 +31,7 @@ A focused text field or text view (the window's first responder is an `NSTextVie
 | Shortcut | Available |
 |---|---|
 | Font size: `Ctrl+1/2/3` (12/15/26), `Ctrl+=` (15), `Ctrl+Shift+=`/`-` (±2, within 8–40) | Always |
-| `Ctrl+Shift+S` (new shell) | When no opaque layer is in the window stack |
+| `Ctrl+S` (open the Workspace Hub; never closes it), `Ctrl+Shift+S` (new shell) | When no opaque layer is in the window stack |
 | `Ctrl+←/→` (switch tab, wrapping), `Ctrl+Shift+←/→` (move the active tab, not wrapping) | When no opaque layer is in the window stack |
 
 An unavailable shortcut is still consumed, so it reaches neither the surface nor a terminal.
@@ -41,9 +41,10 @@ Option and Command chords are never shortcuts, where Ember's font-size keys igno
 ## How later surfaces plug in
 
 - A hub, the guide or the palette: push `pageLayer(LayerSpec(...))` on `windowStack`, with `focus` set to what should take the keyboard; with no `focus`, the window's first responder is cleared, so keys reach no view.
+	The Workspace Hub (`Surfaces.openWorkspaceHub`) is the first: it has no `focus`, handles its keys in `onKey`, and consumes the plain keys it doesn't use, which would otherwise reach no view and beep.
 - A dialog: `modalLayer`, pushed on the window stack; Ember's modal also traps Tab within the dialog, which comes with the first dialog.
 - A dropdown: `popupLayer`, which takes no focus and passes on the keys it doesn't claim.
-- `Ctrl+S` (Workspace Hub) and `F1` (User Guide) are key-downs: new `AppShortcut` cases, matched before any layer like the others.
+- `F1` (User Guide) is a key-down: a new `AppShortcut` case, matched before any layer like `Ctrl+S` (Workspace Hub).
 - Shift-Shift (Command Palette) arrives as `.flagsChanged` events, not key-downs: its tracking needs a monitor of its own in `AppShortcuts`, while every key-down already reaches `AppShortcuts.handle` first, which is where a pending tap is reset.
 
 ## Where things live

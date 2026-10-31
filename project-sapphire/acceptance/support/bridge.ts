@@ -12,7 +12,29 @@ export interface TabState {
   layers: string[];
 }
 
+/** The open Workspace Hub; `items` is the list as it shows, filters applied. */
+export interface HubState {
+  /** Until the first load is done, the list shows its placeholder. */
+  loading: boolean;
+  category: 'Active' | 'Inactive' | 'All';
+  filter: string;
+  /** Whether a text field (the filter) has the keyboard focus. */
+  filterFocused: boolean;
+  items: { id: string; title: string; dot: 'clean' | 'modified' | 'pending' | 'error' }[];
+  focused: string | null;
+  /** The focused workspace's detail panel; `repos` is null while its status loads. */
+  detail: {
+    id: string;
+    error: string | null;
+    repos: { name: string; branch: string; detached: boolean; modified: number; untracked: number }[] | null;
+  } | null;
+  toast: string | null;
+  /** The cheatsheet's scroll view, while it is open. */
+  cheatsheet: { offset: number; contentHeight: number; viewportHeight: number } | null;
+}
+
 export interface AppState {
+  hub: HubState | null;
   version: string;
   profiles: { name: string; path: string }[];
   selectedProfile: string | null;
@@ -89,7 +111,7 @@ export class Bridge {
 
   /**
    * Presses a key: the app makes the key-down AppKit would and sends it through its key router, then, unless the router consumes it, to the window's first responder.
-   * `key` is a letter, a digit, `Minus`, `Equal`, `Left`, `Right`, `Escape` or `Return`.
+   * `key` is a letter, a digit, `Minus`, `Equal`, `Slash`, `Space`, `Left`, `Right`, `Down`, `Up`, `Escape` or `Return`.
    */
   async press(key: string, modifiers: Modifier[] = []): Promise<void> {
     await this.request('POST', '/test/key', { key, modifiers });
@@ -98,11 +120,6 @@ export class Bridge {
   /** The errors shown since the last scrape, which it clears, as Ember's `__scrapeErrors`. */
   async scrapeErrors(): Promise<string[]> {
     return (await this.request('POST', '/test/errors/scrape')).errors;
-  }
-
-  /** Opens a stand-in window surface: a page over the whole window, with nothing to focus, that `q` or Escape closes. */
-  async openTestSurface(): Promise<void> {
-    await this.request('POST', '/test/surface');
   }
 
   /** Polls `read` until `done` accepts its value; a `BridgeError` (e.g. a terminal that isn't running yet) counts as not done. */
