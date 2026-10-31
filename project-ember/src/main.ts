@@ -12,7 +12,7 @@ import { showCloneRepoDialog } from './ui/components/CloneRepoDialog';
 import { TaskCreationProgressHandle } from './ui/components/TaskCreationProgress';
 import { WorkspaceHub, createWsHubCheatsheet } from './workspace/WorkspaceHub';
 import { TaskCreationController } from './workspace/TaskCreationController';
-import { CreationEvent, RepoInfo } from './workspace/types';
+import { CreationEvent, RepoInfo, WorkspaceInfo } from './workspace/types';
 import { SettingsHub, SettingsHubView } from './workspace/SettingsHub';
 import { initWindowLayerStack } from './ui/layers/stack';
 import { LayerRouter } from './ui/layers/LayerRouter';
@@ -77,12 +77,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (hub) layers.remove(hub);
   };
 
-  const openWorkspace = async (wsPath: string, title: string, repos: string[], profilePath?: string) => {
+  // The session takes the workspace's own profile: the hub may already show another profile while its list is still the previous one's.
+  const openWorkspace = async (ws: WorkspaceInfo) => {
     dismissWsHub();
 
-    const target = { kind: 'workspace', path: wsPath, repos } as const;
+    const target = { kind: 'workspace', path: ws.path, repos: ws.repos } as const;
     try {
-      await sessionManager.createSession(title, target, wsPath, profilePath ?? null);
+      await sessionManager.createSession(ws.taskTitle, target, ws.path, ws.profilePath);
     } catch (e) {
       showError(`Failed to create session: ${e}`);
     }
@@ -247,7 +248,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   };
 
   const wsHub = new WorkspaceHub(
-    (path, title, repos) => openWorkspace(path, title, repos, wsHub.getActiveProfilePath()),
+    openWorkspace,
     startTaskCreation,
     (view) => openSettingsHub(view),
     cloneRepoIntoProfile,

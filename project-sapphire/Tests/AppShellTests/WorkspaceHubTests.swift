@@ -6,7 +6,7 @@ import Store
 import Testing
 
 private func workspace(_ id: String, title: String = "", repos: [String] = [], active: Bool = true) -> Workspace {
-	Workspace(id: id, path: "/profile/workspaces/\(id)", title: title, repos: repos, active: active)
+	Workspace(id: id, path: "/profile/workspaces/\(id)", profilePath: "/profile", title: title, repos: repos, active: active)
 }
 
 private func repo(_ name: String, modified: UInt32 = 0, untracked: UInt32 = 0) -> RepoStatus {
