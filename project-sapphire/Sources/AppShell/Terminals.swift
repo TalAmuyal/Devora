@@ -71,7 +71,7 @@ struct TabContent: View {
 			if window.tabs.isEmpty {
 				ContentUnavailableView(
 					"No Tabs", systemImage: "terminal",
-					description: Text("Open a shell with + or a workspace from the sidebar."))
+					description: Text("Open a shell with + or a workspace from the Workspace Hub (Ctrl+S)."))
 			}
 			ForEach(window.tabs, id: \.terminalID) { tab in
 				let isActive = tab.id == window.activeTab

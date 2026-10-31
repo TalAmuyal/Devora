@@ -28,6 +28,7 @@ Types of changes:
 - Devora Sapphire restores its tabs and the active tab after a quit, a crash or a `kill -9`, starting a fresh terminal in each; it keeps them in `~/Library/Application Support/Devora Sapphire/state.db` (per install suffix), tells a second instance that the state is in use, and offers to quit or start fresh (keeping the old state aside) when the state can't be opened; closing its window now quits it
 - Devora Sapphire routes keys through Ember's layer system (ADR-003) and has Ember's tab and font-size shortcuts: `Ctrl+←/→` switch tabs, `Ctrl+Shift+←/→` move the active tab, `Ctrl+Shift+S` opens a shell, and `Ctrl+1/2/3`, `Ctrl+=` and `Ctrl+Shift+=`/`-` set the terminals' font size (now 15 by default, as in Ember)
 - Devora Sapphire reports errors as Ember does (ADR-002): dismissible error banners above everything, with identical messages merged (×N), for every failing core call and every error the core reports, and a log file at `/tmp/devora-sapphire-<timestamp>.log` (its path printed to stderr) that also gets Rust panics
+- Devora Sapphire has the Workspace Hub (`Ctrl+S`) in place of its sidebar: the profile's workspaces with their status dots, the Active/Inactive/All categories (`1`/`2`/`3`), a filter (`f`), Vim navigation, a detail panel whose per-repo statuses load progressively, opening a workspace in a new tab (`Enter`), refresh (`R`) and the shortcut cheatsheet (`?`); the core gains `workspace_status`, one workspace's repo statuses
 
 ### Changed
 

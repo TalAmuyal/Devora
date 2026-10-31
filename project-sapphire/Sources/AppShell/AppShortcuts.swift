@@ -11,6 +11,7 @@ enum AppShortcut: Equatable {
 	case moveTabBackward
 	case moveTabForward
 	case newShell
+	case openWorkspaceHub
 
 	/// The shortcut a key-down is, if any; matched on the physical key, since Control turns the characters into control codes.
 	/// Command and Option chords are never shortcuts, so they reach the menu and the terminal unchanged.
@@ -24,6 +25,7 @@ enum AppShortcut: Equatable {
 		case (KeyCode.leftArrow, true): self = .moveTabBackward
 		case (KeyCode.rightArrow, true): self = .moveTabForward
 		case (KeyCode.s, true): self = .newShell
+		case (KeyCode.s, false): self = .openWorkspaceHub
 		case (KeyCode.equal, true), (KeyCode.keypadPlus, true): self = .changeFontSize(by: 2)
 		case (KeyCode.minus, true), (KeyCode.keypadMinus, true): self = .changeFontSize(by: -2)
 		case (KeyCode.equal, false), (KeyCode.digit2, false): self = .setFontSize(reset)
@@ -37,7 +39,7 @@ enum AppShortcut: Equatable {
 	var needsNoWindowSurface: Bool {
 		switch self {
 		case .setFontSize, .changeFontSize: false
-		case .previousTab, .nextTab, .moveTabBackward, .moveTabForward, .newShell: true
+		case .previousTab, .nextTab, .moveTabBackward, .moveTabForward, .newShell, .openWorkspaceHub: true
 		}
 	}
 }
@@ -49,6 +51,7 @@ struct AppShortcuts {
 
 	let store: Store
 	let windowStack: LayerStack
+	let openWorkspaceHub: () -> Void
 
 	/// Returns whether the key was a shortcut, which consumes it even when unavailable: a deliberate no-op, so the key reaches neither the surface that made it unavailable nor a terminal.
 	func handle(_ key: KeyPress) -> Bool {
@@ -70,6 +73,7 @@ struct AppShortcuts {
 		case .moveTabBackward: store.dispatch(.moveActiveTabBackward)
 		case .moveTabForward: store.dispatch(.moveActiveTabForward)
 		case .newShell: store.dispatch(.openShell)
+		case .openWorkspaceHub: openWorkspaceHub()
 		}
 	}
 }

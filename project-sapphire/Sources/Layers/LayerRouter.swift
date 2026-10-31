@@ -57,6 +57,14 @@ public final class LayerRouter {
 		if activeTabStack()?.focusTop() != true { focus.clear() }
 	}
 
+	/// Whether a text field or text view has the focus, which keeps `q` and Escape from dismissing.
+	public var isEditingText: Bool { focus.isEditingText() }
+
+	/// Takes the focus away from whatever has it, e.g. a text field that Escape leaves.
+	public func clearFocus() {
+		focus.clear()
+	}
+
 	/// Routes every key-down meant for `window` through `handle` before AppKit dispatches it, so neither the menu, the first responder nor libghostty sees a consumed key.
 	public func install(in window: NSWindow) {
 		uninstall()

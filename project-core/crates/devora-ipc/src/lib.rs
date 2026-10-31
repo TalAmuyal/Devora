@@ -106,7 +106,11 @@ async fn handle(
                 Err(message) => error_response(StatusCode::INTERNAL_SERVER_ERROR, &message),
             })
         }
-        _ => Ok(error_response(StatusCode::NOT_FOUND, "not found")),
+        _ => {
+            // Read the body even so: closing the connection with it unread makes the kernel reset it, which can discard the response before the client reads it.
+            let _ = body.collect().await;
+            Ok(error_response(StatusCode::NOT_FOUND, "not found"))
+        }
     }
 }
 

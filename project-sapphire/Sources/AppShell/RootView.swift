@@ -5,7 +5,7 @@ import Store
 import SwiftUI
 import TerminalKit
 
-/// The window's content: profiles and workspaces in the sidebar; the active tab's terminal over the tab bar in the main area.
+/// The window's content: the active tab's terminal over the tab bar, under the window's surfaces (the Workspace Hub).
 public struct RootView: View {
 	@State private var store: Store
 	@State private var terminals = Terminals()
@@ -33,14 +33,9 @@ public struct RootView: View {
 			if let problem = store.startupProblem {
 				StartupProblemView(problem: problem, store: store)
 			} else {
-				NavigationSplitView {
-					Sidebar(store: store)
-						.navigationSplitViewColumnWidth(min: 220, ideal: 260)
-				} detail: {
-					VStack(spacing: 0) {
-						TabContent(store: store, terminals: terminals, surfaces: surfaces)
-						TabBar(store: store)
-					}
+				VStack(spacing: 0) {
+					TabContent(store: store, terminals: terminals, surfaces: surfaces)
+					TabBar(store: store)
 				}
 				.overlay { LayerHost(stack: surfaces.windowStack) }
 				.background(KeyRouterInstaller(router: surfaces.router))
@@ -74,61 +69,15 @@ public struct RootView: View {
 				store.showError("--open-workspace: \(path) is not a workspace of the selected profile")
 			}
 		}
+		if LaunchOptions.value("--surface") == WorkspaceHubModel.layerName {
+			surfaces.openWorkspaceHub()
+		}
 		// Started after the launch's commands, so that the harness finds them dispatched.
 		if TestBridge.isEnabled {
 			TestBridge.start(store: store, terminals: terminals, surfaces: surfaces)
 		}
 		if let path = LaunchOptions.value("--snapshot") {
 			await Snapshot.run(store: store, terminals: terminals, to: path)
-		}
-	}
-}
-
-private struct Sidebar: View {
-	let store: Store
-
-	var body: some View {
-		let selection = Binding(
-			get: { store.selectedProfilePath },
-			set: { path in if let path { store.dispatch(.selectProfile(path: path)) } })
-		List(selection: selection) {
-			Section("Profiles") {
-				ForEach(store.profiles, id: \.path) { profile in
-					Label(profile.name, systemImage: "person.crop.square").tag(Optional(profile.path))
-				}
-			}
-			Section("Workspaces") {
-				ForEach(store.workspaces, id: \.path) { workspace in
-					Button {
-						store.dispatch(.openWorkspace(workspace))
-					} label: {
-						WorkspaceRow(workspace: workspace)
-					}
-					.buttonStyle(.plain)
-					// Activating an inactive workspace (a new task) comes with the Workspace Hub.
-					.disabled(!workspace.active)
-					.help(workspace.active ? "Open in a new tab" : "")
-				}
-			}
-		}
-		.listStyle(.sidebar)
-	}
-}
-
-private struct WorkspaceRow: View {
-	let workspace: Workspace
-
-	var body: some View {
-		HStack {
-			Image(systemName: workspace.active ? "circle.fill" : "circle")
-				.foregroundStyle(workspace.active ? .green : .secondary)
-				.imageScale(.small)
-			VStack(alignment: .leading) {
-				Text(workspace.active ? workspace.title : "Inactive")
-					.foregroundStyle(workspace.active ? .primary : .secondary)
-					.lineLimit(1)
-				Text(workspace.id).font(.caption).foregroundStyle(.secondary)
-			}
 		}
 	}
 }

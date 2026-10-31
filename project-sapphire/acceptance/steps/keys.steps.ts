@@ -25,21 +25,27 @@ When(/^the user presses ((?:Ctrl|Shift|Option|Cmd)\+.+)$/, async function (this:
   await this.bridge.press(key, modifiers);
 });
 
-When('the user presses {string}', async function (this: SapphireWorld, key: string) {
-  await this.bridge.press(key);
+/** A key as Ember's scenarios name it (its `KeyboardEvent.key`), as the bridge presses it. */
+function pressable(name: string): { key: string; modifiers: Modifier[] } {
+  const named: Record<string, string> = { Enter: 'Return', ArrowDown: 'Down', ArrowUp: 'Up' };
+  if (named[name]) return { key: named[name], modifiers: [] };
+  if (name === '?') return { key: 'Slash', modifiers: ['shift'] };
+  if (/^[A-Z]$/.test(name)) return { key: name.toLowerCase(), modifiers: ['shift'] };
+  return { key: name, modifiers: [] };
+}
+
+When('the user presses {string}', async function (this: SapphireWorld, name: string) {
+  const { key, modifiers } = pressable(name);
+  await this.bridge.press(key, modifiers);
+});
+
+When('the user presses {string} {int} times', async function (this: SapphireWorld, name: string, count: number) {
+  const { key, modifiers } = pressable(name);
+  for (let i = 0; i < count; i++) await this.bridge.press(key, modifiers);
 });
 
 Then('the terminal font size should be {int}', async function (this: SapphireWorld, size: number) {
   await this.bridge.waitFor(`the font size to be ${size}`, () => this.bridge.state(), (s) => s.fontSize === size);
-});
-
-Given('a window surface is open', async function (this: SapphireWorld) {
-  await this.bridge.openTestSurface();
-  assert.deepStrictEqual((await this.bridge.state()).windowLayers, ['test-surface']);
-});
-
-Then('no window surface should be open', async function (this: SapphireWorld) {
-  assert.deepStrictEqual((await this.bridge.state()).windowLayers, []);
 });
 
 Then('no session should have the keyboard focus', async function (this: SapphireWorld) {
