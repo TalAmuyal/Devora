@@ -19,7 +19,7 @@ struct ProfileTests {
 
 		#expect(FileManager.default.fileExists(atPath: "\(root)/workspaces"))
 		#expect(store.profiles.map(\.name) == ["work", "Personal"])
-		#expect(store.selectedProfilePath == root)
+		try await eventually { store.selectedProfilePath == root }
 		#expect(store.scrapeErrors() == [])
 	}
 
@@ -45,11 +45,11 @@ struct ProfileTests {
 		await store.load(selecting: home)
 
 		#expect(await store.unregisterProfile(path: home))
-		#expect(store.selectedProfilePath == work)
+		try await eventually { store.selectedProfilePath == work }
 
 		#expect(await store.unregisterProfile(path: work))
 		#expect(store.profilesListed && store.profiles.isEmpty)
-		#expect(store.selectedProfilePath == nil)
+		try await eventually { store.selectedProfilePath == nil }
 		#expect(FileManager.default.fileExists(atPath: "\(work)/config.json"), "the directory stays on disk")
 	}
 

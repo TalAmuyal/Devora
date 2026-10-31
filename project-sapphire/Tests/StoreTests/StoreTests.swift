@@ -72,7 +72,7 @@ struct StoreTests {
 		#expect(store.scrapeErrors() == [])
 		#expect(!store.version.isEmpty)
 		#expect(store.profiles.map(\.name) == ["work", "home"])
-		#expect(store.selectedProfilePath == work)
+		try await eventually { store.selectedProfilePath == work }
 		#expect(store.workspaces.map(\.id) == ["ws-1", "ws-2"])
 		#expect(store.workspaces.map(\.active) == [true, false])
 		#expect(store.workspaces.first?.title == "Fix the build")
@@ -90,7 +90,7 @@ struct StoreTests {
 
 		await store.dispatch(.selectProfile(path: home)).value
 
-		#expect(store.selectedProfilePath == home)
+		try await eventually { store.selectedProfilePath == home }
 		#expect(store.workspaces.map(\.title) == ["Home task"])
 	}
 

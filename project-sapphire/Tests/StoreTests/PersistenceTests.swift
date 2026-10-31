@@ -27,6 +27,51 @@ struct PersistenceTests {
 		#expect(second.app == left)
 	}
 
+	@Test func aLaunchRestoresTheSelectedProfile() async throws {
+		let fixture = try Fixture()
+		let work = try fixture.makeProfile("work")
+		let home = try fixture.makeProfile("home")
+		try fixture.makeWorkspace(profile: home, id: "ws-7", title: "Home task")
+		try fixture.registerProfiles([work, home])
+		let statePath = fixture.root.appending(path: "state.db").path
+		var first: Store? = Store(configPath: fixture.configPath, state: .file(path: statePath), log: try fixture.log())
+		await first!.dispatch(.load).value
+		await first!.dispatch(.selectProfile(path: home)).value
+		first = nil
+
+		let second = Store(configPath: fixture.configPath, state: .file(path: statePath), log: try fixture.log())
+		await second.dispatch(.load).value
+
+		try await eventually { second.selectedProfilePath == home }
+		#expect(second.workspaces.map(\.title) == ["Home task"])
+	}
+
+	@Test func aLaunchWhoseRestoredProfileIsNoLongerRegisteredSelectsTheFirstAndForgetsIt() async throws {
+		let fixture = try Fixture()
+		let work = try fixture.makeProfile("work")
+		let home = try fixture.makeProfile("home")
+		try fixture.registerProfiles([work, home])
+		let statePath = fixture.root.appending(path: "state.db").path
+		var store: Store? = Store(configPath: fixture.configPath, state: .file(path: statePath), log: try fixture.log())
+		await store!.load(selecting: home)
+		store = nil
+		let moved = fixture.root.appending(path: "home-moved").path
+		try FileManager.default.moveItem(atPath: home, toPath: moved)
+		try fixture.registerProfiles([work, moved])
+
+		store = Store(configPath: fixture.configPath, state: .file(path: statePath), log: try fixture.log())
+		await store!.dispatch(.load).value
+		try await eventually { store!.selectedProfilePath == work }
+		store = nil
+		try FileManager.default.moveItem(atPath: moved, toPath: home)
+		try fixture.registerProfiles([work, home])
+
+		let relaunched = Store(configPath: fixture.configPath, state: .file(path: statePath), log: try fixture.log())
+		await relaunched.dispatch(.load).value
+		try await eventually { relaunched.selectedProfilePath == work }
+		#expect(relaunched.scrapeErrors() == [])
+	}
+
 	@Test func anUnreadableStateIsSetAsideToStartFresh() async throws {
 		let fixture = try Fixture()
 		let statePath = fixture.root.appending(path: "state.db").path

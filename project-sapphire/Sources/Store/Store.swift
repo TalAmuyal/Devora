@@ -4,8 +4,9 @@ import Observation
 import Synchronization
 
 public enum Command: Sendable {
-	/// Loads the version and the profiles, then the workspaces of the selected (or first) profile.
+	/// Loads the version and the profiles, then the workspaces of the selected profile: the one restored from the app state while it is registered, otherwise the first.
 	case load
+	/// Selects a profile (`SetActiveProfile`, so that a launch restores it) and lists its workspaces.
 	case selectProfile(path: String)
 	/// Loads the status of each workspace that has none yet, a few workspaces at a time, each kept as it arrives; `fresh` drops the statuses already loaded first.
 	case loadWorkspaceStatuses(fresh: Bool)
@@ -56,7 +57,9 @@ public final class Store {
 	public private(set) var profiles: [Profile] = []
 	/// Whether the profiles have been listed once: with none, Ember's first-run welcome shows only after a listing that succeeded.
 	public private(set) var profilesListed = false
-	public private(set) var selectedProfilePath: String?
+	/// The core-owned active profile, which a launch restores: it decides what the hub lists and where new tasks go, not which profile a workspace opens with.
+	/// It follows `app`, so a selection shows once its event folds.
+	public var selectedProfilePath: String? { app.activeProfile }
 	public private(set) var workspaces: [Workspace] = []
 	/// The statuses loaded so far, by workspace path; a workspace without one is still loading.
 	public private(set) var workspaceStatuses: [String: WorkspaceStatus] = [:]
@@ -78,6 +81,8 @@ public final class Store {
 	@ObservationIgnored private let inbox = Inbox()
 	@ObservationIgnored private var stateEvents: Task<Void, Never>?
 	@ObservationIgnored private var reportedErrors: Task<Void, Never>?
+	/// Bumped by each selection, so that a later selection wins over a slower, earlier one.
+	@ObservationIgnored private var selectionGeneration = 0
 	/// Bumped whenever the statuses are dropped, so that the loads started before can't store theirs.
 	@ObservationIgnored private var statusGeneration = 0
 	@ObservationIgnored private var statusesLoading: Set<String> = []
@@ -385,8 +390,8 @@ public final class Store {
 		for message in messages { banner(message) }
 	}
 
-	/// Loads the version and the profiles, then the workspaces of the selected (or first) profile; returns whether every call succeeded.
-	/// `selecting` selects that profile instead, when it is listed.
+	/// Loads the version and the profiles, then the workspaces of the selected profile; returns whether every call succeeded.
+	/// The selection is `selecting` when it is listed, otherwise the core's active profile (read from the core, since its events fold on a later frame) while it is registered, otherwise the first profile, or none.
 	@discardableResult
 	public func load(selecting preferred: String? = nil) async -> Bool {
 		guard let core, let version = try? await call("version", { try core.version() }) else { return false }
@@ -396,7 +401,8 @@ public final class Store {
 		self.version = version
 		self.profiles = profiles
 		profilesListed = true
-		let selected = profiles.first { $0.path == preferred } ?? profiles.first { $0.path == selectedProfilePath } ?? profiles.first
+		let active = try? await call("snapshot", { try core.snapshot().activeProfile })
+		let selected = profiles.first { $0.path == preferred } ?? profiles.first { $0.path == active } ?? profiles.first
 		return await select(selected?.path, core: core, started: started, listProfiles: listProfiles)
 	}
 
@@ -406,7 +412,9 @@ public final class Store {
 		listProfiles: LoadingLatencies.Phase = .zero
 	) async -> Bool {
 		if path != selectedProfilePath { dropWorkspaceStatuses() }
-		selectedProfilePath = path
+		apply(.setActiveProfile(profilePath: path))
+		selectionGeneration += 1
+		let generation = selectionGeneration
 		guard let path else {
 			workspaces = []
 			loadingLatencies = nil
@@ -414,8 +422,7 @@ public final class Store {
 		}
 		let listStarted = ContinuousClock.now
 		let list = try? await call("list_workspaces") { try core.listWorkspaces(profilePath: path) }
-		// A later selection wins over a slower, earlier one.
-		guard selectedProfilePath == path else { return false }
+		guard generation == selectionGeneration else { return false }
 		workspaces = list ?? []
 		let listed = ContinuousClock.now
 		latencyOrigin = started
