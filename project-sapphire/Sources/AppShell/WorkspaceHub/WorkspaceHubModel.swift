@@ -42,6 +42,8 @@ final class WorkspaceHubModel {
 	@ObservationIgnored var closeMenu: () -> Void = {}
 	/// Asks with a confirmation dialog, then runs the action if the user confirms.
 	@ObservationIgnored var confirm: (Confirmation, @escaping () -> Void) -> Void = { _, _ in }
+	/// Opens the New Task dialog; with a workspace, it duplicates that workspace's task.
+	@ObservationIgnored var newTask: (_ duplicating: Workspace?) -> Void = { _ in }
 	@ObservationIgnored private let isEditingText: () -> Bool
 	@ObservationIgnored private let clearFocus: () -> Void
 	@ObservationIgnored private var loadTask: Task<Void, Never>?
@@ -188,6 +190,7 @@ final class WorkspaceHubModel {
 		case "1": category = .active
 		case "2": category = .inactive
 		case "3": category = .all
+		case "n": newTask(nil)
 		case "j": cursor.move(by: 1, in: items.count)
 		case "k": cursor.move(by: -1, in: items.count)
 		case "R": refresh()

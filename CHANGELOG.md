@@ -30,6 +30,7 @@ Types of changes:
 - Devora Sapphire reports errors as Ember does (ADR-002): dismissible error banners above everything, with identical messages merged (×N), for every failing core call and every error the core reports, and a log file at `/tmp/devora-sapphire-<timestamp>.log` (its path printed to stderr) that also gets Rust panics
 - Devora Sapphire has the Workspace Hub (`Ctrl+S`) in place of its sidebar: the profile's workspaces with their status dots, the Active/Inactive/All categories (`1`/`2`/`3`), a filter (`f`), Vim navigation, a detail panel whose per-repo statuses load progressively, opening a workspace in a new tab (`Enter`), refresh (`R`) and the shortcut cheatsheet (`?`); the core gains `workspace_status`, one workspace's repo statuses
 - Devora Sapphire's Workspace Hub has Ember's operations: Remove Task (with a confirmation dialog, trapping Tab, when a repo has changes or is on a branch), Delete for inactive and invalid workspaces, Ember's profile dropdown and burger menu with "Save loading latencies"; Sapphire now opens on the Workspace Hub when it has no tabs to restore
+- Devora Sapphire creates tasks as Ember does: the New Task dialog (`n` or "+ New Task" in the Workspace Hub, and Duplicate for an active workspace) hands the creation to a tab of its own, whose progress page shows the steps and the output, cancels on Esc or `q`, and shows a failure until it is closed; a creation the app stopped in the middle of comes back as interrupted
 
 ### Changed
 
@@ -57,6 +58,7 @@ Types of changes:
 
 ### Fixed
 
+- Cancelling a task creation now stops a prepare-command at once even when it started other processes, rather than waiting for them to finish
 - F1 now opens the User Guide in installed apps: it is read from the app bundle instead of the build machine's checkout (#223)
 - A workspace terminal that falls back to a bare shell because the profile config can't be read logs a warning again
 - Neovim now runs in Devora's terminals when Devora itself was launched from a Neovim terminal: the outer `$NVIM` and `$NVIM_LISTEN_ADDRESS` are no longer passed on

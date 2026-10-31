@@ -94,7 +94,7 @@ struct ConfirmationDialogView: View {
 				HStack(spacing: 10) {
 					Spacer()
 					DialogButton(title: confirmation.cancelLabel, isFocused: model.focused == .cancel, action: model.cancel)
-					DialogButton(title: confirmation.confirmLabel, isFocused: model.focused == .confirm, isProminent: true, action: model.confirm)
+					DialogButton(title: confirmation.confirmLabel, isFocused: model.focused == .confirm, tint: .red, action: model.confirm)
 				}
 				.padding(.top, 4)
 			}
@@ -108,10 +108,11 @@ struct ConfirmationDialogView: View {
 	}
 }
 
-private struct DialogButton: View {
+/// A dialog's button, which draws the focus its dialog gives it rather than the window's first responder's, so that a dialog's Tab trap holds whatever the system's keyboard navigation setting is.
+struct DialogButton: View {
 	let title: String
 	let isFocused: Bool
-	var isProminent = false
+	var tint: Color?
 	let action: () -> Void
 
 	var body: some View {
@@ -119,7 +120,7 @@ private struct DialogButton: View {
 			Text(title).frame(minWidth: 70)
 		}
 		.buttonStyle(.bordered)
-		.tint(isProminent ? .red : nil)
+		.tint(tint)
 		.focusEffectDisabled()
 		.overlay {
 			if isFocused {

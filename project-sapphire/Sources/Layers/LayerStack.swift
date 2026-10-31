@@ -62,6 +62,17 @@ public final class LayerStack {
 		return layer.handle
 	}
 
+	/// Puts a layer beneath every other one, as a tab's terminal goes under the surface that was over its tab before it existed (task-creation progress).
+	/// Under another layer, it takes the focus once that layer goes and reveals it; alone, it is a push.
+	@discardableResult
+	public func insertAtBottom(_ spec: LayerSpec) -> LayerHandle {
+		guard !isEmpty else { return push(spec) }
+		nextID += 1
+		let layer = Layer(handle: LayerHandle(id: nextID), spec: spec)
+		layers.insert(layer, at: 0)
+		return layer.handle
+	}
+
 	public func pop() {
 		if let top { remove(top.handle) }
 	}

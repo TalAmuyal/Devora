@@ -5,7 +5,7 @@ Feature: Per-tab surfaces
   focus, and never blocks window-level shortcuts such as tab switching.
 
   Background:
-    Given Ember is running
+    Given Devora is running with no sessions open
     And an origin-backed profile "Work" with repo "test-repo"
     And the prepare-command sleeps
     And a session exists

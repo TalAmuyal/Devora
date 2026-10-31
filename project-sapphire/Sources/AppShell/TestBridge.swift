@@ -85,13 +85,22 @@ final class TestBridge {
 				session.typeLine(line)
 				return .init(status: 200, body: [:])
 			case ("POST", "/test/key"):
-				try press(request.json())
-				return .init(status: 200, body: [:])
+				return .init(status: 200, body: ["consumed": try press(request.json())])
 			case ("POST", "/test/hub"):
 				try hubAction(request.json())
 				return .init(status: 200, body: [:])
 			case ("POST", "/test/dialog"):
 				try dialogButton(request.json())
+				return .init(status: 200, body: [:])
+			case ("POST", "/test/new-task"):
+				try newTaskAction(request.json())
+				return .init(status: 200, body: [:])
+			case ("POST", "/test/progress"):
+				try progressAction(request.json())
+				return .init(status: 200, body: [:])
+			case ("POST", "/test/terminal/focus"):
+				let body = try request.json()
+				try terminal((body["tab"] as? NSNumber)?.uint64Value).focus()
 				return .init(status: 200, body: [:])
 			case ("POST", "/test/snapshot"):
 				guard let path = try request.json()["path"] as? String else { throw BridgeError(status: 400, "missing path") }
@@ -148,8 +157,8 @@ final class TestBridge {
 		return session
 	}
 
-	/// Presses a key in the window: a key-down event enters the router as AppKit's would, and, unless it is consumed, goes on to the window, which dispatches it to its first responder.
-	private func press(_ body: [String: Any]) throws {
+	/// Presses a key in the window: a key-down event enters the router as AppKit's would, and, unless it is consumed, goes on to the window, which dispatches it to its first responder; returns whether the router consumed it.
+	private func press(_ body: [String: Any]) throws -> Bool {
 		guard let name = body["key"] as? String, let key = TestKey(name) else {
 			throw BridgeError(status: 400, "unknown key \(String(describing: body["key"]))")
 		}
@@ -167,7 +176,9 @@ final class TestBridge {
 			throw BridgeError(status: 409, "no window")
 		}
 		let event = try key.event(modifiers: modifiers, window: window)
-		if !surfaces.router.handle(KeyPress(event)) { window.sendEvent(event) }
+		let consumed = surfaces.router.handle(KeyPress(event))
+		if !consumed { window.sendEvent(event) }
+		return consumed
 	}
 
 	/// Clicks what the open hub draws, as its buttons do: an action on the focused workspace, a dropdown's trigger, or a row of the open dropdown (by its label; a disabled one is a 409).
@@ -181,6 +192,11 @@ final class TestBridge {
 				throw BridgeError(status: 409, "\(workspace.id) has no \(removes ? "Remove Task" : "Delete") button")
 			}
 			if removes { hub.removeTask(workspace) } else { hub.deleteWorkspace(workspace) }
+		case "newTask":
+			hub.newTask(nil)
+		case "duplicate":
+			guard let workspace = hub.focused, workspace.active else { throw BridgeError(status: 409, "no active workspace is focused") }
+			hub.newTask(workspace)
 		case "toggleMenu":
 			guard let menu = (body["menu"] as? String).flatMap(HubMenu.init) else { throw BridgeError(status: 400, "unknown menu") }
 			hub.toggleMenu(menu)
@@ -206,6 +222,58 @@ final class TestBridge {
 		case "cancel": dialog.cancel()
 		default: throw BridgeError(status: 400, "unknown button \(String(describing: body["button"]))")
 		}
+	}
+
+	/// Clicks what the open New Task dialog draws: a repo's row (by its name), or one of its buttons.
+	private func newTaskAction(_ body: [String: Any]) throws {
+		guard let dialog = surfaces.newTask else { throw BridgeError(status: 409, "the New Task dialog isn't open") }
+		switch body["action"] as? String {
+		case "toggleRepo":
+			let name = body["name"] as? String
+			guard let repo = dialog.visibleRepos.first(where: { $0.name == name }) else {
+				throw BridgeError(status: 404, "no repo \(name ?? "nil") in the New Task dialog's list")
+			}
+			dialog.click(repo)
+		case "create": dialog.create()
+		case "cancel": dialog.cancel()
+		default: throw BridgeError(status: 400, "unknown New Task action \(String(describing: body["action"]))")
+		}
+	}
+
+	/// Clicks the button of a tab's progress page (the active tab's by default): Cancel while its creation runs, Close once it has failed.
+	private func progressAction(_ body: [String: Any]) throws {
+		guard let id = (body["tab"] as? NSNumber)?.uint64Value ?? store.app.window.activeTab,
+		      surfaces.tabStacks[id]?.find(CreationProgressPage.layerName) != nil
+		else { throw BridgeError(status: 409, "the tab has no progress page") }
+		CreationPageState(store: store, tab: id).closeOrCancel()
+	}
+
+	private func newTaskState() -> Any {
+		guard let dialog = surfaces.newTask else { return NSNull() }
+		let active = dialog.activeRepo
+		return [
+			"heading": dialog.heading,
+			"title": dialog.title,
+			"filter": dialog.filter,
+			"focus": "\(dialog.focus)",
+			"repos": dialog.visibleRepos.map { repo in
+				["name": repo.name, "selected": dialog.selected.contains(repo.path), "active": repo == active]
+			},
+		] as [String: Any]
+	}
+
+	/// A tab's progress page, while it has one.
+	private func progressState(of tab: AppTab) -> Any {
+		guard surfaces.tabStacks[tab.id]?.find(CreationProgressPage.layerName) != nil else { return NSNull() }
+		let page = CreationPageState(store: store, tab: tab.id)
+		let progress = page.progress
+		return [
+			"title": page.title,
+			"steps": progress.steps.map { ["label": $0.label, "state": "\($0.state)"] },
+			"outputLines": progress.output.count,
+			"failure": page.failure ?? NSNull(),
+			"action": page.action,
+		] as [String: Any]
 	}
 
 	private func dialogState() -> Any {
@@ -268,8 +336,10 @@ final class TestBridge {
 		return [
 			"hub": hubState(),
 			"dialog": dialogState(),
+			"newTask": newTaskState(),
 			"fontSize": TerminalRuntime.shared.fontSize,
 			"windowLayers": surfaces.windowStack.layers.map(\.spec.name),
+			"editingText": surfaces.router.isEditingText,
 			"version": store.version,
 			"profiles": store.profiles.map { ["name": $0.name, "path": $0.path] },
 			"selectedProfile": store.selectedProfilePath ?? NSNull(),
@@ -287,6 +357,7 @@ final class TestBridge {
 					"terminal": Self.status(session),
 					"focused": session?.hasFocus ?? false,
 					"layers": surfaces.tabStacks[tab.id]?.layers.map(\.spec.name) ?? [],
+					"progress": progressState(of: tab),
 				] as [String: Any]
 			},
 		]
@@ -315,7 +386,7 @@ final class TestBridge {
 	}
 }
 
-/// A key the bridge can press, by the name the harness uses: a letter or a digit, `Minus`, `Equal`, `Slash`, `Space`, `Left`, `Right`, `Down`, `Up`, `Escape` or `Return`.
+/// A key the bridge can press, by the name the harness uses: a letter or a digit, `Minus`, `Equal`, `Slash`, `Space`, `Left`, `Right`, `Down`, `Up`, `Escape`, `Tab` or `Return`.
 private struct TestKey {
 	let keyCode: UInt16
 	/// What the key types unshifted, and with Shift (on a US layout).
@@ -333,6 +404,7 @@ private struct TestKey {
 			"Down": TestKey(keyCode: KeyCode.downArrow, plain: "\u{F701}", shifted: "\u{F701}", isArrow: true),
 			"Up": TestKey(keyCode: KeyCode.upArrow, plain: "\u{F700}", shifted: "\u{F700}", isArrow: true),
 			"Escape": TestKey(keyCode: KeyCode.escape, plain: "\u{1B}", shifted: "\u{1B}"),
+			"Tab": TestKey(keyCode: KeyCode.tab, plain: "\t", shifted: "\t"),
 			"Return": TestKey(keyCode: KeyCode.returnKey, plain: "\r", shifted: "\r"),
 			"Space": TestKey(keyCode: 0x31, plain: " ", shifted: " "),
 			"Slash": TestKey(keyCode: 0x2C, plain: "/", shifted: "?"),

@@ -29,6 +29,12 @@ export class SapphireWorld extends World {
   profilePath?: string;
   /** The profiles the fixture steps registered in the config, in order. */
   profilePaths: string[] = [];
+  /** How many tabs were open before a task's creation opened its own. */
+  sessionsBeforeTask?: number;
+  /** The commit a refreshed worktree should be at. */
+  expectedHead?: string;
+  /** Whether the app's key router consumed the latest key typed into a field. */
+  lastKeyConsumed?: boolean;
 
   /** Launches the app on the scenario's config and state; it becomes the app the steps drive. */
   async launch(): Promise<void> {

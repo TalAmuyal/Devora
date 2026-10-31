@@ -7,7 +7,7 @@ import TerminalKit
 
 /// The window's layer stacks and its key router, wired to the store: the composition root of the layer system (`Sources/Layers/CLAUDE.md`).
 ///
-/// It keeps one stack per tab, for exactly as long as the tab is in the core's state, with the tab's terminal as its bottom layer.
+/// It keeps one stack per tab, for exactly as long as the tab is in the core's state, with the tab's terminal as its bottom layer, under the progress page of a tab creating its workspace.
 @MainActor
 @Observable
 final class Surfaces {
@@ -19,6 +19,10 @@ final class Surfaces {
 	@ObservationIgnored private(set) var cheatsheet: VimScroll?
 	/// The open confirmation dialog; nil while none is.
 	@ObservationIgnored private(set) var dialog: ConfirmationDialogModel?
+	/// The open New Task dialog; nil while none is.
+	@ObservationIgnored private(set) var newTask: NewTaskDialogModel?
+	/// From the New Task dialog's opening until its repos have loaded, so that a held or repeated `n` opens one dialog.
+	@ObservationIgnored private var newTaskOpening = false
 	@ObservationIgnored private var hubMenu: LayerHandle?
 	@ObservationIgnored private let store: Store
 
@@ -32,7 +36,7 @@ final class Surfaces {
 
 	var windowStack: LayerStack { router.windowStack }
 
-	/// Makes a stack for each new tab and tears down the stacks of closed tabs.
+	/// Makes a stack for each new tab, with a progress page while the tab creates its workspace, and tears down the stacks of closed tabs.
 	func sync(with tabs: [AppTab]) {
 		let live = Set(tabs.map(\.id))
 		for (id, stack) in tabStacks where !live.contains(id) {
@@ -43,6 +47,30 @@ final class Surfaces {
 			let id = tab.id
 			tabStacks[id] = router.makeTabStack { [store] in store.app.window.activeTab == id }
 		}
+		for tab in tabs where tab.session.kind.isCreation {
+			if let stack = tabStacks[tab.id], stack.find(CreationProgressPage.layerName) == nil {
+				pushProgressPage(on: stack, tab: tab.id)
+			}
+		}
+	}
+
+	/// Removes the progress page of each tab that has its workspace; its terminal is already beneath it (`pushTerminal`), so the page reveals it.
+	func retireProgressPages(of tabs: [AppTab]) {
+		for tab in tabs where !tab.session.kind.isCreation {
+			if let stack = tabStacks[tab.id], let page = stack.find(CreationProgressPage.layerName) { stack.remove(page) }
+		}
+	}
+
+	/// A page, so it takes `q` and Escape from the stack's dismissal, and consumes the plain keys it has no use for, which would otherwise reach whatever has the focus, such as another tab's terminal.
+	private func pushProgressPage(on stack: LayerStack, tab: UInt64) {
+		let store = store
+		var spec = pageLayer(LayerSpec(name: CreationProgressPage.layerName) { CreationProgressPage(store: store, tab: tab) })
+		spec.onKey = { $0.isUnusedOnAPage }
+		spec.onUserDismissRequest = {
+			CreationPageState(store: store, tab: tab).closeOrCancel()
+			return .handled
+		}
+		stack.push(spec)
 	}
 
 	/// Opens the Workspace Hub over the window and loads it; it is a page, so a page closing over it reloads it.
@@ -69,6 +97,7 @@ final class Surfaces {
 		model.toggleMenu = { [unowned self, unowned model] menu in toggleHubMenu(menu, of: model) }
 		model.closeMenu = { [unowned self] in closeHubMenu() }
 		model.confirm = { [unowned self] confirmation, action in confirm(confirmation, then: action) }
+		model.newTask = { [unowned self] source in openNewTaskDialog(duplicating: source) }
 		hub = model
 		model.load()
 	}
@@ -108,6 +137,46 @@ final class Surfaces {
 		dialog = model
 	}
 
+	/// Opens the New Task dialog over the hub, once the selected profile's repos have loaded; with a `source`, it duplicates that workspace's task, with its title and its repos selected.
+	/// Creating the task closes the dialog and the hub, then hands the creation to its own tab (`Command.createTask`), as Ember's hand-off does.
+	private func openNewTaskDialog(duplicating source: Workspace?) {
+		guard store.selectedProfilePath != nil, !newTaskOpening, windowStack.find(NewTaskDialogModel.layerName) == nil else { return }
+		newTaskOpening = true
+		Task { [unowned self, store] in
+			defer { newTaskOpening = false }
+			// A failed call has its banner; the dialog still opens, as Ember's does.
+			let repos = await store.registeredRepos() ?? []
+			// The hub may have closed meanwhile, and the dialog would be stranded over a terminal.
+			guard let hubHandle = windowStack.find(WorkspaceHubModel.layerName) else { return }
+			var handle: LayerHandle?
+			let close = { [unowned self] in
+				if let handle { windowStack.remove(handle) }
+			}
+			let selected = Set(repos.filter { source?.repos.contains($0.name) == true }.map(\.path))
+			let router = router!
+			let model = NewTaskDialogModel(
+				repos: repos, title: source?.title ?? "", selected: selected, isDuplicating: source != nil,
+				clearFocus: { router.clearFocus() },
+				onCreate: { [unowned self] title, repoPaths in
+					close()
+					closeHubMenu()
+					windowStack.remove(hubHandle)
+					store.dispatch(.createTask(title: title, repoPaths: repoPaths, sourceWorkspacePath: source?.path))
+				},
+				onCancel: close)
+			var spec = modalLayer(LayerSpec(name: NewTaskDialogModel.layerName) { NewTaskDialogView(model: model) })
+			spec.onKey = model.handleKey
+			spec.cycleFocus = { model.cycleFocus(backward: $0) }
+			spec.focus = { model.focus = .title }
+			spec.onCleanup = { [unowned self] in
+				if newTask === model { newTask = nil }
+			}
+			closeHubMenu()
+			handle = windowStack.push(spec)
+			newTask = model
+		}
+	}
+
 	/// The hub's shortcuts on a page of their own; `?` closes it as it opened it, and the hub's keys reach nothing meanwhile.
 	private func openCheatsheet() {
 		guard windowStack.find(Cheatsheet.layerName) == nil else { return }
@@ -128,12 +197,14 @@ final class Surfaces {
 		cheatsheet = scroll
 	}
 
-	/// Puts a tab's terminal at the bottom of its stack, as soon as the tab has one, so that it takes the keys before it runs.
+	static let terminalLayerName = "terminal"
+
+	/// Puts a tab's terminal at the bottom of its stack, as soon as the tab has one, so that it takes the keys before it runs; a tab that created its workspace gets it under its progress page, which `retireProgressPages` then removes.
 	func pushTerminal(_ session: TerminalSession, tab: UInt64, onExit: @escaping () -> Void) {
-		guard let stack = tabStacks[tab], stack.isEmpty else { return }
-		var spec = terminalLayer(LayerSpec(name: "terminal") { TerminalTab(session: session, onExit: onExit) })
+		guard let stack = tabStacks[tab], stack.find(Self.terminalLayerName) == nil else { return }
+		var spec = terminalLayer(LayerSpec(name: Self.terminalLayerName) { TerminalTab(session: session, onExit: onExit) })
 		spec.focus = { session.focus() }
-		stack.push(spec)
+		stack.insertAtBottom(spec)
 	}
 }
 

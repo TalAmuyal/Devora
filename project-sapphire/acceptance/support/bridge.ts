@@ -10,7 +10,31 @@ export interface TabState {
   focused: boolean;
   /** The names of the layers on the tab's stack, bottom to top; `terminal` once its terminal runs. */
   layers: string[];
+  /** The tab's task-creation progress page, while it has one. */
+  progress: ProgressState | null;
 }
+
+/** A task-creation progress page; `action` is its button: `Cancel` while the creation runs, `Close` once it has failed. */
+export interface ProgressState {
+  title: string;
+  steps: { label: string; state: 'active' | 'done' | 'failed' }[];
+  outputLines: number;
+  failure: string | null;
+  action: 'Cancel' | 'Close';
+}
+
+/** The open New Task dialog; `repos` is its list as it shows, filtered. */
+export interface NewTaskState {
+  heading: 'New Task' | 'Duplicate Task';
+  title: string;
+  filter: string;
+  /** What has the dialog's focus. */
+  focus: 'title' | 'filter' | 'cancel' | 'create';
+  repos: { name: string; selected: boolean; active: boolean }[];
+}
+
+/** A click on what the open New Task dialog draws. */
+export type NewTaskAction = { action: 'toggleRepo'; name: string } | { action: 'create' } | { action: 'cancel' };
 
 /** The open Workspace Hub; `items` is the list as it shows, filters applied. */
 export interface HubState {
@@ -55,12 +79,15 @@ export interface DialogState {
 export type HubAction =
   | { action: 'removeTask' }
   | { action: 'delete' }
+  | { action: 'newTask' }
+  | { action: 'duplicate' }
   | { action: 'toggleMenu'; menu: HubMenu }
   | { action: 'menuItem'; label: string };
 
 export interface AppState {
   hub: HubState | null;
   dialog: DialogState | null;
+  newTask: NewTaskState | null;
   version: string;
   profiles: { name: string; path: string }[];
   selectedProfile: string | null;
@@ -80,6 +107,8 @@ export interface AppState {
   fontSize: number;
   /** The names of the layers on the window stack, bottom to top. */
   windowLayers: string[];
+  /** Whether a text field or text view has the keyboard focus. */
+  editingText: boolean;
 }
 
 export type Modifier = 'shift' | 'control' | 'option' | 'command';
@@ -137,15 +166,31 @@ export class Bridge {
 
   /**
    * Presses a key: the app makes the key-down AppKit would and sends it through its key router, then, unless the router consumes it, to the window's first responder.
-   * `key` is a letter, a digit, `Minus`, `Equal`, `Slash`, `Space`, `Left`, `Right`, `Down`, `Up`, `Escape` or `Return`.
+   * `key` is a letter, a digit, `Minus`, `Equal`, `Slash`, `Space`, `Left`, `Right`, `Down`, `Up`, `Escape`, `Tab` or `Return`.
+   * Returns whether the router consumed it, so that no view saw it.
    */
-  async press(key: string, modifiers: Modifier[] = []): Promise<void> {
-    await this.request('POST', '/test/key', { key, modifiers });
+  async press(key: string, modifiers: Modifier[] = []): Promise<boolean> {
+    return (await this.request('POST', '/test/key', { key, modifiers })).consumed;
+  }
+
+  /** Makes a tab's terminal the window's first responder, as a click into it would. */
+  async focusTerminal(tab: number): Promise<void> {
+    await this.request('POST', '/test/terminal/focus', { tab });
   }
 
   /** Clicks what the open Workspace Hub draws, as its buttons do; a disabled dropdown row is a 409. */
   async hub(action: HubAction): Promise<void> {
     await this.request('POST', '/test/hub', action);
+  }
+
+  /** Clicks what the open New Task dialog draws. */
+  async newTask(action: NewTaskAction): Promise<void> {
+    await this.request('POST', '/test/new-task', action);
+  }
+
+  /** Clicks the button of a tab's progress page (the active tab's by default). */
+  async progressAction(tab?: number): Promise<void> {
+    await this.request('POST', '/test/progress', { tab });
   }
 
   /** Clicks a button of the open confirmation dialog. */

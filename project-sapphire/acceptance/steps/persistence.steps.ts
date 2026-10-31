@@ -1,5 +1,4 @@
 import { Given, Then, When } from '@cucumber/cucumber';
-import { execFileSync } from 'node:child_process';
 import * as assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -56,24 +55,24 @@ Then('the terminal should not contain {string}', async function (this: SapphireW
   assert.ok(!text.includes(unexpected), `the terminal shows "${unexpected}":\n${text}`);
 });
 
-Given('Sapphire stopped while a session was creating its workspace', async function (this: SapphireWorld) {
-  await quit({ app: this.app, bridge: this.bridge });
-  // Sapphire can't create workspaces yet, so the tab is written as a creation in progress would have left it.
-  execFileSync('sqlite3', [
-    stateDb(this),
-    `INSERT INTO tabs (id, position, title, kind, profile_path)
-       SELECT next_id + 1, (SELECT count(*) FROM tabs), 'New task', 'creating_workspace', NULL FROM meta;
-     INSERT INTO panes (id, tab_id, kind) SELECT next_id + 2, next_id + 1, 'terminal' FROM meta;
-     UPDATE meta SET active_tab = next_id + 1, next_id = next_id + 2;`,
-  ]);
-});
-
 Then('that session should show that its workspace creation was interrupted', async function (this: SapphireWorld) {
   const state = await waitUntilReady(this.bridge);
   const task = state.tabs.find((tab) => tab.title === 'New task');
   assert.deepEqual(
-    { kind: task?.kind, terminal: task?.terminal, active: task?.id === state.activeTab },
-    { kind: 'creationFailed', terminal: 'none', active: true },
+    {
+      kind: task?.kind,
+      terminal: task?.terminal,
+      active: task?.id === state.activeTab,
+      failure: task?.progress?.failure,
+      action: task?.progress?.action,
+    },
+    {
+      kind: 'creationFailed',
+      terminal: 'none',
+      active: true,
+      failure: 'Interrupted: Devora Sapphire stopped before the workspace was ready.',
+      action: 'Close',
+    },
   );
 });
 

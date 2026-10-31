@@ -81,14 +81,18 @@ Then('the category filter should still be {string}', async function (this: Sapph
 When('the user filters workspaces by {string}', async function (this: SapphireWorld, text: string) {
   await this.bridge.press('f');
   await waitForHub(this, 'the filter to have the focus', (hub) => hub.filterFocused);
-  // Typed into the field as key-downs, so the text goes through the field editor as a user's typing does.
-  for (const char of text) {
-    if (char === ' ') await this.bridge.press('Space');
-    else if (/[A-Z]/.test(char)) await this.bridge.press(char.toLowerCase(), ['shift']);
-    else await this.bridge.press(char);
-  }
+  await typeText(this, text);
   await waitForHub(this, `the filter to read "${text}"`, (hub) => hub.filter === text);
 });
+
+/** Types into the focused field as key-downs, so the text goes through the field editor as a user's typing does; letters, digits and spaces only. */
+export async function typeText(world: SapphireWorld, text: string): Promise<void> {
+  for (const char of text) {
+    if (char === ' ') await world.bridge.press('Space');
+    else if (/[A-Z]/.test(char)) await world.bridge.press(char.toLowerCase(), ['shift']);
+    else await world.bridge.press(char);
+  }
+}
 
 Then('the detail panel should show repo status', async function (this: SapphireWorld) {
   await waitForHub(

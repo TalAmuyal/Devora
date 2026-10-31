@@ -8,6 +8,7 @@
 use std::collections::HashMap;
 use std::fs;
 use std::io::{BufRead, BufReader, Read};
+use std::os::unix::process::CommandExt;
 use std::path::{Component, Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -28,7 +29,7 @@ pub type EventSink = Arc<dyn Fn(CreationEvent) + Send + Sync>;
 const POLL_MS: u64 = 50;
 
 /// A progress event streamed to the frontend over the creation channel.
-#[derive(Serialize, Clone)]
+#[derive(Debug, PartialEq, Serialize, Clone)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum CreationEvent {
     /// A new high-level phase has started (shown as a step in the progress overlay).
@@ -70,7 +71,7 @@ impl CreationHandle {
         self.cancel.store(true, Ordering::SeqCst);
         if let Ok(mut slot) = self.current_child.lock() {
             if let Some(child) = slot.as_mut() {
-                let _ = child.kill();
+                kill_process_group(child);
             }
         }
     }
@@ -832,6 +833,8 @@ fn run_streamed(
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
+        // A group of its own, so a cancel kills what it spawned too (`sh -c` runs a prepare-command's children), which would otherwise hold the output pipes open until they finish.
+        .process_group(0)
         .spawn()
         .map_err(|e| format!("failed to spawn {program}: {e}"))?;
 
@@ -858,7 +861,7 @@ fn run_streamed(
             match slot.as_mut() {
                 Some(child) => {
                     if handle.is_cancelled() {
-                        let _ = child.kill();
+                        kill_process_group(child);
                     }
                     match child.try_wait() {
                         Ok(Some(status)) => {
@@ -884,6 +887,15 @@ fn run_streamed(
     }
 
     Ok(success)
+}
+
+/// Kills a child started by [`run_streamed`] and every process in its group.
+fn kill_process_group(child: &mut Child) {
+    if let Ok(pid) = libc::pid_t::try_from(child.id()) {
+        // SAFETY: `kill` has no memory-safety preconditions; a negative pid names the process group.
+        unsafe { libc::kill(-pid, libc::SIGKILL) };
+    }
+    let _ = child.kill();
 }
 
 fn spawn_reader(reader: Box<dyn Read + Send>, on_event: EventSink) -> JoinHandle<()> {
@@ -1236,6 +1248,36 @@ mod tests {
 
         canceller.join().unwrap();
         assert!(!success, "a cancelled command should report failure");
+        assert!(
+            elapsed < Duration::from_secs(3),
+            "cancellation should be prompt, took {elapsed:?}"
+        );
+    }
+
+    #[test]
+    fn run_streamed_cancellation_kills_what_the_command_spawned() {
+        let tmp = tempfile::tempdir().unwrap();
+        let handle = CreationHandle::new();
+        let canceller_handle = handle.clone();
+        let canceller = thread::spawn(move || {
+            thread::sleep(Duration::from_millis(200));
+            canceller_handle.request_cancel();
+        });
+
+        let start = Instant::now();
+        // The shell forks `sleep`, which holds the output pipes open after the shell is killed.
+        let success = run_streamed(
+            "sh",
+            &["-c", "echo started; sleep 5; echo done"],
+            tmp.path(),
+            &noop_channel(),
+            &handle,
+        )
+        .unwrap();
+        let elapsed = start.elapsed();
+
+        canceller.join().unwrap();
+        assert!(!success);
         assert!(
             elapsed < Duration::from_secs(3),
             "cancellation should be prompt, took {elapsed:?}"

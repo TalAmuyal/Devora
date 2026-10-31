@@ -21,6 +21,10 @@ public enum Command: Sendable {
 	case moveActiveTabForward
 	case moveActiveTabBackward
 	case closeTab(id: UInt64)
+	/// Opens a tab named `title` and creates a workspace for it in the selected profile, with these repos; `sourceWorkspacePath` duplicates that workspace's task.
+	case createTask(title: String, repoPaths: [String], sourceWorkspacePath: String?)
+	/// Cancels the workspace creation running in a tab; a cancel asked for before the creation has started is held until it has.
+	case cancelCreation(tab: UInt64)
 	/// Answers `StartupProblem.stateUnreadable`: moves the unreadable app state aside, keeping it, and opens a fresh one in its place.
 	case startFresh
 	/// Removes an error banner.
@@ -60,6 +64,8 @@ public final class Store {
 	public private(set) var errorBanners = ErrorBanners()
 	/// The latest listing's latencies, with each status's as it arrives; nil without a selected profile.
 	public private(set) var loadingLatencies: LoadingLatencies?
+	/// The progress of the workspace creations started in this run, by the tab each runs in, until the tab closes or has its workspace.
+	public private(set) var creations: [UInt64: CreationProgress] = [:]
 
 	/// Asks the window's display link to call `foldPending()` on its next frame; without one, events fold on the main actor's next turn.
 	@ObservationIgnored public var requestFrame: (@MainActor () -> Void)?
@@ -77,6 +83,10 @@ public final class Store {
 	@ObservationIgnored private var latencyOrigin = ContinuousClock.now
 	/// Every error shown since the last `scrapeErrors()`, for the acceptance tests, as Ember records them.
 	@ObservationIgnored private var recordedErrors: [String] = []
+	/// The ids of the creations still running, by tab, for cancelling them.
+	@ObservationIgnored private var runningCreations: [UInt64: UInt32] = [:]
+	/// The tabs whose creation was cancelled before `create_workspace` returned its id.
+	@ObservationIgnored private var cancelsBeforeStart: Set<UInt64> = []
 
 	/// `configPath` overrides the global config file (`nil`: `DEVORA_CONFIG_PATH`, then `~/.config/devora/config.json`).
 	/// `log` is where the store and the core write, and where the core reports its errors from.
@@ -144,6 +154,10 @@ public final class Store {
 			apply(.moveActiveTabBackward)
 		case .closeTab(let id):
 			apply(.closeSession(tab: id))
+		case .createTask(let title, let repoPaths, let source):
+			return Task { await createTask(title: title, repoPaths: repoPaths, sourceWorkspacePath: source) }
+		case .cancelCreation(let tab):
+			cancelCreation(tab: tab)
 		case .dismissError(let id):
 			errorBanners.dismiss(id: id)
 		}
@@ -155,7 +169,10 @@ public final class Store {
 		let events = inbox.drain()
 		guard !events.isEmpty else { return }
 		var app = self.app
-		for event in events { app.apply(event) }
+		for event in events {
+			followCreation(event, in: app)
+			app.apply(event)
+		}
 		self.app = app
 	}
 
@@ -170,6 +187,12 @@ public final class Store {
 	public func hasNoTabs() -> Bool {
 		guard let core, let snapshot = try? call("snapshot", { try core.snapshot() }) else { return false }
 		return snapshot.window.tabs.isEmpty
+	}
+
+	/// The repos a task in the selected profile can use; nil when the call failed.
+	public func registeredRepos() async -> [RepoInfo]? {
+		guard let core, let profile = selectedProfilePath else { return nil }
+		return try? await call("get_registered_repos") { try core.getRegisteredRepos(profilePath: profile) }
 	}
 
 	/// Ends a workspace's task (`remove_task`: its repos' changes are discarded and their HEADs detached; the worktrees stay), then lists the workspaces again; returns whether the task was removed.
@@ -226,6 +249,63 @@ public final class Store {
 	}
 
 	private static let openShell = StateCommand.openSession(title: "Shell", kind: .shell, profilePath: nil)
+
+	/// The core opens the creation's tab and records its outcome in the app state; the store follows its progress for the progress page.
+	private func createTask(title: String, repoPaths: [String], sourceWorkspacePath: String?) async {
+		guard let core, let profile = selectedProfilePath,
+		      let creation = try? await call("create_workspace", {
+		      	try core.createWorkspace(profilePath: profile, repoPaths: repoPaths, taskName: title, sourceWorkspacePath: sourceWorkspacePath)
+		      })
+		else { return }
+		let tab = creation.tab
+		creations[tab] = CreationProgress()
+		runningCreations[tab] = creation.id
+		if cancelsBeforeStart.remove(tab) != nil { cancelCreation(tab: tab) }
+		let events = creation.events
+		Task.detached { [weak self] in
+			do {
+				for try await batch in Batches(events) {
+					await self?.creationProgressed(tab: tab, batch)
+					if batch.contains(where: \.isLast) { break }
+				}
+			} catch {
+				await self?.showError("the progress of task creation stopped: \(Self.describe(error))")
+			}
+			try? events.close()
+		}
+	}
+
+	/// Creation events are a handful per second at most (the prepare-command's output aside, which comes in batches), so each batch hops to the main actor as it comes.
+	private func creationProgressed(tab: UInt64, _ events: [CreationEvent]) {
+		if events.contains(where: \.isLast) { runningCreations[tab] = nil }
+		guard var progress = creations[tab] else { return }
+		for event in events { progress.apply(event) }
+		creations[tab] = progress
+	}
+
+	private func cancelCreation(tab: UInt64) {
+		guard let core else { return }
+		guard let id = runningCreations[tab] else {
+			// A creation the store has no progress for hasn't returned its id yet; one it has has ended.
+			if creations[tab] == nil { cancelsBeforeStart.insert(tab) }
+			return
+		}
+		try? call("cancel_workspace_creation") { try core.cancelWorkspaceCreation(id: id) }
+	}
+
+	/// A creation's progress goes once its tab has its workspace or is closed; closing the tab of a creation that is running, or has yet to return its id, cancels it.
+	/// `app` is the state before the event, where a closed tab still is.
+	private func followCreation(_ event: StateEvent, in app: AppState) {
+		switch event {
+		case .sessionChanged(let tab, let session):
+			if case .workspace = session.kind { creations[tab] = nil }
+		case .sessionClosed(let tab):
+			if app.window.tabs.first(where: { $0.id == tab })?.session.kind == .creatingWorkspace { cancelCreation(tab: tab) }
+			creations[tab] = nil
+		default:
+			break
+		}
+	}
 
 	private func startFresh() {
 		guard case .stateUnreadable(let path, _) = startupProblem,
