@@ -67,4 +67,21 @@ struct ProfileTests {
 
 		#expect(store.tabs(usingProfile: work).map(\.title) == ["Task"])
 	}
+
+	@Test func aWorkspaceOpensWithItsOwnProfileWhenAnotherIsSelected() async throws {
+		let fixture = try Fixture()
+		let work = try fixture.makeProfile("work")
+		let home = try fixture.makeProfile("home")
+		try fixture.makeWorkspace(profile: work, id: "ws-1", title: "Task")
+		try fixture.registerProfiles([work, home])
+		let store = Store(configPath: fixture.configPath, state: .inMemory, log: try fixture.log())
+		await store.load(selecting: work)
+		let listed = store.workspaces[0]
+
+		await store.dispatch(.selectProfile(path: home)).value
+		store.dispatch(.openWorkspace(listed))
+		try await eventually { store.app.window.tabs.count == 1 }
+
+		#expect(store.app.window.tabs[0].session.profilePath == work)
+	}
 }

@@ -64,7 +64,7 @@ struct AppStateTests {
 	@Test func theStoreRendersTabsFromTheCore() async throws {
 		let fixture = try Fixture()
 		let store = Store(configPath: "/nonexistent/config.json", state: .inMemory, log: try fixture.log())
-		let workspace = Workspace(id: "ws-1", path: "/ws/1", title: "Fix the build", repos: ["api"], active: true)
+		let workspace = Workspace(id: "ws-1", path: "/profile/workspaces/ws-1", profilePath: "/profile", title: "Fix the build", repos: ["api"], active: true)
 
 		store.dispatch(.openShell)
 		store.dispatch(.openWorkspace(workspace))
@@ -72,7 +72,7 @@ struct AppStateTests {
 
 		let tabs = store.app.window.tabs
 		#expect(tabs.map(\.title) == ["Shell", "Fix the build"])
-		#expect(tabs.map(\.session.kind) == [.shell, .workspace(path: "/ws/1")])
+		#expect(tabs.map(\.session.kind) == [.shell, .workspace(path: "/profile/workspaces/ws-1")])
 		#expect(store.app.window.activeTab == tabs[1].id)
 
 		store.dispatch(.closeTab(id: tabs[1].id))

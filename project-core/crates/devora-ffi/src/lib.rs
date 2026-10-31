@@ -77,6 +77,8 @@ pub struct Workspace {
     /// The workspace's directory name (`ws-N`).
     pub id: String,
     pub path: String,
+    /// The root of the profile the workspace belongs to: open its session with this profile, not the selected one.
+    pub profile_path: String,
     /// The task title; empty for an inactive workspace.
     pub title: String,
     pub repos: Vec<String>,
@@ -88,6 +90,7 @@ impl From<workspace::WorkspaceInfo> for Workspace {
         Workspace {
             id: info.id,
             path: info.path,
+            profile_path: info.profile_path,
             title: info.task_title,
             repos: info.repos,
             active: info.active,

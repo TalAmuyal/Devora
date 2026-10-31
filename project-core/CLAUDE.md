@@ -25,4 +25,6 @@ It is being extracted from Ember's `src-tauri/` area by area (TalAmuyal/Devora#2
 - No UI framework types (Tauri, UniFFI) below `devora-core`; a crate here must build and test on Linux.
 - Platform-specific behavior goes behind a trait in `devora-platform`, so the Linux track only adds implementations.
 - The facade's UniFFI side (for Sapphire) follows ADR-010's rules: every export returns `Result`, events are pulled in batches through a subscription object, and cancellation is an explicit command.
+- Each workspace belongs to exactly one profile, the one whose `workspaces/` holds it, which `list_workspaces` records on each entry (`profile_path`).
+  Profile-scoped settings (Claude settings, `terminal.default-app`, git shortcuts, the prepare-command, and Debi's profile through `DEBI_PROFILE_PATH`) resolve through the workspace's own profile, carried by its session (`Session::profile_path`), never through the active profile.
 - Tests live with the code they test; run them with `mise run test` (and `mise run lint`).

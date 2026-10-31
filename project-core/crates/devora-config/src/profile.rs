@@ -1,5 +1,8 @@
 //! Profile registry operations: creating/registering profile root directories and maintaining the "profiles" list in the global config.
 //!
+//! Each workspace belongs to exactly one profile, the one whose `workspaces/` holds it.
+//! Its profile-scoped settings resolve through that profile, never through the active one (which only selects what the Workspace Hub shows).
+//!
 //! All functions take the global config path explicitly so tests never need to mutate process-wide environment variables.
 
 use std::fs;

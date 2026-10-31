@@ -21,6 +21,8 @@ pub struct ProfileInfo {
 pub struct WorkspaceInfo {
     pub id: String,
     pub path: String,
+    /// The root of the profile the workspace belongs to; a session opened on the workspace takes its settings from this profile, whichever profile is active.
+    pub profile_path: String,
     pub task_title: String,
     pub repos: Vec<String>,
     pub active: bool,
@@ -237,6 +239,7 @@ pub fn list_workspaces(
         workspaces.push(WorkspaceInfo {
             id: dir_name,
             path: ws_path.to_string_lossy().into_owned(),
+            profile_path: profile_path.to_string(),
             task_title,
             repos,
             active,
@@ -918,6 +921,7 @@ mod tests {
         assert_eq!(result.len(), 2);
 
         assert_eq!(result[0].id, "ws-1");
+        assert_eq!(result[0].profile_path, tmp.path().to_string_lossy());
         assert!(result[0].active);
         assert_eq!(result[0].task_title, "my task");
         assert_eq!(result[0].repos, vec!["my-repo"]);

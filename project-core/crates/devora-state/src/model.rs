@@ -50,6 +50,7 @@ pub struct Tab {
 pub struct Session {
     pub kind: SessionKind,
     /// The profile the session belongs to, as the profile's root path; `None` for a shell outside any profile.
+    /// For a workspace it is the workspace's own profile, never the active one: the terminal's profile-scoped settings resolve from it.
     pub profile_path: Option<String>,
 }
 

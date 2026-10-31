@@ -18,6 +18,8 @@ export interface RepoInfo {
 export interface WorkspaceInfo {
   id: string;
   path: string;
+  /** The profile the workspace belongs to: its session takes this profile's settings, not the hub's active profile's. */
+  profilePath: string;
   taskTitle: string;
   repos: string[];
   active: boolean;
