@@ -22,10 +22,9 @@ final class WindowCloseUITests: XCTestCase {
 		app.launchEnvironment["DEVORA_CONFIG_PATH"] = config.path
 		app.launchEnvironment["DEVORA_STATE_DIR"] = scratch.appending(path: "state").path
 		app.launch()
+		app.openFirstShell()
+		app.openShell()
 		let shellTabs = app.staticTexts.matching(identifier: "Shell")
-		XCTAssertTrue(shellTabs.firstMatch.waitForExistence(timeout: 10))
-		app.buttons["New Shell"].click()
-		XCTAssertTrue(shellTabs.element(boundBy: 1).waitForExistence(timeout: 10))
 
 		app.typeKey("w", modifierFlags: .command)
 		XCTAssertTrue(app.wait(for: .notRunning, timeout: 10), "closing the window should quit")
@@ -33,5 +32,6 @@ final class WindowCloseUITests: XCTestCase {
 		app.launch()
 		XCTAssertTrue(shellTabs.element(boundBy: 1).waitForExistence(timeout: 10), "both tabs should be back")
 		XCTAssertEqual(shellTabs.count, 2)
+		XCTAssertFalse(app.hubHeader.exists, "restored tabs show without the Workspace Hub")
 	}
 }

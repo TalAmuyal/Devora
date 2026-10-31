@@ -31,10 +31,36 @@ export interface HubState {
   toast: string | null;
   /** The cheatsheet's scroll view, while it is open. */
   cheatsheet: { offset: number; contentHeight: number; viewportHeight: number } | null;
+  /** The profile dropdown's trigger label: the selected profile's name. */
+  profileLabel: string | null;
+  /** The open header dropdown (the profiles, or the burger menu), with its rows, separators left out. */
+  menu: {
+    kind: HubMenu;
+    items: { kind: 'option' | 'action'; label: string; detail: string | null; checked: boolean; enabled: boolean }[];
+  } | null;
 }
+
+export type HubMenu = 'profiles' | 'main';
+
+/** The open confirmation dialog; `focused` is the button Space would press. */
+export interface DialogState {
+  title: string;
+  intro: string;
+  items: { name: string; detail: string }[];
+  confirmLabel: string;
+  focused: 'confirm' | 'cancel';
+}
+
+/** A click on what the open hub draws: an action on its focused workspace, a dropdown's trigger, or a row of the open dropdown. */
+export type HubAction =
+  | { action: 'removeTask' }
+  | { action: 'delete' }
+  | { action: 'toggleMenu'; menu: HubMenu }
+  | { action: 'menuItem'; label: string };
 
 export interface AppState {
   hub: HubState | null;
+  dialog: DialogState | null;
   version: string;
   profiles: { name: string; path: string }[];
   selectedProfile: string | null;
@@ -115,6 +141,16 @@ export class Bridge {
    */
   async press(key: string, modifiers: Modifier[] = []): Promise<void> {
     await this.request('POST', '/test/key', { key, modifiers });
+  }
+
+  /** Clicks what the open Workspace Hub draws, as its buttons do; a disabled dropdown row is a 409. */
+  async hub(action: HubAction): Promise<void> {
+    await this.request('POST', '/test/hub', action);
+  }
+
+  /** Clicks a button of the open confirmation dialog. */
+  async dialog(button: 'confirm' | 'cancel'): Promise<void> {
+    await this.request('POST', '/test/dialog', { button });
   }
 
   /** The errors shown since the last scrape, which it clears, as Ember's `__scrapeErrors`. */

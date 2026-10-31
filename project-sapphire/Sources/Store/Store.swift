@@ -13,8 +13,6 @@ public enum Command: Sendable {
 	case openShell
 	/// Opens a tab on a workspace of the selected profile.
 	case openWorkspace(Workspace)
-	/// Opens a shell tab when there are no tabs, as at a launch that restored none.
-	case openShellIfNoTabs
 	case activateTab(id: UInt64)
 	/// Activates the tab after the active one, wrapping around to the first; `activatePreviousTab` goes the other way.
 	case activateNextTab
@@ -60,6 +58,8 @@ public final class Store {
 	public private(set) var app = AppState.empty
 	public private(set) var startupProblem: StartupProblem?
 	public private(set) var errorBanners = ErrorBanners()
+	/// The latest listing's latencies, with each status's as it arrives; nil without a selected profile.
+	public private(set) var loadingLatencies: LoadingLatencies?
 
 	/// Asks the window's display link to call `foldPending()` on its next frame; without one, events fold on the main actor's next turn.
 	@ObservationIgnored public var requestFrame: (@MainActor () -> Void)?
@@ -73,6 +73,8 @@ public final class Store {
 	/// Bumped whenever the statuses are dropped, so that the loads started before can't store theirs.
 	@ObservationIgnored private var statusGeneration = 0
 	@ObservationIgnored private var statusesLoading: Set<String> = []
+	/// When the listing `loadingLatencies` describes started; its times count from here.
+	@ObservationIgnored private var latencyOrigin = ContinuousClock.now
 	/// Every error shown since the last `scrapeErrors()`, for the acceptance tests, as Ember records them.
 	@ObservationIgnored private var recordedErrors: [String] = []
 
@@ -123,9 +125,6 @@ public final class Store {
 			loadWorkspaceStatuses(fresh: fresh)
 		case .openShell:
 			apply(Self.openShell)
-		case .openShellIfNoTabs:
-			guard let core, let snapshot = try? call("snapshot", { try core.snapshot() }) else { break }
-			if snapshot.window.tabs.isEmpty { apply(Self.openShell) }
 		case .startFresh:
 			startFresh()
 		case .openWorkspace(let workspace):
@@ -165,6 +164,43 @@ public final class Store {
 		guard let core else { throw CoreError.Failed(message: "the core isn't running") }
 		let resources = Bundle.main.resourcePath
 		return try await call("terminal_spec") { try core.terminalSpec(pane: id, resourcesDir: resources) }
+	}
+
+	/// Whether the core's app state has no tabs, as after a launch that restored none; read from the core, since its events fold on a later frame.
+	public func hasNoTabs() -> Bool {
+		guard let core, let snapshot = try? call("snapshot", { try core.snapshot() }) else { return false }
+		return snapshot.window.tabs.isEmpty
+	}
+
+	/// Ends a workspace's task (`remove_task`: its repos' changes are discarded and their HEADs detached; the worktrees stay), then lists the workspaces again; returns whether the task was removed.
+	@discardableResult
+	public func removeTask(_ workspace: Workspace) async -> Bool {
+		guard let core else { return false }
+		let path = workspace.path
+		guard (try? await call("remove_task", { try core.removeTask(workspacePath: path) })) != nil else { return false }
+		await workspaceChanged(path, core: core)
+		return true
+	}
+
+	/// Deletes a workspace (`delete_workspace`: its worktrees, then its directory), then lists the workspaces again; returns whether it was deleted.
+	@discardableResult
+	public func deleteWorkspace(_ workspace: Workspace) async -> Bool {
+		guard let core else { return false }
+		let path = workspace.path
+		guard (try? await call("delete_workspace", { try core.deleteWorkspace(workspacePath: path) })) != nil else { return false }
+		await workspaceChanged(path, core: core)
+		return true
+	}
+
+	/// Writes the latest load's latencies to `<profile>/diagnostics/hub-profile-<timestamp>.json` and returns the file's path; nil when there is nothing to write or the write failed.
+	public func saveLoadingLatencies() async -> String? {
+		guard let core, let latencies = loadingLatencies else { return nil }
+		let encoder = JSONEncoder()
+		encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+		guard let data = try? encoder.encode(latencies) else { return nil }
+		let json = String(decoding: data, as: UTF8.self)
+		let profile = latencies.profilePath
+		return try? await call("save_profiling_report") { try core.saveProfilingReport(profilePath: profile, reportJson: json) }
 	}
 
 	/// THE way to surface an error, as Ember's `showError`: recorded for the tests, written to the log, and shown on a banner.
@@ -244,29 +280,56 @@ public final class Store {
 	/// Loads the version and the profiles, then the workspaces of the selected (or first) profile; returns whether every call succeeded.
 	@discardableResult
 	public func load() async -> Bool {
-		guard let core,
-		      let version = try? await call("version", { try core.version() }),
-		      let profiles = try? await call("list_profiles", { try core.listProfiles() })
-		else { return false }
+		guard let core, let version = try? await call("version", { try core.version() }) else { return false }
+		let started = ContinuousClock.now
+		guard let profiles = try? await call("list_profiles", { try core.listProfiles() }) else { return false }
+		let listProfiles = LoadingLatencies.Phase(from: started, to: .now, origin: started)
 		self.version = version
 		self.profiles = profiles
 		let selected = profiles.first { $0.path == selectedProfilePath } ?? profiles.first
-		return await select(selected?.path, core: core)
+		return await select(selected?.path, core: core, started: started, listProfiles: listProfiles)
 	}
 
 	@discardableResult
-	private func select(_ path: String?, core: DevoraCore) async -> Bool {
+	private func select(
+		_ path: String?, core: DevoraCore, started: ContinuousClock.Instant = .now,
+		listProfiles: LoadingLatencies.Phase = .zero
+	) async -> Bool {
 		if path != selectedProfilePath { dropWorkspaceStatuses() }
 		selectedProfilePath = path
 		guard let path else {
 			workspaces = []
+			loadingLatencies = nil
 			return true
 		}
+		let listStarted = ContinuousClock.now
 		let list = try? await call("list_workspaces") { try core.listWorkspaces(profilePath: path) }
 		// A later selection wins over a slower, earlier one.
 		guard selectedProfilePath == path else { return false }
 		workspaces = list ?? []
+		let listed = ContinuousClock.now
+		latencyOrigin = started
+		loadingLatencies = LoadingLatencies(
+			timestamp: Date.now.ISO8601Format(),
+			profileName: profiles.first { $0.path == path }?.name ?? "",
+			profilePath: path,
+			workspaceCount: workspaces.count,
+			phases: .init(
+				listProfiles: listProfiles,
+				listWorkspaces: .init(from: listStarted, to: listed, origin: started),
+				totalLoad: .init(from: started, to: listed, origin: started)),
+			workspaceStatuses: [])
 		return list != nil
+	}
+
+	/// After a workspace's task was removed or the workspace deleted: its status is stale and the list may have changed.
+	private func workspaceChanged(_ path: String, core: DevoraCore) async {
+		workspaceStatuses[path] = nil
+		guard let profile = selectedProfilePath,
+		      let list = try? await call("list_workspaces", { try core.listWorkspaces(profilePath: profile) }),
+		      selectedProfilePath == profile
+		else { return }
+		workspaces = list
 	}
 
 	private func dropWorkspaceStatuses() {
@@ -289,35 +352,45 @@ public final class Store {
 		let generation = statusGeneration
 		let requests = pending.map { StatusRequest(path: $0.path, repos: $0.repos) }
 		Task.detached { [weak self] in
-			await withTaskGroup(of: (String, Result<WorkspaceStatus, any Error>).self) { group in
+			await withTaskGroup(of: StatusLoad.self) { group in
 				var next = requests.makeIterator()
 				func start(_ request: StatusRequest) {
 					group.addTask {
-						(request.path, Result { try core.workspaceStatus(workspacePath: request.path, repoNames: request.repos) })
+						let started = ContinuousClock.now
+						let result = Result { try core.workspaceStatus(workspacePath: request.path, repoNames: request.repos) }
+						return StatusLoad(request: request, result: result, started: started, finished: .now)
 					}
 				}
 				for _ in 0..<Self.concurrentStatusLoads {
 					guard let request = next.next() else { break }
 					start(request)
 				}
-				for await (path, result) in group {
-					guard let self, await self.statusArrived(path: path, result: result, generation: generation) else { return }
+				for await load in group {
+					guard let self, await self.statusArrived(load, generation: generation) else { return }
 					if let request = next.next() { start(request) }
 				}
 			}
 		}
 	}
 
-	/// Keeps a workspace's status; returns false once its load was superseded, so that it starts no more.
-	private func statusArrived(path: String, result: Result<WorkspaceStatus, any Error>, generation: Int) -> Bool {
+	/// Keeps a workspace's status, and its latency; returns false once its load was superseded, so that it starts no more.
+	private func statusArrived(_ load: StatusLoad, generation: Int) -> Bool {
 		guard generation == statusGeneration else { return false }
+		let path = load.request.path
 		statusesLoading.remove(path)
-		switch result {
-		case .success(let status):
-			workspaceStatuses[path] = status
+		let status: WorkspaceStatus
+		switch load.result {
+		case .success(let loaded):
+			status = loaded
 		case .failure(let error):
 			showError("workspace_status failed: \(Self.describe(error))")
-			workspaceStatuses[path] = WorkspaceStatus(repos: [], error: Self.describe(error))
+			status = WorkspaceStatus(repos: [], error: Self.describe(error))
+		}
+		workspaceStatuses[path] = status
+		if let id = workspaces.first(where: { $0.path == path })?.id {
+			let phase = LoadingLatencies.Phase(from: load.started, to: load.finished, origin: latencyOrigin)
+			loadingLatencies?.workspaceStatuses.append(.init(
+				wsId: id, repoCount: load.request.repos.count, startMs: phase.startMs, durationMs: phase.durationMs, error: status.error))
 		}
 		return true
 	}
@@ -356,6 +429,13 @@ public final class Store {
 private struct StatusRequest: Sendable {
 	let path: String
 	let repos: [String]
+}
+
+private struct StatusLoad: Sendable {
+	let request: StatusRequest
+	let result: Result<WorkspaceStatus, any Error>
+	let started: ContinuousClock.Instant
+	let finished: ContinuousClock.Instant
 }
 
 /// Events buffered off the main actor until the next fold.

@@ -23,7 +23,7 @@ Before(async function (this: SapphireWorld) {
   this.stateDir = path.join(this.scenarioDir, 'state');
   writeTestConfig(this.testConfigPath, []);
   await this.launch();
-  // A fresh state restores no tabs, so the launch opens one shell tab.
+  // A fresh state restores no tabs, so the launch opens the Workspace Hub.
   await waitUntilReady(this.bridge);
 });
 

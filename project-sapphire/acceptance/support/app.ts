@@ -62,15 +62,15 @@ export async function launch(configPath: string, stateDir: string): Promise<Laun
   return { app, bridge: new Bridge(port) };
 }
 
-/** Waits until the app state is open and every tab that runs a terminal runs it; the launch opens a shell tab when it restored none. */
+/** Waits until the app state is open and either every restored tab that runs a terminal runs it, or, when none was restored, the Workspace Hub the launch opens has loaded. */
 export function waitUntilReady(bridge: Bridge): Promise<AppState> {
-  // The bridge starts once the launch is done, but its tabs reach the store's state on a later frame; steps that read the state before acting need it settled.
+  // The bridge starts once the launch is done, but restored tabs reach the store's state on a later frame; steps that read the state before acting need it settled.
   return bridge.waitFor(
-    'the launch to settle with its tabs running',
+    'the launch to settle',
     () => bridge.state(),
     (s) =>
       s.startupProblem === null &&
-      s.tabs.length > 0 &&
+      (s.tabs.length > 0 || (s.hub !== null && !s.hub.loading)) &&
       s.tabs.every((tab) => tab.terminal === 'running' || !runsTerminal(tab.kind)),
   );
 }

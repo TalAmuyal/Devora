@@ -3,7 +3,7 @@ Feature: Workspace Hub - Remove Task and Delete operations
   Inactive and invalid workspaces can be permanently deleted.
 
   Background:
-    Given Ember is running
+    Given Devora is running with no sessions open
 
   # --- Remove Task (active workspaces) ---
 

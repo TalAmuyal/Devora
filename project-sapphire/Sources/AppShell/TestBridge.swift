@@ -87,6 +87,16 @@ final class TestBridge {
 			case ("POST", "/test/key"):
 				try press(request.json())
 				return .init(status: 200, body: [:])
+			case ("POST", "/test/hub"):
+				try hubAction(request.json())
+				return .init(status: 200, body: [:])
+			case ("POST", "/test/dialog"):
+				try dialogButton(request.json())
+				return .init(status: 200, body: [:])
+			case ("POST", "/test/snapshot"):
+				guard let path = try request.json()["path"] as? String else { throw BridgeError(status: 400, "missing path") }
+				await Snapshot.captureWindow(to: path, store: store)
+				return .init(status: 200, body: [:])
 			case ("POST", "/test/errors/scrape"):
 				return .init(status: 200, body: ["errors": store.scrapeErrors()])
 			default:
@@ -128,13 +138,13 @@ final class TestBridge {
 		return value
 	}
 
-	/// The terminal of the tab with this id (the active tab by default); a 409 until it is running, so that callers poll.
+	/// The terminal of the tab with this id (the active tab by default); a 409 until the tab has one, so that callers poll.
 	private func terminal(_ id: UInt64?) throws -> TerminalSession {
 		let window = store.app.window
 		guard let id = id ?? window.activeTab, let tab = window.tabs.first(where: { $0.id == id }) else {
 			throw BridgeError(status: 404, "no tab \(id.map(String.init) ?? "is active")")
 		}
-		guard let session = terminals.session(for: tab) else { throw BridgeError(status: 409, "the terminal of tab \(id) isn't running") }
+		guard let session = terminals.session(for: tab) else { throw BridgeError(status: 409, "tab \(id) has no terminal yet") }
 		return session
 	}
 
@@ -160,10 +170,73 @@ final class TestBridge {
 		if !surfaces.router.handle(KeyPress(event)) { window.sendEvent(event) }
 	}
 
+	/// Clicks what the open hub draws, as its buttons do: an action on the focused workspace, a dropdown's trigger, or a row of the open dropdown (by its label; a disabled one is a 409).
+	private func hubAction(_ body: [String: Any]) throws {
+		guard let hub = surfaces.hub else { throw BridgeError(status: 409, "the Workspace Hub isn't open") }
+		switch body["action"] as? String {
+		case "removeTask", "delete":
+			guard let workspace = hub.focused else { throw BridgeError(status: 409, "no workspace is focused") }
+			let removes = body["action"] as? String == "removeTask"
+			guard workspace.active == removes else {
+				throw BridgeError(status: 409, "\(workspace.id) has no \(removes ? "Remove Task" : "Delete") button")
+			}
+			if removes { hub.removeTask(workspace) } else { hub.deleteWorkspace(workspace) }
+		case "toggleMenu":
+			guard let menu = (body["menu"] as? String).flatMap(HubMenu.init) else { throw BridgeError(status: 400, "unknown menu") }
+			hub.toggleMenu(menu)
+		case "menuItem":
+			guard let menu = hub.openMenu else { throw BridgeError(status: 409, "no dropdown is open") }
+			let label = body["label"] as? String
+			guard let item = hub.menuItems(menu).first(where: { $0.kind != .separator && $0.label == label }) else {
+				throw BridgeError(status: 404, "no row \(label ?? "nil") in the \(menu.rawValue) dropdown")
+			}
+			guard item.enabled else { throw BridgeError(status: 409, "\(item.label) is disabled") }
+			hub.closeMenu()
+			item.select()
+		default:
+			throw BridgeError(status: 400, "unknown hub action \(String(describing: body["action"]))")
+		}
+	}
+
+	/// Clicks one of the open confirmation dialog's buttons.
+	private func dialogButton(_ body: [String: Any]) throws {
+		guard let dialog = surfaces.dialog else { throw BridgeError(status: 409, "no confirmation dialog is open") }
+		switch body["button"] as? String {
+		case "confirm": dialog.confirm()
+		case "cancel": dialog.cancel()
+		default: throw BridgeError(status: 400, "unknown button \(String(describing: body["button"]))")
+		}
+	}
+
+	private func dialogState() -> Any {
+		guard let dialog = surfaces.dialog else { return NSNull() }
+		let confirmation = dialog.confirmation
+		return [
+			"title": confirmation.title,
+			"intro": confirmation.intro,
+			"items": confirmation.items.map { ["name": $0.name, "detail": $0.detail] },
+			"confirmLabel": confirmation.confirmLabel,
+			"focused": dialog.focused == .confirm ? "confirm" : "cancel",
+		] as [String: Any]
+	}
+
+	private func menuState(of hub: WorkspaceHubModel) -> Any {
+		guard let menu = hub.openMenu else { return NSNull() }
+		let items: [[String: Any]] = hub.menuItems(menu).filter { $0.kind != .separator }.map { item in
+			[
+				"kind": item.kind.rawValue, "label": item.label, "detail": item.detail ?? NSNull(),
+				"checked": item.checked, "enabled": item.enabled,
+			]
+		}
+		return ["kind": menu.rawValue, "items": items] as [String: Any]
+	}
+
 	private func hubState() -> Any {
 		guard let hub = surfaces.hub else { return NSNull() }
 		let focused = hub.focused
 		return [
+			"profileLabel": store.profiles.first { $0.path == store.selectedProfilePath }?.name ?? NSNull(),
+			"menu": menuState(of: hub),
 			"loading": !hub.loaded,
 			"category": hub.category.label,
 			"filter": hub.filter,
@@ -194,6 +267,7 @@ final class TestBridge {
 		let window = store.app.window
 		return [
 			"hub": hubState(),
+			"dialog": dialogState(),
 			"fontSize": TerminalRuntime.shared.fontSize,
 			"windowLayers": surfaces.windowStack.layers.map(\.spec.name),
 			"version": store.version,
@@ -210,7 +284,7 @@ final class TestBridge {
 					"id": NSNumber(value: tab.id),
 					"title": tab.title,
 					"kind": Self.name(tab.session.kind),
-					"terminal": Self.name(terminals.slots[tab.terminalID]),
+					"terminal": Self.status(session),
 					"focused": session?.hasFocus ?? false,
 					"layers": surfaces.tabStacks[tab.id]?.layers.map(\.spec.name) ?? [],
 				] as [String: Any]
@@ -234,13 +308,10 @@ final class TestBridge {
 		}
 	}
 
-	private static func name(_ slot: Terminals.Slot?) -> String {
-		switch slot {
-		case nil: "none"
-		case .starting: "starting"
-		case .failed(let reason): "failed: \(reason)"
-		case .running: "running"
-		}
+	private static func status(_ session: TerminalSession?) -> String {
+		guard let session else { return "none" }
+		if let reason = session.startFailure { return "failed: \(reason)" }
+		return session.isRunning ? "running" : "starting"
 	}
 }
 

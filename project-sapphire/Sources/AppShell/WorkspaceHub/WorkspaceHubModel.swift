@@ -14,6 +14,8 @@ final class WorkspaceHubModel {
 	/// "Refreshing…" stays up at least this long, even when the reload is instant; "Refreshed successfully" stays this long.
 	static let refreshingMinimum = Duration.seconds(1)
 	static let refreshedDuration = Duration.seconds(3)
+	/// The tooltip of the controls that lead to what Sapphire doesn't have yet, which are shown disabled.
+	static let notYet = "Not in Sapphire yet"
 
 	let store: Store
 	var category = HubCategory.active {
@@ -28,13 +30,23 @@ final class WorkspaceHubModel {
 	/// False until the first load is done, while the list shows its loading placeholder.
 	private(set) var loaded = false
 	private(set) var toast: String?
+	/// The header's open dropdown; its popup layer (`Surfaces`) keeps this in step.
+	var openMenu: HubMenu?
+	/// Where each dropdown's trigger is drawn, in the hub's coordinates, to anchor the open panel under it.
+	var menuTriggers: [HubMenu: CGRect] = [:]
 
 	@ObservationIgnored var openWorkspace: (Workspace) -> Void = { _ in }
 	@ObservationIgnored var showCheatsheet: () -> Void = {}
+	/// Opens a header dropdown, closing the other one; closes it if it is the one open.
+	@ObservationIgnored var toggleMenu: (HubMenu) -> Void = { _ in }
+	@ObservationIgnored var closeMenu: () -> Void = {}
+	/// Asks with a confirmation dialog, then runs the action if the user confirms.
+	@ObservationIgnored var confirm: (Confirmation, @escaping () -> Void) -> Void = { _, _ in }
 	@ObservationIgnored private let isEditingText: () -> Bool
 	@ObservationIgnored private let clearFocus: () -> Void
 	@ObservationIgnored private var loadTask: Task<Void, Never>?
 	@ObservationIgnored private var refreshTask: Task<Void, Never>?
+	@ObservationIgnored private var toastTask: Task<Void, Never>?
 
 	init(store: Store, isEditingText: @escaping () -> Bool, clearFocus: @escaping () -> Void) {
 		self.store = store
@@ -67,6 +79,7 @@ final class WorkspaceHubModel {
 	/// Reloads everything with a toast: "Refreshing…", then "Refreshed successfully" unless a call failed, which has its banner; the latest press wins.
 	func refresh() {
 		refreshTask?.cancel()
+		toastTask?.cancel()
 		refreshTask = Task { [weak self] in
 			guard let self else { return }
 			toast = "Refreshing…"
@@ -95,14 +108,73 @@ final class WorkspaceHubModel {
 		if let index = items.firstIndex(where: { $0.path == workspace.path }) { cursor.select(index) }
 	}
 
+	/// Ends an active workspace's task: at once when its repos are clean and detached, otherwise after a confirmation listing what will be lost.
+	func removeTask(_ workspace: Workspace) {
+		switch RemoveTaskDecision(status: status(of: workspace)) {
+		case .removeNow:
+			performRemoveTask(workspace)
+		case .confirm(let problems):
+			confirm(RemoveTaskDecision.confirmation(for: workspace, problems: problems)) { [weak self] in
+				self?.performRemoveTask(workspace)
+			}
+		}
+	}
+
+	/// Deletes an inactive or invalid workspace, with no confirmation, as Ember does.
+	func deleteWorkspace(_ workspace: Workspace) {
+		Task {
+			guard await store.deleteWorkspace(workspace) else { return }
+			store.dispatch(.loadWorkspaceStatuses(fresh: false))
+		}
+	}
+
+	/// Writes the latest load's latencies to the profile's `diagnostics/`, and says where in a toast.
+	func saveLoadingLatencies() {
+		Task {
+			guard let path = await store.saveLoadingLatencies() else { return }
+			flash("Loading latencies saved: \(path)")
+		}
+	}
+
+	/// The rows of a header dropdown; the actions that lead to surfaces Sapphire doesn't have yet are shown disabled.
+	func menuItems(_ menu: HubMenu) -> [DropdownItem] {
+		let notYet = Self.notYet
+		switch menu {
+		case .profiles:
+			return store.profiles.map { profile in
+				.option(
+					profile.name, detail: profile.repoCount == 1 ? "1 repo" : "\(profile.repoCount) repos",
+					checked: profile.path == store.selectedProfilePath
+				) { [weak self] in self?.selectProfile(profile.path) }
+			} + [
+				.separator,
+				.action("New Profile…", systemImage: "plus", enabled: false, help: notYet),
+				.action("Manage Profiles…", systemImage: "gearshape", enabled: false, help: notYet),
+			]
+		case .main:
+			var items: [DropdownItem] = []
+			if !store.profiles.isEmpty {
+				items.append(.action("Settings", systemImage: "gearshape", enabled: false, help: notYet))
+			}
+			items.append(.action("Health", systemImage: "cross.case", enabled: false, help: notYet))
+			if store.loadingLatencies != nil {
+				items += [.separator, .action("Save loading latencies", systemImage: "square.and.arrow.down") { [weak self] in self?.saveLoadingLatencies() }]
+			}
+			return items
+		}
+	}
+
 	/// The layer's cleanup: stops what is still loading, so nothing changes a closed hub.
 	func close() {
 		loadTask?.cancel()
 		refreshTask?.cancel()
+		toastTask?.cancel()
 	}
 
 	/// The hub's keys; `q` and Escape go on to the stack's dismissal, unless the filter has the focus, where Escape leaves the field and `q` types.
+	/// A key that reaches the hub closes an open dropdown first: the dropdown's popup layer passes on what it doesn't claim, and closes on `q` and Escape itself.
 	func handleKey(_ key: Layers.KeyPress) -> Bool {
+		if openMenu != nil { closeMenu() }
 		if isEditingText() {
 			guard key.keyCode == KeyCode.escape else { return false }
 			filterFocused = false
@@ -130,6 +202,24 @@ final class WorkspaceHubModel {
 		return true
 	}
 
+	private func performRemoveTask(_ workspace: Workspace) {
+		Task {
+			guard await store.removeTask(workspace) else { return }
+			store.dispatch(.loadWorkspaceStatuses(fresh: false))
+		}
+	}
+
+	/// Shows a toast for a few seconds, replacing the one up.
+	private func flash(_ text: String) {
+		toastTask?.cancel()
+		toast = text
+		toastTask = Task { [weak self] in
+			try? await Task.sleep(for: Self.refreshedDuration)
+			guard !Task.isCancelled else { return }
+			self?.toast = nil
+		}
+	}
+
 	/// Runs `listing`, then loads the statuses; a later listing wins over an earlier one.
 	private func list(freshStatuses: Bool, _ listing: @escaping @MainActor (WorkspaceHubModel) async -> Void) {
 		loadTask?.cancel()
@@ -141,6 +231,12 @@ final class WorkspaceHubModel {
 			store.dispatch(.loadWorkspaceStatuses(fresh: freshStatuses))
 		}
 	}
+}
+
+/// The Workspace Hub's header dropdowns: the profiles, and the burger (☰) menu.
+enum HubMenu: String {
+	case profiles
+	case main
 }
 
 extension Layers.KeyPress {

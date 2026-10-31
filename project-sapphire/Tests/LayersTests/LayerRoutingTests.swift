@@ -119,6 +119,25 @@ struct LayerRoutingTests {
 		#expect(router.windowStack.isEmpty)
 	}
 
+	@Test func aModalKeepsTabWithinItself() {
+		let (router, _) = routerWithTab()
+		router.windowStack.push(layer("hub", preset: pageLayer))
+		var cycles: [Bool] = []
+		var dialog = layer("dialog", preset: modalLayer)
+		dialog.cycleFocus = { cycles.append($0) }
+		router.windowStack.push(dialog)
+		log.keys = []
+		let tab = KeyPress(keyCode: KeyCode.tab, characters: "\t")
+
+		#expect(router.handle(tab))
+		#expect(router.handle(KeyPress(keyCode: KeyCode.tab, modifiers: .shift, characters: "\u{19}")))
+		#expect(cycles == [false, true])
+		#expect(log.keys.isEmpty, "neither the dialog's keys nor the hub beneath see Tab")
+
+		router.windowStack.pop()
+		#expect(!router.handle(tab), "without the dialog, Tab goes on to the window")
+	}
+
 	@Test func aVetoedDismissalIsConsumedAndKeepsTheLayer() {
 		let (router, _) = routerWithTab()
 		var spec = layer("welcome", preset: pageLayer)

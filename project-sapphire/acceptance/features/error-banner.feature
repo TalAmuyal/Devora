@@ -1,6 +1,6 @@
 Feature: Global error banners
   Failed core calls and the errors the core reports surface as dismissible error banners stacked above all UI, are written to the log file, and are recorded for test scraping.
-  The scenario shared with Ember is in `acceptance/features/error-banner.feature`; Ember's own reaches a failing call through Remove Task, which Sapphire doesn't have yet, so these fail the Workspace Hub's listing instead.
+  The scenarios shared with Ember are in `acceptance/features/error-banner.feature`; these fail the Workspace Hub's listing, to check the log file and the count on a repeated banner.
 
   Scenario: A failing core call shows a global error banner
     Given a profile "Work" with 1 active workspaces

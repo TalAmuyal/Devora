@@ -2,7 +2,8 @@
 
 The native macOS build (ADR-006, ADR-010): SwiftUI and AppKit over the shared Rust core (`../project-core/`), bound through UniFFI by the `devora-ffi` crate.
 The app is one window: the active tab's terminal (libghostty) over a tab bar, under the window's surfaces, of which the Workspace Hub (`Ctrl+S`) is the first.
-It reopens the tabs it had when it last quit, crashed or was killed, or one shell tab when it had none; `+` opens another, and the Workspace Hub opens a workspace in a new tab.
+It reopens the tabs it had when it last quit, crashed or was killed, without the Workspace Hub; with no tabs to reopen, it opens on the Workspace Hub, as Ember always does.
+`+` opens a shell tab, and the Workspace Hub opens a workspace in a new tab.
 Keys go through ADR-003's layer routing (`Sources/Layers/CLAUDE.md`): `Ctrl+S` opens the Workspace Hub, `Ctrl+←/→` switch tabs, `Ctrl+Shift+←/→` move the active tab, `Ctrl+Shift+S` opens a shell, and `Ctrl+1/2/3`, `Ctrl+=` and `Ctrl+Shift+=`/`-` set the terminals' font size; every other key reaches the terminal.
 Closing the window quits the app.
 
@@ -15,11 +16,13 @@ Closing the window quits the app.
 - The app state has one writer: the core holds `state.db` exclusively while it runs, so a second instance on it gets `StartupProblem.stateInUse` and can only quit.
 	A state that can't be opened (corrupt, from a newer build) is `StartupProblem.stateUnreadable`: Quit leaves it untouched, Start Fresh (`Command.startFresh`) renames it, with its WAL, to `state-unreadable-<UTC time>.db` beside it and opens a fresh one.
 	Until the problem is answered, the store has no core and `StartupProblemView` fills the window.
-- The launch (`RootView`) runs once the state is open: `openShellIfNoTabs`, then the profiles and the selected profile's workspaces; restored tabs get fresh terminals from their specs (a terminal's contents aren't restored), and a workspace creation the app stopped in the middle of comes back as failed ("interrupted").
+- The launch (`RootView`) runs once the state is open: the profiles and the selected profile's workspaces, then the Workspace Hub if the core has no tabs (`Store.hasNoTabs`, read from the core since the restored tabs fold on a later frame); restored tabs get fresh terminals from their specs (a terminal's contents aren't restored), and a workspace creation the app stopped in the middle of comes back as failed ("interrupted").
 - The store pulls the core's events through `Batches`, the `AsyncSequence` over a core subscription.
 	Events wait in an off-main inbox until `FrameDriver`'s display link folds them into `Store.app`, once per frame and only while events are pending.
 	Without a display link (tests), they fold on the main actor's next turn.
-- `Terminals` (in `AppShell`) holds the live terminals, keyed by the terminal id of each tab's pane: it starts one from the core's `terminalSpec` when a tab appears and drops it when the tab leaves the state, which frees the libghostty surface and ends its process.
+- `Terminals` (in `AppShell`) holds the live terminals, keyed by the terminal id of each tab's pane: it makes one when a tab appears and drops it when the tab leaves the state, which frees the libghostty surface and ends its process.
+	The terminal is at the bottom of its tab's stack at once, while its launch (the core's `terminalSpec`) loads; it runs once it has its launch and its view is in the window, when libghostty makes the surface and spawns the shell.
+	What is typed into it before then (keys, the bridge's lines, a paste) waits in its `TerminalSession` and goes to the surface in order once it exists; the PTY holds it until the shell reads it, as in any terminal.
 	Every tab's terminal stays in the view tree, so switching tabs keeps them running; a terminal whose process exits closes its tab, as in Ember.
 - `Surfaces` (in `AppShell`) holds the key router and one layer stack per tab, with the tab's terminal as its bottom layer; the active tab's top layer has the keyboard focus unless a window surface is open.
 
@@ -34,7 +37,14 @@ Ember's home page (`Sources/AppShell/WorkspaceHub/`): the selected profile's wor
 	Dropping the statuses (a fresh load, another profile) makes the loads still running drop theirs.
 - Its keys are in `WorkspaceHubModel.handleKey`; while the filter field has the focus, keys type into it and Escape leaves it, as Ember's editable-element guard does.
 	The cheatsheet (`?`) is a page of its own over the hub, scrolled by `VimScroll`, ADR-004's motions over a SwiftUI scroll view; `ListCursor` is the list's cursor.
-- The profile menu in its header switches the profile, standing in for Ember's profile dropdown, which comes with the hub's operations.
+- The detail panel's buttons are Ember's: Open; Duplicate and Remove Task for an active workspace; Delete for an inactive or invalid one.
+	Remove Task (`Store.removeTask`, `remove_task`) goes ahead at once when every repo is known to be clean and on a detached HEAD (`RemoveTaskDecision`), and otherwise asks with a confirmation dialog listing what will be lost; Delete (`Store.deleteWorkspace`, `delete_workspace`) never asks.
+	Either one lists the workspaces again, keeping the filters and the cursor; a failure shows its banner.
+- The confirmation dialog (`ConfirmationDialog.swift`, `Surfaces.confirm`) is a modal layer over the window, with Ember's keys: Escape and `q` cancel, Enter confirms, Tab and Shift+Tab move between its two buttons without ever leaving it, and Space presses the focused one; it draws its own focus, so the Tab trap doesn't depend on the system's keyboard navigation setting.
+- The header has Ember's two dropdowns (`DropdownMenu.swift`): the profiles (each with its repo count, the selected one checked), and the burger menu, whose "Save loading latencies" writes the latest load's `LoadingLatencies` to `<profile>/diagnostics/hub-profile-<timestamp>.json` and shows the path in a toast.
+	An open dropdown is a popup layer (`Surfaces.toggleHubMenu`) whose content is empty: the hub draws the panel under its trigger, as Ember's caller-mounted popup, with a click anywhere else closing it.
+	Escape and `q` close only the dropdown; any other key closes it and reaches the hub.
+- What leads to a surface Sapphire doesn't have yet is shown disabled, with a "Not in Sapphire yet" tooltip: Duplicate and "+ New Task" (task creation), "New Profile…", "Manage Profiles…" and "Settings" (the Settings Hub), and "Health" (the Health Hub); their keys (`n`, `P`, `H`) do nothing, and the cheatsheet leaves them out.
 - Ember refuses to close the hub while there are no profiles, behind its first-run welcome; Sapphire has neither yet, so its hub closes and says there are no profiles.
 
 ## Errors and the log
@@ -62,7 +72,7 @@ Sapphire follows Ember's error reporting (ADR-002).
 - `Tests/StoreTests`: the store and the event fold against the real core, over a fixture config.
 - `Tests/TerminalKitTests`: the command line libghostty runs.
 - `Tests/LayersTests`: the routing and focus rules, on stand-in layers.
-- `Tests/AppShellTests`: which key-downs are app-wide shortcuts, and the Workspace Hub's list, cursor, scrolling and keys.
+- `Tests/AppShellTests`: which key-downs are app-wide shortcuts, the Workspace Hub's list, cursor, scrolling and keys, the Remove Task decision and the confirmation dialog's keys.
 - `acceptance/`: the acceptance scenarios' Cucumber.js harness (steps, hooks, the bridge client) and Sapphire-only features; `../acceptance/features/` holds those shared with Ember.
 - `UITests/`: the XCUITests, a UI-test target in `App/project.yml`.
 - `scripts/build-core.sh`: `devora-ffi` → static library → bindings → `build/DevoraCoreFFI.xcframework`.
@@ -73,7 +83,7 @@ Sapphire follows Ember's error reporting (ADR-002).
 - `mise run build`: the core, the bindings, the Xcode project and `build/DerivedData/Build/Products/Release/Devora Sapphire.app`; it builds GhosttyKit first if `build/GhosttyKit.xcframework` is missing.
 - `mise run run`: launches the app through LaunchServices (`open -n`); arguments are `--flag value` pairs, since a bare argument makes AppKit open no window.
 	`--open-workspace <path>` opens a workspace of the selected profile in a new tab; `--surface workspace-hub` opens the Workspace Hub.
-	`--snapshot <out.png>` types a command into the first shell tab, captures the window to `<out.png>` and the active tab's text to `<out.png>.txt`, then quits.
+	`--snapshot <out.png>` types a command into the first shell tab, if there is one, captures the window to `<out.png>` and the active tab's text to `<out.png>.txt`, then quits.
 - `mise run test`: every test, in order: `test-unit` (`swift test`, the store against the real core), `test-acceptance` (the scenarios over the test bridge) and `test-ui` (the XCUITests); the last two build the app first.
 - `mise run core`, `mise run generate`, `mise run ghostty-fetch`, `mise run ghostty-build`: the build's steps.
 	`ghostty-build` needs Xcode's Metal Toolchain and gettext's `msgfmt` (`mise run ghostty-prereqs` installs whichever is missing; it is meant for CI, since it installs system-wide, so ask before running it on a developer's Mac); set `GHOSTTY_CLONE_SOURCE` to clone Ghostty from a local copy instead of GitHub.
@@ -88,12 +98,16 @@ Real input (key events, focus, the IME, libghostty's key path) is what the bridg
 
 - The bridge (`Sources/AppShell/TestBridge.swift`) is a loopback HTTP server that starts only when `DEVORA_TEST_MODE=1`, once the launch is done, and prints `Devora test harness on port <port>` to stderr, as Ember's does.
 	It is compiled into every build, as Ember's is, and does nothing unless the variable is set.
-	Its routes: `GET /test/state` (profiles, workspaces, tabs with their terminal's status, focus and layers, the active tab, the window stack's layers, the open Workspace Hub as it shows (its list, cursor, filters, detail panel, toast and cheatsheet scrolling), the font size, the error banners, the log's path and the startup problem); `POST /test/dispatch` with a store command (`{"command": "openShell"}`, `load`, `selectProfile` with `path`, `openWorkspace` with a workspace `id`, `activateTab` and `closeTab` with a tab `id`, `startFresh`, `dismissError` with a banner `id`); `POST /test/errors/scrape` (the errors shown since the last scrape, which it clears, as Ember's `__scrapeErrors`); `POST /test/quit` (the app menu's Quit; the app may exit before it answers); `GET /test/terminal/text?tab=<id>` and `POST /test/terminal/type` with `{"line", "tab"}` (the active tab when `tab` is omitted; a 409 until its terminal runs).
+	Its routes: `GET /test/state` (profiles, workspaces, tabs with their terminal's status, focus and layers, the active tab, the window stack's layers, the open Workspace Hub as it shows (its list, cursor, filters, detail panel, toast, cheatsheet scrolling, profile label and open dropdown's rows), the open confirmation dialog, the font size, the error banners, the log's path and the startup problem); `POST /test/dispatch` with a store command (`{"command": "openShell"}`, `load`, `selectProfile` with `path`, `openWorkspace` with a workspace `id`, `activateTab` and `closeTab` with a tab `id`, `startFresh`, `dismissError` with a banner `id`); `POST /test/hub`, which clicks what the open hub draws, running what the button runs (`{"action": "removeTask"}` or `delete` on the focused workspace, `toggleMenu` with a `menu`, `profiles` or `main`, and `menuItem` with the `label` of a row of the open dropdown, a 409 when it is disabled); `POST /test/dialog` with `{"button": "confirm"}` or `cancel`; `POST /test/snapshot` with `{"path"}` (captures the window to a PNG); `POST /test/errors/scrape` (the errors shown since the last scrape, which it clears, as Ember's `__scrapeErrors`); `POST /test/quit` (the app menu's Quit; the app may exit before it answers); `GET /test/terminal/text?tab=<id>` and `POST /test/terminal/type` with `{"line", "tab"}` (the active tab when `tab` is omitted; a 409 until the tab has its terminal, which holds the line until it runs).
+	A tab's `terminal` in the state is `none`, `starting`, `running` (its surface exists, so its shell has a PTY) or `failed: <reason>`.
 	`POST /test/key` with `{"key", "modifiers"}` presses a key: it makes the key-down AppKit would (key code, characters, flags) and hands it to `LayerRouter.handle`, the monitor's own entry point, then, unless consumed, to the window's `sendEvent`, which delivers it to the first responder; it skips the event monitor's plumbing and the menu's key equivalents, which the XCUITests cover.
 	It starts early when the launch meets a startup problem, so that a scenario can answer it.
 	State changes fold on the next frame, so steps poll `state` (`Bridge.waitFor`) rather than reading it once.
-- Every scenario launches a fresh app (`acceptance/support/hooks.ts`, `app.ts`), straight from the bundle's binary rather than through `open`, with a config and an app state of its own (`DEVORA_CONFIG_PATH`, `DEVORA_STATE_DIR`) and only a login session's environment, and starts once the startup tab's terminal runs; failed steps save the state, the active terminal's text and the app's stderr to `test-results/failures/`.
+- Every scenario launches a fresh app (`acceptance/support/hooks.ts`, `app.ts`), straight from the bundle's binary rather than through `open`, with a config and an app state of its own (`DEVORA_CONFIG_PATH`, `DEVORA_STATE_DIR`) and only a login session's environment, and starts once the launch has settled: the Workspace Hub it opens has loaded, or, after a relaunch, the restored tabs' terminals run.
+	Steps that need a known state close the launch's hub ("Devora is running with no sessions open", as Ember's scenarios start after its teardown), and "the Workspace Hub is open" closes an open hub before opening it, so that it loads the profiles the scenario has made since.
+	Failed steps save the state, the active terminal's text and the app's stderr to `test-results/failures/`.
 	As in Ember, a scenario fails if an error was shown that no step scraped ("the recorded errors should include").
 	Relaunches within a scenario (`persistence.feature`) keep its state directory.
 - Scenarios shared with Ember live in `../acceptance/features/` (see `../acceptance/CLAUDE.md`); Sapphire's steps use the same phrases as Ember's, and reuse Ember's fixture helpers (`project-ember/tests/support/fixture-helper.ts`).
 - The XCUITests launch the app themselves, each on a state directory of its own; `scripts/test-ui.sh` skips them, saying why, when the screen is locked or `SAPPHIRE_SKIP_UI_TESTS=1`.
+	Their runner is sandboxed, where git can't run, so `scripts/test-ui.sh` makes the git repo they copy into their fixtures (`SAPPHIRE_GIT_REPO`).

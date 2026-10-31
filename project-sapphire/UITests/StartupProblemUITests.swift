@@ -1,6 +1,6 @@
 import XCTest
 
-/// An app state that can't be opened stops the launch until the user answers, with real clicks: Quit leaves the state as it was; Start Fresh keeps it aside and opens a shell tab.
+/// An app state that can't be opened stops the launch until the user answers, with real clicks: Quit leaves the state as it was; Start Fresh keeps it aside and goes on with the launch.
 final class StartupProblemUITests: XCTestCase {
 	private var scratch: URL!
 
@@ -34,7 +34,7 @@ final class StartupProblemUITests: XCTestCase {
 
 		app.launch()
 		app.buttons["Start Fresh"].click()
-		XCTAssertTrue(app.staticTexts.matching(identifier: "Shell").firstMatch.waitForExistence(timeout: 10))
+		XCTAssertTrue(app.hubHeader.waitForExistence(timeout: 10), "a fresh state has no tabs, so the launch goes on to the Workspace Hub")
 		let kept = try FileManager.default.contentsOfDirectory(atPath: stateDir.path).filter { $0.hasPrefix("state-unreadable-") }
 		XCTAssertEqual(kept.count, 1)
 		XCTAssertEqual(try Data(contentsOf: stateDir.appending(path: kept[0])), corrupt)

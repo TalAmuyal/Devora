@@ -204,6 +204,28 @@ impl DevoraCore {
         })
     }
 
+    /// Ends the workspace's task, keeping its worktrees: in each repo, discards the uncommitted changes and detaches the HEAD, then deletes `task.json`.
+    pub fn remove_task(&self, workspace_path: String) -> Result<(), CoreError> {
+        Ok(workspace::remove_task(&workspace_path)?)
+    }
+
+    /// Removes each repo's worktree (`git worktree remove --force`, in parallel), then the workspace's directory.
+    pub fn delete_workspace(&self, workspace_path: String) -> Result<(), CoreError> {
+        Ok(workspace::delete_workspace(&workspace_path)?)
+    }
+
+    /// Writes `report_json` to `<profile>/diagnostics/hub-profile-<timestamp>.json` and returns the file's path.
+    pub fn save_profiling_report(
+        &self,
+        profile_path: String,
+        report_json: String,
+    ) -> Result<String, CoreError> {
+        Ok(workspace::save_profiling_report(
+            &profile_path,
+            &report_json,
+        )?)
+    }
+
     /// The theme file's colors, keyed by the CSS custom property names the UIs share.
     pub fn load_theme(&self, path: String) -> Result<HashMap<String, String>, CoreError> {
         Ok(theme::load_theme(Path::new(&path))?)
@@ -376,6 +398,79 @@ mod tests {
 
         assert_eq!(status.repos, vec![]);
         assert!(status.error.is_some_and(|e| e.contains("gone")));
+    }
+
+    fn git_output(dir: &Path, args: &[&str]) -> String {
+        let output = std::process::Command::new("git")
+            .args(args)
+            .current_dir(dir)
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "git {args:?}");
+        String::from_utf8(output.stdout).unwrap()
+    }
+
+    /// A profile with a source repo and an active workspace `ws-1` whose `repo` is a detached worktree of it.
+    fn workspace_with_a_worktree(root: &Path) -> (PathBuf, PathBuf) {
+        let profile = write_profile(root, "alpha");
+        let source = profile.join("repos").join("repo");
+        fs::create_dir_all(&source).unwrap();
+        git(&source, &["init", "-q", "-b", "main"]);
+        fs::write(source.join("tracked.txt"), "original").unwrap();
+        git(&source, &["add", "."]);
+        git(&source, &["commit", "-q", "-m", "init"]);
+        let ws = profile.join("workspaces").join("ws-1");
+        fs::create_dir_all(&ws).unwrap();
+        fs::write(ws.join("task.json"), r#"{"title": "Task"}"#).unwrap();
+        let worktree = ws.join("repo");
+        git(
+            &source,
+            &[
+                "worktree",
+                "add",
+                "-q",
+                "--detach",
+                worktree.to_str().unwrap(),
+            ],
+        );
+        (source, ws)
+    }
+
+    #[test]
+    fn removing_a_task_discards_the_changes_and_detaches_but_keeps_the_worktree() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (source, ws) = workspace_with_a_worktree(tmp.path());
+        let repo = ws.join("repo");
+        git(&repo, &["checkout", "-q", "-b", "feature"]);
+        fs::write(repo.join("tracked.txt"), "changed").unwrap();
+        fs::write(repo.join("untracked.txt"), "").unwrap();
+        let core = core_with_config(tmp.path(), "{}");
+
+        core.remove_task(ws.to_string_lossy().into_owned()).unwrap();
+
+        assert!(!ws.join("task.json").exists());
+        assert_eq!(git_output(&repo, &["status", "--porcelain"]), "");
+        assert_eq!(
+            git_output(&repo, &["rev-parse", "--abbrev-ref", "HEAD"]).trim(),
+            "HEAD"
+        );
+        assert!(git_output(&source, &["worktree", "list"]).contains("ws-1/repo"));
+    }
+
+    #[test]
+    fn deleting_a_workspace_removes_its_worktrees_and_its_directory() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (source, ws) = workspace_with_a_worktree(tmp.path());
+        fs::remove_file(ws.join("task.json")).unwrap();
+        fs::write(ws.join("repo").join("untracked.txt"), "").unwrap();
+        let core = core_with_config(tmp.path(), "{}");
+
+        core.delete_workspace(ws.to_string_lossy().into_owned())
+            .unwrap();
+
+        assert!(!ws.exists());
+        assert!(!git_output(&source, &["worktree", "list"]).contains("ws-1"));
+        assert!(source.exists());
     }
 
     #[test]

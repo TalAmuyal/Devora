@@ -7,8 +7,30 @@ import SwiftUI
 /// The header, the filter and the hints draw at once; the list shows a placeholder until the workspaces are loaded, and each status as it arrives.
 struct WorkspaceHubView: View {
 	@Bindable var model: WorkspaceHubModel
+	nonisolated static let coordinateSpace = "workspace-hub"
 
 	var body: some View {
+		page
+			.overlay {
+				if let menu = model.openMenu, let trigger = model.menuTriggers[menu] {
+					ZStack(alignment: .topLeading) {
+						// A click anywhere outside the panel closes it, as Ember's outside click does.
+						Color.clear
+							.contentShape(.rect)
+							.onTapGesture { model.closeMenu() }
+						// Right-aligned with its trigger, just below it.
+						DropdownPanel(items: model.menuItems(menu), close: model.closeMenu)
+							.accessibilityElement(children: .contain)
+							.accessibilityIdentifier("hub-dropdown-\(menu.rawValue)")
+							.frame(width: trigger.maxX, alignment: .trailing)
+							.padding(.top, trigger.maxY + 6)
+					}
+				}
+			}
+			.coordinateSpace(.named(Self.coordinateSpace))
+	}
+
+	private var page: some View {
 		VStack(spacing: 0) {
 			HubHeader(model: model)
 			Divider()
@@ -51,29 +73,44 @@ private struct HubHeader: View {
 			Text("Devora").font(.title2.weight(.semibold))
 			Spacer()
 			if !store.profiles.isEmpty {
-				Menu {
-					ForEach(store.profiles, id: \.path) { profile in
-						Toggle(isOn: Binding(
-							get: { profile.path == store.selectedProfilePath },
-							set: { if $0 { model.selectProfile(profile.path) } })
-						) {
-							Text(profile.name)
-							Text(profile.repoCount == 1 ? "1 repo" : "\(profile.repoCount) repos")
-						}
+				MenuTrigger(menu: .profiles, model: model) {
+					HStack(spacing: 6) {
+						Text(store.profiles.first { $0.path == store.selectedProfilePath }?.name ?? "Profiles")
+						Image(systemName: "chevron.down").font(.caption2.weight(.semibold))
 					}
-				} label: {
-					Label(
-						store.profiles.first { $0.path == store.selectedProfilePath }?.name ?? "Profiles",
-						systemImage: "person.crop.square")
 				}
-				.fixedSize()
 				.help("Profile")
+				.accessibilityIdentifier("hub-profile-dropdown")
 			}
+			MenuTrigger(menu: .main, model: model) {
+				Image(systemName: "line.3.horizontal")
+			}
+			.help("Menu")
+			.accessibilityLabel("Menu")
+			.accessibilityIdentifier("hub-menu")
 		}
 		.padding(.horizontal, 16)
 		.padding(.vertical, 10)
 		.accessibilityElement(children: .contain)
 		.accessibilityIdentifier("hub-header")
+	}
+}
+
+/// A header button that toggles its dropdown, and reports where it is drawn so the panel opens under it; both triggers have the same height.
+private struct MenuTrigger<Label: View>: View {
+	let menu: HubMenu
+	let model: WorkspaceHubModel
+	@ViewBuilder let label: Label
+
+	var body: some View {
+		Button { model.toggleMenu(menu) } label: {
+			label.frame(minHeight: 18)
+		}
+		.buttonStyle(.bordered)
+		.fixedSize()
+		.onGeometryChange(for: CGRect.self) { $0.frame(in: .named(WorkspaceHubView.coordinateSpace)) } action: {
+			model.menuTriggers[menu] = $0
+		}
 	}
 }
 
@@ -88,11 +125,17 @@ private struct WorkspaceListPanel: View {
 					.textFieldStyle(.roundedBorder)
 					.focused($filterFocused)
 					.accessibilityIdentifier("hub-filter")
-				Picker("Category", selection: $model.category) {
-					ForEach(HubCategory.allCases, id: \.self) { Text($0.label).tag($0) }
+				HStack {
+					Picker("Category", selection: $model.category) {
+						ForEach(HubCategory.allCases, id: \.self) { Text($0.label).tag($0) }
+					}
+					.pickerStyle(.segmented)
+					.labelsHidden()
+					// Task creation isn't in Sapphire yet.
+					Button("+ New Task") {}
+						.disabled(true)
+						.help(WorkspaceHubModel.notYet)
 				}
-				.pickerStyle(.segmented)
-				.labelsHidden()
 			}
 			.padding(12)
 			Divider()
@@ -190,9 +233,7 @@ private struct WorkspaceDetailPanel: View {
 	var body: some View {
 		if model.loaded, let workspace = model.focused {
 			ScrollView {
-				WorkspaceDetail(workspace: workspace, status: model.status(of: workspace)) {
-					model.openWorkspace(workspace)
-				}
+				WorkspaceDetail(workspace: workspace, status: model.status(of: workspace), model: model)
 				.padding(20)
 				.frame(maxWidth: .infinity, alignment: .leading)
 			}
@@ -205,7 +246,7 @@ private struct WorkspaceDetailPanel: View {
 private struct WorkspaceDetail: View {
 	let workspace: Workspace
 	let status: WorkspaceStatus?
-	let open: () -> Void
+	let model: WorkspaceHubModel
 
 	var body: some View {
 		VStack(alignment: .leading, spacing: 14) {
@@ -227,8 +268,19 @@ private struct WorkspaceDetail: View {
 					.frame(maxWidth: .infinity, alignment: .leading)
 					.background(.red.opacity(0.08), in: .rect(cornerRadius: 6))
 			}
-			Button("Open", action: open)
-				.buttonStyle(.borderedProminent)
+			HStack(spacing: 8) {
+				Button("Open") { model.openWorkspace(workspace) }
+					.buttonStyle(.borderedProminent)
+				if workspace.active {
+					// Duplicating opens the New Task dialog, which isn't in Sapphire yet.
+					Button("Duplicate") {}
+						.disabled(true)
+						.help(WorkspaceHubModel.notYet)
+					Button("Remove Task") { model.removeTask(workspace) }
+				} else {
+					Button("Delete") { model.deleteWorkspace(workspace) }
+				}
+			}
 			if status?.error == nil {
 				RepoTable(names: workspace.repos, statuses: status?.repos)
 			}

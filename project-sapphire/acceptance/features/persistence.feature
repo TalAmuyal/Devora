@@ -3,6 +3,7 @@ Feature: Tabs survive a restart
 
   Scenario: Tabs survive a quit and relaunch
     Given a profile "work" with 2 active workspaces
+    And a session exists
     And "echo BEFORE_RESTART" is typed in the terminal
     And the user opens the workspace "ws-1"
     And a new session is created
@@ -19,10 +20,13 @@ Feature: Tabs survive a restart
     When Sapphire is killed and relaunched
     Then the same sessions should be open, with the same one active
 
-  Scenario: Closing every tab before quitting starts the next launch with one shell tab
+  Scenario: Closing every tab before quitting starts the next launch on the Workspace Hub
     Given Devora is running with no sessions open
-    When Sapphire is quit and relaunched
-    Then there should be 1 session
+    And a session exists
+    When the active session is closed
+    And Sapphire is quit and relaunched
+    Then there should be 0 sessions
+    And the Workspace Hub should be visible
 
   Scenario: A workspace still being created when Sapphire stopped comes back as failed
     Given Sapphire stopped while a session was creating its workspace
@@ -36,7 +40,8 @@ Feature: Tabs survive a restart
     When Sapphire is launched
     Then Sapphire should report that the app state can't be opened
     When the user chooses to start fresh
-    Then there should be 1 session
+    Then there should be 0 sessions
+    And the Workspace Hub should be visible
     And the corrupt app state should be kept beside the new one
 
   Scenario: A second Sapphire on the same app state is turned away

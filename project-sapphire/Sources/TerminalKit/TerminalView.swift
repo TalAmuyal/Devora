@@ -32,7 +32,14 @@ final class TerminalView: NSView, @preconcurrency NSTextInputClient {
 
 	override func viewDidMoveToWindow() {
 		super.viewDidMoveToWindow()
-		guard surface == nil, let window else { return }
+		createSurfaceIfReady()
+		// The host may have focused the terminal before SwiftUI put its view in a window.
+		if window != nil, session.wantsFocus { session.focus() }
+	}
+
+	/// Makes the surface, which starts the child, once the view is in a window and the session has its launch.
+	func createSurfaceIfReady() {
+		guard surface == nil, let window, let launch = session.launch else { return }
 		var config = ghostty_surface_config_new()
 		config.platform_tag = GHOSTTY_PLATFORM_MACOS
 		let me = Unmanaged.passUnretained(self).toOpaque()
@@ -41,7 +48,6 @@ final class TerminalView: NSView, @preconcurrency NSTextInputClient {
 		config.scale_factor = window.backingScaleFactor
 		config.context = GHOSTTY_SURFACE_CONTEXT_SPLIT
 		let app = TerminalRuntime.shared.app
-		let launch = session.launch
 		// libghostty copies the strings during `ghostty_surface_new`, so they only need to outlive the call.
 		let env = launch.env.map { (key: strdup($0.key), value: strdup($0.value)) }
 		defer { env.forEach { free($0.key); free($0.value) } }
@@ -57,11 +63,15 @@ final class TerminalView: NSView, @preconcurrency NSTextInputClient {
 				}
 			}
 		}
+		guard let surface else {
+			session.fail("libghostty couldn't create the terminal")
+			return
+		}
 		session.startedAt = .now
 		updateSurfaceSize()
 		updateTrackingAreas()
-		// The host may have focused the terminal before SwiftUI put its view in a window.
-		if session.wantsFocus { session.focus() }
+		if window.firstResponder === self { ghostty_surface_set_focus(surface, true) }
+		session.surfaceCreated(surface)
 	}
 
 	override func setFrameSize(_ newSize: NSSize) {
@@ -105,7 +115,7 @@ final class TerminalView: NSView, @preconcurrency NSTextInputClient {
 
 	override func keyDown(with event: NSEvent) {
 		guard surface != nil else {
-			interpretKeyEvents([event])
+			session.withSurface { [weak self] _ in self?.keyDown(with: event) }
 			return
 		}
 		let action = event.isARepeat ? GHOSTTY_ACTION_REPEAT : GHOSTTY_ACTION_PRESS
@@ -124,6 +134,10 @@ final class TerminalView: NSView, @preconcurrency NSTextInputClient {
 	}
 
 	override func keyUp(with event: NSEvent) {
+		guard surface != nil else {
+			session.withSurface { [weak self] _ in self?.keyUp(with: event) }
+			return
+		}
 		keyAction(GHOSTTY_ACTION_RELEASE, event: event, text: nil)
 	}
 

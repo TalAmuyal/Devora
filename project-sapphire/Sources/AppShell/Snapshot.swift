@@ -11,7 +11,7 @@ enum LaunchOptions {
 	}
 }
 
-/// `--snapshot <path>`: runs a command in the first shell tab, captures the window to `<path>` (PNG) and the active tab's text to `<path>.txt`, then quits.
+/// `--snapshot <path>`: runs a command in the first shell tab, if there is one, captures the window to `<path>` (PNG) and the active tab's text to `<path>.txt`, then quits.
 @MainActor
 enum Snapshot {
 	static func run(store: Store, terminals: Terminals, to path: String) async {
@@ -29,7 +29,7 @@ enum Snapshot {
 	}
 
 	/// ScreenCaptureKit needs no Screen Recording permission for the process's own windows.
-	private static func captureWindow(to path: String, store: Store) async {
+	static func captureWindow(to path: String, store: Store) async {
 		do {
 			let content = try await SCShareableContent.currentProcess
 			guard let window = content.windows.first(where: { $0.title?.hasPrefix("Devora Sapphire") == true && $0.windowLayer == 0 })

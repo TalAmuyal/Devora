@@ -103,6 +103,10 @@ public final class LayerStack {
 
 	/// Walks the stack top-down and reports what happened; the router acts on the event.
 	public func route(_ key: KeyPress) -> RouteResult {
+		if let top, top.spec.trapsTab, key.keyCode == KeyCode.tab, key.modifiers.isSubset(of: .shift) {
+			top.spec.cycleFocus?(key.modifiers.contains(.shift))
+			return .consumed
+		}
 		for layer in layers.reversed() {
 			if layer.spec.onKey?(key) == true { return .consumed }
 			if layer.spec.dismissible, Self.isDismissKey(key) {

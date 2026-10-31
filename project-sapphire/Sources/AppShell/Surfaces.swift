@@ -17,6 +17,9 @@ final class Surfaces {
 	@ObservationIgnored private(set) var hub: WorkspaceHubModel?
 	/// The open cheatsheet's scrolling; nil while it is closed.
 	@ObservationIgnored private(set) var cheatsheet: VimScroll?
+	/// The open confirmation dialog; nil while none is.
+	@ObservationIgnored private(set) var dialog: ConfirmationDialogModel?
+	@ObservationIgnored private var hubMenu: LayerHandle?
 	@ObservationIgnored private let store: Store
 
 	init(store: Store) {
@@ -58,12 +61,51 @@ final class Surfaces {
 		let handle = windowStack.push(spec)
 		// Opening a workspace closes the hub without asking it, as Ember's `dismissWsHub` does.
 		model.openWorkspace = { [unowned self, store] workspace in
+			closeHubMenu()
 			windowStack.remove(handle)
 			store.dispatch(.openWorkspace(workspace))
 		}
 		model.showCheatsheet = { [unowned self] in openCheatsheet() }
+		model.toggleMenu = { [unowned self, unowned model] menu in toggleHubMenu(menu, of: model) }
+		model.closeMenu = { [unowned self] in closeHubMenu() }
+		model.confirm = { [unowned self] confirmation, action in confirm(confirmation, then: action) }
 		hub = model
 		model.load()
+	}
+
+	/// A header dropdown is a popup layer: it routes `q` and Escape to closing it and passes every other key on to the hub, while the hub draws it under its trigger.
+	private func toggleHubMenu(_ menu: HubMenu, of model: WorkspaceHubModel) {
+		let wasOpen = model.openMenu
+		closeHubMenu()
+		guard wasOpen != menu else { return }
+		var spec = popupLayer(LayerSpec(name: "dropdown-menu") { EmptyView() })
+		spec.onCleanup = { [unowned self, unowned model] in
+			model.openMenu = nil
+			hubMenu = nil
+		}
+		hubMenu = windowStack.push(spec)
+		model.openMenu = menu
+	}
+
+	private func closeHubMenu() {
+		if let hubMenu { windowStack.remove(hubMenu) }
+	}
+
+	/// Shows a confirmation dialog as a modal layer over the window, and runs `action` once the user confirms; cancelling it changes nothing.
+	func confirm(_ confirmation: Confirmation, then action: @escaping () -> Void) {
+		var handle: LayerHandle?
+		let close = { [unowned self] in
+			if let handle { windowStack.remove(handle) }
+		}
+		let model = ConfirmationDialogModel(confirmation, onConfirm: { close(); action() }, onCancel: close)
+		var spec = modalLayer(LayerSpec(name: ConfirmationDialogModel.layerName) { ConfirmationDialogView(model: model) })
+		spec.onKey = model.handleKey
+		spec.cycleFocus = { model.cycleFocus(backward: $0) }
+		spec.onCleanup = { [unowned self] in
+			if dialog === model { dialog = nil }
+		}
+		handle = windowStack.push(spec)
+		dialog = model
 	}
 
 	/// The hub's shortcuts on a page of their own; `?` closes it as it opened it, and the hub's keys reach nothing meanwhile.
@@ -86,7 +128,7 @@ final class Surfaces {
 		cheatsheet = scroll
 	}
 
-	/// Puts a tab's terminal at the bottom of its stack, once the terminal runs.
+	/// Puts a tab's terminal at the bottom of its stack, as soon as the tab has one, so that it takes the keys before it runs.
 	func pushTerminal(_ session: TerminalSession, tab: UInt64, onExit: @escaping () -> Void) {
 		guard let stack = tabStacks[tab], stack.isEmpty else { return }
 		var spec = terminalLayer(LayerSpec(name: "terminal") { TerminalTab(session: session, onExit: onExit) })

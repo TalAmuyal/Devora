@@ -9,7 +9,7 @@ Given('Ember is running', async function (this: EmberWorld) {
   );
 });
 
-// Shared with Sapphire (`acceptance/features/`), which starts with a shell tab; Ember starts with none, and every scenario's teardown closes its sessions.
+// Shared with Sapphire (`acceptance/features/`), whose step closes the Workspace Hub its launch opens; here, every scenario's teardown closes the sessions and the surfaces.
 Given('Devora is running with no sessions open', async function (this: EmberWorld) {
   await this.driver.pollFor(
     'return window.__test?.sessionManager?.getSessionCount() ?? -1',
