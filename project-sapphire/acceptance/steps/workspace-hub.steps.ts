@@ -21,12 +21,9 @@ async function waitForHub(world: SapphireWorld, what: string, done: (hub: HubSta
   return hubOf(state);
 }
 
-/** Closes every window surface (the hub the launch opened, among others) with Escape, as a user would. */
+/** Closes every window surface (the hub the launch opened, among others), as Ember's teardown does; the first-run welcome, which a scenario starts on, refuses Escape. */
 export async function closeWindowSurfaces(world: SapphireWorld): Promise<void> {
-  // A focused filter takes one Escape of its own.
-  for (let i = 0; i < 5 && (await world.bridge.state()).windowLayers.length > 0; i++) {
-    await world.bridge.press('Escape');
-  }
+  await world.bridge.clearWindowSurfaces();
   await world.bridge.waitFor('the window surfaces to close', () => world.bridge.state(), (s) => s.windowLayers.length === 0);
 }
 
@@ -151,7 +148,7 @@ async function openMenu(world: SapphireWorld, menu: HubMenu): Promise<void> {
 }
 
 /** Opens a header dropdown and clicks one of its rows, as Ember's `clickBurgerMenuItem` and `switchProfile` do. */
-async function clickMenuItem(world: SapphireWorld, menu: HubMenu, label: string): Promise<void> {
+export async function clickMenuItem(world: SapphireWorld, menu: HubMenu, label: string): Promise<void> {
   await openMenu(world, menu);
   await world.bridge.hub({ action: 'menuItem', label });
   await waitForHub(world, `the ${menu} dropdown to close`, (hub) => hub.menu === null);

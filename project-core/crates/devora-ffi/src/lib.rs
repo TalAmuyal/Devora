@@ -13,6 +13,7 @@ use devora_core::{config, state, theme, workspace};
 mod app_state;
 mod creation;
 mod log;
+mod profiles;
 mod terminal;
 
 pub use log::{AppLog, ErrorSubscription};

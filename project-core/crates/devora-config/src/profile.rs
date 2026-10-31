@@ -11,7 +11,7 @@ use serde_json::Value;
 use crate::config;
 use crate::config::write_pretty_json;
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RegisteredProfile {
     pub name: String,

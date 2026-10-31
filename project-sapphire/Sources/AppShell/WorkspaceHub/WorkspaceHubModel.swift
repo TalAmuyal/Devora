@@ -34,6 +34,8 @@ final class WorkspaceHubModel {
 	var openMenu: HubMenu?
 	/// Where each dropdown's trigger is drawn, in the hub's coordinates, to anchor the open panel under it.
 	var menuTriggers: [HubMenu: CGRect] = [:]
+	/// The first-run welcome's profile form, while the latest listing found no profiles; the hub can't be closed meanwhile, since there is nothing behind it.
+	private(set) var welcome: ProfileFormModel?
 
 	@ObservationIgnored var openWorkspace: (Workspace) -> Void = { _ in }
 	@ObservationIgnored var showCheatsheet: () -> Void = {}
@@ -44,6 +46,8 @@ final class WorkspaceHubModel {
 	@ObservationIgnored var confirm: (Confirmation, @escaping () -> Void) -> Void = { _, _ in }
 	/// Opens the New Task dialog; with a workspace, it duplicates that workspace's task.
 	@ObservationIgnored var newTask: (_ duplicating: Workspace?) -> Void = { _ in }
+	/// Opens the New Profile dialog.
+	@ObservationIgnored var newProfile: () -> Void = {}
 	@ObservationIgnored private let isEditingText: () -> Bool
 	@ObservationIgnored private let clearFocus: () -> Void
 	@ObservationIgnored private var loadTask: Task<Void, Never>?
@@ -100,6 +104,18 @@ final class WorkspaceHubModel {
 		}
 	}
 
+	/// The answer to `q` and Escape: the first-run welcome refuses them, as Ember's zero-profile lock does.
+	func dismissDecision() -> DismissDecision {
+		welcome == nil ? .close : .veto
+	}
+
+	/// After a profile was registered: it is selected, and the hub loads it from scratch.
+	func profileRegistered(_ path: String) {
+		cursor.select(0)
+		loaded = false
+		list(freshStatuses: true) { await $0.store.load(selecting: path) }
+	}
+
 	func selectProfile(_ path: String) {
 		guard path != store.selectedProfilePath else { return }
 		cursor.select(0)
@@ -150,7 +166,7 @@ final class WorkspaceHubModel {
 				) { [weak self] in self?.selectProfile(profile.path) }
 			} + [
 				.separator,
-				.action("New Profile…", systemImage: "plus", enabled: false, help: notYet),
+				.action("New Profile…", systemImage: "plus") { [weak self] in self?.newProfile() },
 				.action("Manage Profiles…", systemImage: "gearshape", enabled: false, help: notYet),
 			]
 		case .main:
@@ -177,6 +193,7 @@ final class WorkspaceHubModel {
 	/// A key that reaches the hub closes an open dropdown first: the dropdown's popup layer passes on what it doesn't claim, and closes on `q` and Escape itself.
 	func handleKey(_ key: Layers.KeyPress) -> Bool {
 		if openMenu != nil { closeMenu() }
+		if let welcome { return handleWelcomeKey(key, form: welcome) }
 		if isEditingText() {
 			guard key.keyCode == KeyCode.escape else { return false }
 			filterFocused = false
@@ -205,6 +222,34 @@ final class WorkspaceHubModel {
 		return true
 	}
 
+	/// Only the profile form is interactive on the first-run welcome: Tab and Shift+Tab move through it, Escape leaves a field, and the hub's own keys do nothing.
+	private func handleWelcomeKey(_ key: Layers.KeyPress, form: ProfileFormModel) -> Bool {
+		if key.keyCode == KeyCode.tab, key.modifiers.isSubset(of: .shift) {
+			form.cycleFocus(backward: key.modifiers.contains(.shift))
+			return true
+		}
+		if key.keyCode == KeyCode.escape, form.focus?.isTextField == true {
+			form.focus = nil
+			return true
+		}
+		return form.handleKey(key)
+	}
+
+	/// Shows the first-run welcome when the listing found no profiles, keeping the form typed into while there are still none.
+	private func syncWelcome() {
+		guard store.profilesListed, store.profiles.isEmpty else {
+			if welcome != nil {
+				welcome = nil
+				clearFocus()
+			}
+			return
+		}
+		guard welcome == nil else { return }
+		welcome = ProfileFormModel(
+			store: store, initialPath: "~/devora", hasCancel: false, clearFocus: clearFocus,
+			onRegistered: { [weak self] path in self?.profileRegistered(path) })
+	}
+
 	private func performRemoveTask(_ workspace: Workspace) {
 		Task {
 			guard await store.removeTask(workspace) else { return }
@@ -230,6 +275,7 @@ final class WorkspaceHubModel {
 			guard let self else { return }
 			await listing(self)
 			guard !Task.isCancelled else { return }
+			syncWelcome()
 			loaded = true
 			store.dispatch(.loadWorkspaceStatuses(fresh: freshStatuses))
 		}

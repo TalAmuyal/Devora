@@ -18,8 +18,7 @@ final class KeyRoutingUITests: XCTestCase {
 	/// Launches the app on a fresh config and app state, and opens one shell tab; the shells see `UITEST_OUT`.
 	@MainActor
 	private func launch() throws {
-		let config = scratch.appending(path: "config.json")
-		try #"{"profiles": []}"#.write(to: config, atomically: true, encoding: .utf8)
+		let config = try writeConfigWithAProfile(in: scratch)
 		app = XCUIApplication()
 		app.launchEnvironment["DEVORA_CONFIG_PATH"] = config.path
 		app.launchEnvironment["DEVORA_STATE_DIR"] = scratch.appending(path: "state").path

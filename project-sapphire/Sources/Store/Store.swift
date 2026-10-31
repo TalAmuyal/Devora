@@ -54,6 +54,8 @@ public enum StartupProblem: Equatable, Sendable {
 public final class Store {
 	public private(set) var version = ""
 	public private(set) var profiles: [Profile] = []
+	/// Whether the profiles have been listed once: with none, Ember's first-run welcome shows only after a listing that succeeded.
+	public private(set) var profilesListed = false
 	public private(set) var selectedProfilePath: String?
 	public private(set) var workspaces: [Workspace] = []
 	/// The statuses loaded so far, by workspace path; a workspace without one is still loading.
@@ -215,6 +217,32 @@ public final class Store {
 		return true
 	}
 
+	/// What the profile form's root path would be (`validate_profile_path`); nil when the call failed.
+	public func validateProfilePath(_ path: String) async -> ProfilePathValidation? {
+		guard let core else { return nil }
+		return try? await call("validate_profile_path") { try core.validateProfilePath(path: path) }
+	}
+
+	/// Registers the profile at `path` (`register_profile`): an existing profile as it is, or a new one, created there with `name`; nil when the call failed.
+	public func registerProfile(path: String, name: String) async -> RegisteredProfile? {
+		guard let core else { return nil }
+		return try? await call("register_profile") { try core.registerProfile(path: path, name: name) }
+	}
+
+	/// Removes a profile from the registry (`unregister_profile`), leaving its directory on disk, then loads again, which selects the first profile if it was the selected one; returns whether it was removed.
+	/// Ember refuses while tabs use the profile (`tabs(usingProfile:)`), which is the caller's to check.
+	@discardableResult
+	public func unregisterProfile(path: String) async -> Bool {
+		guard let core, (try? await call("unregister_profile", { try core.unregisterProfile(path: path) })) != nil else { return false }
+		await load()
+		return true
+	}
+
+	/// The open tabs whose session belongs to the profile.
+	public func tabs(usingProfile path: String) -> [AppTab] {
+		app.window.tabs.filter { $0.session.profilePath == path }
+	}
+
 	/// Writes the latest load's latencies to `<profile>/diagnostics/hub-profile-<timestamp>.json` and returns the file's path; nil when there is nothing to write or the write failed.
 	public func saveLoadingLatencies() async -> String? {
 		guard let core, let latencies = loadingLatencies else { return nil }
@@ -358,15 +386,17 @@ public final class Store {
 	}
 
 	/// Loads the version and the profiles, then the workspaces of the selected (or first) profile; returns whether every call succeeded.
+	/// `selecting` selects that profile instead, when it is listed.
 	@discardableResult
-	public func load() async -> Bool {
+	public func load(selecting preferred: String? = nil) async -> Bool {
 		guard let core, let version = try? await call("version", { try core.version() }) else { return false }
 		let started = ContinuousClock.now
 		guard let profiles = try? await call("list_profiles", { try core.listProfiles() }) else { return false }
 		let listProfiles = LoadingLatencies.Phase(from: started, to: .now, origin: started)
 		self.version = version
 		self.profiles = profiles
-		let selected = profiles.first { $0.path == selectedProfilePath } ?? profiles.first
+		profilesListed = true
+		let selected = profiles.first { $0.path == preferred } ?? profiles.first { $0.path == selectedProfilePath } ?? profiles.first
 		return await select(selected?.path, core: core, started: started, listProfiles: listProfiles)
 	}
 
