@@ -23,6 +23,8 @@ public enum Command: Sendable {
 	case closeTab(id: UInt64)
 	/// Answers `StartupProblem.stateUnreadable`: moves the unreadable app state aside, keeping it, and opens a fresh one in its place.
 	case startFresh
+	/// Removes an error banner.
+	case dismissError(id: UInt64)
 }
 
 /// Where the app state (the tabs) is kept.
@@ -50,25 +52,29 @@ public final class Store {
 	public private(set) var profiles: [Profile] = []
 	public private(set) var selectedProfilePath: String?
 	public private(set) var workspaces: [Workspace] = []
-	/// Problems the core reported without failing, such as a corrupt `task.json`.
-	public private(set) var warnings: [String] = []
-	/// The last command's failure, cleared by the next success.
-	public private(set) var error: String?
 	/// The core-owned app state (tabs and their sessions), folded from the core's events.
 	public private(set) var app = AppState.empty
 	public private(set) var startupProblem: StartupProblem?
+	public private(set) var errorBanners = ErrorBanners()
 
 	/// Asks the window's display link to call `foldPending()` on its next frame; without one, events fold on the main actor's next turn.
 	@ObservationIgnored public var requestFrame: (@MainActor () -> Void)?
 
+	@ObservationIgnored public let log: AppLog
 	@ObservationIgnored private let configPath: String?
 	@ObservationIgnored private var core: DevoraCore?
 	@ObservationIgnored private let inbox = Inbox()
 	@ObservationIgnored private var stateEvents: Task<Void, Never>?
+	@ObservationIgnored private var reportedErrors: Task<Void, Never>?
+	/// Every error shown since the last `scrapeErrors()`, for the acceptance tests, as Ember records them.
+	@ObservationIgnored private var recordedErrors: [String] = []
 
 	/// `configPath` overrides the global config file (`nil`: `DEVORA_CONFIG_PATH`, then `~/.config/devora/config.json`).
-	public init(configPath: String?, state: StateStorage) {
+	/// `log` is where the store and the core write, and where the core reports its errors from.
+	public init(configPath: String?, state: StateStorage, log: AppLog) {
 		self.configPath = configPath
+		self.log = log
+		reportedErrors = pullReportedErrors()
 		open(state)
 	}
 
@@ -79,7 +85,7 @@ public final class Store {
 			case .file(let path): path
 			case .app: try sapphireStatePath(resourcesDir: Bundle.main.resourcePath)
 			}
-			let core = try DevoraCore(configPath: configPath, statePath: statePath)
+			let core = try DevoraCore(configPath: configPath, statePath: statePath, log: log)
 			self.core = core
 			stateEvents = pullStateEvents(from: try core.subscribe())
 		} catch CoreError.StateInUse(let path, _) {
@@ -87,12 +93,13 @@ public final class Store {
 		} catch CoreError.StateUnreadable(let path, let message) {
 			startupProblem = .stateUnreadable(path: path, reason: message)
 		} catch {
-			self.error = Self.describe(error)
+			showError("the core failed to start: \(Self.describe(error))")
 		}
 	}
 
 	isolated deinit {
 		stateEvents?.cancel()
+		reportedErrors?.cancel()
 	}
 
 	@discardableResult
@@ -103,12 +110,8 @@ public final class Store {
 		case .openShell:
 			apply(Self.openShell)
 		case .openShellIfNoTabs:
-			guard let core else { break }
-			do {
-				if try core.snapshot().window.tabs.isEmpty { apply(Self.openShell) }
-			} catch {
-				self.error = Self.describe(error)
-			}
+			guard let core, let snapshot = try? call("snapshot", { try core.snapshot() }) else { break }
+			if snapshot.window.tabs.isEmpty { apply(Self.openShell) }
 		case .startFresh:
 			startFresh()
 		case .openWorkspace(let workspace):
@@ -128,6 +131,8 @@ public final class Store {
 			apply(.moveActiveTabBackward)
 		case .closeTab(let id):
 			apply(.closeSession(tab: id))
+		case .dismissError(let id):
+			errorBanners.dismiss(id: id)
 		}
 		return Task {}
 	}
@@ -143,25 +148,40 @@ public final class Store {
 
 	/// The launch spec of the terminal with this id, from its tab's session.
 	public func terminalSpec(id: UInt64) async throws -> TerminalSpec {
-		guard let core else { throw CoreError.Failed(message: error ?? "the core failed to start") }
+		guard let core else { throw CoreError.Failed(message: "the core isn't running") }
 		let resources = Bundle.main.resourcePath
-		let launch = try await Self.offMain { try core.terminalSpec(pane: id, resourcesDir: resources) }
-		for warning in launch.warnings { NSLog("terminal %llu: %@", id, warning) }
-		return launch.spec
+		return try await call("terminal_spec") { try core.terminalSpec(pane: id, resourcesDir: resources) }
+	}
+
+	/// THE way to surface an error, as Ember's `showError`: recorded for the tests, written to the log, and shown on a banner.
+	public func showError(_ message: String) {
+		try? log.write(level: .error, message: message)
+		banner(message)
+	}
+
+	/// Writes a problem that degrades rather than fails to the log, with no banner.
+	public func logWarning(_ message: String) {
+		try? log.write(level: .warn, message: message)
+	}
+
+	/// The errors shown since the last call, which it clears.
+	public func scrapeErrors() -> [String] {
+		defer { recordedErrors.removeAll() }
+		return recordedErrors
+	}
+
+	private func banner(_ message: String) {
+		recordedErrors.append(message)
+		errorBanners.show(message)
 	}
 
 	private static let openShell = StateCommand.openSession(title: "Shell", kind: .shell, profilePath: nil)
 
 	private func startFresh() {
-		guard case .stateUnreadable(let path, _) = startupProblem else { return }
-		do {
-			let aside = try setAsideState(path: path)
-			NSLog("Moved the unreadable app state aside to %@", aside)
-		} catch {
-			self.error = Self.describe(error)
-			return
-		}
-		error = nil
+		guard case .stateUnreadable(let path, _) = startupProblem,
+		      let aside = try? call("set_aside_state", { try setAsideState(path: path) })
+		else { return }
+		logWarning("Moved the unreadable app state aside to \(aside)")
 		startupProblem = nil
 		open(.file(path: path))
 	}
@@ -169,23 +189,18 @@ public final class Store {
 	/// State commands apply in order and quickly (a reducer and one small SQLite transaction), so they run synchronously; their changes arrive through the subscription.
 	private func apply(_ command: StateCommand) {
 		guard let core else { return }
-		do {
-			try core.dispatch(command: command)
-			error = nil
-		} catch {
-			self.error = Self.describe(error)
-		}
+		try? call("dispatch") { try core.dispatch(command: command) }
 	}
 
 	private func pullStateEvents(from subscription: StateSubscription) -> Task<Void, Never> {
 		let inbox = inbox
 		return Task.detached { [weak self] in
 			do {
-				for try await batch in StateEvents(subscription) {
+				for try await batch in Batches(subscription) {
 					if inbox.append(batch) { await self?.eventsArrived() }
 				}
 			} catch {
-				await self?.fail(error)
+				await self?.showError("the app state's events stopped: \(Self.describe(error))")
 			}
 		}
 	}
@@ -194,24 +209,35 @@ public final class Store {
 		if let requestFrame { requestFrame() } else { foldPending() }
 	}
 
-	private func fail(_ error: any Error) {
-		self.error = Self.describe(error)
+	/// The core already wrote the errors it reports to the log, so they only need their banners; they are rare, so each batch hops to the main actor as it comes.
+	private func pullReportedErrors() -> Task<Void, Never>? {
+		guard let subscription = try? call("errors", { try log.errors() }) else { return nil }
+		return Task.detached { [weak self] in
+			do {
+				for try await batch in Batches(subscription) {
+					await self?.bannerAll(batch)
+				}
+			} catch {
+				await self?.showError("the core's error reports stopped: \(Self.describe(error))")
+			}
+		}
+	}
+
+	private func bannerAll(_ messages: [String]) {
+		for message in messages { banner(message) }
 	}
 
 	private func perform(_ command: Command) async {
 		guard let core else { return }
 		switch command {
 		case .load:
-			do {
-				let (version, profiles) = try await Self.offMain { (try core.version(), try core.listProfiles()) }
-				self.version = version
-				self.profiles = profiles
-				error = nil
-				let selected = profiles.first { $0.path == selectedProfilePath } ?? profiles.first
-				await select(selected?.path, core: core)
-			} catch {
-				self.error = Self.describe(error)
-			}
+			guard let version = try? await call("version", { try core.version() }),
+			      let profiles = try? await call("list_profiles", { try core.listProfiles() })
+			else { return }
+			self.version = version
+			self.profiles = profiles
+			let selected = profiles.first { $0.path == selectedProfilePath } ?? profiles.first
+			await select(selected?.path, core: core)
 		case .selectProfile(let path):
 			await select(path, core: core)
 		default:
@@ -223,27 +249,35 @@ public final class Store {
 		selectedProfilePath = path
 		guard let path else {
 			workspaces = []
-			warnings = []
 			return
 		}
+		let list = try? await call("list_workspaces") { try core.listWorkspaces(profilePath: path) }
+		// A later selection wins over a slower, earlier one.
+		guard selectedProfilePath == path else { return }
+		workspaces = list ?? []
+	}
+
+	/// A core call, whose failure is shown as `<name> failed: <error>`, then rethrown for the caller's flow.
+	private func call<T>(_ name: String, _ body: () throws -> T) throws -> T {
 		do {
-			let list = try await Self.offMain { try core.listWorkspaces(profilePath: path) }
-			// A later selection wins over a slower, earlier one.
-			guard selectedProfilePath == path else { return }
-			workspaces = list.workspaces
-			warnings = list.warnings
-			error = nil
+			return try body()
 		} catch {
-			guard selectedProfilePath == path else { return }
-			workspaces = []
-			warnings = []
-			self.error = Self.describe(error)
+			throw shown(error, of: name)
 		}
 	}
 
-	/// Core calls do file I/O, so they run off the main actor.
-	private static func offMain<T: Sendable>(_ body: @escaping @Sendable () throws -> T) async throws -> T {
-		try await Task.detached(operation: body).value
+	/// Like the synchronous `call`, but off the main actor, since most core calls do file I/O.
+	private func call<T: Sendable>(_ name: String, _ body: @escaping @Sendable () throws -> T) async throws -> T {
+		do {
+			return try await Task.detached(operation: body).value
+		} catch {
+			throw shown(error, of: name)
+		}
+	}
+
+	private func shown(_ error: any Error, of call: String) -> any Error {
+		showError("\(call) failed: \(Self.describe(error))")
+		return error
 	}
 
 	public nonisolated static func describe(_ error: any Error) -> String {

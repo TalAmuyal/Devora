@@ -176,7 +176,7 @@ pub(crate) fn open(path: String) -> Result<state::Store, CoreError> {
 /// A pending `next_batch` can't be cancelled from Swift, so the consumer calls `close` to end it.
 #[derive(uniffi::Object)]
 pub struct StateSubscription {
-    inner: state::Subscription,
+    inner: state::Subscription<Event>,
 }
 
 #[uniffi::export]
@@ -227,7 +227,12 @@ mod tests {
 
     #[test]
     fn a_subscription_delivers_a_snapshot_then_the_events_of_each_command() {
-        let core = DevoraCore::new(Some("/nonexistent/config.json".into()), None).unwrap();
+        let core = DevoraCore::new(
+            Some("/nonexistent/config.json".into()),
+            None,
+            crate::log::test_log(),
+        )
+        .unwrap();
         core.dispatch(open_shell()).unwrap();
         let subscription = core.subscribe().unwrap();
         core.dispatch(open_shell()).unwrap();
@@ -250,7 +255,12 @@ mod tests {
 
     #[test]
     fn a_rejected_command_is_an_error() {
-        let core = DevoraCore::new(Some("/nonexistent/config.json".into()), None).unwrap();
+        let core = DevoraCore::new(
+            Some("/nonexistent/config.json".into()),
+            None,
+            crate::log::test_log(),
+        )
+        .unwrap();
 
         let error = core
             .dispatch(Command::CloseSession { tab: 42 })
@@ -295,6 +305,7 @@ mod tests {
         DevoraCore::new(
             Some("/nonexistent/config.json".into()),
             Some(path.to_string_lossy().into_owned()),
+            crate::log::test_log(),
         )
     }
 

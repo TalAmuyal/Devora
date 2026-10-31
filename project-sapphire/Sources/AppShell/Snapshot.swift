@@ -21,7 +21,7 @@ enum Snapshot {
 			terminals.session(for: shell)?.typeLine("echo SAPPHIRE-$((40+2))")
 		}
 		try? await Task.sleep(for: .seconds(1))
-		await captureWindow(to: path)
+		await captureWindow(to: path, store: store)
 		let active = window.tabs.first { $0.id == window.activeTab }
 		let text = active.flatMap { terminals.session(for: $0)?.allText() } ?? ""
 		try? text.write(toFile: path + ".txt", atomically: true, encoding: .utf8)
@@ -29,12 +29,12 @@ enum Snapshot {
 	}
 
 	/// ScreenCaptureKit needs no Screen Recording permission for the process's own windows.
-	private static func captureWindow(to path: String) async {
+	private static func captureWindow(to path: String, store: Store) async {
 		do {
 			let content = try await SCShareableContent.currentProcess
 			guard let window = content.windows.first(where: { $0.title?.hasPrefix("Devora Sapphire") == true && $0.windowLayer == 0 })
 			else {
-				NSLog("snapshot: no window found")
+				store.logWarning("snapshot: no window found")
 				return
 			}
 			let config = SCStreamConfiguration()
@@ -44,7 +44,7 @@ enum Snapshot {
 				contentFilter: SCContentFilter(desktopIndependentWindow: window), configuration: config)
 			try NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])?.write(to: URL(filePath: path))
 		} catch {
-			NSLog("snapshot failed: %@", String(describing: error))
+			store.logWarning("snapshot failed: \(error)")
 		}
 	}
 }

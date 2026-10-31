@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { cleanupFixtures, writeTestConfig } from '../../../project-ember/tests/support/fixture-helper';
-import { APP_BINARY, stderrOf, stop, waitUntilReady } from './app';
+import { APP_BINARY, hasExited, stderrOf, stop, waitUntilReady } from './app';
 import { SapphireWorld } from './world';
 
 const PROJECT_DIR = path.resolve(import.meta.dirname, '../..');
@@ -32,12 +32,20 @@ AfterStep(async function (this: SapphireWorld, { result, pickle, pickleStep }) {
   await captureFailure(this, `${pickle.name}--${pickleStep.text}`);
 });
 
+/** As Ember's: an error no step expected fails the scenario; steps that expect one scrape it ("the recorded errors should include"). */
 After(async function (this: SapphireWorld) {
-  for (const app of [this.app, this.second?.app]) {
-    if (app) await stop(app, 'SIGTERM');
+  try {
+    const errors = this.app && !hasExited(this.app) ? await this.bridge.scrapeErrors() : [];
+    if (errors.length > 0) {
+      throw new Error(`Errors shown during the scenario:\n${errors.map((e) => `  - ${e}`).join('\n')}`);
+    }
+  } finally {
+    for (const app of [this.app, this.second?.app]) {
+      if (app) await stop(app, 'SIGTERM');
+    }
+    fs.rmSync(this.scenarioDir, { recursive: true, force: true });
+    if (this.fixtureRoot) cleanupFixtures(this.fixtureRoot);
   }
-  fs.rmSync(this.scenarioDir, { recursive: true, force: true });
-  if (this.fixtureRoot) cleanupFixtures(this.fixtureRoot);
 });
 
 /** Saves the app's state, the active terminal's text and the app's stderr to `test-results/failures/`; in CI, they are uploaded with the failed run. */

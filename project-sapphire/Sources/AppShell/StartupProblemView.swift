@@ -14,9 +14,6 @@ struct StartupProblemView: View {
 			Label(title, systemImage: "exclamationmark.triangle")
 		} description: {
 			Text(message).textSelection(.enabled)
-			if let error = store.error {
-				Text(error).foregroundStyle(.red).textSelection(.enabled)
-			}
 		} actions: {
 			HStack {
 				Button("Quit") { NSApp.terminate(nil) }

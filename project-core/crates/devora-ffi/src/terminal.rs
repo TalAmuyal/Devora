@@ -20,23 +20,17 @@ pub struct TerminalSpec {
     pub env_remove: Vec<String>,
 }
 
-/// A terminal's [`TerminalSpec`], plus the warnings met while building it (a setting that couldn't be read degrades the terminal rather than failing it).
-#[derive(uniffi::Record)]
-pub struct TerminalLaunchSpec {
-    pub spec: TerminalSpec,
-    pub warnings: Vec<String>,
-}
-
 #[uniffi::export]
 impl DevoraCore {
     /// The launch spec for the terminal shown in pane `pane`, from its tab's session.
     ///
     /// `resources_dir` is the app bundle's `Resources` directory, whose tool directories go first on `PATH`.
+    /// A setting that can't be read degrades the terminal (to a bare shell) rather than failing it, so it is logged as a warning, as Ember does.
     pub fn terminal_spec(
         &self,
         pane: u64,
         resources_dir: Option<String>,
-    ) -> Result<TerminalLaunchSpec, CoreError> {
+    ) -> Result<TerminalSpec, CoreError> {
         let state = self.state.snapshot();
         let tab = state
             .window
@@ -68,7 +62,10 @@ impl DevoraCore {
             u32::try_from(pane).map_err(|_| format!("pane id {pane} doesn't fit DEVORA_PTY_ID"))?;
         let mut warnings = Vec::new();
         let spec = terminal::terminal_spec(&request, &host, terminal_id, &mut warnings);
-        Ok(TerminalLaunchSpec { spec, warnings })
+        for warning in &warnings {
+            self.log.warn(warning);
+        }
+        Ok(spec)
     }
 }
 
@@ -80,7 +77,12 @@ mod tests {
     use std::sync::Arc;
 
     fn core() -> Arc<DevoraCore> {
-        DevoraCore::new(Some("/nonexistent/config.json".into()), None).unwrap()
+        DevoraCore::new(
+            Some("/nonexistent/config.json".into()),
+            None,
+            crate::log::test_log(),
+        )
+        .unwrap()
     }
 
     /// Opens a tab and returns its pane id.
@@ -116,7 +118,7 @@ mod tests {
             Some(profile.to_string_lossy().into_owned()),
         );
 
-        let spec = core.terminal_spec(pane, None).unwrap().spec;
+        let spec = core.terminal_spec(pane, None).unwrap();
 
         assert_eq!(spec.cwd, format!("{ws}/api"));
         assert_eq!(spec.args, ["-l", "-i", "-c", "ccc"]);
@@ -129,7 +131,7 @@ mod tests {
         let core = core();
         let pane = open(&core, SessionKind::Shell, None);
 
-        let spec = core.terminal_spec(pane, None).unwrap().spec;
+        let spec = core.terminal_spec(pane, None).unwrap();
 
         assert_eq!(spec.args, ["-l", "-i"]);
     }

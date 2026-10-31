@@ -7,7 +7,8 @@ import Testing
 @MainActor
 struct AppStateTests {
 	@Test func foldingTheEventsReproducesTheCoresState() async throws {
-		let core = try DevoraCore(configPath: "/nonexistent/config.json", statePath: nil)
+		let fixture = try Fixture()
+		let core = try DevoraCore(configPath: "/nonexistent/config.json", statePath: nil, log: try fixture.log())
 		let shell = StateCommand.openSession(title: "Shell", kind: .shell, profilePath: nil)
 		try core.dispatch(command: shell)
 		let subscription = try core.subscribe()
@@ -26,7 +27,7 @@ struct AppStateTests {
 		}
 
 		var folded = AppState.empty
-		var events = StateEvents(subscription, maxBatch: 3).makeAsyncIterator()
+		var events = Batches(subscription, maxBatch: 3).makeAsyncIterator()
 		let expected = try core.snapshot()
 		while folded != expected, let batch = try await events.next() {
 			for event in batch { folded.apply(event) }
@@ -37,12 +38,13 @@ struct AppStateTests {
 	}
 
 	@Test func cancellingTheConsumerClosesTheSubscriptionAndEndsTheSequence() async throws {
-		let core = try DevoraCore(configPath: "/nonexistent/config.json", statePath: nil)
+		let fixture = try Fixture()
+		let core = try DevoraCore(configPath: "/nonexistent/config.json", statePath: nil, log: try fixture.log())
 		let subscription = try core.subscribe()
 		let (received, signal) = AsyncStream<Void>.makeStream()
 		let consumer = Task {
 			var batches = 0
-			for try await _ in StateEvents(subscription) {
+			for try await _ in Batches(subscription) {
 				batches += 1
 				signal.yield()
 			}
@@ -60,7 +62,8 @@ struct AppStateTests {
 	}
 
 	@Test func theStoreRendersTabsFromTheCore() async throws {
-		let store = Store(configPath: "/nonexistent/config.json", state: .inMemory)
+		let fixture = try Fixture()
+		let store = Store(configPath: "/nonexistent/config.json", state: .inMemory, log: try fixture.log())
 		let workspace = Workspace(id: "ws-1", path: "/ws/1", title: "Fix the build", repos: ["api"], active: true)
 
 		store.dispatch(.openShell)

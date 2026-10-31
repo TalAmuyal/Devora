@@ -79,7 +79,7 @@ function runsTerminal(kind: string): boolean {
   return kind === 'shell' || kind === 'workspace';
 }
 
-function hasExited(app: ChildProcess): boolean {
+export function hasExited(app: ChildProcess): boolean {
   return app.exitCode !== null || app.signalCode !== null;
 }
 

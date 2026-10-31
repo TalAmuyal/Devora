@@ -3,6 +3,7 @@ import CoreBindings
 import Layers
 import Store
 import SwiftUI
+import TerminalKit
 
 /// The window's content: profiles and workspaces in the sidebar; the active tab's terminal over the tab bar in the main area.
 public struct RootView: View {
@@ -10,8 +11,19 @@ public struct RootView: View {
 	@State private var terminals = Terminals()
 	@State private var surfaces: Surfaces
 
+	/// Opened once per process; the app can't report anything without it, so it stops if it can't be opened, as Ember does.
+	private static let sessionLog: AppLog = {
+		do {
+			return try AppLog.openSession()
+		} catch {
+			fatalError("couldn't open the log: \(Store.describe(error))")
+		}
+	}()
+
 	public init() {
-		let store = Store(configPath: nil, state: .app)
+		let log = Self.sessionLog
+		TerminalRuntime.logWarning = { message in try? log.write(level: .warn, message: message) }
+		let store = Store(configPath: nil, state: .app, log: log)
 		_store = State(initialValue: store)
 		_surfaces = State(initialValue: Surfaces(store: store))
 	}
@@ -34,6 +46,7 @@ public struct RootView: View {
 				.background(KeyRouterInstaller(router: surfaces.router))
 			}
 		}
+		.overlay(alignment: .top) { ErrorBannerStack(store: store) }
 		.background(FrameDriver(store: store))
 		.navigationTitle(store.version.isEmpty ? "Devora Sapphire" : "Devora Sapphire \(store.version)")
 		.frame(minWidth: 900, minHeight: 560)
@@ -58,7 +71,7 @@ public struct RootView: View {
 			if let workspace = store.workspaces.first(where: { $0.path == path }) {
 				store.dispatch(.openWorkspace(workspace))
 			} else {
-				NSLog("--open-workspace: %@ is not a workspace of the selected profile", path)
+				store.showError("--open-workspace: \(path) is not a workspace of the selected profile")
 			}
 		}
 		// Started after the launch's commands, so that the harness finds them dispatched.
@@ -95,16 +108,6 @@ private struct Sidebar: View {
 					// Activating an inactive workspace (a new task) comes with the Workspace Hub.
 					.disabled(!workspace.active)
 					.help(workspace.active ? "Open in a new tab" : "")
-				}
-			}
-			if let error = store.error {
-				Section("Error") {
-					Text(error).foregroundStyle(.red).textSelection(.enabled)
-				}
-			}
-			if !store.warnings.isEmpty {
-				Section("Warnings") {
-					ForEach(store.warnings, id: \.self) { Text($0).foregroundStyle(.orange) }
 				}
 			}
 		}

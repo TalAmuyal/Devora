@@ -17,13 +17,15 @@ export interface AppState {
   profiles: { name: string; path: string }[];
   selectedProfile: string | null;
   workspaces: { id: string; title: string; path: string; active: boolean }[];
-  error: string | null;
+  /** The error banners on screen, oldest first; `count` is how many times the message was shown while its banner was up. */
+  errorBanners: { id: number; message: string; count: number }[];
+  /** This run's log file. */
+  logPath: string;
   /** Why the app state couldn't be opened at launch; the app waits for an answer (`startFresh`, or `quit`) meanwhile. */
   startupProblem:
     | { kind: 'stateInUse'; path: string }
     | { kind: 'stateUnreadable'; path: string; reason: string }
     | null;
-  warnings: string[];
   activeTab: number | null;
   tabs: TabState[];
   /** The terminals' font size, in points. */
@@ -41,7 +43,8 @@ export type Command =
   | { command: 'openWorkspace'; id: string }
   | { command: 'activateTab'; id: number }
   | { command: 'closeTab'; id: number }
-  | { command: 'startFresh' };
+  | { command: 'startFresh' }
+  | { command: 'dismissError'; id: number };
 
 export class BridgeError extends Error {
   constructor(
@@ -90,6 +93,11 @@ export class Bridge {
    */
   async press(key: string, modifiers: Modifier[] = []): Promise<void> {
     await this.request('POST', '/test/key', { key, modifiers });
+  }
+
+  /** The errors shown since the last scrape, which it clears, as Ember's `__scrapeErrors`. */
+  async scrapeErrors(): Promise<string[]> {
+    return (await this.request('POST', '/test/errors/scrape')).errors;
   }
 
   /** Opens a stand-in window surface: a page over the whole window, with nothing to focus, that `q` or Escape closes. */
