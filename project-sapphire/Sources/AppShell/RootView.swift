@@ -58,9 +58,8 @@ public struct RootView: View {
 		}
 	}
 
-	/// Runs once the app state is open: the restored tabs are already in the core, so a shell tab opens only if none was restored.
+	/// Runs once the app state is open: the restored tabs are already in the core, and the Workspace Hub opens when there are none, as Ember's launch always opens it.
 	private func launch() async {
-		store.dispatch(.openShellIfNoTabs)
 		await store.dispatch(.load).value
 		if let path = LaunchOptions.value("--open-workspace") {
 			if let workspace = store.workspaces.first(where: { $0.path == path }) {
@@ -69,7 +68,7 @@ public struct RootView: View {
 				store.showError("--open-workspace: \(path) is not a workspace of the selected profile")
 			}
 		}
-		if LaunchOptions.value("--surface") == WorkspaceHubModel.layerName {
+		if store.hasNoTabs() || LaunchOptions.value("--surface") == WorkspaceHubModel.layerName {
 			surfaces.openWorkspaceHub()
 		}
 		// Started after the launch's commands, so that the harness finds them dispatched.

@@ -36,6 +36,8 @@ public struct LayerSpec {
 	public var takesFocus = true
 	/// `q` and Escape may dismiss it.
 	public var dismissible = true
+	/// Keeps Tab and Shift+Tab within this layer while it is the top: the stack consumes them and calls `cycleFocus`, so the window's key-view loop can't move the focus to a surface beneath.
+	public var trapsTab = false
 	/// Removing this layer from the top runs the revealed layer's `onReveal`: true for navigation (returning to a hub refreshes it), false for a transient sub-interaction such as a dialog.
 	public var refreshesRevealedLayer = false
 	/// Layer-specific keys, tried first in the walk; returning true consumes the key.
@@ -46,6 +48,8 @@ public struct LayerSpec {
 	public var onCleanup: (() -> Void)?
 	/// Runs when this layer is the top again after a `refreshesRevealedLayer` layer above it is removed.
 	public var onReveal: (() -> Void)?
+	/// Moves the layer's focus to its next control, or to its previous one when `backward` (Shift+Tab); the Tab trap calls it.
+	public var cycleFocus: ((_ backward: Bool) -> Void)?
 	/// Gives the layer the keyboard focus; without it, the stack's fallback takes the focus away from whatever had it, so keys can't reach a covered surface.
 	public var focus: (() -> Void)?
 
@@ -63,11 +67,12 @@ public func pageLayer(_ spec: LayerSpec) -> LayerSpec {
 	return spec
 }
 
-/// A dialog with the surface below kept visible as context; cancelling it doesn't refresh the caller, which refreshes on confirm.
-/// Ember's modal also keeps Tab within the dialog; that comes with the first dialog.
+/// A dialog with the surface below kept visible as context: it traps Tab, and cancelling it doesn't refresh the caller, which refreshes on confirm.
 @MainActor
 public func modalLayer(_ spec: LayerSpec) -> LayerSpec {
-	spec
+	var spec = spec
+	spec.trapsTab = true
+	return spec
 }
 
 /// An anchored light-dismiss surface (a dropdown): it never takes the focus and passes on the keys it doesn't handle, so the surface beneath keeps working while it is open.

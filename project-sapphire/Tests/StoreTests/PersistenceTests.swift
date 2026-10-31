@@ -6,11 +6,12 @@ import Testing
 /// The store on an app state kept in a file: what a launch restores, and the problems it can meet opening it.
 @MainActor
 struct PersistenceTests {
-	@Test func aLaunchRestoresTheTabsAndOpensNoShellOfItsOwn() async throws {
+	@Test func aLaunchRestoresTheTabs() async throws {
 		let fixture = try Fixture()
 		let statePath = fixture.root.appending(path: "state/state.db").path
 		var first: Store? = Store(configPath: fixture.configPath, state: .file(path: statePath), log: try fixture.log())
-		first!.dispatch(.openShellIfNoTabs)
+		#expect(first!.hasNoTabs())
+		first!.dispatch(.openShell)
 		first!.dispatch(.openShell)
 		try await eventually { first!.app.window.tabs.count == 2 }
 		first!.dispatch(.activateTab(id: first!.app.window.tabs[0].id))
@@ -19,9 +20,9 @@ struct PersistenceTests {
 		first = nil
 
 		let second = Store(configPath: fixture.configPath, state: .file(path: statePath), log: try fixture.log())
-		second.dispatch(.openShellIfNoTabs)
-		try await eventually { !second.app.window.tabs.isEmpty }
 
+		#expect(!second.hasNoTabs(), "read from the core before any event folds")
+		try await eventually { !second.app.window.tabs.isEmpty }
 		#expect(second.startupProblem == nil)
 		#expect(second.app == left)
 	}
@@ -41,10 +42,9 @@ struct PersistenceTests {
 		#expect(reason.contains("couldn't open the app state"))
 
 		store.dispatch(.startFresh)
-		store.dispatch(.openShellIfNoTabs)
-		try await eventually { store.app.window.tabs.count == 1 }
 
 		#expect(store.startupProblem == nil)
+		#expect(store.hasNoTabs())
 		let kept = try FileManager.default.contentsOfDirectory(atPath: fixture.root.path).filter { $0.hasPrefix("state-unreadable-") }
 		#expect(kept.count == 1)
 		#expect(try Data(contentsOf: fixture.root.appending(path: kept[0])) == corrupt)

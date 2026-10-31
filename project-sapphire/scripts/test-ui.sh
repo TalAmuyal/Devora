@@ -16,6 +16,14 @@ if ioreg -n Root -d1 | grep -q '"CGSSessionScreenIsLocked"=Yes'; then
 	skip "the screen is locked"
 fi
 
+# The UI test runner is sandboxed, where git can't run (xcrun refuses to), so the git repo the tests copy into their fixtures is made here.
+# xcodebuild passes TEST_RUNNER_-prefixed variables to the runner, without the prefix.
+git_repo="$PWD/build/ui-test-fixtures/repo"
+rm -rf "$git_repo"
+git init -q -b main "$git_repo"
+git -C "$git_repo" -c user.name=uitest -c user.email=uitest@localhost -c commit.gpgsign=false commit -q --allow-empty -m init
+export TEST_RUNNER_SAPPHIRE_GIT_REPO="$git_repo"
+
 results=build/ui-tests.xcresult
 rm -rf "$results"
 if ! xcodebuild -project App/DevoraSapphire.xcodeproj -scheme DevoraSapphire -configuration Release \

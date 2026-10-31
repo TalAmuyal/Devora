@@ -80,6 +80,8 @@ struct TabContent: View {
 				.allowsHitTesting(isActive)
 			}
 		}
+		// The tabs' region fills the window even with no tabs, so the window's surfaces, which take its size, do too.
+		.frame(maxWidth: .infinity, maxHeight: .infinity)
 		.onChange(of: window.tabs, initial: true) { _, tabs in
 			surfaces.sync(with: tabs)
 			terminals.sync(with: tabs, store: store) { [store, surfaces] tab, session in

@@ -15,7 +15,7 @@ final class KeyRoutingUITests: XCTestCase {
 		try? FileManager.default.removeItem(at: scratch)
 	}
 
-	/// Launches the app on a fresh config and app state, so it starts with one shell tab; the shells see `UITEST_OUT`.
+	/// Launches the app on a fresh config and app state, and opens one shell tab; the shells see `UITEST_OUT`.
 	@MainActor
 	private func launch() throws {
 		let config = scratch.appending(path: "config.json")
@@ -26,6 +26,7 @@ final class KeyRoutingUITests: XCTestCase {
 		app.launchEnvironment["UITEST_OUT"] = scratch.path
 		app.launch()
 		addTeardownBlock { @MainActor [app] in app?.terminate() }
+		app.openFirstShell()
 	}
 
 	@MainActor

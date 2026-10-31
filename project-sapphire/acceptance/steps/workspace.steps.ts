@@ -12,14 +12,21 @@ import {
 import { openWorkspaceHub } from './workspace-hub.steps';
 import { SapphireWorld } from '../support/world';
 
-const TEST_REPO_NAME = 'test-repo';
+export const TEST_REPO_NAME = 'test-repo';
 
 /** A profile whose workspaces are real worktrees of one repo, the first `active` of them with a task; it joins the profiles already in the config. */
 function createProfile(world: SapphireWorld, name: string, count: number, active: number): void {
+  addProfile(world, name, (profilePath) => {
+    createTestRepo(profilePath, TEST_REPO_NAME);
+    createTestWorkspaces(profilePath, count, { active }, TEST_REPO_NAME);
+  });
+}
+
+/** Creates a profile, lets `populate` fill it, and registers it after the profiles already in the config. */
+export function addProfile(world: SapphireWorld, name: string, populate: (profilePath: string) => void): void {
   world.fixtureRoot ??= createTestFixtureRoot();
   const profilePath = createTestProfile(world.fixtureRoot, name);
-  createTestRepo(profilePath, TEST_REPO_NAME);
-  createTestWorkspaces(profilePath, count, { active }, TEST_REPO_NAME);
+  populate(profilePath);
   world.profilePaths.push(profilePath);
   writeTestConfig(world.testConfigPath, world.profilePaths);
   world.profilePath = profilePath;

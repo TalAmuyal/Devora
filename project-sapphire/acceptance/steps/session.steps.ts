@@ -1,6 +1,7 @@
 import { Given, When, Then } from '@cucumber/cucumber';
 import type { AppState } from '../support/bridge';
 import { SapphireWorld } from '../support/world';
+import { closeWindowSurfaces } from './workspace-hub.steps';
 
 // The phrases are Ember's, so that the scenarios in `acceptance/features/` run on both apps; a session is a tab.
 
@@ -8,11 +9,10 @@ Given('Sapphire is running', async function (this: SapphireWorld) {
   // The launch hook only returns once the app has finished launching.
 });
 
+// A fresh app state restores no tabs, so the launch opened the Workspace Hub; Ember's scenarios start after its teardown, with no surface open, so it is closed.
 Given('Devora is running with no sessions open', async function (this: SapphireWorld) {
-  for (const tab of (await this.bridge.state()).tabs) {
-    await this.bridge.dispatch({ command: 'closeTab', id: tab.id });
-  }
   await waitForSessionCount(this, 0);
+  await closeWindowSurfaces(this);
 });
 
 Given('a session exists', async function (this: SapphireWorld) {

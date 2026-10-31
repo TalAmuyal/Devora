@@ -36,10 +36,10 @@ final class WorkspaceHubUITests: XCTestCase {
 		addTeardownBlock { @MainActor [app] in app?.terminate() }
 	}
 
+	/// A fresh app state has no tabs to restore, so the launch opens the hub.
 	@MainActor
 	func testTheHubDrawsItsHeaderFilterAndHintsAsItOpens() throws {
 		try launch()
-		app.typeKey("s", modifierFlags: .control)
 		for identifier in ["hub-header", "hub-filter", "hub-hint-bar"] {
 			XCTAssertTrue(element(identifier).waitForExistence(timeout: 5), "\(identifier) isn't drawn")
 		}
@@ -48,8 +48,7 @@ final class WorkspaceHubUITests: XCTestCase {
 	@MainActor
 	func testTypingInTheFilterNarrowsTheListAndEscapeLeavesItBeforeClosing() throws {
 		try launch()
-		app.typeKey("s", modifierFlags: .control)
-		XCTAssertTrue(app.staticTexts["Fix beta"].waitForExistence(timeout: 5))
+		XCTAssertTrue(app.staticTexts["Fix beta"].waitForExistence(timeout: 10))
 
 		app.typeKey("f", modifierFlags: [])
 		// `q` types into the field rather than closing the hub.

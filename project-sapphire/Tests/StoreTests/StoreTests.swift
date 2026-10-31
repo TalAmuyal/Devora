@@ -128,6 +128,46 @@ struct StoreTests {
 		try await eventually { store.workspaceStatuses.count == 2 }
 	}
 
+	@Test func removingATaskOrDeletingAWorkspaceListsTheWorkspacesAgain() async throws {
+		let fixture = try Fixture()
+		let work = try fixture.makeProfile("work")
+		try fixture.makeWorkspace(profile: work, id: "ws-1", title: "Done")
+		try fixture.makeWorkspace(profile: work, id: "ws-2", title: nil)
+		try fixture.registerProfiles([work])
+		let store = Store(configPath: fixture.configPath, state: .inMemory, log: try fixture.log())
+		await store.dispatch(.load).value
+
+		#expect(await store.removeTask(store.workspaces[0]))
+		#expect(store.workspaces.map(\.active) == [false, false])
+		#expect(await store.deleteWorkspace(store.workspaces[1]))
+		#expect(store.workspaces.map(\.id) == ["ws-1"])
+		#expect(store.scrapeErrors() == [])
+	}
+
+	@Test func theLoadingLatenciesReportTheListingAndEachStatus() async throws {
+		let fixture = try Fixture()
+		let work = try fixture.makeProfile("work")
+		try fixture.makeWorkspace(profile: work, id: "ws-1", title: "One")
+		try fixture.makeWorkspace(profile: work, id: "ws-2", title: "Two")
+		try fixture.registerProfiles([work])
+		let store = Store(configPath: fixture.configPath, state: .inMemory, log: try fixture.log())
+		await store.dispatch(.load).value
+		store.dispatch(.loadWorkspaceStatuses(fresh: true))
+		try await eventually { store.workspaceStatuses.count == 2 }
+
+		let path = try #require(await store.saveLoadingLatencies())
+
+		#expect(path.hasPrefix("\(work)/diagnostics/hub-profile-") && path.hasSuffix(".json"))
+		let report = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: URL(filePath: path))) as? [String: Any])
+		#expect(report["profileName"] as? String == "work")
+		#expect(report["workspaceCount"] as? Int == 2)
+		let phases = try #require(report["phases"] as? [String: [String: Double]])
+		#expect(Set(phases.keys) == ["listProfiles", "listWorkspaces", "totalLoad"])
+		#expect(phases["totalLoad"]!["durationMs"]! >= phases["listWorkspaces"]!["durationMs"]!)
+		let statuses = try #require(report["workspaceStatuses"] as? [[String: Any]])
+		#expect(Set(statuses.compactMap { $0["wsId"] as? String }) == ["ws-1", "ws-2"])
+	}
+
 	@Test func aFailingCoreCallIsShownOnABannerAndLogged() async throws {
 		let fixture = try Fixture()
 		try fixture.writeConfig("{not json")
