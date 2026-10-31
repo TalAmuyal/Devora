@@ -8,39 +8,33 @@ import TerminalKit
 @MainActor
 @Observable
 final class Terminals {
-	enum Slot {
-		case starting
-		case failed(String)
-		case running(TerminalSession)
-	}
+	private(set) var sessions: [UInt64: TerminalSession] = [:]
 
-	private(set) var slots: [UInt64: Slot] = [:]
-
-	/// Drops the terminals of closed tabs, and starts one for each new tab that runs a terminal, from the core's spec; `started` gets each one that runs.
-	func sync(with tabs: [AppTab], store: Store, started: @escaping (AppTab, TerminalSession) -> Void) {
+	/// Drops the terminals of closed tabs, and makes one for each new tab that runs a terminal; `started` gets each new one at once, and its launch, the core's spec, follows.
+	///
+	/// The terminal exists before its spec has loaded, so that what is typed into a new tab meanwhile waits in it rather than reaching nothing.
+	func sync(with tabs: [AppTab], store: Store, started: (AppTab, TerminalSession) -> Void) {
 		let live = Set(tabs.map(\.terminalID))
-		slots = slots.filter { live.contains($0.key) }
-		for tab in tabs where slots[tab.terminalID] == nil && tab.session.kind.runsTerminal {
+		sessions = sessions.filter { live.contains($0.key) }
+		for tab in tabs where sessions[tab.terminalID] == nil && tab.session.kind.runsTerminal {
 			let id = tab.terminalID
-			slots[id] = .starting
+			let session = TerminalSession()
+			sessions[id] = session
+			started(tab, session)
 			Task {
-				let slot: Slot
 				do {
-					slot = .running(TerminalSession(launch: TerminalLaunch(try await store.terminalSpec(id: id))))
+					let launch = TerminalLaunch(try await store.terminalSpec(id: id))
+					// The tab may have closed while its spec loaded.
+					if sessions[id] === session { session.start(launch) }
 				} catch {
-					slot = .failed(Store.describe(error))
+					session.fail(Store.describe(error))
 				}
-				// The tab may have closed while its spec loaded.
-				guard slots[id] != nil else { return }
-				slots[id] = slot
-				if case .running(let session) = slot { started(tab, session) }
 			}
 		}
 	}
 
 	func session(for tab: AppTab) -> TerminalSession? {
-		guard case .running(let session) = slots[tab.terminalID] else { return nil }
-		return session
+		sessions[tab.terminalID]
 	}
 }
 
@@ -75,7 +69,7 @@ struct TabContent: View {
 			}
 			ForEach(window.tabs, id: \.terminalID) { tab in
 				let isActive = tab.id == window.activeTab
-				TabPane(tab: tab, slot: terminals.slots[tab.terminalID], stack: surfaces.tabStacks[tab.id])
+				TabPane(tab: tab, session: terminals.sessions[tab.terminalID], stack: surfaces.tabStacks[tab.id])
 				.opacity(isActive ? 1 : 0)
 				.allowsHitTesting(isActive)
 			}
@@ -96,21 +90,19 @@ struct TabContent: View {
 
 private struct TabPane: View {
 	let tab: AppTab
-	let slot: Terminals.Slot?
+	let session: TerminalSession?
 	let stack: LayerStack?
 
 	var body: some View {
-		switch (tab.session.kind, slot) {
+		switch (tab.session.kind, session?.startFailure) {
 		case (.creatingWorkspace, _):
 			ProgressView("Creating the workspace…")
 		case (.creationFailed(let reason), _):
 			Message(title: "The workspace couldn't be created", detail: reason)
-		case (_, .failed(let reason)):
+		case (_, let reason?):
 			Message(title: "The terminal couldn't start", detail: reason)
-		case (_, .running):
-			if let stack { LayerHost(stack: stack) }
-		case (_, .starting), (_, nil):
-			Color.clear
+		case (_, nil):
+			if session != nil, let stack { LayerHost(stack: stack) }
 		}
 	}
 }

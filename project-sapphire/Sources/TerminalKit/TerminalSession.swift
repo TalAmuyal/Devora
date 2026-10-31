@@ -6,11 +6,19 @@ import Observation
 /// One terminal: what it runs, and what Sapphire needs to know about it for display and restore.
 ///
 /// libghostty owns the PTY and the child process; the session only describes them and reads them back.
+///
+/// A session exists from the moment its tab does, and runs once it has both its launch (the core's spec, which loads asynchronously) and a view in a window: libghostty then makes the surface, which spawns the child on a PTY.
+/// Input that comes before that (typed keys, `typeLine`, a paste) waits in the session and goes to the surface, in order, once it exists, as typeahead does in any terminal: the PTY holds it until the shell reads it.
 @MainActor
 @Observable
 public final class TerminalSession: Identifiable {
 	public let id = UUID()
-	public let launch: TerminalLaunch
+	/// What the terminal runs; nil until the core's spec has loaded.
+	public private(set) var launch: TerminalLaunch?
+	/// Whether libghostty runs the terminal: its surface exists, so the child has a PTY that input goes to.
+	public private(set) var isRunning = false
+	/// Why the terminal couldn't start, if it couldn't.
+	public private(set) var startFailure: String?
 	public internal(set) var title = ""
 	/// The cwd the shell reported through OSC 7, if it does.
 	public internal(set) var reportedPwd: String?
@@ -23,9 +31,39 @@ public final class TerminalSession: Identifiable {
 	@ObservationIgnored var startedAt: ContinuousClock.Instant?
 	/// A focus request made before the view was in a window, claimed once it is.
 	@ObservationIgnored private(set) var wantsFocus = false
+	/// Input that came before the surface existed, in order.
+	@ObservationIgnored private var pendingInput: [(ghostty_surface_t) -> Void] = []
 
-	public init(launch: TerminalLaunch) {
+	public init() {}
+
+	/// Gives the terminal what to run; it starts once its view is in a window, or at once if it already is.
+	public func start(_ launch: TerminalLaunch) {
+		guard self.launch == nil, startFailure == nil else { return }
 		self.launch = launch
+		view?.createSurfaceIfReady()
+	}
+
+	/// Marks the terminal as unable to start, dropping the input that waited for it.
+	public func fail(_ reason: String) {
+		guard !isRunning else { return }
+		startFailure = reason
+		pendingInput = []
+	}
+
+	func surfaceCreated(_ surface: ghostty_surface_t) {
+		isRunning = true
+		let pending = pendingInput
+		pendingInput = []
+		for input in pending { input(surface) }
+	}
+
+	/// Runs `input` on the surface now, or once it exists; input for a terminal that couldn't start goes nowhere.
+	func withSurface(_ input: @escaping (ghostty_surface_t) -> Void) {
+		if let surface = view?.surface {
+			input(surface)
+		} else if startFailure == nil {
+			pendingInput.append(input)
+		}
 	}
 
 	func markExited(code: Int32) {
@@ -95,19 +133,21 @@ public final class TerminalSession: Identifiable {
 
 	/// Types text into the terminal as if pasted.
 	public func paste(_ text: String) {
-		guard let surface = view?.surface else { return }
-		text.withCString { ghostty_surface_paste_text(surface, $0, UInt(strlen($0))) }
+		withSurface { surface in
+			text.withCString { ghostty_surface_paste_text(surface, $0, UInt(strlen($0))) }
+		}
 	}
 
 	/// Types a line and presses Return. Text alone is not enough: a trailing "\r" in `ghostty_surface_text` is not a key press.
 	public func typeLine(_ line: String) {
-		guard let surface = view?.surface else { return }
-		line.withCString { ghostty_surface_text(surface, $0, UInt(strlen($0))) }
-		var key = ghostty_input_key_s()
-		key.keycode = 0x24  // kVK_Return
-		for action in [GHOSTTY_ACTION_PRESS, GHOSTTY_ACTION_RELEASE] {
-			key.action = action
-			_ = ghostty_surface_key(surface, key)
+		withSurface { surface in
+			line.withCString { ghostty_surface_text(surface, $0, UInt(strlen($0))) }
+			var key = ghostty_input_key_s()
+			key.keycode = 0x24  // kVK_Return
+			for action in [GHOSTTY_ACTION_PRESS, GHOSTTY_ACTION_RELEASE] {
+				key.action = action
+				_ = ghostty_surface_key(surface, key)
+			}
 		}
 	}
 }

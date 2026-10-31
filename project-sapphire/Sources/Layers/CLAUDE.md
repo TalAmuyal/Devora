@@ -6,7 +6,7 @@ The contract is Ember's ([`project-ember/src/ui/layers/CLAUDE.md`](../../../proj
 ## Topology: n + 1 stacks
 
 - **The window stack** (`LayerRouter.windowStack`), drawn by a `LayerHost` overlaid on the whole window (the tab bar included): hubs, the Command Palette, the User Guide, dialogs.
-- **One stack per tab** (`Surfaces.tabStacks` in `AppShell`), made when the tab enters the core's state and cleared when it leaves; its bottom layer is the tab's terminal, pushed once the terminal runs, so a tab's stack is empty until then.
+- **One stack per tab** (`Surfaces.tabStacks` in `AppShell`), made when the tab enters the core's state and cleared when it leaves; its bottom layer is the tab's terminal, pushed as soon as the tab has one, before it runs, so that it takes the keys typed into a new tab.
 
 A surface covers the window iff it is in the window stack; the presets declare behavior, never extent.
 

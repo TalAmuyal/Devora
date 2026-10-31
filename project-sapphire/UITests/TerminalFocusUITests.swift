@@ -29,7 +29,7 @@ final class TerminalFocusUITests: XCTestCase {
 
 		// Each tab's terminal has its own id, which its shell sees as DEVORA_PTY_ID.
 		let first = try typeTerminalID(into: app, file: "first")
-		app.buttons["New Shell"].click()
+		app.openShell()
 		let second = try typeTerminalID(into: app, file: "second")
 		XCTAssertNotEqual(first, second, "the new tab's terminal should have the keys")
 

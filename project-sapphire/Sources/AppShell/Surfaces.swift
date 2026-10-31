@@ -128,7 +128,7 @@ final class Surfaces {
 		cheatsheet = scroll
 	}
 
-	/// Puts a tab's terminal at the bottom of its stack, once the terminal runs.
+	/// Puts a tab's terminal at the bottom of its stack, as soon as the tab has one, so that it takes the keys before it runs.
 	func pushTerminal(_ session: TerminalSession, tab: UInt64, onExit: @escaping () -> Void) {
 		guard let stack = tabStacks[tab], stack.isEmpty else { return }
 		var spec = terminalLayer(LayerSpec(name: "terminal") { TerminalTab(session: session, onExit: onExit) })

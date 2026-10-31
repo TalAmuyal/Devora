@@ -33,7 +33,7 @@ final class KeyRoutingUITests: XCTestCase {
 	func testCtrlArrowsSwitchTabsAndTheFocusFollows() throws {
 		try launch()
 		let first = try runInShell("echo $DEVORA_PTY_ID >$UITEST_OUT/first", awaiting: "first")
-		app.buttons["New Shell"].click()
+		app.openShell()
 		let second = try runInShell("echo $DEVORA_PTY_ID >$UITEST_OUT/second", awaiting: "second")
 		XCTAssertNotEqual(first, second)
 

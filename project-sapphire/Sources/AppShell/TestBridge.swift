@@ -138,13 +138,13 @@ final class TestBridge {
 		return value
 	}
 
-	/// The terminal of the tab with this id (the active tab by default); a 409 until it is running, so that callers poll.
+	/// The terminal of the tab with this id (the active tab by default); a 409 until the tab has one, so that callers poll.
 	private func terminal(_ id: UInt64?) throws -> TerminalSession {
 		let window = store.app.window
 		guard let id = id ?? window.activeTab, let tab = window.tabs.first(where: { $0.id == id }) else {
 			throw BridgeError(status: 404, "no tab \(id.map(String.init) ?? "is active")")
 		}
-		guard let session = terminals.session(for: tab) else { throw BridgeError(status: 409, "the terminal of tab \(id) isn't running") }
+		guard let session = terminals.session(for: tab) else { throw BridgeError(status: 409, "tab \(id) has no terminal yet") }
 		return session
 	}
 
@@ -284,7 +284,7 @@ final class TestBridge {
 					"id": NSNumber(value: tab.id),
 					"title": tab.title,
 					"kind": Self.name(tab.session.kind),
-					"terminal": Self.name(terminals.slots[tab.terminalID]),
+					"terminal": Self.status(session),
 					"focused": session?.hasFocus ?? false,
 					"layers": surfaces.tabStacks[tab.id]?.layers.map(\.spec.name) ?? [],
 				] as [String: Any]
@@ -308,13 +308,10 @@ final class TestBridge {
 		}
 	}
 
-	private static func name(_ slot: Terminals.Slot?) -> String {
-		switch slot {
-		case nil: "none"
-		case .starting: "starting"
-		case .failed(let reason): "failed: \(reason)"
-		case .running: "running"
-		}
+	private static func status(_ session: TerminalSession?) -> String {
+		guard let session else { return "none" }
+		if let reason = session.startFailure { return "failed: \(reason)" }
+		return session.isRunning ? "running" : "starting"
 	}
 }
 

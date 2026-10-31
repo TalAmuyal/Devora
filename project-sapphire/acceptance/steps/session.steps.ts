@@ -74,8 +74,8 @@ When('the active session is closed', async function (this: SapphireWorld) {
 });
 
 When('{string} is typed in the terminal', async function (this: SapphireWorld, line: string) {
-  // The terminal starts once its tab is on screen; typing before that has nowhere to go.
-  await this.bridge.waitFor('the active terminal to run', () => this.bridge.terminalText(), () => true);
+  // The bridge answers 409 until the new tab has its terminal, which then holds what is typed until its shell runs.
+  await this.bridge.waitFor('the active tab to have its terminal', () => this.bridge.terminalText(), () => true);
   await this.bridge.typeLine(line);
 });
 
