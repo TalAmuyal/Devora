@@ -23,8 +23,15 @@ final class Surfaces {
 	@ObservationIgnored private(set) var newTask: NewTaskDialogModel?
 	/// The open New Profile dialog's form; nil while none is.
 	@ObservationIgnored private(set) var newProfile: ProfileFormModel?
+	/// The open Add Repo dialog; nil while none is.
+	@ObservationIgnored private(set) var addRepo: AddRepoDialogModel?
+	/// The open Clone Repo dialog; nil while none is.
+	@ObservationIgnored private(set) var cloneRepo: CloneRepoDialogModel?
 	/// From the New Task dialog's opening until its repos have loaded, so that a held or repeated `n` opens one dialog.
 	@ObservationIgnored private var newTaskOpening = false
+	/// The same for the Add Repo and Clone Repo dialogs.
+	@ObservationIgnored private var addRepoOpening = false
+	@ObservationIgnored private var cloneRepoOpening = false
 	@ObservationIgnored private var hubMenu: LayerHandle?
 	@ObservationIgnored private let store: Store
 
@@ -102,6 +109,10 @@ final class Surfaces {
 		model.confirm = { [unowned self] confirmation, action in confirm(confirmation, then: action) }
 		model.newTask = { [unowned self] source in openNewTaskDialog(duplicating: source) }
 		model.newProfile = { [unowned self, unowned model] in openNewProfileDialog(over: model) }
+		model.addRepo = { [unowned self, unowned model] workspace in
+			closeHubMenu()
+			openAddRepoDialog(for: AddRepoTarget(workspace)) { [weak model] in model?.repoAdded() }
+		}
 		hub = model
 		model.load()
 	}
@@ -175,10 +186,90 @@ final class Surfaces {
 			spec.onCleanup = { [unowned self] in
 				if newTask === model { newTask = nil }
 			}
+			if let profile = store.selectedProfilePath {
+				// After a clone, the list is the profile's repos again, with the clone selected, as Ember's `refreshAfterClone` does.
+				model.cloneRepo = { [unowned self, unowned model, store] in
+					openCloneRepoDialog(profilePath: profile) { [weak model] cloned in
+						Task {
+							guard let repos = await store.registeredRepos(inProfile: profile) else { return }
+							model?.reposChanged(repos, selecting: cloned.path)
+						}
+					}
+				}
+			}
 			closeHubMenu()
 			handle = windowStack.push(spec)
 			newTask = model
 		}
+	}
+
+	/// Opens the Add Repo dialog over the window for a workspace, once the repos of the workspace's profile have loaded; a profile with none has a banner instead, as in Ember.
+	/// `onAdded` runs once a repo was added, after the store has listed the workspaces again.
+	func openAddRepoDialog(for target: AddRepoTarget, onAdded: @escaping () -> Void) {
+		guard !addRepoOpening, windowStack.find(AddRepoDialogModel.layerName) == nil else { return }
+		addRepoOpening = true
+		Task { [unowned self, store] in
+			defer { addRepoOpening = false }
+			guard let repos = await store.registeredRepos(inProfile: target.profilePath) else { return }
+			guard !repos.isEmpty else {
+				store.showError("No repos are registered in this profile")
+				return
+			}
+			let router = router!
+			var handle: LayerHandle?
+			let close = { [unowned self] in
+				if let handle { windowStack.remove(handle) }
+			}
+			let model = AddRepoDialogModel(
+				target: target, repos: repos, store: store, clearFocus: { router.clearFocus() }, close: close, onAdded: onAdded)
+			var spec = modalLayer(LayerSpec(name: AddRepoDialogModel.layerName) { AddRepoDialogView(model: model) })
+			spec.onKey = model.handleKey
+			spec.onUserDismissRequest = {
+				model.dismiss()
+				return .handled
+			}
+			spec.cycleFocus = { model.cycleFocus(backward: $0) }
+			spec.focus = { model.focus = .filter }
+			spec.onCleanup = { [unowned self] in
+				if addRepo === model { addRepo = nil }
+			}
+			handle = windowStack.push(spec)
+			addRepo = model
+		}
+	}
+
+	/// Opens the Clone Repo dialog over the window, cloning into the profile; `onCloned` runs once the repo was cloned, with its path and name.
+	/// It opens on the main actor's next turn: a SwiftUI field made while AppKit dispatches the key that opens its dialog (Space on "+ Clone Repo") never gets the focus it is given.
+	func openCloneRepoDialog(profilePath: String, onCloned: @escaping (CreatedWorkspace) -> Void) {
+		guard !cloneRepoOpening, windowStack.find(CloneRepoDialogModel.layerName) == nil else { return }
+		cloneRepoOpening = true
+		Task { [unowned self] in
+			cloneRepoOpening = false
+			pushCloneRepoDialog(profilePath: profilePath, onCloned: onCloned)
+		}
+	}
+
+	private func pushCloneRepoDialog(profilePath: String, onCloned: @escaping (CreatedWorkspace) -> Void) {
+		let router = router!
+		var handle: LayerHandle?
+		let close = { [unowned self] in
+			if let handle { windowStack.remove(handle) }
+		}
+		let model = CloneRepoDialogModel(
+			profilePath: profilePath, store: store, clearFocus: { router.clearFocus() }, close: close, onCloned: onCloned)
+		var spec = modalLayer(LayerSpec(name: CloneRepoDialogModel.layerName) { CloneRepoDialogView(model: model) })
+		spec.onKey = model.handleKey
+		spec.onUserDismissRequest = {
+			model.dismiss()
+			return .handled
+		}
+		spec.cycleFocus = { model.cycleFocus(backward: $0) }
+		spec.focus = { model.focus = .url }
+		spec.onCleanup = { [unowned self] in
+			if cloneRepo === model { cloneRepo = nil }
+		}
+		handle = windowStack.push(spec)
+		cloneRepo = model
 	}
 
 	/// Opens the New Profile dialog over the hub, a modal layer with the profile form, which stands in for the Settings Hub's inline form that Ember's "New Profile…" opens.

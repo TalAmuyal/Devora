@@ -95,6 +95,12 @@ final class TestBridge {
 			case ("POST", "/test/new-task"):
 				try newTaskAction(request.json())
 				return .init(status: 200, body: [:])
+			case ("POST", "/test/add-repo"):
+				try addRepoAction(request.json())
+				return .init(status: 200, body: [:])
+			case ("POST", "/test/clone-repo"):
+				try cloneRepoAction(request.json())
+				return .init(status: 200, body: [:])
 			case ("POST", "/test/profile-form"):
 				try profileFormAction(request.json())
 				return .init(status: 200, body: [:])
@@ -202,9 +208,9 @@ final class TestBridge {
 			if removes { hub.removeTask(workspace) } else { hub.deleteWorkspace(workspace) }
 		case "newTask":
 			hub.newTask(nil)
-		case "duplicate":
+		case "duplicate", "addRepo":
 			guard let workspace = hub.focused, workspace.active else { throw BridgeError(status: 409, "no active workspace is focused") }
-			hub.newTask(workspace)
+			if body["action"] as? String == "duplicate" { hub.newTask(workspace) } else { hub.addRepo(workspace) }
 		case "toggleMenu":
 			guard let menu = (body["menu"] as? String).flatMap(HubMenu.init) else { throw BridgeError(status: 400, "unknown menu") }
 			hub.toggleMenu(menu)
@@ -244,8 +250,77 @@ final class TestBridge {
 			dialog.click(repo)
 		case "create": dialog.create()
 		case "cancel": dialog.cancel()
+		case "cloneRepo": dialog.cloneRepo()
 		default: throw BridgeError(status: 400, "unknown New Task action \(String(describing: body["action"]))")
 		}
+	}
+
+	/// Clicks what the open Add Repo dialog draws: a repo's row (by its name), or one of its buttons, the progress's included (`progressAction`: Cancel, or Close once the add has failed).
+	private func addRepoAction(_ body: [String: Any]) throws {
+		guard let dialog = surfaces.addRepo else { throw BridgeError(status: 409, "the Add Repo dialog isn't open") }
+		switch body["action"] as? String {
+		case "selectRepo":
+			let name = body["name"] as? String
+			guard let repo = dialog.visibleRepos.first(where: { $0.name == name }) else {
+				throw BridgeError(status: 404, "no repo \(name ?? "nil") in the Add Repo dialog's list")
+			}
+			dialog.click(repo)
+		case "submit": dialog.submit()
+		case "cancel": dialog.cancel()
+		case "progressAction":
+			guard let operation = dialog.operation else { throw BridgeError(status: 409, "the add hasn't started") }
+			operation.closeOrCancel()
+		default: throw BridgeError(status: 400, "unknown Add Repo action \(String(describing: body["action"]))")
+		}
+	}
+
+	/// Fills in the open Clone Repo dialog's URL, as typing it does (`setUrl` with a `value`), or clicks its buttons, the progress's included (`progressAction`).
+	private func cloneRepoAction(_ body: [String: Any]) throws {
+		guard let dialog = surfaces.cloneRepo else { throw BridgeError(status: 409, "the Clone Repo dialog isn't open") }
+		switch body["action"] as? String {
+		case "setUrl":
+			guard let value = body["value"] as? String else { throw BridgeError(status: 400, "missing value") }
+			dialog.url = value
+		case "submit": dialog.submit()
+		case "cancel": dialog.cancel()
+		case "progressAction":
+			guard let operation = dialog.operation else { throw BridgeError(status: 409, "the clone hasn't started") }
+			operation.closeOrCancel()
+		default: throw BridgeError(status: 400, "unknown Clone Repo action \(String(describing: body["action"]))")
+		}
+	}
+
+	private static func operationState(_ operation: RepoOperationPhase?) -> Any {
+		guard let operation else { return NSNull() }
+		return [
+			"title": operation.title,
+			"steps": operation.run.progress.steps.map { ["label": $0.label, "state": "\($0.state)"] },
+			"failure": operation.failure ?? NSNull(),
+			"action": operation.action,
+		] as [String: Any]
+	}
+
+	private func addRepoState() -> Any {
+		guard let dialog = surfaces.addRepo else { return NSNull() }
+		let selected = dialog.selectedRepo
+		return [
+			"workspacePath": dialog.target.workspacePath,
+			"filter": dialog.filter,
+			"postfix": dialog.postfix,
+			"focus": "\(dialog.focus)",
+			"repos": dialog.visibleRepos.map { ["name": $0.name, "selected": $0 == selected] },
+			"progress": Self.operationState(dialog.operation),
+		] as [String: Any]
+	}
+
+	private func cloneRepoState() -> Any {
+		guard let dialog = surfaces.cloneRepo else { return NSNull() }
+		return [
+			"url": dialog.url,
+			"hint": dialog.hint ?? NSNull(),
+			"focus": "\(dialog.focus)",
+			"progress": Self.operationState(dialog.operation),
+		] as [String: Any]
 	}
 
 	/// The open profile form: the New Profile dialog's, or else the first-run welcome's.
@@ -393,6 +468,8 @@ final class TestBridge {
 			"hub": hubState(),
 			"dialog": dialogState(),
 			"newTask": newTaskState(),
+			"addRepo": addRepoState(),
+			"cloneRepo": cloneRepoState(),
 			"profileForm": profileFormState(),
 			"fontSize": TerminalRuntime.shared.fontSize,
 			"windowLayers": surfaces.windowStack.layers.map(\.spec.name),

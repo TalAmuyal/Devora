@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use devora_core::state::{self as feeds, Command, Event, SessionKind, StateError, Subscription};
 use devora_core::workspace::{self, CreatedWorkspace, RepoInfo};
 use devora_core::workspace_creation::{
-    self as creation, CreationEvent, EventSink, Outcome, WorkspaceCreationManager,
+    self as creation, CreationEvent, CreationHandle, EventSink, Outcome, WorkspaceCreationManager,
 };
 
 use crate::{CoreError, DevoraCore};
@@ -105,6 +105,37 @@ impl DevoraCore {
                 _ => None,
             })
             .ok_or_else(|| "opening the task's tab opened no tab".to_string())?;
+        let (id, events) = self.start_creation(move |core, handle, sink| {
+            let mut warnings = Vec::new();
+            let result = creation::create(
+                handle,
+                &profile_path,
+                &repo_paths,
+                &task_name,
+                source_workspace_path.as_deref(),
+                sink,
+                &mut warnings,
+            );
+            core.finish_creation(tab, result, &warnings)
+        });
+        Ok(WorkspaceCreation { id, tab, events })
+    }
+
+    /// Asks a creation to stop: the process it runs is killed, and its work undone (a fresh workspace removed, a reused one made inactive again, keeping its caches; an added worktree or a clone removed).
+    /// It stops the repo operations (`add_repo_to_workspace`, `clone_repo_into_profile`) too, whose ids are a creation's.
+    /// A creation that has already ended is left alone.
+    pub fn cancel_workspace_creation(&self, id: u32) -> Result<(), CoreError> {
+        lock(&self.creations).cancel(id);
+        Ok(())
+    }
+}
+
+impl DevoraCore {
+    /// Registers a creation, for cancelling, and runs `work` on a worker thread: its progress streams as `work` sends it, then the last event `work` returns, once the creation is deregistered.
+    pub(crate) fn start_creation(
+        self: &Arc<Self>,
+        work: impl FnOnce(&DevoraCore, &CreationHandle, &EventSink) -> CreationEvent + Send + 'static,
+    ) -> (u32, Arc<CreationSubscription>) {
         let (id, handle) = lock(&self.creations).register();
         let (feed, subscription) = feeds::feed();
         let feed = Arc::new(feed);
@@ -116,46 +147,23 @@ impl DevoraCore {
         };
         let core = self.clone();
         std::thread::spawn(move || {
-            let mut warnings = Vec::new();
-            let result = creation::create(
-                &handle,
-                &profile_path,
-                &repo_paths,
-                &task_name,
-                source_workspace_path.as_deref(),
-                &sink,
-                &mut warnings,
-            );
-            let last = core.finish_creation(id, tab, result, &warnings);
+            let last = work(&core, &handle, &sink);
+            lock(&core.creations).remove(id);
             feed.push(&[last]);
         });
-        Ok(WorkspaceCreation {
-            id,
-            tab,
-            events: Arc::new(CreationSubscription {
-                inner: subscription,
-            }),
-        })
+        let events = Arc::new(CreationSubscription {
+            inner: subscription,
+        });
+        (id, events)
     }
 
-    /// Asks a creation to stop: the process it runs is killed, and its work undone (a fresh workspace removed, a reused one made inactive again, keeping its caches).
-    /// A creation that has already ended is left alone.
-    pub fn cancel_workspace_creation(&self, id: u32) -> Result<(), CoreError> {
-        lock(&self.creations).cancel(id);
-        Ok(())
-    }
-}
-
-impl DevoraCore {
     /// Records how a creation ended in the app state, and returns its last event.
     fn finish_creation(
         &self,
-        id: u32,
         tab: u64,
         result: Result<Outcome, String>,
         warnings: &[String],
     ) -> CreationEvent {
-        lock(&self.creations).remove(id);
         for warning in warnings {
             self.log.report(warning);
         }
@@ -193,72 +201,10 @@ impl DevoraCore {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support::{core, label, profile, pull_all, Profile};
     use devora_core::state::{AppState, Pane, Tab};
     use futures_lite::future::block_on;
-    use std::fs;
-    use std::path::{Path, PathBuf};
-    use std::process::Command as Process;
-
-    fn git(dir: &Path, args: &[&str]) {
-        let status = Process::new("git")
-            .args(["-c", "user.name=t", "-c", "user.email=t@t"])
-            .args(args)
-            .current_dir(dir)
-            .status()
-            .unwrap();
-        assert!(status.success(), "git {args:?}");
-    }
-
-    struct Profile {
-        _root: tempfile::TempDir,
-        path: PathBuf,
-        repo: PathBuf,
-    }
-
-    impl Profile {
-        fn workspace(&self, id: &str) -> PathBuf {
-            self.path.join("workspaces").join(id)
-        }
-    }
-
-    /// A profile whose one repo, `repo`, is a clone of a bare origin with a commit on `main`; `prepare` is its prepare-command.
-    fn profile(prepare: Option<&str>) -> Profile {
-        let root = tempfile::tempdir().unwrap();
-        let origin = root.path().join("repo.git");
-        fs::create_dir_all(&origin).unwrap();
-        git(&origin, &["init", "-q", "--bare", "-b", "main"]);
-        let path = root.path().join("work");
-        fs::create_dir_all(path.join("repos")).unwrap();
-        fs::create_dir_all(path.join("workspaces")).unwrap();
-        let config = match prepare {
-            Some(command) => format!(r#"{{"name": "work", "prepare-command": {command:?}}}"#),
-            None => r#"{"name": "work"}"#.to_string(),
-        };
-        fs::write(path.join("config.json"), config).unwrap();
-        let repo = path.join("repos").join("repo");
-        fs::create_dir_all(&repo).unwrap();
-        git(&repo, &["init", "-q", "-b", "main"]);
-        fs::write(repo.join("file.txt"), "v1\n").unwrap();
-        git(&repo, &["add", "."]);
-        git(&repo, &["commit", "-q", "-m", "c1"]);
-        git(
-            &repo,
-            &["remote", "add", "origin", origin.to_str().unwrap()],
-        );
-        git(&repo, &["push", "-q", "-u", "origin", "main"]);
-        Profile {
-            _root: root,
-            path,
-            repo,
-        }
-    }
-
-    fn core() -> (Arc<DevoraCore>, Arc<crate::AppLog>) {
-        let log = crate::log::test_log();
-        let core =
-            DevoraCore::new(Some("/nonexistent/config.json".into()), None, log.clone()).unwrap();
-        (core, log)
-    }
+    use std::path::Path;
 
     fn start(core: &Arc<DevoraCore>, profile: &Profile, repos: &[&Path]) -> WorkspaceCreation {
         core.clone()
@@ -274,40 +220,9 @@ mod tests {
             .unwrap()
     }
 
-    fn is_last(event: &CreationEvent) -> bool {
-        matches!(
-            event,
-            CreationEvent::Done { .. } | CreationEvent::Failed { .. } | CreationEvent::Cancelled
-        )
-    }
-
-    /// Pulls every event up to the last one; `on_event` sees each as it comes.
-    fn pull_all(
-        creation: &WorkspaceCreation,
-        mut on_event: impl FnMut(&CreationEvent),
-    ) -> Vec<CreationEvent> {
-        let mut events = Vec::new();
-        while !events.last().is_some_and(is_last) {
-            let batch = block_on(creation.events.next_batch(100)).unwrap();
-            assert!(!batch.is_empty(), "the stream ended without a last event");
-            for event in batch {
-                on_event(&event);
-                events.push(event);
-            }
-        }
-        events
-    }
-
     fn tab(core: &DevoraCore, id: u64) -> Option<Tab> {
         let AppState { window, .. } = core.snapshot().unwrap();
         window.tabs.into_iter().find(|tab| tab.id == id)
-    }
-
-    fn label(event: &CreationEvent) -> Option<&str> {
-        match event {
-            CreationEvent::Step { label } => Some(label),
-            _ => None,
-        }
     }
 
     #[test]
@@ -319,7 +234,7 @@ mod tests {
         let opened = tab(&core, creation.tab).unwrap();
         assert_eq!(opened.title, "Fix login");
         assert_eq!(opened.session.kind, SessionKind::CreatingWorkspace);
-        let events = pull_all(&creation, |_| {});
+        let events = pull_all(&creation.events, |_| {});
 
         // `mise trust` is a step only where mise is installed.
         let steps: Vec<_> = events
@@ -370,7 +285,7 @@ mod tests {
 
         let creation = start(&core, &profile, &[&profile.repo]);
         core.cancel_workspace_creation(creation.id).unwrap();
-        let events = pull_all(&creation, |_| {});
+        let events = pull_all(&creation.events, |_| {});
 
         assert_eq!(events.last(), Some(&CreationEvent::Cancelled));
         assert_eq!(tab(&core, creation.tab), None);
@@ -384,7 +299,7 @@ mod tests {
         let started = std::time::Instant::now();
 
         let creation = start(&core, &profile, &[&profile.repo]);
-        let events = pull_all(&creation, |event| {
+        let events = pull_all(&creation.events, |event| {
             if label(event).is_some_and(|label| label.starts_with("Preparing")) {
                 core.cancel_workspace_creation(creation.id).unwrap();
             }
@@ -405,7 +320,7 @@ mod tests {
         let missing = profile.path.join("repos").join("missing");
 
         let creation = start(&core, &profile, &[&missing]);
-        let events = pull_all(&creation, |_| {});
+        let events = pull_all(&creation.events, |_| {});
 
         let Some(CreationEvent::Failed { message }) = events.last() else {
             panic!("expected a failure, got {events:?}");
@@ -429,7 +344,7 @@ mod tests {
         core.dispatch(Command::CloseSession { tab: creation.tab })
             .unwrap();
         core.cancel_workspace_creation(creation.id).unwrap();
-        let events = pull_all(&creation, |_| {});
+        let events = pull_all(&creation.events, |_| {});
 
         assert_eq!(events.last(), Some(&CreationEvent::Cancelled));
         log.report_error("the only error".into()).unwrap();

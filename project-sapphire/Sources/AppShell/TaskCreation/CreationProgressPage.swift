@@ -10,43 +10,12 @@ struct CreationProgressPage: View {
 
 	let store: Store
 	let tab: UInt64
-	/// Expanded by a failure, which the output almost always explains.
-	@State private var isOutputOpen = false
 
 	var body: some View {
 		let state = CreationPageState(store: store, tab: tab)
 		VStack(alignment: .leading, spacing: 16) {
 			Text("Creating: \(state.title)").font(.title2.weight(.semibold))
-			VStack(alignment: .leading, spacing: 8) {
-				ForEach(Array(state.progress.steps.enumerated()), id: \.offset) { _, step in
-					HStack(spacing: 10) {
-						StepIndicator(state: step.state).frame(width: 14, height: 14)
-						Text(step.label).fontWeight(step.state == .active ? .semibold : .regular)
-					}
-				}
-			}
-			DisclosureGroup("Output", isExpanded: $isOutputOpen) {
-				ScrollView {
-					Text(state.progress.output.joined(separator: "\n"))
-						.font(.callout.monospaced())
-						.textSelection(.enabled)
-						.frame(maxWidth: .infinity, alignment: .leading)
-						.padding(8)
-				}
-				.defaultScrollAnchor(.bottom)
-				.frame(maxHeight: 260)
-				.background(.quaternary.opacity(0.4), in: .rect(cornerRadius: 6))
-			}
-			if let failure = state.failure {
-				Text(failure)
-					.font(.callout.monospaced())
-					.foregroundStyle(.red)
-					.textSelection(.enabled)
-					.padding(10)
-					.frame(maxWidth: .infinity, alignment: .leading)
-					.background(.red.opacity(0.08), in: .rect(cornerRadius: 6))
-					.accessibilityIdentifier("creation-error")
-			}
+			CreationProgressDetails(progress: state.progress, failure: state.failure)
 			Spacer(minLength: 0)
 			HStack {
 				HStack(spacing: 4) {
@@ -64,7 +33,50 @@ struct CreationProgressPage: View {
 		.background(.windowBackground)
 		.accessibilityElement(children: .contain)
 		.accessibilityIdentifier(Self.layerName)
-		.onChange(of: state.failure != nil, initial: true) { _, failed in
+	}
+}
+
+/// A creation's steps with their states, its collapsible Output log, and its failure, as Ember's `TaskCreationProgress` shows them: on a tab's progress page, and in the Add Repo and Clone Repo dialogs.
+struct CreationProgressDetails: View {
+	let progress: CreationProgress
+	let failure: String?
+	/// Expanded by a failure, which the output almost always explains.
+	@State private var isOutputOpen = false
+
+	var body: some View {
+		VStack(alignment: .leading, spacing: 16) {
+			VStack(alignment: .leading, spacing: 8) {
+				ForEach(Array(progress.steps.enumerated()), id: \.offset) { _, step in
+					HStack(spacing: 10) {
+						StepIndicator(state: step.state).frame(width: 14, height: 14)
+						Text(step.label).fontWeight(step.state == .active ? .semibold : .regular)
+					}
+				}
+			}
+			DisclosureGroup("Output", isExpanded: $isOutputOpen) {
+				ScrollView {
+					Text(progress.output.joined(separator: "\n"))
+						.font(.callout.monospaced())
+						.textSelection(.enabled)
+						.frame(maxWidth: .infinity, alignment: .leading)
+						.padding(8)
+				}
+				.defaultScrollAnchor(.bottom)
+				.frame(maxHeight: 260)
+				.background(.quaternary.opacity(0.4), in: .rect(cornerRadius: 6))
+			}
+			if let failure {
+				Text(failure)
+					.font(.callout.monospaced())
+					.foregroundStyle(.red)
+					.textSelection(.enabled)
+					.padding(10)
+					.frame(maxWidth: .infinity, alignment: .leading)
+					.background(.red.opacity(0.08), in: .rect(cornerRadius: 6))
+					.accessibilityIdentifier("creation-error")
+			}
+		}
+		.onChange(of: failure != nil, initial: true) { _, failed in
 			if failed { isOutputOpen = true }
 		}
 	}

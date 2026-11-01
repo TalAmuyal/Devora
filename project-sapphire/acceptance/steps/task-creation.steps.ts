@@ -103,7 +103,8 @@ Then('the New Task form should show {int} repo(s)', async function (this: Sapphi
 });
 
 When('the user filters the New Task form repo list by {string}', async function (this: SapphireWorld, text: string) {
-  // The filter comes after the title in the dialog's Tab order.
+  // The filter comes after the title and "+ Clone Repo" in the dialog's Tab order.
+  await this.bridge.press('Tab');
   await this.bridge.press('Tab');
   await this.bridge.waitFor('the filter to have the focus', () => this.bridge.state(), (s) => s.newTask?.focus === 'filter' && s.editingText);
   await typeText(this, text);

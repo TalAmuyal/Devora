@@ -14,7 +14,10 @@ mod app_state;
 mod creation;
 mod log;
 mod profiles;
+mod repos;
 mod terminal;
+#[cfg(test)]
+mod test_support;
 
 pub use log::{AppLog, ErrorSubscription};
 

@@ -48,6 +48,8 @@ final class WorkspaceHubModel {
 	@ObservationIgnored var newTask: (_ duplicating: Workspace?) -> Void = { _ in }
 	/// Opens the New Profile dialog.
 	@ObservationIgnored var newProfile: () -> Void = {}
+	/// Opens the Add Repo dialog for an active workspace.
+	@ObservationIgnored var addRepo: (Workspace) -> Void = { _ in }
 	@ObservationIgnored private let isEditingText: () -> Bool
 	@ObservationIgnored private let clearFocus: () -> Void
 	@ObservationIgnored private var loadTask: Task<Void, Never>?
@@ -136,6 +138,11 @@ final class WorkspaceHubModel {
 				self?.performRemoveTask(workspace)
 			}
 		}
+	}
+
+	/// After a repo was added to a workspace: the store has listed the workspaces again and dropped that workspace's status, which loads again.
+	func repoAdded() {
+		store.dispatch(.loadWorkspaceStatuses(fresh: false))
 	}
 
 	/// Deletes an inactive or invalid workspace, with no confirmation, as Ember does.

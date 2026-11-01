@@ -86,3 +86,16 @@ Then(
     );
   },
 );
+
+Then(
+  'the New Task form should have repo {string} selected',
+  async function (this: EmberWorld, repoName: string) {
+    await this.driver.pollFor(
+      `return Array.from(document.querySelectorAll('.new-task-dialog .repo-list-item'))
+        .find((i) => (i.textContent || '').trim() === ${JSON.stringify(repoName)})
+        ?.querySelector('input')?.checked === true`,
+      true,
+      5_000,
+    );
+  },
+);

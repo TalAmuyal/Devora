@@ -83,10 +83,11 @@ struct AppStateTests {
 
 /// Polls instead of sleeping a fixed time: events reach the store asynchronously.
 @MainActor
-func eventually(_ condition: () -> Bool) async throws {
-	for _ in 0..<500 {
+func eventually(timeout: Duration = .seconds(5), _ condition: () -> Bool) async throws {
+	let deadline = ContinuousClock.now + timeout
+	while ContinuousClock.now < deadline {
 		if condition() { return }
 		try await Task.sleep(for: .milliseconds(10))
 	}
-	Issue.record("condition not met within 5 s")
+	Issue.record("condition not met within \(timeout)")
 }

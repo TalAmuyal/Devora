@@ -85,12 +85,12 @@ struct NewTaskDialogTests {
 	@Test func tabCyclesTheFieldsAndButtonsInOrderAndAButtonTakesTheFocusFromTheFields() {
 		let model = dialog()
 		var order: [NewTaskDialogModel.Focus] = [model.focus]
-		for _ in 0..<4 {
+		for _ in 0..<5 {
 			model.cycleFocus(backward: false)
 			order.append(model.focus)
 		}
-		#expect(order == [.title, .filter, .cancel, .create, .title])
-		#expect(outcome.focusCleared == 2)
+		#expect(order == [.title, .cloneRepo, .filter, .cancel, .create, .title])
+		#expect(outcome.focusCleared == 3)
 
 		model.cycleFocus(backward: true)
 		#expect(model.focus == .create)
@@ -100,16 +100,34 @@ struct NewTaskDialogTests {
 		let model = dialog([])
 
 		model.cycleFocus(backward: false)
+		model.cycleFocus(backward: false)
 
 		#expect(model.focus == .cancel)
 	}
 
 	@Test func spacePressesTheFocusedButton() {
 		let model = dialog(title: "Task")
-		model.focus = .cancel
+		var clonesAsked = 0
+		model.cloneRepo = { clonesAsked += 1 }
+		model.focus = .cloneRepo
+		#expect(model.handleKey(KeyPress(keyCode: KeyCode.space, characters: " ")))
+		#expect(clonesAsked == 1)
 
+		model.focus = .cancel
 		#expect(model.handleKey(KeyPress(keyCode: KeyCode.space, characters: " ")))
 
 		#expect(outcome.cancelled)
+	}
+
+	@Test func aCloneListsTheReposAgainWithTheCloneSelectedKeepingTheTitleAndTheSelection() {
+		let model = dialog(["api", "web"], title: "Fix login", selected: ["/repos/api"])
+
+		model.reposChanged(
+			["api", "cloned", "web"].map { RepoInfo(name: $0, path: "/repos/\($0)", source: "auto-discovered") },
+			selecting: "/repos/cloned")
+
+		#expect(model.repos.map(\.name) == ["api", "cloned", "web"])
+		#expect(model.selected == ["/repos/api", "/repos/cloned"])
+		#expect(model.title == "Fix login")
 	}
 }
