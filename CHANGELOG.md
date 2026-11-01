@@ -35,6 +35,7 @@ Types of changes:
 
 ### Changed
 
+- App log timestamps are formatted in-process instead of spawning `date` for every line, preserving the local time and existing line and file-name formats
 - ADR-010 (Sapphire UI stack and build) is accepted, recording the libghostty terminal decision: Ghostty's internal embedding API, pinned and isolated, with upgrades reviewed in #221
 - ADR-010 records the embedded Neovim spike's findings: Sapphire's prompt editor runs a Neovim config vendored in Sapphire rather than the user's own
 - `ccc` is now part of the Rust `debi` (`debi ccc`, still installed as `ccc`), replacing `ccc.sh` with identical behavior; the bundled `debi` runs it and passes every other command to the Go CLI, now bundled as `debi-go`
