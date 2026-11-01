@@ -497,14 +497,22 @@ fn resolve_config(
 #[derive(Serialize)]
 pub struct ConfigSettingsResponse {
     /// Per key present at this scope: the raw stored value (a string or bool). Absent keys are omitted, which the UI reads as "Default" (inherit) for that scope.
-    stored: serde_json::Map<String, Value>,
+    pub stored: serde_json::Map<String, Value>,
     /// Per key (all present): the effective value after profile → user → built-in, or JSON `null` when nothing is set and Devora has no built-in to advertise (a Debi-owned default).
-    resolved: serde_json::Map<String, Value>,
+    pub resolved: serde_json::Map<String, Value>,
 }
 
 /// Reads the generic config settings for the Settings Hub at the given scope (a profile path, or `None` for the user-level/global scope): the raw stored values at that scope plus the effective values after full resolution. A corrupt config surfaces as an error.
 pub fn read_config_settings(profile_path: Option<&str>) -> Result<ConfigSettingsResponse, String> {
-    let user_cfg = read_config_opt(&global_config_path()?)?;
+    read_config_settings_in(&global_config_path()?, profile_path)
+}
+
+/// `read_config_settings` over the global config at `global_config`.
+pub fn read_config_settings_in(
+    global_config: &Path,
+    profile_path: Option<&str>,
+) -> Result<ConfigSettingsResponse, String> {
+    let user_cfg = read_config_opt(global_config)?;
     let profile_cfg = match profile_path {
         Some(p) => read_config_opt(&profile_config_path(p))?,
         None => None,
@@ -574,11 +582,22 @@ pub fn write_config_setting(
     state: &str,
     value: Option<&str>,
 ) -> Result<(), String> {
+    write_config_setting_in(&global_config_path()?, profile_path, key, state, value)
+}
+
+/// `write_config_setting` over the global config at `global_config`.
+pub fn write_config_setting_in(
+    global_config: &Path,
+    profile_path: Option<&str>,
+    key: &str,
+    state: &str,
+    value: Option<&str>,
+) -> Result<(), String> {
     let spec = config_field(key).ok_or_else(|| format!("unknown config key: {key}"))?;
 
     let config_path = match profile_path {
         Some(p) => profile_config_path(p),
-        None => global_config_path()?,
+        None => global_config.to_path_buf(),
     };
     let mut config =
         read_config_opt(&config_path)?.unwrap_or_else(|| Value::Object(serde_json::Map::new()));

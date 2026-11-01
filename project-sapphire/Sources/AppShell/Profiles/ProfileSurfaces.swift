@@ -37,29 +37,3 @@ struct WelcomeCard: View {
 
 	static let identifier = "first-run-welcome"
 }
-
-/// The profile form in a dialog over the Workspace Hub, which its "New Profile…" opens (`Surfaces.openNewProfileDialog`).
-struct NewProfileDialog: View {
-	static let layerName = "new-profile-dialog"
-
-	let form: ProfileFormModel
-
-	var body: some View {
-		ZStack {
-			Color.black.opacity(0.35)
-				.contentShape(.rect)
-				.onTapGesture { form.cancel() }
-				.accessibilityHidden(true)
-			VStack(alignment: .leading, spacing: 14) {
-				Text("New Profile").font(.title3.weight(.semibold))
-				ProfileFormView(model: form)
-			}
-			.padding(20)
-			.frame(width: 500)
-			.background(.windowBackground, in: .rect(cornerRadius: 12))
-			.shadow(radius: 24)
-			.accessibilityElement(children: .contain)
-			.accessibilityIdentifier(Self.layerName)
-		}
-	}
-}

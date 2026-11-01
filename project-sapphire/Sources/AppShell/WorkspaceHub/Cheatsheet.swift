@@ -17,6 +17,7 @@ struct Cheatsheet: View {
 			("2", "Show inactive workspaces"),
 			("3", "Show all workspaces"),
 			("n", "New task"),
+			("P", "Manage Profiles"),
 			("R", "Refresh hub"),
 			("q", "Close hub"),
 			("?", "Toggle this cheatsheet"),

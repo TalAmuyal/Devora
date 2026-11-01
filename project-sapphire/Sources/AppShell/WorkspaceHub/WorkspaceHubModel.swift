@@ -46,8 +46,8 @@ final class WorkspaceHubModel {
 	@ObservationIgnored var confirm: (Confirmation, @escaping () -> Void) -> Void = { _, _ in }
 	/// Opens the New Task dialog; with a workspace, it duplicates that workspace's task.
 	@ObservationIgnored var newTask: (_ duplicating: Workspace?) -> Void = { _ in }
-	/// Opens the New Profile dialog.
-	@ObservationIgnored var newProfile: () -> Void = {}
+	/// Opens the Settings Hub, on the active profile or on the New Profile form.
+	@ObservationIgnored var openSettings: (SettingsHubModel.Opening) -> Void = { _ in }
 	/// Opens the Add Repo dialog for an active workspace.
 	@ObservationIgnored var addRepo: (Workspace) -> Void = { _ in }
 	@ObservationIgnored private let isEditingText: () -> Bool
@@ -55,6 +55,8 @@ final class WorkspaceHubModel {
 	@ObservationIgnored private var loadTask: Task<Void, Never>?
 	@ObservationIgnored private var refreshTask: Task<Void, Never>?
 	@ObservationIgnored private var toastTask: Task<Void, Never>?
+	/// The profile whose workspaces the latest listing listed: another one starts the cursor over.
+	@ObservationIgnored private var listedProfile: String?
 
 	init(store: Store, isEditingText: @escaping () -> Bool, clearFocus: @escaping () -> Void) {
 		self.store = store
@@ -79,8 +81,9 @@ final class WorkspaceHubModel {
 		list(freshStatuses: true) { await $0.store.load() }
 	}
 
-	/// Reloads silently when a page over the hub closes, keeping the filters, the cursor and the statuses already loaded.
+	/// Reloads silently when a page over the hub closes, keeping the filters, the cursor and the statuses already loaded; after the Settings Hub made another profile active, it loads that one from scratch.
 	func reload() {
+		if store.selectedProfilePath != listedProfile { loaded = false }
 		list(freshStatuses: false) { await $0.store.load() }
 	}
 
@@ -173,13 +176,13 @@ final class WorkspaceHubModel {
 				) { [weak self] in self?.selectProfile(profile.path) }
 			} + [
 				.separator,
-				.action("New Profile…", systemImage: "plus") { [weak self] in self?.newProfile() },
-				.action("Manage Profiles…", systemImage: "gearshape", enabled: false, help: notYet),
+				.action("New Profile…", systemImage: "plus") { [weak self] in self?.openSettings(.newProfile) },
+				.action("Manage Profiles…", systemImage: "gearshape") { [weak self] in self?.openSettings(.list) },
 			]
 		case .main:
 			var items: [DropdownItem] = []
 			if !store.profiles.isEmpty {
-				items.append(.action("Settings", systemImage: "gearshape", enabled: false, help: notYet))
+				items.append(.action("Settings", systemImage: "gearshape") { [weak self] in self?.openSettings(.list) })
 			}
 			items.append(.action("Health", systemImage: "cross.case", enabled: false, help: notYet))
 			if store.loadingLatencies != nil {
@@ -215,6 +218,7 @@ final class WorkspaceHubModel {
 		case "2": category = .inactive
 		case "3": category = .all
 		case "n": newTask(nil)
+		case "P": openSettings(.list)
 		case "j": cursor.move(by: 1, in: items.count)
 		case "k": cursor.move(by: -1, in: items.count)
 		case "R": refresh()
@@ -282,6 +286,10 @@ final class WorkspaceHubModel {
 			guard let self else { return }
 			await listing(self)
 			guard !Task.isCancelled else { return }
+			if store.selectedProfilePath != listedProfile {
+				listedProfile = store.selectedProfilePath
+				cursor.select(0)
+			}
 			syncWelcome()
 			loaded = true
 			store.dispatch(.loadWorkspaceStatuses(fresh: freshStatuses))
