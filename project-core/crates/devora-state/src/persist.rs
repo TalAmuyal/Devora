@@ -1,6 +1,7 @@
 //! The SQLite database a persistent [`crate::Store`] writes through to (ADR-008).
 //!
 //! Each command's resulting state is written in one transaction, replacing every row: the state is a handful of rows, and a full rewrite can't drift from the reducer the way a per-event mapping could.
+//! The creation journal is internal recovery bookkeeping, not UI app state, so its writes use Store methods rather than commands or events.
 //! WAL mode with `synchronous=NORMAL` keeps every committed command across a process crash or `kill -9`; a power loss may drop the last few.
 //! A store holds its database exclusively until it is dropped or its process dies, so a second store on the same file, in any process, fails to open with [`StateError::InUse`].
 
@@ -14,7 +15,8 @@ use std::time::Duration;
 /// Entry `i` migrates the schema from version `i` to `i + 1`, the version being the database's `user_version`.
 ///
 /// A new database runs them all; a released entry never changes, so a schema change appends one.
-const MIGRATIONS: &[&str] = &["
+const MIGRATIONS: &[&str] = &[
+    "
     CREATE TABLE meta (
         id INTEGER PRIMARY KEY CHECK (id = 0),
         next_id INTEGER NOT NULL,
@@ -35,7 +37,9 @@ const MIGRATIONS: &[&str] = &["
         kind TEXT NOT NULL
     );
     INSERT INTO meta (id, next_id) VALUES (0, 0);
-"];
+",
+    "CREATE TABLE creation_journal (session_id INTEGER PRIMARY KEY, descriptor TEXT NOT NULL);",
+];
 
 pub(crate) struct Db {
     conn: Connection,
@@ -68,10 +72,49 @@ impl Db {
         Ok((db, state))
     }
 
+    pub(crate) fn record_creation(
+        &mut self,
+        session_id: u64,
+        descriptor: &str,
+    ) -> Result<(), StateError> {
+        let tx = self.conn.transaction().map_err(journal_error)?;
+        tx.execute("INSERT INTO creation_journal (session_id, descriptor) VALUES (?1, ?2) ON CONFLICT(session_id) DO UPDATE SET descriptor = excluded.descriptor", params![session_id, descriptor]).map_err(journal_error)?;
+        tx.commit().map_err(journal_error)
+    }
+
+    pub(crate) fn pending_creations(&self) -> Result<Vec<(u64, String)>, StateError> {
+        let mut query = self
+            .conn
+            .prepare("SELECT session_id, descriptor FROM creation_journal ORDER BY session_id")
+            .map_err(journal_error)?;
+        let entries = query
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+            .map_err(journal_error)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(journal_error);
+        entries
+    }
+
+    pub(crate) fn clear_creation(&mut self, session_id: u64) -> Result<(), StateError> {
+        let tx = self.conn.transaction().map_err(journal_error)?;
+        tx.execute(
+            "DELETE FROM creation_journal WHERE session_id = ?1",
+            [session_id],
+        )
+        .map_err(journal_error)?;
+        tx.commit().map_err(journal_error)
+    }
+
     pub(crate) fn save(&mut self, state: &State) -> Result<(), StateError> {
         write(&mut self.conn, state).map_err(|error| StateError::Storage {
             message: format!("couldn't save the app state: {error}"),
         })
+    }
+}
+
+fn journal_error(error: rusqlite::Error) -> StateError {
+    StateError::Storage {
+        message: format!("couldn't update creation journal: {error}"),
     }
 }
 
