@@ -2,6 +2,7 @@
 //!
 //! [`Log::report_error`] is THE way to report an error from the app's Rust side: it writes the log line, then tells the UI through the error listener, so an error can lose its banner at worst, never its log line.
 
+use std::ffi::CStr;
 use std::fs::{File, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -62,7 +63,7 @@ impl Log {
     }
 
     pub fn write(&self, level: Level, message: &str) {
-        let timestamp = date("+%Y-%m-%d %H:%M:%S").unwrap_or_default();
+        let timestamp = timestamp(c"%Y-%m-%d %H:%M:%S").unwrap_or_default();
         if let Ok(mut f) = self.file.lock() {
             let _ = writeln!(f, "[{timestamp}] [{}] {message}", level.as_str());
             let _ = f.flush();
@@ -82,7 +83,7 @@ impl Log {
 
 /// A fresh log path for one run of `app` (e.g. `devora-ember`): `/tmp/<app>-<timestamp>.log`.
 pub fn session_log_path(app: &str) -> PathBuf {
-    let timestamp = date("+%Y%m%d-%H%M%S").unwrap_or_else(|| "unknown".to_string());
+    let timestamp = timestamp(c"%Y%m%d-%H%M%S").unwrap_or_else(|| "unknown".to_string());
     PathBuf::from(format!("/tmp/{app}-{timestamp}.log"))
 }
 
@@ -103,19 +104,65 @@ pub fn install_panic_hook(path: PathBuf) {
     }));
 }
 
-/// The local time, formatted by `date(1)`.
-fn date(format: &str) -> Option<String> {
-    std::process::Command::new("date")
-        .arg(format)
-        .output()
-        .ok()
-        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+/// The local time, using the same formats as `date(1)` without spawning a process.
+fn timestamp(format: &CStr) -> Option<String> {
+    // SAFETY: time accepts a null pointer when its return value is used directly.
+    let now = unsafe { libc::time(std::ptr::null_mut()) };
+    format_local_time(now, format)
+}
+
+fn format_local_time(time: libc::time_t, format: &CStr) -> Option<String> {
+    let mut local = std::mem::MaybeUninit::<libc::tm>::uninit();
+    // SAFETY: both pointers are valid and localtime_r initializes local on success.
+    if unsafe { libc::localtime_r(&time, local.as_mut_ptr()) }.is_null() {
+        return None;
+    }
+    let mut buffer = [0u8; 64];
+    // SAFETY: local was initialized above; format is NUL-terminated and buffer is
+    // writable for the supplied size. strftime does not retain any pointers.
+    let length = unsafe {
+        libc::strftime(
+            buffer.as_mut_ptr().cast(),
+            buffer.len(),
+            format.as_ptr(),
+            local.as_ptr(),
+        )
+    };
+    if length == 0 {
+        return None;
+    }
+    String::from_utf8(buffer[..length].to_vec()).ok()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::sync::Arc;
+
+    #[test]
+    fn local_timestamps_keep_the_date_command_formats() {
+        // Construct a local civil time without changing the process-wide timezone.
+        // SAFETY: zero is valid for every field of tm, including its pointer fields.
+        let mut local: libc::tm = unsafe { std::mem::zeroed() };
+        local.tm_year = 126;
+        local.tm_mon = 9;
+        local.tm_mday = 31;
+        local.tm_hour = 13;
+        local.tm_min = 4;
+        local.tm_sec = 5;
+        local.tm_isdst = -1;
+        // SAFETY: mktime accepts a valid, writable tm and resolves local timezone/DST.
+        let time = unsafe { libc::mktime(&mut local) };
+        assert_ne!(time, -1);
+        assert_eq!(
+            format_local_time(time, c"%Y-%m-%d %H:%M:%S").unwrap(),
+            "2026-10-31 13:04:05"
+        );
+        assert_eq!(
+            format_local_time(time, c"%Y%m%d-%H%M%S").unwrap(),
+            "20261031-130405"
+        );
+    }
 
     #[test]
     fn a_reported_error_is_logged_and_reaches_the_listener() {
@@ -128,14 +175,20 @@ mod tests {
             sink.lock().unwrap().push(message.to_string())
         }));
 
+        let before = timestamp(c"%Y-%m-%d %H:%M:%S").unwrap();
         log.write(Level::Warn, "careful");
         log.report_error("boom");
+        let after = timestamp(c"%Y-%m-%d %H:%M:%S").unwrap();
 
         let contents = std::fs::read_to_string(&path).unwrap();
         let lines: Vec<&str> = contents.lines().collect();
         assert_eq!(lines.len(), 2, "{contents}");
-        assert!(lines[0].ends_with("] [WARN] careful"), "{contents}");
-        assert!(lines[1].ends_with("] [ERROR] boom"), "{contents}");
+        for (line, message) in lines.iter().zip(["[WARN] careful", "[ERROR] boom"]) {
+            assert!(
+                *line == format!("[{before}] {message}") || *line == format!("[{after}] {message}"),
+                "{contents}"
+            );
+        }
         assert_eq!(*heard.lock().unwrap(), ["boom"], "a warning is log-only");
     }
 
