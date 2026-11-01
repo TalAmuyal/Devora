@@ -107,7 +107,7 @@ impl DevoraCore {
             .ok_or_else(|| "opening the task's tab opened no tab".to_string())?;
         let (id, events) = self.start_creation(move |core, handle, sink| {
             let mut warnings = Vec::new();
-            let result = creation::create(
+            let result = creation::create_with_claim(
                 handle,
                 &profile_path,
                 &repo_paths,
@@ -115,6 +115,12 @@ impl DevoraCore {
                 source_workspace_path.as_deref(),
                 sink,
                 &mut warnings,
+                &|descriptor| {
+                    let encoded = descriptor.encode()?;
+                    core.state
+                        .record_creation(tab, &encoded)
+                        .map_err(|e| e.to_string())
+                },
             );
             core.finish_creation(tab, result, &warnings)
         });
@@ -194,8 +200,45 @@ impl DevoraCore {
                 .log
                 .report(&format!("couldn't record how task creation ended: {error}")),
         }
+        if let Err(error) = recover_pending_for(&self.state, &self.log, Some(tab)) {
+            self.log
+                .warn(&format!("creation recovery remains pending: {error}"));
+        }
         last
     }
+}
+
+pub(crate) fn recover_pending(state: &feeds::Store, log: &crate::AppLog) -> Result<(), CoreError> {
+    recover_pending_for(state, log, None)
+}
+
+fn recover_pending_for(
+    state: &feeds::Store,
+    log: &crate::AppLog,
+    only: Option<u64>,
+) -> Result<(), CoreError> {
+    for (tab, encoded) in state.pending_creations()? {
+        if only.is_some_and(|id| id != tab) {
+            continue;
+        }
+        let descriptor = match creation::RecoveryDescriptor::decode(&encoded) {
+            Ok(descriptor) => descriptor,
+            Err(error) => {
+                log.warn(&format!("invalid creation recovery record: {error}"));
+                continue;
+            }
+        };
+        match creation::recover(&descriptor) {
+            Ok(warning) => {
+                if let Some(warning) = warning {
+                    log.warn(&warning);
+                }
+                state.clear_creation(tab)?;
+            }
+            Err(error) => log.warn(&format!("creation recovery remains pending: {error}")),
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -369,5 +412,108 @@ mod tests {
                 source: "auto-discovered".into(),
             }]
         );
+    }
+}
+
+#[cfg(test)]
+mod recovery_tests {
+    use super::*;
+    use crate::test_support::{interrupted_creation, profile};
+    use std::fs;
+
+    #[test]
+    fn restore_cleans_fresh_and_reused_creations_and_keeps_the_failed_tab() {
+        for fresh in [true, false] {
+            let profile = profile(None);
+            let (path, ws) = interrupted_creation(&profile, fresh);
+            let log = crate::log::test_log();
+            let core = DevoraCore::new(
+                Some("/nonexistent/config.json".into()),
+                Some(path.to_string_lossy().into()),
+                log,
+            )
+            .unwrap();
+            assert!(matches!(
+                core.state.snapshot().window.tabs[0].session.kind,
+                SessionKind::CreationFailed { .. }
+            ));
+            assert!(core.state.pending_creations().unwrap().is_empty());
+            if fresh {
+                assert!(!ws.exists());
+            } else {
+                assert!(ws.join("repo/file.txt").exists());
+                assert!(ws.join("initialized").exists());
+                assert!(!ws.join("task.json").exists());
+            }
+        }
+    }
+
+    #[test]
+    fn restore_leaves_completed_and_reclaimed_workspaces_untouched() {
+        for (fresh, completed) in [(true, true), (false, true), (false, false)] {
+            let profile = profile(None);
+            let (path, ws) = interrupted_creation(&profile, fresh);
+            fs::write(ws.join("initialized"), "").unwrap();
+            let claim = if completed {
+                r#"{"uid":"finished","title":"complete"}"#
+            } else {
+                r#"{"creation_token":"someone-else"}"#
+            };
+            fs::write(ws.join("task.json"), claim).unwrap();
+            let core = DevoraCore::new(
+                Some("/nonexistent/config.json".into()),
+                Some(path.to_string_lossy().into()),
+                crate::log::test_log(),
+            )
+            .unwrap();
+            assert!(ws.join("repo/file.txt").exists());
+            assert_eq!(fs::read_to_string(ws.join("task.json")).unwrap(), claim);
+            assert!(core.state.pending_creations().unwrap().is_empty());
+        }
+    }
+
+    #[test]
+    fn an_old_creation_with_no_journal_entry_is_a_safe_no_op() {
+        let profile = profile(None);
+        let (path, ws) = interrupted_creation(&profile, true);
+        let store = feeds::Store::open(&path).unwrap();
+        for (id, _) in store.pending_creations().unwrap() {
+            store.clear_creation(id).unwrap();
+        }
+        drop(store);
+        let core = DevoraCore::new(
+            Some("/nonexistent/config.json".into()),
+            Some(path.to_string_lossy().into()),
+            crate::log::test_log(),
+        )
+        .unwrap();
+        assert!(ws.join("repo/file.txt").exists());
+        assert!(core.state.pending_creations().unwrap().is_empty());
+        assert!(matches!(
+            core.state.snapshot().window.tabs[0].session.kind,
+            SessionKind::CreationFailed { .. }
+        ));
+    }
+
+    #[test]
+    fn unreadable_claim_is_retried_on_next_restore() {
+        let profile = profile(None);
+        let (path, ws) = interrupted_creation(&profile, true);
+        fs::write(ws.join("task.json"), "invalid json").unwrap();
+        let reopen = || {
+            DevoraCore::new(
+                Some("/nonexistent/config.json".into()),
+                Some(path.to_string_lossy().into()),
+                crate::log::test_log(),
+            )
+            .unwrap()
+        };
+        let core = reopen();
+        assert_eq!(core.state.pending_creations().unwrap().len(), 1);
+        drop(core);
+        fs::write(ws.join("task.json"), r#"{"creation_token":"test-token"}"#).unwrap();
+        let core = reopen();
+        assert!(!ws.exists());
+        assert!(core.state.pending_creations().unwrap().is_empty());
     }
 }

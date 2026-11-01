@@ -162,6 +162,7 @@ impl DevoraCore {
             Some(path) => app_state::open(path)?,
             None => state::Store::new(),
         };
+        creation::recover_pending(&state, &log)?;
         Ok(Arc::new(DevoraCore {
             config_path,
             state,
