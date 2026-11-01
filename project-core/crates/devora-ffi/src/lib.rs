@@ -15,6 +15,7 @@ mod creation;
 mod log;
 mod profiles;
 mod repos;
+mod settings;
 mod terminal;
 #[cfg(test)]
 mod test_support;

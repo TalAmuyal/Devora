@@ -104,6 +104,9 @@ final class TestBridge {
 			case ("POST", "/test/profile-form"):
 				try profileFormAction(request.json())
 				return .init(status: 200, body: [:])
+			case ("POST", "/test/settings"):
+				try settingsAction(request.json())
+				return .init(status: 200, body: [:])
 			case ("POST", "/test/layers/clear"):
 				// Teardown, as Ember's `__test.layers.clear()`: it closes even the first-run welcome, which refuses `q` and Escape.
 				surfaces.windowStack.clear()
@@ -323,9 +326,133 @@ final class TestBridge {
 		] as [String: Any]
 	}
 
-	/// The open profile form: the New Profile dialog's, or else the first-run welcome's.
+	/// The open profile form: the Settings Hub's New Profile row's, or else the first-run welcome's.
 	private var profileForm: ProfileFormModel? {
-		surfaces.newProfile ?? surfaces.hub?.welcome
+		surfaces.settings?.form ?? surfaces.hub?.welcome
+	}
+
+	/// Clicks what the open Settings Hub draws: a master row (`selectRow` by its label), a profile detail's button (`setActive`, `cloneRepo`, `delete`), or a settings card's control on the focused row's scope:
+	/// a segment (`selectSegment` with a `key` and the segment's `label`), typing into a revealed input (`type` with a `key` and a `value`), Enter in it (`commit`), or its Save button (`save`, a 409 while it is hidden).
+	private func settingsAction(_ body: [String: Any]) throws {
+		guard let settings = surfaces.settings else { throw BridgeError(status: 409, "the Settings Hub isn't open") }
+		let action = body["action"] as? String
+		switch action {
+		case "selectRow":
+			let label = body["label"] as? String
+			guard let row = settings.rows.first(where: { Self.label(of: $0) == label }) else {
+				throw BridgeError(status: 404, "no row \(label ?? "nil") in the Settings Hub")
+			}
+			settings.select(row)
+			return
+		case "setActive", "cloneRepo", "delete":
+			guard case .profile(let profile) = settings.focusedRow else { throw BridgeError(status: 409, "no profile is focused") }
+			switch action {
+			case "setActive": settings.setActive(profile)
+			case "cloneRepo": settings.cloneRepo(into: profile)
+			default: settings.delete(profile)
+			}
+			return
+		default:
+			break
+		}
+		guard let scope = settings.scope, scope.settings != nil else {
+			throw BridgeError(status: 409, "the focused row's settings aren't loaded")
+		}
+		let key = body["key"] as? String
+		guard let field = ConfigCard.all.flatMap(\.fields).first(where: { $0.key == key }), scope.isVisible(field) else {
+			throw BridgeError(status: 404, "no setting \(key ?? "nil") is shown")
+		}
+		let label = body["label"] as? String
+		let noSegment = BridgeError(status: 404, "\(field.key) has no segment \(label ?? "nil")")
+		switch (action, field.kind) {
+		case ("selectSegment", .text):
+			guard let mode = TextMode.allCases.first(where: { $0.label == label }) else { throw noSegment }
+			if mode != scope.textMode(field.key) { scope.selectTextMode(mode, for: field.key) }
+		case ("selectSegment", .bool):
+			guard let choice = BoolChoice.allCases.first(where: { $0.label == label }) else { throw noSegment }
+			if choice != scope.boolChoice(field.key) { scope.selectBool(choice, for: field.key) }
+		case ("selectSegment", .choice(let options)):
+			guard let option = options.first(where: { $0.label == label }) else { throw noSegment }
+			if option != scope.chosenOption(options, for: field.key) { scope.selectOption(option, for: field.key) }
+		case ("type", .text):
+			guard scope.textMode(field.key) == .set else { throw BridgeError(status: 409, "\(field.key) has no input") }
+			guard let value = body["value"] as? String else { throw BridgeError(status: 400, "missing value") }
+			scope.edit(field.key, to: value)
+		case ("commit", .text(_, let whitespace)), ("save", .text(_, let whitespace)):
+			guard scope.textMode(field.key) == .set else { throw BridgeError(status: 409, "\(field.key) has no input") }
+			if action == "save", !scope.showsSave(field.key, whitespace: whitespace) {
+				throw BridgeError(status: 409, "\(field.key) has no Save button")
+			}
+			scope.commit(field.key, whitespace: whitespace)
+		default:
+			throw BridgeError(status: 400, "unknown settings action \(action ?? "nil") for \(field.key)")
+		}
+	}
+
+	private static func label(of row: SettingsRow) -> String {
+		switch row {
+		case .userDefaults: "User Defaults"
+		case .profile(let profile): profile.name
+		case .newProfile: "New Profile…"
+		}
+	}
+
+	/// The open Settings Hub: its rows, the focused one's detail, and the settings of its scope as the cards show them.
+	private func settingsState() -> Any {
+		guard let settings = surfaces.settings else { return NSNull() }
+		let focused = settings.focusedRow
+		var detail: Any = NSNull()
+		if case .profile(let profile) = focused {
+			let loaded = settings.details[profile.path]
+			detail = [
+				"name": profile.name,
+				"path": profile.path,
+				"active": settings.isActive(profile),
+				"workspaceCount": loaded?.workspaceCount ?? NSNull(),
+				"activeTaskCount": loaded?.activeTaskCount ?? NSNull(),
+				"repos": loaded.map { $0.repos.map { ["name": $0.name, "source": $0.source, "path": $0.path] } } ?? NSNull(),
+			] as [String: Any]
+		}
+		return [
+			"loaded": settings.loaded,
+			"rows": settings.rows.map { row -> [String: Any] in
+				var state: [String: Any] = ["label": Self.label(of: row), "focused": row.id == focused.id]
+				switch row {
+				case .userDefaults: state["kind"] = "userDefaults"
+				case .newProfile: state["kind"] = "newProfile"
+				case .profile(let profile):
+					state["kind"] = "profile"
+					state["active"] = settings.isActive(profile)
+					state["repoCount"] = profile.repoCount
+				}
+				return state
+			},
+			"focused": Self.label(of: focused),
+			"detail": detail,
+			"scope": settings.scope.map(scopeState) ?? NSNull(),
+		] as [String: Any]
+	}
+
+	/// The settings of a scope as the cards show them: each shown field's segment, its input while revealed, its Save button and its inherited hint.
+	private func scopeState(_ scope: ConfigSettingsModel) -> Any {
+		var state: [String: Any] = ["profilePath": scope.profilePath ?? NSNull(), "loaded": scope.settings != nil]
+		guard scope.settings != nil else { return state }
+		state["fields"] = ConfigCard.all.flatMap(\.fields).filter(scope.isVisible).map { field -> [String: Any] in
+			var shown: [String: Any] = ["key": field.key, "hint": scope.inheritedHint(field) ?? NSNull()]
+			switch field.kind {
+			case .text(_, let whitespace):
+				let mode = scope.textMode(field.key)
+				shown["segment"] = mode.label
+				shown["input"] = mode == .set ? scope.inputText(field.key) : NSNull()
+				shown["showsSave"] = mode == .set && scope.showsSave(field.key, whitespace: whitespace)
+			case .bool:
+				shown["segment"] = scope.boolChoice(field.key).label
+			case .choice(let options):
+				shown["segment"] = scope.chosenOption(options, for: field.key)?.label ?? NSNull()
+			}
+			return shown
+		}
+		return state
 	}
 
 	/// Fills in the open profile form's fields, as typing into them does (`setName`, `setPath` with a `value`), or clicks its buttons (`submit`, `cancel`).
@@ -414,6 +541,7 @@ final class TestBridge {
 			"intro": confirmation.intro,
 			"items": confirmation.items.map { ["name": $0.name, "detail": $0.detail] },
 			"confirmLabel": confirmation.confirmLabel,
+			"cancelLabel": confirmation.cancelLabel ?? NSNull(),
 			"focused": dialog.focused == .confirm ? "confirm" : "cancel",
 		] as [String: Any]
 	}
@@ -471,6 +599,7 @@ final class TestBridge {
 			"addRepo": addRepoState(),
 			"cloneRepo": cloneRepoState(),
 			"profileForm": profileFormState(),
+			"settings": settingsState(),
 			"fontSize": TerminalRuntime.shared.fontSize,
 			"windowLayers": surfaces.windowStack.layers.map(\.spec.name),
 			"editingText": surfaces.router.isEditingText,

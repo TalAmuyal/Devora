@@ -288,6 +288,41 @@ public final class Store {
 		app.window.tabs.filter { $0.session.profilePath == path }
 	}
 
+	/// Lists the profiles again, leaving the selection and the workspaces as they are; returns whether the call succeeded.
+	@discardableResult
+	public func listProfiles() async -> Bool {
+		guard let core, let profiles = try? await call("list_profiles", { try core.listProfiles() }) else { return false }
+		self.profiles = profiles
+		profilesListed = true
+		return true
+	}
+
+	/// Makes a profile the active one at once, as the Settings Hub does before it closes; the listing that follows (the Workspace Hub's reload) lists its workspaces.
+	public func activateProfile(_ path: String) {
+		guard path != selectedProfilePath else { return }
+		setActiveProfile(path)
+	}
+
+	/// The workspaces of any profile, for the Settings Hub's counts; nil when the call failed.
+	public func workspaces(inProfile profile: String) async -> [Workspace]? {
+		guard let core else { return nil }
+		return try? await call("list_workspaces") { try core.listWorkspaces(profilePath: profile) }
+	}
+
+	/// The config settings of a profile, or of the User Defaults without one (`get_config_settings`); nil when the call failed.
+	public func configSettings(profilePath: String?) async -> ConfigSettings? {
+		guard let core else { return nil }
+		return try? await call("get_config_settings") { try core.getConfigSettings(profilePath: profilePath) }
+	}
+
+	/// Stores a config setting in a profile, or in the User Defaults without one; a nil `value` removes the key, so the scope inherits it (`set_config_setting`).
+	/// Returns whether it was stored.
+	@discardableResult
+	public func setConfigSetting(profilePath: String?, key: String, value: String?) async -> Bool {
+		guard let core else { return false }
+		return (try? await call("set_config_setting") { try core.setConfigSetting(profilePath: profilePath, key: key, value: value) }) != nil
+	}
+
 	/// Writes the latest load's latencies to `<profile>/diagnostics/hub-profile-<timestamp>.json` and returns the file's path; nil when there is nothing to write or the write failed.
 	public func saveLoadingLatencies() async -> String? {
 		guard let core, let latencies = loadingLatencies else { return nil }
@@ -488,10 +523,7 @@ public final class Store {
 		_ path: String?, core: DevoraCore, started: ContinuousClock.Instant = .now,
 		listProfiles: LoadingLatencies.Phase = .zero
 	) async -> Bool {
-		if path != selectedProfilePath { dropWorkspaceStatuses() }
-		// Folded at once, so that whatever reads the selection once the workspaces are listed sees it; its event, folded later, sets it again.
-		if apply(.setActiveProfile(profilePath: path)) { app.apply(.activeProfileChanged(profilePath: path)) }
-		selectionGeneration += 1
+		setActiveProfile(path)
 		let generation = selectionGeneration
 		guard let path else {
 			workspaces = []
@@ -515,6 +547,14 @@ public final class Store {
 				totalLoad: .init(from: started, to: listed, origin: started)),
 			workspaceStatuses: [])
 		return list != nil
+	}
+
+	/// Makes `path` the core's active profile, dropping another profile's statuses and superseding a slower, earlier selection.
+	private func setActiveProfile(_ path: String?) {
+		if path != selectedProfilePath { dropWorkspaceStatuses() }
+		// Folded at once, so that whatever reads the selection once the workspaces are listed sees it; its event, folded later, sets it again.
+		if apply(.setActiveProfile(profilePath: path)) { app.apply(.activeProfileChanged(profilePath: path)) }
+		selectionGeneration += 1
 	}
 
 	/// After a workspace's task was removed or the workspace deleted: its status is stale and the list may have changed.
