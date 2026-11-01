@@ -161,7 +161,9 @@ impl DevoraCore {
             Some(path) => app_state::open(path)?,
             None => state::Store::new(),
         };
-        creation::recover_pending(&state, &log)?;
+        if let Err(error) = creation::recover_pending(&state, &log) {
+            log.report(&format!("couldn't recover interrupted creations: {error}"));
+        }
         Ok(Arc::new(DevoraCore {
             config_path,
             state,

@@ -27,17 +27,18 @@ impl RecoveryDescriptor {
         }
     }
 
-    fn staging(&self) -> PathBuf {
-        self.path
+    fn staging(&self) -> Result<PathBuf, String> {
+        Ok(self
+            .path
             .parent()
-            .unwrap()
-            .join(format!(".creation-{}", self.token))
+            .ok_or("workspace has no parent")?
+            .join(format!(".creation-{}", self.token)))
     }
 
     pub(super) fn claim_fresh(&self, title: &str) -> Result<(), String> {
         // Publish the selected path only after its ownership token exists.
         // A crash before rename leaves a token-named staging directory recoverable from the journal.
-        let staging = self.staging();
+        let staging = self.staging()?;
         fs::create_dir(&staging).map_err(|e| e.to_string())?;
         let claim = serde_json::json!({"title": title, "creation_token": self.token});
         fs::write(staging.join("task.json"), claim.to_string()).map_err(|e| e.to_string())?;
@@ -62,7 +63,7 @@ pub fn recover(descriptor: &RecoveryDescriptor) -> Result<Option<String>, String
         .open(parent.join(".creation-lock"))
         .map_err(|e| e.to_string())?;
     lock.lock_exclusive().map_err(|e| e.to_string())?;
-    let staging = descriptor.staging();
+    let staging = descriptor.staging()?;
     if descriptor.fresh && staging.exists() {
         fs::remove_dir_all(staging).map_err(|e| e.to_string())?;
     }
@@ -92,30 +93,90 @@ pub fn recover(descriptor: &RecoveryDescriptor) -> Result<Option<String>, String
 }
 
 pub(super) fn cleanup_path(path: &Path, repos: &[String], fresh: bool) -> Result<(), String> {
+    let mut errors = Vec::new();
     if fresh {
         for repo in repos {
             let worktree = path.join(repo);
             if worktree.join(".git").exists() {
-                let output = Command::new("git")
+                match Command::new("git")
                     .args(["worktree", "remove", "--force", "."])
                     .current_dir(&worktree)
                     .output()
-                    .map_err(|e| e.to_string())?;
-                if !output.status.success() {
-                    return Err(String::from_utf8_lossy(&output.stderr).into_owned());
+                {
+                    Ok(output) if output.status.success() => {}
+                    Ok(output) => errors.push(String::from_utf8_lossy(&output.stderr).into_owned()),
+                    Err(error) => errors.push(error.to_string()),
                 }
             }
         }
-        fs::remove_dir_all(path).map_err(|e| e.to_string())?;
-    } else {
-        fs::remove_file(path.join("task.json")).map_err(|e| e.to_string())?;
+        if let Err(error) = fs::remove_dir_all(path) {
+            errors.push(error.to_string());
+        }
+    } else if let Err(error) = fs::remove_file(path.join("task.json")) {
+        errors.push(error.to_string());
     }
-    Ok(())
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors.join("; "))
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cleanup_continues_past_a_broken_worktree() {
+        let root = tempfile::tempdir().unwrap();
+        let ws = root.path().join("ws-1");
+        let repo = root.path().join("source");
+        fs::create_dir_all(ws.join("broken")).unwrap();
+        fs::write(ws.join("broken/.git"), "invalid").unwrap();
+        fs::create_dir(&repo).unwrap();
+        for args in [
+            vec!["init", "-q"],
+            vec![
+                "-c",
+                "user.name=t",
+                "-c",
+                "user.email=t@t",
+                "commit",
+                "--allow-empty",
+                "-qm",
+                "initial",
+            ],
+            vec![
+                "worktree",
+                "add",
+                "--detach",
+                ws.join("good").to_str().unwrap(),
+                "HEAD",
+            ],
+        ] {
+            assert!(Command::new("git")
+                .args(args)
+                .current_dir(&repo)
+                .status()
+                .unwrap()
+                .success());
+        }
+        assert!(cleanup_path(&ws, &["broken".into(), "good".into()], true).is_err());
+        assert!(!ws.exists());
+        let output = Command::new("git")
+            .args(["worktree", "list", "--porcelain"])
+            .current_dir(&repo)
+            .output()
+            .unwrap();
+        assert!(!String::from_utf8_lossy(&output.stdout).contains("/good"));
+    }
+
+    #[test]
+    fn malformed_recovery_paths_return_errors() {
+        let descriptor = RecoveryDescriptor::new(Path::new("/"), &[], true);
+        assert!(descriptor.staging().is_err());
+        assert!(recover(&descriptor).is_err());
+    }
 
     #[test]
     fn a_failed_journal_commit_prevents_the_claim() {
@@ -142,10 +203,10 @@ mod tests {
     fn recovery_removes_a_fresh_claim_interrupted_before_publication() {
         let root = tempfile::tempdir().unwrap();
         let descriptor = RecoveryDescriptor::new(&root.path().join("ws-1"), &[], true);
-        fs::create_dir(descriptor.staging()).unwrap();
-        fs::write(descriptor.staging().join("task.json"), "partial").unwrap();
+        fs::create_dir(descriptor.staging().unwrap()).unwrap();
+        fs::write(descriptor.staging().unwrap().join("task.json"), "partial").unwrap();
         assert_eq!(recover(&descriptor).unwrap(), None);
-        assert!(!descriptor.staging().exists());
+        assert!(!descriptor.staging().unwrap().exists());
         assert!(!descriptor.path.exists());
     }
 }
