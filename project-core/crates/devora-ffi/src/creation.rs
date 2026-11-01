@@ -200,7 +200,7 @@ impl DevoraCore {
                 .log
                 .report(&format!("couldn't record how task creation ended: {error}")),
         }
-        if let Err(error) = recover_pending_for(&self.state, &self.log, Some(tab)) {
+        if let Err(error) = self.state.clear_creation(tab) {
             self.log
                 .warn(&format!("creation recovery remains pending: {error}"));
         }
@@ -209,18 +209,7 @@ impl DevoraCore {
 }
 
 pub(crate) fn recover_pending(state: &feeds::Store, log: &crate::AppLog) -> Result<(), CoreError> {
-    recover_pending_for(state, log, None)
-}
-
-fn recover_pending_for(
-    state: &feeds::Store,
-    log: &crate::AppLog,
-    only: Option<u64>,
-) -> Result<(), CoreError> {
     for (tab, encoded) in state.pending_creations()? {
-        if only.is_some_and(|id| id != tab) {
-            continue;
-        }
         let descriptor = match creation::RecoveryDescriptor::decode(&encoded) {
             Ok(descriptor) => descriptor,
             Err(error) => {
@@ -470,6 +459,34 @@ mod recovery_tests {
             assert_eq!(fs::read_to_string(ws.join("task.json")).unwrap(), claim);
             assert!(core.state.pending_creations().unwrap().is_empty());
         }
+    }
+
+    #[test]
+    fn normal_success_clears_the_journal_without_a_warning() {
+        let profile = profile(None);
+        let path = profile.root.path().join("success.db");
+        let log = crate::AppLog::open(profile.root.path().join("app.log").to_string_lossy().into())
+            .unwrap();
+        let core = DevoraCore::new(
+            Some("/nonexistent/config.json".into()),
+            Some(path.to_string_lossy().into()),
+            log.clone(),
+        )
+        .unwrap();
+        let creation = core
+            .clone()
+            .create_workspace(
+                profile.path_string(),
+                vec![profile.repo.to_string_lossy().into()],
+                "task".into(),
+                None,
+            )
+            .unwrap();
+        let events = crate::test_support::pull_all(&creation.events, |_| {});
+        assert!(matches!(events.last(), Some(CreationEvent::Done { .. })));
+        assert!(core.state.pending_creations().unwrap().is_empty());
+        let contents = std::fs::read_to_string(log.path().unwrap()).unwrap();
+        assert!(!contents.contains("[WARN]"), "{contents}");
     }
 
     #[test]
