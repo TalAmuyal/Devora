@@ -8,7 +8,7 @@ import Testing
 struct RepoOperationTests {
 	/// A store on the origin-backed profile, with a task whose workspace, `ws-1`, has the profile's repo; its tab is the active one.
 	private func storeWithATask(_ fixture: borrowing Fixture, prepare: String?) async throws -> (Store, profile: String, repo: String) {
-		let (profile, repo) = try fixture.originBackedProfile(prepare: prepare)
+		let (profile, repo) = try await fixture.originBackedProfile(prepare: prepare)
 		let store = Store(configPath: fixture.configPath, state: .inMemory, log: try fixture.log())
 		await store.dispatch(.load).value
 		await store.dispatch(.createTask(title: "Main work", repoPaths: [repo], sourceWorkspacePath: nil)).value
@@ -96,7 +96,7 @@ struct RepoOperationTests {
 
 	@Test func cloningPutsTheRepoDetachedWhereTheHintSaid() async throws {
 		let fixture = try Fixture()
-		let (profile, _) = try fixture.originBackedProfile(prepare: nil)
+		let (profile, _) = try await fixture.originBackedProfile(prepare: nil)
 		let store = Store(configPath: fixture.configPath, state: .inMemory, log: try fixture.log())
 		let other = fixture.root.appending(path: "other.git").path
 		try FileManager.default.copyItem(atPath: fixture.root.appending(path: "repo.git").path, toPath: other)
