@@ -1,5 +1,6 @@
-Feature: Tabs survive a restart
+Feature: Tabs and the selected profile survive a restart
   Sapphire keeps its tabs in its app state, so they come back after a quit, a crash or a kill; each tab's terminal starts afresh.
+  It keeps the selected profile there too, where Ember starts on the first profile.
 
   Scenario: Tabs survive a quit and relaunch
     Given a profile "work" with 2 active workspaces
@@ -14,6 +15,15 @@ Feature: Tabs survive a restart
     Then the terminal should not contain "BEFORE_RESTART"
     When "echo AFTER_RESTART" is typed in the terminal
     Then the terminal should contain "AFTER_RESTART"
+
+  Scenario: The selected profile survives a quit and relaunch
+    Given a profile "Work" with 2 active workspaces
+    And a profile "Personal" with 1 active workspaces
+    And the Workspace Hub is open
+    When the user switches to profile "Personal"
+    And Sapphire is quit and relaunched
+    Then the profile dropdown should be labeled "Personal"
+    And the Workspace Hub should show 1 workspace items
 
   Scenario: Tabs survive a kill -9
     Given 2 sessions exist

@@ -32,6 +32,7 @@ Types of changes:
 - Devora Sapphire's Workspace Hub has Ember's operations: Remove Task (with a confirmation dialog, trapping Tab, when a repo has changes or is on a branch), Delete for inactive and invalid workspaces, Ember's profile dropdown and burger menu with "Save loading latencies"; Sapphire now opens on the Workspace Hub when it has no tabs to restore
 - Devora Sapphire creates tasks as Ember does: the New Task dialog (`n` or "+ New Task" in the Workspace Hub, and Duplicate for an active workspace) hands the creation to a tab of its own, whose progress page shows the steps and the output, cancels on Esc or `q`, and shows a failure until it is closed; a creation the app stopped in the middle of comes back as interrupted
 - Devora Sapphire has Ember's profile form and first-run welcome: with no profiles, the Workspace Hub shows the welcome card with the form and can't be closed, and the profile dropdown's "New Profile…" opens the form in a dialog; the form validates the root path 250 ms after typing (new, existing or invalid), has a "Browse…" folder picker, and creates or registers the profile
+- Devora Sapphire remembers the selected profile across restarts, falling back to the first profile when it is no longer registered (Ember always starts on the first profile)
 
 ### Changed
 

@@ -9,7 +9,8 @@ Closing the window quits the app.
 
 ## State and terminals
 
-- The tabs are core-owned state (`devora-state`, ADR-008): the store dispatches a `StateCommand` to the core and never changes `Store.app` itself.
+- The tabs are core-owned state (`devora-state`, ADR-008): the store dispatches a `StateCommand` to the core and changes `Store.app` only by folding the core's events.
+	The one early fold is a profile selection's own `ActiveProfileChanged`, applied as soon as `SetActiveProfile` succeeds so that the hub and the New Task dialog see it once the workspaces are listed; the core's copy of that event folds later and sets the same value.
 - The core commits every command to `state.db` (SQLite) before its events go out, in `~/Library/Application Support/Devora Sapphire/`, or `Devora Sapphire <suffix>/` for a bundle with an install suffix; `DEVORA_STATE_DIR` replaces the directory (tests).
 	The core resolves that path (`sapphireStatePath`, from the bundle's `Resources`); `Store(configPath:state:log:)` takes `.app` for it, `.file` or `.inMemory` (tests).
 	A failed command, including one that couldn't be saved, takes no effect and shows as an error banner.
@@ -58,8 +59,9 @@ Ember's profile form and first-run welcome (`Sources/AppShell/Profiles/`).
 	The hub refuses `q` and Escape meanwhile (`dismissDecision`), as Ember's zero-profile lock does; Escape in a field leaves the field, and the hub's own keys do nothing.
 	The burger menu has no "Settings" and the header no profile dropdown, as in Ember.
 - The profile dropdown's "New Profile…" opens the form in the New Profile dialog, a modal layer over the hub, where Ember opens the Settings Hub's inline form; Escape cancels it, and registering closes it.
-- The selected profile is the store's, in memory, as Ember's is: a launch selects the first profile.
-- Deleting a profile is the Settings Hub's (`d`, behind "Manage Profiles…"); the store already has its side: `Store.unregisterProfile` (`unregister_profile`, which leaves the directory on disk, then loads again, so the selection moves to the first profile, and the hub shows the welcome after the last one), and `Store.tabs(usingProfile:)`, the open tabs that make Ember refuse the deletion.
+- The selected profile is the core's active profile (`AppState.activeProfile`, which `Store.selectedProfilePath` reads): selecting one dispatches `SetActiveProfile`, so a launch restores it, where Ember always starts on the first profile.
+	A load selects the restored profile while it is registered, otherwise the first profile, or none, and dispatches that in its place; it reads the active profile from the core, since the state's events fold on a later frame, and folds its own selection at once, so that the New Task dialog and the hub see it as soon as the workspaces are listed.
+- Deleting a profile is the Settings Hub's (`d`, behind "Manage Profiles…"); the store already has its side: `Store.unregisterProfile` (`unregister_profile`, which leaves the directory on disk, then loads again, so the selection moves to the first profile, as a launch's does, and the hub shows the welcome after the last one), and `Store.tabs(usingProfile:)`, the open tabs that make Ember refuse the deletion.
 
 ## Task creation
 
