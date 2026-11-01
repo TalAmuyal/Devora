@@ -62,6 +62,8 @@ Types of changes:
 
 ### Fixed
 
+- Sapphire recovers interrupted workspace creations on restart, removing incomplete fresh workspaces and releasing reused workspaces while preserving completed or re-claimed workspaces
+
 - A workspace opened from the Workspace Hub always uses its own profile's settings (Claude models and effort, default app, git shortcuts, `debi`'s profile); opening one right after switching profiles, before the hub had listed the new profile's workspaces, used the newly selected profile's
 - Cancelling a task creation now stops a prepare-command at once even when it started other processes, rather than waiting for them to finish
 - F1 now opens the User Guide in installed apps: it is read from the app bundle instead of the build machine's checkout (#223)

@@ -101,3 +101,45 @@ pub(crate) fn label(event: &CreationEvent) -> Option<&str> {
         _ => None,
     }
 }
+
+/// A persisted interrupted creation over a real cached worktree.
+pub(crate) fn interrupted_creation(profile: &Profile, fresh: bool) -> (PathBuf, PathBuf) {
+    use devora_core::state::{Command, SessionKind, Store};
+    let ws = profile.workspace("ws-1");
+    fs::create_dir_all(&ws).unwrap();
+    git(
+        &profile.repo,
+        &[
+            "worktree",
+            "add",
+            "--detach",
+            ws.join("repo").to_str().unwrap(),
+            "HEAD",
+        ],
+    );
+    if !fresh {
+        fs::write(ws.join("initialized"), "").unwrap();
+    }
+    fs::write(
+        ws.join("task.json"),
+        r#"{"creation_token":"test-token","title":"unfinished"}"#,
+    )
+    .unwrap();
+    let path = profile.root.path().join("state.db");
+    let store = Store::open(&path).unwrap();
+    store
+        .dispatch(Command::OpenSession {
+            title: "unfinished".into(),
+            kind: SessionKind::CreatingWorkspace,
+            profile_path: Some(profile.path_string()),
+        })
+        .unwrap();
+    let tab = store.snapshot().window.tabs[0].id;
+    let descriptor = format!(
+        r#"{{"path":{:?},"repos":["repo"],"fresh":{},"token":"test-token"}}"#,
+        ws.to_str().unwrap(),
+        fresh
+    );
+    store.record_creation(tab, &descriptor).unwrap();
+    (path, ws)
+}

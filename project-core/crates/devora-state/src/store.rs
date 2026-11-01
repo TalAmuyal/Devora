@@ -62,6 +62,31 @@ impl Store {
         Ok(events)
     }
 
+    /// Commits opaque recovery bookkeeping before the caller claims a workspace on disk.
+    /// This is not rendered app state and emits no events; in-memory stores do not restore.
+    pub fn record_creation(&self, session_id: u64, descriptor: &str) -> Result<(), StateError> {
+        if let Some(db) = &mut lock(&self.inner).db {
+            db.record_creation(session_id, descriptor)?;
+        }
+        Ok(())
+    }
+
+    /// Recovery entries survive tab removal and restart until explicitly cleared.
+    pub fn pending_creations(&self) -> Result<Vec<(u64, String)>, StateError> {
+        match &lock(&self.inner).db {
+            Some(db) => db.pending_creations(),
+            None => Ok(Vec::new()),
+        }
+    }
+
+    /// Clears an entry only after its owner has completed or recovered the creation.
+    pub fn clear_creation(&self, session_id: u64) -> Result<(), StateError> {
+        if let Some(db) = &mut lock(&self.inner).db {
+            db.clear_creation(session_id)?;
+        }
+        Ok(())
+    }
+
     pub fn snapshot(&self) -> AppState {
         lock(&self.inner).state.snapshot().clone()
     }
@@ -101,6 +126,42 @@ mod tests {
     use std::sync::mpsc;
     use std::sync::Arc;
     use std::thread;
+
+    #[test]
+    fn recovery_journal_survives_restart_and_clears_only_explicitly() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("state.db");
+        let store = Store::open(&path).unwrap();
+        let subscription = store.subscribe();
+        subscription.try_next_batch(100);
+        store.record_creation(42, "descriptor").unwrap();
+        assert!(subscription.try_next_batch(100).is_empty());
+        drop(store);
+        let store = Store::open(&path).unwrap();
+        assert_eq!(
+            store.pending_creations().unwrap(),
+            [(42, "descriptor".into())]
+        );
+        drop(store);
+        let store = Store::open(&path).unwrap();
+        assert_eq!(store.pending_creations().unwrap().len(), 1);
+        store.clear_creation(42).unwrap();
+        store.clear_creation(42).unwrap();
+        drop(store);
+        assert!(Store::open(&path)
+            .unwrap()
+            .pending_creations()
+            .unwrap()
+            .is_empty());
+    }
+
+    #[test]
+    fn an_in_memory_store_needs_no_recovery() {
+        let store = Store::new();
+        store.record_creation(42, "descriptor").unwrap();
+        assert!(store.pending_creations().unwrap().is_empty());
+        store.clear_creation(42).unwrap();
+    }
 
     fn open_shell(store: &Store, title: &str) -> Vec<Event> {
         store
