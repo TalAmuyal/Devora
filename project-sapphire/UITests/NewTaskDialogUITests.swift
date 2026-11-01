@@ -51,6 +51,8 @@ final class NewTaskDialogUITests: XCTestCase {
 		XCTAssertEqual(title.value as? String, "nq?f", "the title field has the keyboard as the dialog opens")
 		XCTAssertFalse(element("hub-cheatsheet").exists)
 
+		// "+ Clone Repo", then the filter.
+		app.typeKey(.tab, modifierFlags: [])
 		app.typeKey(.tab, modifierFlags: [])
 		app.typeText("we")
 		XCTAssertEqual(element("new-task-filter").value as? String, "we")
@@ -89,6 +91,43 @@ final class NewTaskDialogUITests: XCTestCase {
 
 		XCTAssertTrue(dialog.waitForNonExistence(timeout: 5))
 		XCTAssertTrue(app.hubHeader.exists)
+	}
+
+	/// The Clone Repo dialog over the New Task dialog: its URL field has the keyboard, Escape closes it alone, and Enter clones, after which the New Task list has the clone, selected.
+	@MainActor
+	func testCloneRepoTakesTheKeysAndItsCloneJoinsTheNewTaskList() throws {
+		try launchWithProfile()
+		XCTAssertTrue(app.staticTexts["No workspaces found"].waitForExistence(timeout: 10))
+		app.typeText("n")
+		let newTask = element("new-task-dialog")
+		XCTAssertTrue(newTask.waitForExistence(timeout: 5))
+
+		// The title, then "+ Clone Repo", which Space presses.
+		app.typeKey(.tab, modifierFlags: [])
+		app.typeKey(.space, modifierFlags: [])
+		let clone = element("clone-repo-dialog")
+		XCTAssertTrue(clone.waitForExistence(timeout: 5))
+		let url = element("clone-repo-url")
+		app.typeText("q")
+		XCTAssertEqual(url.value as? String, "q", "the URL field has the keyboard as the dialog opens, and q types")
+		app.typeKey(.escape, modifierFlags: [])
+		XCTAssertTrue(clone.waitForNonExistence(timeout: 5))
+		XCTAssertTrue(newTask.exists, "Escape closes the Clone Repo dialog alone")
+
+		element("new-task-clone-repo").click()
+		XCTAssertTrue(clone.waitForExistence(timeout: 5))
+		let template = try XCTUnwrap(ProcessInfo.processInfo.environment["SAPPHIRE_GIT_REPO"])
+		app.typeText("file://\(template)")
+		let hint = element("clone-repo-hint")
+		XCTAssertTrue(hint.waitForExistence(timeout: 5))
+		XCTAssertEqual(hint.value as? String, "Clones to:  \(scratch.appending(path: "Work/repos/repo").path)")
+
+		app.typeKey(.return, modifierFlags: [])
+		XCTAssertTrue(clone.waitForNonExistence(timeout: 30), "the clone closes its dialog once done")
+		let cloned = element("new-task-repo-repo")
+		XCTAssertTrue(cloned.waitForExistence(timeout: 5))
+		XCTAssertEqual(cloned.value as? String, "selected")
+		XCTAssertTrue(FileManager.default.fileExists(atPath: scratch.appending(path: "Work/repos/repo/.git").path))
 	}
 
 	@MainActor

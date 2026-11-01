@@ -155,9 +155,9 @@ struct ProfileFormTests {
 	}
 }
 
-/// Polls until `condition` holds, for the form's asynchronous validation.
+/// Polls until `condition` holds, for what the core answers asynchronously (the profile form's validation, a repo operation).
 @MainActor
-private func eventually(_ condition: () -> Bool) async throws {
+func eventually(_ condition: () -> Bool) async throws {
 	for _ in 0..<200 {
 		if condition() { return }
 		try await Task.sleep(for: .milliseconds(10))

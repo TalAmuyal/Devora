@@ -29,8 +29,34 @@ export interface NewTaskState {
   title: string;
   filter: string;
   /** What has the dialog's focus. */
-  focus: 'title' | 'filter' | 'cancel' | 'create';
+  focus: 'title' | 'cloneRepo' | 'filter' | 'cancel' | 'create';
   repos: { name: string; selected: boolean; active: boolean }[];
+}
+
+/** A repo dialog's progress, once its operation has started. */
+export interface RepoOperationState {
+  title: string;
+  steps: { label: string; state: 'active' | 'done' | 'failed' }[];
+  failure: string | null;
+  action: 'Cancel' | 'Close';
+}
+
+/** The open Add Repo dialog; `repos` is its list as it shows, filtered, with the one selected. */
+export interface AddRepoState {
+  workspacePath: string;
+  filter: string;
+  postfix: string;
+  focus: 'filter' | 'postfix' | 'cancel' | 'add';
+  repos: { name: string; selected: boolean }[];
+  progress: RepoOperationState | null;
+}
+
+/** The open Clone Repo dialog; `hint` is its "Clones to:" line, null while the URL isn't clonable. */
+export interface CloneRepoState {
+  url: string;
+  hint: string | null;
+  focus: 'url' | 'cancel' | 'clone';
+  progress: RepoOperationState | null;
 }
 
 /** The open profile form: the New Profile dialog's, or else the first-run welcome's; `status` is null while the path is empty or unvalidated. */
@@ -55,7 +81,25 @@ export type ProfileFormAction =
   | { action: 'cancel' };
 
 /** A click on what the open New Task dialog draws. */
-export type NewTaskAction = { action: 'toggleRepo'; name: string } | { action: 'create' } | { action: 'cancel' };
+export type NewTaskAction =
+  | { action: 'toggleRepo'; name: string }
+  | { action: 'create' }
+  | { action: 'cancel' }
+  | { action: 'cloneRepo' };
+
+/** A click on what the open Add Repo dialog draws; `progressAction` is its progress's Cancel, or Close once the add has failed. */
+export type AddRepoAction =
+  | { action: 'selectRepo'; name: string }
+  | { action: 'submit' }
+  | { action: 'cancel' }
+  | { action: 'progressAction' };
+
+/** Typing the open Clone Repo dialog's URL (`setUrl`), or a click on what it draws. */
+export type CloneRepoAction =
+  | { action: 'setUrl'; value: string }
+  | { action: 'submit' }
+  | { action: 'cancel' }
+  | { action: 'progressAction' };
 
 /** The open Workspace Hub; `items` is the list as it shows, filters applied. */
 export interface HubState {
@@ -104,6 +148,7 @@ export type HubAction =
   | { action: 'delete' }
   | { action: 'newTask' }
   | { action: 'duplicate' }
+  | { action: 'addRepo' }
   | { action: 'toggleMenu'; menu: HubMenu }
   | { action: 'menuItem'; label: string };
 
@@ -111,6 +156,8 @@ export interface AppState {
   hub: HubState | null;
   dialog: DialogState | null;
   newTask: NewTaskState | null;
+  addRepo: AddRepoState | null;
+  cloneRepo: CloneRepoState | null;
   profileForm: ProfileFormState | null;
   version: string;
   profiles: { name: string; path: string }[];
@@ -220,6 +267,16 @@ export class Bridge {
   /** Clicks what the open New Task dialog draws. */
   async newTask(action: NewTaskAction): Promise<void> {
     await this.request('POST', '/test/new-task', action);
+  }
+
+  /** Clicks what the open Add Repo dialog draws. */
+  async addRepo(action: AddRepoAction): Promise<void> {
+    await this.request('POST', '/test/add-repo', action);
+  }
+
+  /** Fills in or clicks the open Clone Repo dialog. */
+  async cloneRepo(action: CloneRepoAction): Promise<void> {
+    await this.request('POST', '/test/clone-repo', action);
   }
 
   /** Clicks the button of a tab's progress page (the active tab's by default). */

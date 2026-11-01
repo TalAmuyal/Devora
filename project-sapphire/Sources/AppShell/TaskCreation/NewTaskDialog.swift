@@ -14,6 +14,7 @@ final class NewTaskDialogModel {
 	/// In Tab order, which is the order they are drawn in.
 	enum Focus: CaseIterable {
 		case title
+		case cloneRepo
 		case filter
 		case cancel
 		case create
@@ -22,12 +23,13 @@ final class NewTaskDialogModel {
 	}
 
 	/// The repos the profile has, in its order.
-	let repos: [RepoInfo]
+	private(set) var repos: [RepoInfo]
 	/// Duplicating a task: its repos are selected and its title is filled in.
 	let isDuplicating: Bool
 	var title: String
+	/// A new filter moves the cursor to its first match; SwiftUI writes the field's same text back as it leaves the field, which moves nothing.
 	var filter = "" {
-		didSet { cursor.select(0) }
+		didSet { if filter != oldValue { cursor.select(0) } }
 	}
 	var focus = Focus.title {
 		didSet { if !focus.isTextField { clearFocus() } }
@@ -36,6 +38,8 @@ final class NewTaskDialogModel {
 	private(set) var selected: Set<String>
 	private(set) var cursor = ListCursor()
 
+	/// Opens the Clone Repo dialog over this one; `reposChanged` follows a clone.
+	@ObservationIgnored var cloneRepo: () -> Void = {}
 	@ObservationIgnored private let onCreate: (_ title: String, _ repoPaths: [String]) -> Void
 	@ObservationIgnored private let onCancel: () -> Void
 	@ObservationIgnored private let clearFocus: () -> Void
@@ -58,11 +62,7 @@ final class NewTaskDialogModel {
 	var heading: String { isDuplicating ? "Duplicate Task" : "New Task" }
 
 	/// The repos whose name contains the filter, ignoring case.
-	var visibleRepos: [RepoInfo] {
-		let needle = filter.trimmingCharacters(in: .whitespaces)
-		guard !needle.isEmpty else { return repos }
-		return repos.filter { $0.name.localizedCaseInsensitiveContains(needle) }
-	}
+	var visibleRepos: [RepoInfo] { repos.matching(filter) }
 
 	/// The row Enter toggles while the filter has the focus.
 	var activeRepo: RepoInfo? {
@@ -89,6 +89,13 @@ final class NewTaskDialogModel {
 
 	func cancel() { onCancel() }
 
+	/// After a clone: the profile's repos, listed again, with the clone selected too, as Ember's `refreshAfterClone` does; the title and the selection are kept.
+	func reposChanged(_ repos: [RepoInfo], selecting path: String) {
+		self.repos = repos
+		selected = selected.intersection(repos.map(\.path))
+		selected.insert(path)
+	}
+
 	/// Without repos, there is no filter to focus.
 	func cycleFocus(backward: Bool) {
 		let order = Focus.allCases.filter { $0 != .filter || !repos.isEmpty }
@@ -112,7 +119,11 @@ final class NewTaskDialogModel {
 		case KeyCode.upArrow where focus == .filter:
 			cursor.move(by: -1, in: visibleRepos.count)
 		case KeyCode.space where !focus.isTextField:
-			focus == .create ? create() : cancel()
+			switch focus {
+			case .create: create()
+			case .cloneRepo: cloneRepo()
+			case .title, .filter, .cancel: cancel()
+			}
 		default:
 			// Typing goes to the focused field, and nothing beneath the dialog may see a key.
 			return !focus.isTextField && key.isUnusedOnAPage
@@ -142,9 +153,8 @@ struct NewTaskDialogView: View {
 				HStack {
 					fieldLabel("Repositories")
 					Spacer()
-					Button("+ Clone Repo") {}
-						.disabled(true)
-						.help(WorkspaceHubModel.notYet)
+					DialogButton(title: "+ Clone Repo", isFocused: model.focus == .cloneRepo, action: model.cloneRepo)
+						.accessibilityIdentifier("new-task-clone-repo")
 				}
 				if model.isDuplicating {
 					Text("Pre-selected repos are duplicated at their current commit; added repos use the latest commit.")
@@ -160,7 +170,10 @@ struct NewTaskDialogView: View {
 						.textFieldStyle(.roundedBorder)
 						.focused($field, equals: .filter)
 						.accessibilityIdentifier("new-task-filter")
-					RepoList(model: model)
+					RepoListView(
+						repos: model.visibleRepos, active: model.activeRepo, mode: .multi,
+						isSelected: { model.selected.contains($0.path) }, click: model.click,
+						identifierPrefix: "new-task-repo-")
 				}
 				HStack(spacing: 10) {
 					Spacer()
@@ -184,48 +197,5 @@ struct NewTaskDialogView: View {
 
 	private func fieldLabel(_ text: String) -> some View {
 		Text(text).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-	}
-}
-
-private struct RepoList: View {
-	let model: NewTaskDialogModel
-
-	var body: some View {
-		let visible = model.visibleRepos
-		let active = model.activeRepo
-		ScrollViewReader { proxy in
-			ScrollView {
-				LazyVStack(alignment: .leading, spacing: 2) {
-					if visible.isEmpty {
-						Text("No matching repos").foregroundStyle(.secondary).padding(8)
-					}
-					ForEach(visible, id: \.path) { repo in
-						let isSelected = model.selected.contains(repo.path)
-						HStack(spacing: 8) {
-							Image(systemName: isSelected ? "checkmark.square.fill" : "square")
-								.foregroundStyle(isSelected ? Color.accentColor : .secondary)
-							Text(repo.name)
-							Spacer(minLength: 0)
-						}
-						.padding(.horizontal, 8)
-						.padding(.vertical, 5)
-						.background(repo == active ? AnyShapeStyle(.selection) : AnyShapeStyle(.clear), in: .rect(cornerRadius: 6))
-						.contentShape(.rect)
-						.onTapGesture { model.click(repo) }
-						.id(repo.path)
-						.accessibilityElement(children: .combine)
-						.accessibilityAddTraits(.isButton)
-						.accessibilityValue(isSelected ? "selected" : "")
-						.accessibilityIdentifier("new-task-repo-\(repo.name)")
-					}
-				}
-				.padding(4)
-			}
-			.frame(height: 180)
-			.background(.quaternary.opacity(0.4), in: .rect(cornerRadius: 8))
-			.onChange(of: active?.path) { _, path in
-				if let path { proxy.scrollTo(path) }
-			}
-		}
 	}
 }

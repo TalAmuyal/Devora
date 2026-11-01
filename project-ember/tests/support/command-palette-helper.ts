@@ -1,4 +1,6 @@
 import { AppDriver } from './app-driver';
+import { UIDriver } from './ui-driver';
+import { ensureWsHubClosed } from './ws-hub-helper';
 
 /** Dispatch a rapid double-tap of Shift (the real Command Palette shortcut). */
 export async function dispatchShiftShift(driver: AppDriver): Promise<void> {
@@ -29,6 +31,29 @@ export async function openCommandPalette(driver: AppDriver): Promise<void> {
     `return document.querySelector('.command-palette') !== null`,
     true,
     5_000,
+  );
+}
+
+/** Runs a palette command by its title, as a user would: open the palette, filter it down to the command, and press Enter. */
+export async function runPaletteCommand(driver: AppDriver, commandTitle: string): Promise<void> {
+  await ensureWsHubClosed(driver);
+  await openCommandPalette(driver);
+
+  const ui = new UIDriver(driver);
+  await ui.pressKey('f');
+  await ui.typeIntoInput('.search-input-field', commandTitle);
+  await driver.pollFor(
+    `return document.querySelectorAll('.command-palette-item').length`,
+    1,
+    3_000,
+  );
+  await ui.pressKey('Enter');
+
+  // Wait for the palette to close (every command dismisses it before acting)
+  await driver.pollFor(
+    `return document.querySelector('.command-palette') !== null`,
+    false,
+    3_000,
   );
 }
 

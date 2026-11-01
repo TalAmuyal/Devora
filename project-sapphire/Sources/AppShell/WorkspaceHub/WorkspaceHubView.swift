@@ -275,6 +275,7 @@ private struct WorkspaceDetail: View {
 					.buttonStyle(.borderedProminent)
 				if workspace.active {
 					Button("Duplicate") { model.newTask(workspace) }
+					Button("Add Repo") { model.addRepo(workspace) }
 					Button("Remove Task") { model.removeTask(workspace) }
 				} else {
 					Button("Delete") { model.deleteWorkspace(workspace) }

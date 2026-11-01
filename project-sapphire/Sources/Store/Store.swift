@@ -197,8 +197,49 @@ public final class Store {
 
 	/// The repos a task in the selected profile can use; nil when the call failed.
 	public func registeredRepos() async -> [RepoInfo]? {
-		guard let core, let profile = selectedProfilePath else { return nil }
+		guard let profile = selectedProfilePath else { return nil }
+		return await registeredRepos(inProfile: profile)
+	}
+
+	/// The repos of the profile, those its config lists, then those under its `repos/`; nil when the call failed.
+	public func registeredRepos(inProfile profile: String) async -> [RepoInfo]? {
+		guard let core else { return nil }
 		return try? await call("get_registered_repos") { try core.getRegisteredRepos(profilePath: profile) }
+	}
+
+	/// What Add Repo adds to from the active tab: its session's workspace, with the session's profile; nil, with a banner, when the active tab has no workspace, as Ember's palette command refuses.
+	public func addRepoTargetOfActiveTab() -> AddRepoTarget? {
+		let window = app.window
+		guard let tab = window.tabs.first(where: { $0.id == window.activeTab }),
+		      case .workspace(let path) = tab.session.kind, let profile = tab.session.profilePath
+		else {
+			showError("Cannot add a repo: the current session has no associated workspace")
+			return nil
+		}
+		return AddRepoTarget(workspacePath: path, profilePath: profile)
+	}
+
+	/// Where cloning `url` into the profile would put the repo, for the Clone Repo dialog's hint; nil when `url` isn't one it can clone.
+	public func cloneDestination(profilePath: String, url: String) -> String? {
+		guard let core else { return nil }
+		return (try? call("clone_destination") { try core.cloneDestination(profilePath: profilePath, url: url) }) ?? nil
+	}
+
+	/// Starts an add-repo or a clone: the run it returns has its progress, then its outcome, which `onEnd` gets once the store has followed it.
+	/// A repo added to a workspace lists the workspaces again first, so that a status loaded after `onEnd` reads the new worktree too.
+	public func startRepoOperation(
+		_ request: RepoOperationRequest, onEnd: @escaping @MainActor (RepoOperationRun.Outcome) -> Void
+	) -> RepoOperationRun {
+		let run = RepoOperationRun { [weak self] id in self?.cancelRepoOperation(id: id) }
+		Task {
+			await drive(run, request)
+			guard let outcome = run.outcome else { return }
+			if case .addRepo(let path, _, _) = request, case .done = outcome, let core {
+				await workspaceChanged(path, core: core)
+			}
+			onEnd(outcome)
+		}
+		return run
 	}
 
 	/// Ends a workspace's task (`remove_task`: its repos' changes are discarded and their HEADs detached; the worktrees stay), then lists the workspaces again; returns whether the task was removed.
@@ -322,6 +363,42 @@ public final class Store {
 			if creations[tab] == nil { cancelsBeforeStart.insert(tab) }
 			return
 		}
+		try? call("cancel_workspace_creation") { try core.cancelWorkspaceCreation(id: id) }
+	}
+
+	/// Runs a repo operation until it ends; its events are a handful per second at most, so each batch comes to the main actor as it arrives.
+	private func drive(_ run: RepoOperationRun, _ request: RepoOperationRequest) async {
+		let name = switch request {
+		case .addRepo: "add_repo_to_workspace"
+		case .cloneRepo: "clone_repo_into_profile"
+		}
+		guard let core, let operation = try? await call(name, {
+			switch request {
+			case .addRepo(let workspace, let source, let dirName):
+				try core.addRepoToWorkspace(workspacePath: workspace, sourceRepoPath: source, worktreeDirName: dirName)
+			case .cloneRepo(let profile, let url):
+				try core.cloneRepoIntoProfile(profilePath: profile, url: url)
+			}
+		}) else {
+			run.end(.notStarted)
+			return
+		}
+		run.started(id: operation.id)
+		let events = operation.events
+		do {
+			for try await batch in Batches(events) {
+				run.progressed(batch)
+				if !run.isRunning { break }
+			}
+		} catch {
+			showError("the progress of \(name) stopped: \(Self.describe(error))")
+		}
+		try? events.close()
+		run.end(.failed("the progress stopped before the end"))
+	}
+
+	private func cancelRepoOperation(id: UInt32) {
+		guard let core else { return }
 		try? call("cancel_workspace_creation") { try core.cancelWorkspaceCreation(id: id) }
 	}
 

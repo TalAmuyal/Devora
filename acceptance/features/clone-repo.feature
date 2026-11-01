@@ -4,8 +4,10 @@ Feature: Clone a repo into a profile
   Progress streams in a dialog and the cloned repo is auto-discovered into the profile's repo list.
 
   Background:
-    Given Ember is running
+    Given Devora is running with no sessions open
 
+  # Sapphire has no Command Palette yet.
+  @ember-only
   Scenario: Clone a repo into the active profile from the Command Palette
     Given an origin-backed profile "Work" with repo "test-repo"
     And a bare repo "cloned-repo" available to clone
@@ -23,3 +25,4 @@ Feature: Clone a repo into a profile
     And the user clones the repo "hub-repo"
     Then the repo "hub-repo" should exist detached in profile "Work"
     And the New Task form repo list should include "hub-repo"
+    And the New Task form should have repo "hub-repo" selected

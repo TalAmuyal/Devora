@@ -2,7 +2,6 @@
 //!
 //! The work itself (worktrees, prepare-command, cancellation, streamed progress) lives in the core's `devora_core::workspace_creation`.
 
-use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use tauri::ipc::Channel;
@@ -72,7 +71,7 @@ pub fn run(
 /// Worker-thread entry point for adding a single repo as a worktree to an existing workspace.
 /// Spawned by the `add_repo_to_workspace` command.
 /// Mirrors [`run`]: do the work, deregister, report warnings, then emit the terminal event.
-/// On cancel (or a failure observed after cancellation) the partially-added worktree is rolled back so the workspace returns to its prior state.
+/// The core rolls a cancelled add back, so the workspace returns to its prior state.
 pub fn run_add_repo(
     app: tauri::AppHandle,
     id: u32,
@@ -102,23 +101,16 @@ pub fn run_add_repo(
         crate::logging::report_error(&app, warning);
     }
 
-    let target = Path::new(&workspace_path).join(&worktree_dir_name);
     match result {
         Ok(Outcome::Done(workspace)) => {
             let _ = on_event.send(CreationEvent::Done { workspace });
         }
         Ok(Outcome::Cancelled) => {
-            creation::cleanup_added_worktree(&target);
             let _ = on_event.send(CreationEvent::Cancelled);
         }
         Err(message) => {
-            if handle.is_cancelled() {
-                creation::cleanup_added_worktree(&target);
-                let _ = on_event.send(CreationEvent::Cancelled);
-            } else {
-                crate::logging::report_error(&app, &message);
-                let _ = on_event.send(CreationEvent::Failed { message });
-            }
+            crate::logging::report_error(&app, &message);
+            let _ = on_event.send(CreationEvent::Failed { message });
         }
     }
 }
@@ -149,13 +141,8 @@ pub fn run_clone_repo(
             let _ = on_event.send(CreationEvent::Cancelled);
         }
         Err(message) => {
-            // A failure observed after cancellation reads as a cancellation; the partial clone is already cleaned up below.
-            if handle.is_cancelled() {
-                let _ = on_event.send(CreationEvent::Cancelled);
-            } else {
-                crate::logging::report_error(&app, &message);
-                let _ = on_event.send(CreationEvent::Failed { message });
-            }
+            crate::logging::report_error(&app, &message);
+            let _ = on_event.send(CreationEvent::Failed { message });
         }
     }
 }

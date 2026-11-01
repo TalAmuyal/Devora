@@ -228,6 +228,8 @@ pub fn create(
     }
 }
 
+/// Adds a worktree of `source_repo_path` to the workspace as `worktree_dir_name`, then runs the prepare-command and ensures the workspace's `CLAUDE.md`.
+/// A cancel rolls the added worktree back, leaving the workspace as it was; a failure leaves it for inspection.
 pub fn add_repo(
     handle: &CreationHandle,
     workspace_path: &str,
@@ -252,13 +254,45 @@ pub fn add_repo(
         ));
     }
 
+    // Past the check above, `target` is ours: rolling it back on a cancel can never touch a pre-existing directory.
+    match add_worktree(
+        handle,
+        ws_path,
+        &target,
+        source_repo_path,
+        worktree_dir_name,
+        on_event,
+        warnings,
+    ) {
+        Ok(Outcome::Cancelled) => {
+            cleanup_added_worktree(&target);
+            Ok(Outcome::Cancelled)
+        }
+        // A failure after a cancel is what killing the running process looks like.
+        Err(_) if handle.is_cancelled() => {
+            cleanup_added_worktree(&target);
+            Ok(Outcome::Cancelled)
+        }
+        result => result,
+    }
+}
+
+fn add_worktree(
+    handle: &CreationHandle,
+    ws_path: &Path,
+    target: &Path,
+    source_repo_path: &str,
+    worktree_dir_name: &str,
+    on_event: &EventSink,
+    warnings: &mut Vec<String>,
+) -> Result<Outcome, String> {
     let source = config::expand_tilde(source_repo_path)?;
     let default_branch = determine_default_branch(Path::new(&source));
 
     if !create_worktree_for_repo(
         Path::new(&source),
         worktree_dir_name,
-        &target,
+        target,
         &default_branch,
         true,
         on_event,
@@ -297,7 +331,7 @@ pub fn add_repo(
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_default();
     Ok(Outcome::Done(CreatedWorkspace {
-        path: workspace_path.to_string(),
+        path: ws_path.to_string_lossy().into_owned(),
         name,
     }))
 }
@@ -343,7 +377,11 @@ pub fn clone_repo(
         }
         Err(message) => {
             let _ = fs::remove_dir_all(&dest);
-            Err(message)
+            if handle.is_cancelled() {
+                Ok(Outcome::Cancelled)
+            } else {
+                Err(message)
+            }
         }
     }
 }
@@ -808,7 +846,7 @@ fn cleanup_aborted(ws_path: &Path, repo_names: &[String], mode: &Mode) {
 
 /// Roll back a single added worktree (used when an add-repo is cancelled): deregister it from its source repo, then remove the directory.
 /// The surrounding workspace pre-exists and is left intact.
-pub fn cleanup_added_worktree(target: &Path) {
+fn cleanup_added_worktree(target: &Path) {
     if target.join(".git").exists() {
         let _ = Command::new("git")
             .args(["worktree", "remove", "--force", "."])

@@ -5,8 +5,8 @@ import * as path from 'node:path';
 import { Given, When, Then } from '@cucumber/cucumber';
 import { EmberWorld } from '../support/world';
 import { UIDriver } from '../support/ui-driver';
-import { reloadWsHub, ensureWsHubClosed, waitForWorkspaceItems, getFocusedWorkspaceId } from '../support/ws-hub-helper';
-import { openCommandPalette } from '../support/command-palette-helper';
+import { reloadWsHub, waitForWorkspaceItems, getFocusedWorkspaceId } from '../support/ws-hub-helper';
+import { runPaletteCommand } from '../support/command-palette-helper';
 
 const DIALOG_SELECTOR = '.text-input-dialog';
 
@@ -47,25 +47,7 @@ Given(
 When(
   'the user runs the {string} palette command',
   async function (this: EmberWorld, commandTitle: string) {
-    await ensureWsHubClosed(this.driver);
-    await openCommandPalette(this.driver);
-
-    const ui = new UIDriver(this.driver);
-    await ui.pressKey('f');
-    await ui.typeIntoInput('.search-input-field', commandTitle);
-    await this.driver.pollFor(
-      `return document.querySelectorAll('.command-palette-item').length`,
-      1,
-      3_000,
-    );
-    await ui.pressKey('Enter');
-
-    // Wait for the palette to close (every command dismisses it before acting)
-    await this.driver.pollFor(
-      `return document.querySelector('.command-palette') !== null`,
-      false,
-      3_000,
-    );
+    await runPaletteCommand(this.driver, commandTitle);
   },
 );
 
