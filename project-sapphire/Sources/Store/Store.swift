@@ -684,6 +684,12 @@ public final class Store {
 		return error
 	}
 
+	/// Creates a cancellable health run; its blocking work belongs on a detached task.
+	public func newHealthRun() throws -> HealthRun {
+		guard let core else { throw CoreError.Failed(message: "the core isn't running") }
+		return try core.newHealthRun()
+	}
+
 	public nonisolated static func describe(_ error: any Error) -> String {
 		switch error as? CoreError {
 		case .Failed(let message), .StateInUse(_, let message), .StateUnreadable(_, let message): message

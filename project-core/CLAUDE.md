@@ -11,7 +11,7 @@ It is being extracted from Ember's `src-tauri/` area by area (TalAmuyal/Devora#2
 - `crates/devora-config`: the global and per-profile config files, registered profiles, and the settings resolved from them (Claude settings, config fields, the prepare-command, git shortcuts).
 - `crates/devora-core`: the facade. A UI depends on this crate alone, never on the crates behind it.
 - `crates/devora-ffi`: the facade's UniFFI side, the `DevoraCore` object Sapphire binds; the records Swift sees are mapped here, so the other crates stay UniFFI-free.
-- `crates/devora-health`: the in-app health check (runs `debi health --json` through a login shell).
+- `crates/devora-health`: the cancellable in-app health check (runs `debi health --json` through a login shell and derives the typed report shared by both UIs).
 - `crates/devora-ipc`: the app's local IPC server, through which tools in its terminals (`debi preview`) reach the UI; it runs on its own thread and hands each request to a UI callback.
 - `crates/devora-platform`: operating-system services (the keychain today).
 - `crates/devora-pty`: terminal sessions on pseudo-terminals, spawned from a `devora-terminal` spec, with output delivered through callbacks.

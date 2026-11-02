@@ -199,7 +199,16 @@ export type HubAction =
   | { action: 'toggleMenu'; menu: HubMenu }
   | { action: 'menuItem'; label: string };
 
+export interface HealthState {
+  loading: boolean;
+  error: string | null;
+  generation: number;
+  version: string | null;
+  sections: { title: string; items: { name: string; message: string }[] }[];
+}
+
 export interface AppState {
+  health: HealthState | null;
   hub: HubState | null;
   dialog: DialogState | null;
   newTask: NewTaskState | null;

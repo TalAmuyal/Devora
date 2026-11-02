@@ -23,6 +23,8 @@ final class Surfaces {
 	@ObservationIgnored private(set) var newTask: NewTaskDialogModel?
 	/// The open Settings Hub; nil while it is closed.
 	@ObservationIgnored private(set) var settings: SettingsHubModel?
+	/// The open Health Hub; nil while it is closed.
+	@ObservationIgnored private(set) var health: HealthHubModel?
 	/// The open Add Repo dialog; nil while none is.
 	@ObservationIgnored private(set) var addRepo: AddRepoDialogModel?
 	/// The open Clone Repo dialog; nil while none is.
@@ -111,6 +113,10 @@ final class Surfaces {
 		model.openSettings = { [unowned self] opening in
 			closeHubMenu()
 			openSettingsHub(opening)
+		}
+		model.openHealth = { [unowned self] in
+			closeHubMenu()
+			openHealthHub()
 		}
 		model.addRepo = { [unowned self, unowned model] workspace in
 			closeHubMenu()
@@ -294,6 +300,21 @@ final class Surfaces {
 		}
 		settings = model
 		model.load()
+	}
+
+	/// Runs Health on a page above the Workspace Hub and cancels it on dismissal.
+	private func openHealthHub() {
+		guard windowStack.find(HealthHubModel.layerName) == nil else { return }
+		let model = HealthHubModel(store: store)
+		var spec = pageLayer(LayerSpec(name: HealthHubModel.layerName) { HealthHubView(model: model) })
+		spec.onKey = model.handleKey
+		spec.onCleanup = { [unowned self] in
+			model.close()
+			if health === model { health = nil }
+		}
+		windowStack.push(spec)
+		health = model
+		model.rerun()
 	}
 
 	/// The hub's shortcuts on a page of their own; `?` closes it as it opened it, and the hub's keys reach nothing meanwhile.

@@ -1,0 +1,72 @@
+{
+  "version": "0.0.0-test",
+  "config": {
+    "path": "/fixture/config",
+    "found": true
+  },
+  "completion": {
+    "path": "/fixture/completion",
+    "found": false,
+    "fixHint": "debi completion zsh > ~/.zsh/completions/_debi"
+  },
+  "required": [
+    {
+      "name": "claude",
+      "found": true,
+      "version": "fixture-version",
+      "path": "/fixture/bin/claude"
+    },
+    {
+      "name": "git",
+      "found": true,
+      "version": "fixture-version",
+      "path": "/fixture/bin/git"
+    },
+    {
+      "name": "zsh",
+      "found": true,
+      "version": "fixture-version",
+      "path": "/fixture/bin/zsh"
+    }
+  ],
+  "optional": [
+    {
+      "name": "nvim",
+      "found": true,
+      "version": "fixture-version",
+      "path": "/fixture/bin/nvim"
+    },
+    {
+      "name": "mise",
+      "found": true,
+      "version": "fixture-version",
+      "path": "/fixture/bin/mise"
+    },
+    {
+      "name": "gh",
+      "found": true,
+      "version": "fixture-version",
+      "path": "/fixture/bin/gh"
+    }
+  ],
+  "credentials": [
+    {
+      "name": "GitHub",
+      "status": "ok",
+      "message": "Fixture credential status"
+    },
+    {
+      "name": "task-tracker",
+      "status": "info",
+      "message": "Fixture credential status"
+    }
+  ],
+  "summary": {
+    "requiredMet": 3,
+    "requiredTotal": 3,
+    "optionalMet": 3,
+    "optionalTotal": 3,
+    "credentialsMet": 1,
+    "credentialsTotal": 1
+  }
+}

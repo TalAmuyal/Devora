@@ -660,10 +660,25 @@ final class TestBridge {
 		] as [String: Any]
 	}
 
+	private func healthState() -> Any {
+		guard let health = surfaces.health else { return NSNull() }
+		let report = health.report
+		return [
+			"loading": health.loading,
+			"error": health.error ?? NSNull(),
+			"generation": health.generation,
+			"version": report?.version ?? NSNull(),
+			"sections": report?.sections.map { section in
+				["title": section.title, "items": section.items.map { ["name": $0.name, "message": $0.message] }]
+			} ?? [],
+		] as [String: Any]
+	}
+
 	private func state() -> [String: Any] {
 		let window = store.app.window
 		return [
 			"hub": hubState(),
+			"health": healthState(),
 			"dialog": dialogState(),
 			"newTask": newTaskState(),
 			"addRepo": addRepoState(),

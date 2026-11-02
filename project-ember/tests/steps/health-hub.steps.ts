@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import assert from 'node:assert';
 import { When, Then } from '@cucumber/cucumber';
 import { EmberWorld } from '../support/world';
@@ -52,4 +54,15 @@ Then('the Health Hub should show a version', async function (this: EmberWorld) {
     `return document.querySelector('.health-version-pill')?.textContent ?? ''`,
   )) as string;
   assert.ok(version.length > 0, 'expected a non-empty version pill');
+});
+
+When('the health fixture version changes to {string}', function (this: EmberWorld, version: string) {
+  const fixture = path.join(path.dirname(this.testConfigPath), 'health-report.json');
+  const report = JSON.parse(fs.readFileSync(fixture, 'utf8'));
+  report.version = version;
+  fs.writeFileSync(fixture, JSON.stringify(report));
+});
+
+Then('the Health Hub should eventually show version {string}', async function (this: EmberWorld, version: string) {
+  await this.driver.pollFor(`return document.querySelector('.health-version-pill')?.textContent?.includes(${JSON.stringify(version)}) ?? false`, true, 10_000);
 });

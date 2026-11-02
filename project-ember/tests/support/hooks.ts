@@ -38,7 +38,7 @@ function findAppBinary(): string {
       console.warn(
         `EMBER_E2E_PREBUILT=1 -- testing ${bundle.appDir} as-is (freshness and completeness not verified)`,
       );
-      return bundle.binaryPath;
+      return fs.realpathSync(bundle.binaryPath);
     }
     const builtFingerprint = readBundleFingerprint(bundle.resourcesDir);
     const currentFingerprint = computeCurrentFingerprint();
@@ -52,7 +52,7 @@ function findAppBinary(): string {
     }
     assertBundleComplete(bundle.resourcesDir);
     console.log(`Testing ${bundle.appDir} (fingerprint ${currentFingerprint.slice(0, 12)}…)`);
-    return bundle.binaryPath;
+    return fs.realpathSync(bundle.binaryPath);
   }
 
   const rawBinary = findRawBinary();
@@ -135,6 +135,7 @@ BeforeAll(async function () {
     env: {
       ...baseEnv,
       DEVORA_TEST_MODE: '1',
+      DEVORA_TEST_HEALTH_FIXTURE: path.join(testConfigDir!, 'health-report.json'),
       ANTHROPIC_BASE_URL: `http://127.0.0.1:${fakeClaudeServer.getPort()}`,
       ANTHROPIC_API_KEY: 'sk-ant-fake-key-for-bdd-tests',
       DEVORA_CONFIG_PATH: testConfigPath,
@@ -206,7 +207,13 @@ AfterStep(async function (this: EmberWorld, { result, pickle, pickleStep }) {
   await captureFailure(this.driver, `${pickle.name}--${pickleStep.text}`);
 });
 
-Before(async function (this: EmberWorld) {
+Before(async function (this: EmberWorld, scenario) {
+  const healthFixture = path.join(testConfigDir!, 'health-report.json');
+  if (scenario.pickle.tags.some((tag) => tag.name === '@real-health')) {
+    fs.rmSync(healthFixture, { force: true });
+  } else {
+    fs.copyFileSync(path.resolve(import.meta.dirname, '../../../acceptance/fixtures/health-report.json'), healthFixture);
+  }
   this.driver = new AppDriver(testHarnessPort!, ipcPort!);
   this.testConfigPath = testConfigPath!;
 });

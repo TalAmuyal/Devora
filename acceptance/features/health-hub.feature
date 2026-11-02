@@ -4,9 +4,10 @@ Feature: Health Hub
   It opens from the Command Palette and from the Workspace Hub.
 
   Background:
-    Given Ember is running
+    Given Devora is running with no sessions open
 
-  Scenario: Open the Health Hub from the Command Palette
+  @ember-only @real-health
+  Scenario: Open the Health Hub from the Command Palette with a real health check
     Given a profile "Work" with 1 active workspaces
     And the Command Palette is open
     When the user filters commands by "health"
@@ -15,10 +16,6 @@ Feature: Health Hub
     And the Health Hub finishes loading
     Then the Health Hub should be visible
     And the Health Hub should show the "Required dependencies" section
-    And the Health Hub should show the "Credentials" section
-    And the Health Hub should show the "Configuration" section
-    And the Health Hub should report the config file as found
-    And the Health Hub should show a version
 
   Scenario: Open the Health Hub from the Workspace Hub with H
     Given a profile "Work" with 1 active workspaces
@@ -27,6 +24,10 @@ Feature: Health Hub
     And the Health Hub finishes loading
     Then the Health Hub should be visible
     And the Health Hub should show the "Required dependencies" section
+    And the Health Hub should show the "Credentials" section
+    And the Health Hub should show the "Configuration" section
+    And the Health Hub should report the config file as found
+    And the Health Hub should show a version
 
   Scenario: Open the Health Hub from the Workspace Hub menu
     Given a profile "Work" with 1 active workspaces
@@ -35,3 +36,12 @@ Feature: Health Hub
     And the Health Hub finishes loading
     Then the Health Hub should be visible
     And the Health Hub should show the "Required dependencies" section
+
+  Scenario: Re-run the health check
+    Given a profile "Work" with 1 active workspaces
+    And the Workspace Hub is open
+    When the user presses "H"
+    And the Health Hub finishes loading
+    When the health fixture version changes to "0.0.1-test"
+    And the user presses "r"
+    Then the Health Hub should eventually show version "0.0.1-test"

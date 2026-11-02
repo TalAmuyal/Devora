@@ -7,59 +7,39 @@ const invokeMock = vi.mocked(invoke);
 
 const flush = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
 
+type HealthState = 'ok' | 'warn' | 'error' | 'info';
 interface ReportShape {
   version: string;
-  config: { path: string; found: boolean; fixHint?: string };
-  completion: { path: string; found: boolean; fixHint?: string };
-  required: Array<{ name: string; found: boolean; version: string; path: string }>;
-  optional: Array<{ name: string; found: boolean; version: string; path: string }>;
-  credentials: Array<{ name: string; status: string; message: string; fixHint?: string }>;
-  summary: {
-    requiredMet: number;
-    requiredTotal: number;
-    optionalMet: number;
-    optionalTotal: number;
-    credentialsMet: number;
-    credentialsTotal: number;
-  };
+  overallState: HealthState;
+  overallLabel: string;
+  tiles: { label: string; met: number; total: number; state: HealthState }[];
+  sections: { title: string; count: string | null; state: HealthState; items: { name: string; state: HealthState; message: string; version: string | null; path: string | null; fixHint: string | null }[] }[];
 }
 
 function baseReport(): ReportShape {
   return {
-    version: '0.42.0',
-    config: { path: '/home/u/.config/devora/config.json', found: true },
-    completion: {
-      path: '/home/u/.zsh/completions/_debi',
-      found: false,
-      fixHint: 'debi completion zsh > ~/.zsh/completions/_debi',
-    },
-    required: [
-      { name: 'claude', found: true, version: '2.1.4', path: '/u/bin/claude' },
-      { name: 'git', found: true, version: '2.45', path: '/usr/bin/git' },
-      { name: 'zsh', found: true, version: '5.9', path: '/bin/zsh' },
+    version: '0.42.0', overallState: 'warn', overallLabel: 'Issues found',
+    tiles: [
+      { label: 'Required', met: 3, total: 3, state: 'ok' },
+      { label: 'Optional', met: 2, total: 3, state: 'warn' },
+      { label: 'Credentials', met: 0, total: 1, state: 'warn' },
+      { label: 'Setup', met: 1, total: 2, state: 'warn' },
     ],
-    optional: [
-      { name: 'nvim', found: true, version: '0.10', path: '/u/bin/nvim' },
-      { name: 'mise', found: true, version: '2024', path: '/u/bin/mise' },
-      { name: 'gh', found: false, version: '', path: '' },
+    sections: [
+      { title: 'Required dependencies', count: '3 / 3', state: 'ok', items: [] },
+      { title: 'Optional dependencies', count: '2 / 3', state: 'warn', items: [
+        { name: 'gh', state: 'warn', message: 'not found', version: null, path: null, fixHint: null },
+      ] },
+      { title: 'Credentials', count: '0 / 1', state: 'warn', items: [] },
+      { title: 'Configuration', count: null, state: 'ok', items: [
+        { name: 'zsh completion', state: 'warn', message: 'not installed', version: null, path: null, fixHint: 'debi completion zsh > ~/.zsh/completions/_debi' },
+      ] },
     ],
-    credentials: [
-      { name: 'GitHub', status: 'unchecked', message: 'gh not detected' },
-      { name: 'task-tracker', status: 'info', message: 'not configured (optional)' },
-    ],
-    summary: {
-      requiredMet: 3,
-      requiredTotal: 3,
-      optionalMet: 2,
-      optionalTotal: 3,
-      credentialsMet: 0,
-      credentialsTotal: 1,
-    },
   };
 }
 
 function resolveWith(report: ReportShape): void {
-  invokeMock.mockResolvedValue(JSON.stringify(report));
+  invokeMock.mockResolvedValue(report);
 }
 
 let hub: HealthHub;
@@ -125,17 +105,8 @@ describe('HealthHub', () => {
 
   it('shows "Healthy" only when nothing is missing', async () => {
     const report = baseReport();
-    report.optional = report.optional.map((d) => ({ ...d, found: true, version: '1', path: '/x' }));
-    report.completion = { path: '/c', found: true };
-    report.credentials = [{ name: 'GitHub', status: 'ok', message: 'Logged in' }];
-    report.summary = {
-      requiredMet: 3,
-      requiredTotal: 3,
-      optionalMet: 3,
-      optionalTotal: 3,
-      credentialsMet: 1,
-      credentialsTotal: 1,
-    };
+    report.overallState = 'ok';
+    report.overallLabel = 'Healthy';
     resolveWith(report);
     const el = await mount();
     const pill = el.querySelector('.health-overall-pill')!;
@@ -152,8 +123,8 @@ describe('HealthHub', () => {
 
   it('shows "Missing required" when a required dependency is missing', async () => {
     const report = baseReport();
-    report.required[1] = { name: 'git', found: false, version: '', path: '' };
-    report.summary.requiredMet = 2;
+    report.overallState = 'error';
+    report.overallLabel = 'Missing required';
     resolveWith(report);
     const el = await mount();
     const pill = el.querySelector('.health-overall-pill')!;
@@ -176,16 +147,9 @@ describe('HealthHub', () => {
 
   it('copies a fix hint to the clipboard when the copy button is clicked', async () => {
     const report = baseReport();
-    report.credentials = [
-      {
-        name: 'GitHub',
-        status: 'failed',
-        message: 'no token stored (run: gh auth login)',
-        fixHint: 'gh auth login',
-      },
+    report.sections[2].items = [
+      { name: 'GitHub', state: 'error', message: 'no token stored', version: null, path: null, fixHint: 'gh auth login' },
     ];
-    report.summary.credentialsMet = 0;
-    report.summary.credentialsTotal = 1;
     resolveWith(report);
     const el = await mount();
 
@@ -204,10 +168,10 @@ describe('HealthHub', () => {
     expect(el.querySelector('.health-error')?.textContent).toContain('Could not run the health check');
   });
 
-  it('shows a parse-error state when the JSON is malformed', async () => {
-    invokeMock.mockResolvedValue('not json{');
+  it('shows the executable detail when the report cannot be parsed', async () => {
+    invokeMock.mockRejectedValue(new Error('/fixture/debi output did not match'));
     const el = await mount();
-    expect(el.querySelector('.health-error')?.textContent).toContain('Could not parse');
+    expect(el.querySelector('.health-error')?.textContent).toContain('/fixture/debi output did not match');
   });
 
   it('re-runs the check when "r" is pressed, consuming the key', async () => {

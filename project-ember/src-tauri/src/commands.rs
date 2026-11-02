@@ -331,9 +331,13 @@ pub fn clone_repo_into_profile(
 pub fn run_health_check(
     app: tauri::AppHandle,
     profile_path: Option<String>,
-) -> Result<String, String> {
+) -> Result<health::HealthReport, String> {
     let resource_dir = app.path().resource_dir().ok();
-    health::run(resource_dir.as_deref(), profile_path)
+    health::run_report(
+        resource_dir.as_deref(),
+        profile_path,
+        &health::HealthCancellation::new(),
+    )
 }
 
 #[tauri::command]

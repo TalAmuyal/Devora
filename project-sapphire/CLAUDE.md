@@ -48,7 +48,7 @@ Ember's home page (`Sources/AppShell/WorkspaceHub/`): the selected profile's wor
 	An open dropdown is a popup layer (`Surfaces.toggleHubMenu`) whose content is empty: the hub draws the panel under its trigger, as Ember's caller-mounted popup, with a click anywhere else closing it.
 	Escape and `q` close only the dropdown; any other key closes it and reaches the hub.
 - `P`, the profile dropdown's "Manage Profiles…" and the burger menu's "Settings" open the Settings Hub, and "New Profile…" opens it on its New Profile row (see Settings Hub).
-- What leads to a surface Sapphire doesn't have yet is shown disabled, with a "Not in Sapphire yet" tooltip: "Health" (the Health Hub); its key (`H`) does nothing, and the cheatsheet leaves it out.
+- `H` and the burger menu open the Health Hub as a window-stack page. It runs the shared core health check off the main actor, cancels it on close or re-run (`r`), supports Vim scrolling, and copies fix hints with a toast.
 
 ## Profiles and the first run
 
