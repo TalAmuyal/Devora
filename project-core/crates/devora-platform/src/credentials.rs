@@ -6,9 +6,68 @@
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use std::io::Write;
 use std::process::{Command, Stdio};
+use std::sync::{Arc, Mutex, OnceLock};
 
 const SECURITY_BIN: &str = "/usr/bin/security";
 const ASANA_SERVICE: &str = "devora-asana";
+
+/// The shared user's credential, independent of which profile's settings card is open.
+/// UI hosts can inject a store; tests use memory so they never inspect or mutate the login keychain.
+pub trait TokenStore: Send + Sync {
+    fn get(&self) -> Result<Option<String>, String>;
+    fn set(&self, token: &str) -> Result<(), String>;
+    fn clear(&self) -> Result<(), String>;
+}
+
+#[derive(Default)]
+pub struct MemoryTokenStore(Mutex<Option<String>>);
+
+impl TokenStore for MemoryTokenStore {
+    fn get(&self) -> Result<Option<String>, String> {
+        Ok(self.0.lock().map_err(|e| e.to_string())?.clone())
+    }
+
+    fn set(&self, token: &str) -> Result<(), String> {
+        let token = token.trim();
+        if token.is_empty() {
+            return Err("the token must not be empty".into());
+        }
+        *self.0.lock().map_err(|e| e.to_string())? = Some(token.into());
+        Ok(())
+    }
+
+    fn clear(&self) -> Result<(), String> {
+        *self.0.lock().map_err(|e| e.to_string())? = None;
+        Ok(())
+    }
+}
+
+struct KeychainTokenStore;
+
+impl TokenStore for KeychainTokenStore {
+    fn get(&self) -> Result<Option<String>, String> {
+        read_keychain_token()
+    }
+    fn set(&self, token: &str) -> Result<(), String> {
+        write_keychain_token(token)
+    }
+    fn clear(&self) -> Result<(), String> {
+        remove_keychain_token()
+    }
+}
+
+/// One store for the process, so both UI scopes see the same token.
+/// Both Ember and Sapphire acceptance harnesses already launch with `DEVORA_TEST_MODE=1`.
+pub fn token_store() -> Arc<dyn TokenStore> {
+    static STORE: OnceLock<Arc<dyn TokenStore>> = OnceLock::new();
+    Arc::clone(STORE.get_or_init(|| {
+        if cfg!(test) || std::env::var("DEVORA_TEST_MODE").as_deref() == Ok("1") {
+            Arc::new(MemoryTokenStore::default())
+        } else {
+            Arc::new(KeychainTokenStore)
+        }
+    }))
+}
 
 /// `go-keyring` base64-encodes secrets behind this prefix so multi-line / non-ASCII values survive the keychain round-trip; we write and read the same format for full interop.
 const BASE64_PREFIX: &str = "go-keyring-base64:";
@@ -73,6 +132,10 @@ fn decode_hex(s: &str) -> Result<Vec<u8>, String> {
 
 /// Returns the stored Asana token, or `None` when no token is stored.
 pub fn get_asana_token() -> Result<Option<String>, String> {
+    token_store().get()
+}
+
+fn read_keychain_token() -> Result<Option<String>, String> {
     let account = account()?;
     let out = Command::new(SECURITY_BIN)
         .args([
@@ -106,6 +169,10 @@ pub fn asana_token_present() -> Result<bool, String> {
 /// Stores (or replaces) the Asana token in the keychain.
 /// Mirrors `go-keyring`'s `Set`: feed the `add-generic-password` command on stdin (so the secret never appears in the process list) and store it base64-encoded behind the well-known prefix.
 pub fn set_asana_token(token: &str) -> Result<(), String> {
+    token_store().set(token)
+}
+
+fn write_keychain_token(token: &str) -> Result<(), String> {
     let token = token.trim();
     if token.is_empty() {
         return Err("the token must not be empty".to_string());
@@ -148,6 +215,10 @@ pub fn set_asana_token(token: &str) -> Result<(), String> {
 
 /// Removes the stored Asana token. Idempotent: succeeds even when no token is stored.
 pub fn clear_asana_token() -> Result<(), String> {
+    token_store().clear()
+}
+
+fn remove_keychain_token() -> Result<(), String> {
     let account = account()?;
     let out = Command::new(SECURITY_BIN)
         .args([
@@ -173,6 +244,21 @@ pub fn clear_asana_token() -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_memory_store_trims_replaces_and_clears_without_system_commands() {
+        let store = MemoryTokenStore::default();
+        assert_eq!(store.get().unwrap(), None);
+        store.set("  first-token  ").unwrap();
+        assert_eq!(store.get().unwrap().as_deref(), Some("first-token"));
+        assert!(store.set(" \n ").is_err());
+        assert_eq!(store.get().unwrap().as_deref(), Some("first-token"));
+        store.set("replacement").unwrap();
+        assert_eq!(store.get().unwrap().as_deref(), Some("replacement"));
+        store.clear().unwrap();
+        store.clear().unwrap();
+        assert_eq!(store.get().unwrap(), None);
+    }
 
     #[test]
     fn test_decode_secret_base64_prefix() {

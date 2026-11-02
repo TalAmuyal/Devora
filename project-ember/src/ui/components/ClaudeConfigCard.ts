@@ -14,21 +14,6 @@ import { createSettingsCard } from './SettingsCard';
 import { createSegmentedControl } from './SegmentedControl';
 import { createCommitInput } from './CommitInput';
 
-/** Supported Claude Code effort levels, lowest → highest. Mirrors `CLAUDE_EFFORT_LEVELS` in workspace.rs. */
-const EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
-
-const EFFORT_LEVELS_DESC = [...EFFORT_LEVELS].reverse();
-
-/** Suggestions only — any model id can be typed (a new model needs no Devora release). */
-const MODEL_SUGGESTIONS = [
-  'claude-fable-5',
-  'claude-opus-4-8',
-  'claude-sonnet-5',
-];
-
-/** Suggestions only — any permission mode can be typed. Omits `bypassPermissions`/`dontAsk` (still typeable) and `default` (the "None" segment already yields Claude Code's built-in default). */
-const PERMISSION_MODE_SUGGESTIONS = ['plan', 'acceptEdits', 'auto'];
-
 /** The model alias imposed while the Default model toggle is On. Mirrors the `default-model` default in workspace.rs. */
 const DEFAULT_MODEL_ALIAS = 'opusplan';
 
@@ -46,20 +31,20 @@ interface RowSpec {
   label: string;
   hint: string; // the env var / flag it drives, shown muted
   kind: 'combo' | 'effort' | 'toggle';
-  suggestions?: string[]; // combo only: the chips shown under a Custom value
   placeholder?: string; // combo only: the free-text input placeholder
 }
 
 const ROWS: RowSpec[] = [
-  { key: 'opus-model', label: 'Opus tier', hint: 'ANTHROPIC_DEFAULT_OPUS_MODEL', kind: 'combo', suggestions: MODEL_SUGGESTIONS, placeholder: 'model id, then Enter' },
-  { key: 'sonnet-model', label: 'Sonnet tier', hint: 'ANTHROPIC_DEFAULT_SONNET_MODEL', kind: 'combo', suggestions: MODEL_SUGGESTIONS, placeholder: 'model id, then Enter' },
-  { key: 'haiku-model', label: 'Haiku tier', hint: 'ANTHROPIC_DEFAULT_HAIKU_MODEL', kind: 'combo', suggestions: MODEL_SUGGESTIONS, placeholder: 'model id, then Enter' },
+  { key: 'opus-model', label: 'Opus tier', hint: 'ANTHROPIC_DEFAULT_OPUS_MODEL', kind: 'combo', placeholder: 'model id, then Enter' },
+  { key: 'sonnet-model', label: 'Sonnet tier', hint: 'ANTHROPIC_DEFAULT_SONNET_MODEL', kind: 'combo', placeholder: 'model id, then Enter' },
+  { key: 'haiku-model', label: 'Haiku tier', hint: 'ANTHROPIC_DEFAULT_HAIKU_MODEL', kind: 'combo', placeholder: 'model id, then Enter' },
   { key: 'effort', label: 'Effort', hint: '--effort', kind: 'effort' },
   { key: 'default-model', label: 'Default model', hint: 'ANTHROPIC_MODEL', kind: 'toggle' },
-  { key: 'permission-mode', label: 'Permission mode', hint: '--permission-mode', kind: 'combo', suggestions: PERMISSION_MODE_SUGGESTIONS, placeholder: 'permission mode, then Enter' },
+  { key: 'permission-mode', label: 'Permission mode', hint: '--permission-mode', kind: 'combo', placeholder: 'permission mode, then Enter' },
 ];
 
 interface ClaudeSettings {
+  choices: { effort_levels: string[]; model_suggestions: string[]; permission_mode_suggestions: string[] };
   /** Raw value stored at this scope: a string, `null` (None), or the key is absent. */
   stored: Partial<Record<SettingKey, string | null>>;
   /** Effective value after full resolution: a string, or `null` meaning None. */
@@ -78,7 +63,7 @@ export function createClaudeConfigCard(options: ClaudeConfigCardOptions): HTMLEl
     getCommand: 'get_claude_settings',
     setCommand: 'set_claude_setting',
     profilePath: options.profilePath,
-    initial: { stored: {}, resolved: {} as Record<SettingKey, string | null> },
+    initial: { stored: {}, resolved: {} as Record<SettingKey, string | null>, choices: { effort_levels: [], model_suggestions: [], permission_mode_suggestions: [] } },
     render: () => render(),
     afterLoad: (settings, ed) => {
       for (const row of ROWS) {
@@ -182,13 +167,14 @@ export function createClaudeConfigCard(options: ClaudeConfigCardOptions): HTMLEl
 
   const renderEffortControl = (): HTMLElement => {
     const mode = displayMode('effort');
-    // In "custom" mode this is the raw stored level; a hand-edited config can pin a value outside EFFORT_LEVELS, in which case no segment matches.
+    // A hand-edited off-list effort has no matching segment but is still shown as a hint.
+    const levels = editor.settings.choices?.effort_levels ?? [];
     const stored = editor.getDraft('effort');
 
     const segmented = createSegmentedControl<string>({
       items: [
         { key: 'default', label: 'Default' },
-        ...EFFORT_LEVELS_DESC.map((level) => ({ key: level, label: level })),
+        ...[...levels].reverse().map((level) => ({ key: level, label: level })),
         { key: 'none', label: 'None' },
       ],
       activeKey: mode === 'custom' ? (stored ?? '') : mode,
@@ -198,7 +184,7 @@ export function createClaudeConfigCard(options: ClaudeConfigCardOptions): HTMLEl
     let value: HTMLElement | null = null;
     if (mode !== 'custom') {
       value = overrideHint('effort', mode);
-    } else if (stored && !EFFORT_LEVELS.includes(stored as (typeof EFFORT_LEVELS)[number])) {
+    } else if (stored && !levels.includes(stored)) {
       // Surface an off-list level (from a hand-edited config), since no segment is highlighted for it.
       value = mutedHint(`→ ${stored}`);
     }
@@ -230,7 +216,9 @@ export function createClaudeConfigCard(options: ClaudeConfigCardOptions): HTMLEl
 
     const chips = document.createElement('div');
     chips.className = 'config-chips';
-    for (const suggestion of row.suggestions ?? []) {
+    const choices = editor.settings.choices;
+    const suggestions = row.key === 'permission-mode' ? choices?.permission_mode_suggestions : choices?.model_suggestions;
+    for (const suggestion of suggestions ?? []) {
       const chip = document.createElement('button');
       chip.className = 'config-chip';
       chip.textContent = suggestion;

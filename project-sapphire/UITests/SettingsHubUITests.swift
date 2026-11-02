@@ -57,6 +57,44 @@ final class SettingsHubUITests: XCTestCase {
 	}
 
 	@MainActor
+	func testTypingACustomClaudeModelCommitsToTheSelectedProfile() throws {
+		let config = try writeConfigWithAProfile(in: scratch)
+		app = XCUIApplication()
+		app.launchEnvironment["DEVORA_CONFIG_PATH"] = config.path
+		app.launchEnvironment["DEVORA_STATE_DIR"] = scratch.appending(path: "state").path
+		app.launchEnvironment["DEVORA_TEST_MODE"] = "1"
+		app.launch()
+		addTeardownBlock { @MainActor [app] in app?.terminate() }
+		XCTAssertTrue(app.hubHeader.waitForExistence(timeout: 10))
+		app.typeKey("p", modifierFlags: .shift)
+		let segments = element("claude-segments-opus-model")
+		XCTAssertTrue(segments.waitForExistence(timeout: 5), app.debugDescription)
+		segments.radioButtons["Custom"].click()
+		let input = element("claude-input-opus-model")
+		XCTAssertTrue(input.waitForExistence(timeout: 5))
+		XCTAssertTrue(waitFor(input, "hasKeyboardFocus == true"))
+		app.typeKey("a", modifierFlags: .command)
+		app.typeText("custom-jdk-model")
+		app.typeKey(.return, modifierFlags: [])
+		let profileConfig = scratch.appending(path: "Work/config.json")
+		let saved = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+			guard let data = try? Data(contentsOf: profileConfig),
+			      let config = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+			else { return false }
+			return (config["claude"] as? [String: String])?["opus-model"] == "custom-jdk-model"
+		}, object: nil)
+		XCTAssertEqual(XCTWaiter.wait(for: [saved], timeout: 5), .completed)
+		XCTAssertTrue(waitFor(input, "value == 'custom-jdk-model'"))
+		XCTAssertFalse(element("confirmation-dialog").exists, "j and d typed into the model id stay in the field")
+		let user = try JSONSerialization.jsonObject(with: Data(contentsOf: config)) as? [String: Any]
+		XCTAssertNil(user?["claude"], "editing a profile leaves User Defaults alone")
+		let screenshot = XCTAttachment(screenshot: app.screenshot())
+		screenshot.name = "Claude Launch Settings — custom model"
+		screenshot.lifetime = .keepAlways
+		add(screenshot)
+	}
+
+	@MainActor
 	private func waitFor(_ element: XCUIElement, _ predicate: String) -> Bool {
 		XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: predicate), object: element)], timeout: 5) == .completed
 	}

@@ -1,12 +1,12 @@
 @claude-config
 Feature: Claude launch configuration
-  Devora-Ember resolves the Claude Code default model, model tiers, effort level, and permission mode from user/profile config (profile → user → Devora default, per key) and injects them into session shells as environment variables: the ANTHROPIC_* vars (default model + model tiers) are read by Claude Code natively, while the DEVORA_CCC_* vars (effort, permission mode) are turned by `ccc` into `--effort` / `--permission-mode` flags.
+  Devora resolves the Claude Code default model, model tiers, effort level, and permission mode from user/profile config (profile → user → Devora default, per key) and injects them into session shells as environment variables: the ANTHROPIC_* vars (default model + model tiers) are read by Claude Code natively, while the DEVORA_CCC_* vars (effort, permission mode) are turned by `ccc` into `--effort` / `--permission-mode` flags.
   A setting can be a value, None (omit the var so Claude Code uses its default), or unset (fall through).
   Values use a `:value:` sentinel so an omitted var shows as `::`.
   The settings are edited in the Settings Hub through the "Claude Launch Settings" card.
 
   Background:
-    Given Ember is running
+    Given Devora is running with no sessions open
 
   Scenario: A configured model tier is exported to the session shell
     Given the global config sets the Claude "opus-model" to "claude-fable-5"

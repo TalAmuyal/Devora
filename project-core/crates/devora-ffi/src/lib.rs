@@ -11,6 +11,8 @@ use std::sync::Arc;
 use devora_core::{config, state, theme, workspace};
 
 mod app_state;
+mod asana_credentials;
+mod claude_settings;
 mod creation;
 mod log;
 mod profiles;
@@ -139,6 +141,7 @@ pub struct DevoraCore {
     state: state::Store,
     log: Arc<AppLog>,
     creations: creation::Creations,
+    credentials: Arc<dyn devora_core::credentials::TokenStore>,
 }
 
 #[uniffi::export]
@@ -170,6 +173,7 @@ impl DevoraCore {
             state,
             log,
             creations: Default::default(),
+            credentials: devora_core::credentials::token_store(),
         }))
     }
 

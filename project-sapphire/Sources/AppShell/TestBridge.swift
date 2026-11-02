@@ -359,6 +359,56 @@ final class TestBridge {
 			throw BridgeError(status: 409, "the focused row's settings aren't loaded")
 		}
 		let key = body["key"] as? String
+		if key == "asana-token" {
+			guard scope.usesAsana, let token = scope.asana else { throw BridgeError(status: 404, "the Asana token row isn't shown") }
+			switch action {
+			case "type":
+				guard let value = body["value"] as? String else { throw BridgeError(status: 400, "missing value") }
+				token.draft = value
+			case "save", "commit":
+				guard token.canSave else { throw BridgeError(status: 409, "the token has no value to save") }
+				token.saveToken()
+			case "clear":
+				guard token.isSet == true else { throw BridgeError(status: 409, "the token isn't set") }
+				token.clearToken()
+			default: throw BridgeError(status: 400, "unknown token action")
+			}
+			return
+		}
+		if let key, ["opus-model", "sonnet-model", "haiku-model", "effort", "default-model", "permission-mode"].contains(key) {
+			guard let claude = scope.claude, claude.settings != nil, let choices = claude.choices else { throw BridgeError(status: 409, "Claude settings aren't loaded") }
+			let label = body["label"] as? String
+			switch action {
+			case "selectSegment":
+				guard let label else { throw BridgeError(status: 400, "missing segment label") }
+				if key == "effort" {
+					guard (["Default", "None"] + choices.effortLevels).contains(label) else { throw BridgeError(status: 404, "no effort segment \(label)") }
+					claude.selectEffort(label)
+				} else if key == "default-model" {
+					guard ["On", "Off"].contains(label) else { throw BridgeError(status: 404, "no default-model segment \(label)") }
+					claude.setDefaultModel(label == "On")
+				} else {
+					guard let mode = ClaudeMode.allCases.first(where: { $0.label == label }) else { throw BridgeError(status: 404, "no Claude segment \(label)") }
+					claude.select(mode, key: key)
+				}
+			case "type", "commit", "save", "suggest":
+				guard key != "effort", key != "default-model", claude.mode(key) == .custom else { throw BridgeError(status: 409, "the Claude input isn't shown") }
+				if action == "type" {
+					guard let value = body["value"] as? String else { throw BridgeError(status: 400, "missing value") }
+					claude.edit(key, value)
+				} else {
+					if action == "save", !claude.showsSave(key) { throw BridgeError(status: 409, "the Claude Save button isn't shown") }
+					if action == "suggest" {
+						let suggestions = key == "permission-mode" ? choices.permissionModeSuggestions : choices.modelSuggestions
+						guard let label, suggestions.contains(label) else { throw BridgeError(status: 404, "no matching suggestion") }
+						claude.edit(key, label)
+					}
+					claude.commit(key)
+				}
+			default: throw BridgeError(status: 400, "unknown Claude setting action")
+			}
+			return
+		}
 		guard let field = ConfigCard.all.flatMap(\.fields).first(where: { $0.key == key }), scope.isVisible(field) else {
 			throw BridgeError(status: 404, "no setting \(key ?? "nil") is shown")
 		}
@@ -451,6 +501,26 @@ final class TestBridge {
 				shown["segment"] = scope.chosenOption(options, for: field.key)?.label ?? NSNull()
 			}
 			return shown
+		}
+		if let claude = scope.claude {
+			state["claude"] = [
+				"loaded": claude.settings != nil && claude.choices != nil,
+				"effort": claude.effort,
+				"effortLevels": Array((claude.choices?.effortLevels ?? []).reversed()),
+				"defaultModelOn": claude.defaultModelOn,
+				"fields": ["opus-model", "sonnet-model", "haiku-model", "permission-mode"].map { key -> [String: Any] in
+					let mode = claude.mode(key)
+					return [
+						"key": key, "segment": mode.label, "hint": claude.inheritedHint(key),
+						"input": mode == .custom ? claude.input(key) : NSNull(),
+						"showsSave": mode == .custom && claude.showsSave(key),
+						"suggestions": (key == "permission-mode" ? claude.choices?.permissionModeSuggestions : claude.choices?.modelSuggestions) ?? [],
+					]
+				},
+			] as [String: Any]
+		}
+		if scope.usesAsana, let token = scope.asana {
+			state["asana"] = ["isSet": token.isSet ?? NSNull(), "canSave": token.canSave, "hasDraft": !token.draft.isEmpty] as [String: Any]
 		}
 		return state
 	}

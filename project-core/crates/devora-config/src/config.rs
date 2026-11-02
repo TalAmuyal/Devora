@@ -170,8 +170,28 @@ const CLAUDE_SETTINGS: [ClaudeSettingSpec; 6] = [
 ];
 
 /// Valid Claude Code effort levels (low → max).
-/// Mirrored in the Ember UI Effort control (`src/ui/components/ClaudeConfigCard.ts`) — keep the two lists in sync.
+/// Exported to both UI clients with the settings choices.
 pub const CLAUDE_EFFORT_LEVELS: [&str; 5] = ["low", "medium", "high", "xhigh", "max"];
+
+/// Suggestions only: launch settings accept any non-blank model id or permission mode.
+pub const CLAUDE_MODEL_SUGGESTIONS: [&str; 3] =
+    ["claude-fable-5", "claude-opus-4-8", "claude-sonnet-5"];
+pub const CLAUDE_PERMISSION_MODE_SUGGESTIONS: [&str; 3] = ["plan", "acceptEdits", "auto"];
+
+#[derive(Serialize)]
+pub struct ClaudeChoices {
+    pub effort_levels: Vec<String>,
+    pub model_suggestions: Vec<String>,
+    pub permission_mode_suggestions: Vec<String>,
+}
+
+pub fn claude_setting_choices() -> ClaudeChoices {
+    ClaudeChoices {
+        effort_levels: CLAUDE_EFFORT_LEVELS.map(str::to_owned).into(),
+        model_suggestions: CLAUDE_MODEL_SUGGESTIONS.map(str::to_owned).into(),
+        permission_mode_suggestions: CLAUDE_PERMISSION_MODE_SUGGESTIONS.map(str::to_owned).into(),
+    }
+}
 
 /// One resolved setting: either a concrete value to apply, or None (impose nothing).
 enum ResolvedSetting {
@@ -183,10 +203,12 @@ enum ResolvedSetting {
 /// Both maps are keyed by the kebab config key.
 #[derive(Serialize)]
 pub struct ClaudeSettingsResponse {
+    /// Rendering metadata shared by Ember and Sapphire; suggestions never constrain custom values.
+    pub choices: ClaudeChoices,
     /// Per key: the raw stored value at this scope — a string, JSON `null`, or the key is omitted entirely (meaning "Default" / not set at this scope).
-    stored: serde_json::Map<String, Value>,
+    pub stored: serde_json::Map<String, Value>,
     /// Per key (all settings always present): the effective resolved value — a string, or JSON `null` meaning None (no override; Claude Code uses its own default).
-    resolved: serde_json::Map<String, Value>,
+    pub resolved: serde_json::Map<String, Value>,
 }
 
 /// Reads a config file, returning `Ok(None)` when it does not exist.
@@ -253,7 +275,15 @@ pub fn claude_launch_env(profile_path: Option<&str>) -> HashMap<String, String> 
 /// Reads the Claude settings for the Settings Hub UI at the given scope (a profile path, or `None` for the user-level/global scope): the raw stored values at that scope plus the effective values after full resolution.
 /// A corrupt config surfaces as an error.
 pub fn read_claude_settings(profile_path: Option<&str>) -> Result<ClaudeSettingsResponse, String> {
-    let user_cfg = read_config_opt(&global_config_path()?)?;
+    read_claude_settings_in(&global_config_path()?, profile_path)
+}
+
+/// Reads one scope against an explicit user config, without changing process-wide environment.
+pub fn read_claude_settings_in(
+    user_config: &Path,
+    profile_path: Option<&str>,
+) -> Result<ClaudeSettingsResponse, String> {
+    let user_cfg = read_config_opt(user_config)?;
     let profile_cfg = match profile_path {
         Some(p) => read_config_opt(&profile_config_path(p))?,
         None => None,
@@ -291,13 +321,28 @@ pub fn read_claude_settings(profile_path: Option<&str>) -> Result<ClaudeSettings
         resolved.insert(spec.key.to_string(), value);
     }
 
-    Ok(ClaudeSettingsResponse { stored, resolved })
+    Ok(ClaudeSettingsResponse {
+        stored,
+        resolved,
+        choices: claude_setting_choices(),
+    })
 }
 
 /// Writes one Claude setting at the given scope, preserving sibling keys.
 /// `state`: `"value"` (store `value` as a string), `"none"` (store JSON null), `"default"` (remove the key so it falls through).
 /// Empty/whitespace values are rejected; effort values are validated against `CLAUDE_EFFORT_LEVELS`.
 pub fn write_claude_setting(
+    profile_path: Option<&str>,
+    key: &str,
+    state: &str,
+    value: Option<&str>,
+) -> Result<(), String> {
+    write_claude_setting_in(&global_config_path()?, profile_path, key, state, value)
+}
+
+/// Writes one scope against an explicit user config, preserving the same validation and resolution as Ember.
+pub fn write_claude_setting_in(
+    user_config: &Path,
     profile_path: Option<&str>,
     key: &str,
     state: &str,
@@ -310,7 +355,7 @@ pub fn write_claude_setting(
 
     let config_path = match profile_path {
         Some(p) => profile_config_path(p),
-        None => global_config_path()?,
+        None => user_config.to_path_buf(),
     };
 
     let mut config =
