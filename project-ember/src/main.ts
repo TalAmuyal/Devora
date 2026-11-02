@@ -62,7 +62,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     onEmptied: () => sessionManager.getActiveSession()?.layers.focusTop(),
   });
 
-  // The single owner of keyboard routing (see `ui/layers/CLAUDE.md`). Install it first, before any other keydown handler.
+  // The single owner of keyboard routing (see `ui/layers/AGENTS.md`). Install it first, before any other keydown handler.
   const router = new LayerRouter({
     windowStack: layers,
     resolveTabStack: () => sessionManager.getActiveSession()?.layers ?? null,

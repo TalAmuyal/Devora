@@ -5,7 +5,7 @@ import Store
 import SwiftUI
 import TerminalKit
 
-/// The window's layer stacks and its key router, wired to the store: the composition root of the layer system (`Sources/Layers/CLAUDE.md`).
+/// The window's layer stacks and its key router, wired to the store: the composition root of the layer system (`Sources/Layers/AGENTS.md`).
 ///
 /// It keeps one stack per tab, for exactly as long as the tab is in the core's state, with the tab's terminal as its bottom layer, under the progress page of a tab creating its workspace.
 @MainActor

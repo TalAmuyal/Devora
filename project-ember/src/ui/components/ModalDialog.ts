@@ -4,7 +4,7 @@
  *
  * A modal owns Escape and Enter here — `onKey` runs before the central editable guard, so a single press cancels/confirms regardless of what holds focus.
  * `q` is intentionally left to the guard: it types inside a focused input and dismisses only when a non-editable element (e.g. a button) holds focus.
- * See `../layers/CLAUDE.md` ("Modals and pages treat Escape oppositely") for why pages take the opposite approach.
+ * See `../layers/AGENTS.md` ("Modals and pages treat Escape oppositely") for why pages take the opposite approach.
  */
 
 import { modalLayer } from '../layers/presets';

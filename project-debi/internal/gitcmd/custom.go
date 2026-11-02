@@ -44,7 +44,7 @@ func runCustom(w io.Writer, c *customCommand, args []string) error {
 	return c.run(w, args)
 }
 
-// requireRepo gates customs whose probes capture output (default branch, symbolic-ref): a missing repo must become a friendly usage error, not a crash log (see project CLAUDE.md "Precondition handling")
+// requireRepo gates customs whose probes capture output (default branch, symbolic-ref): a missing repo must become a friendly usage error, not a crash log (see project AGENTS.md "Precondition handling")
 func requireRepo() error {
 	if err := ensureInRepo(); err != nil {
 		return &BadUsageError{Message: git.NotInRepoMessage}

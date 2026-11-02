@@ -9,7 +9,7 @@ import TerminalKit
 
 /// The acceptance tests' way into the app, as Ember's test harness is: a loopback HTTP server, started only when `DEVORA_TEST_MODE=1`.
 ///
-/// It dispatches the store's commands and reads back the store's state and the terminals' text; the routes are listed in `CLAUDE.md`.
+/// It dispatches the store's commands and reads back the store's state and the terminals' text; the routes are listed in `AGENTS.md`.
 @MainActor
 final class TestBridge {
 	static var isEnabled: Bool { ProcessInfo.processInfo.environment["DEVORA_TEST_MODE"] == "1" }

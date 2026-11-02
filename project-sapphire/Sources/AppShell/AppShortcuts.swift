@@ -2,7 +2,7 @@ import Layers
 import Store
 import TerminalKit
 
-/// An app-wide shortcut: a chord the router runs before any surface sees it (`Sources/Layers/CLAUDE.md` has the availability table).
+/// An app-wide shortcut: a chord the router runs before any surface sees it (`Sources/Layers/AGENTS.md` has the availability table).
 enum AppShortcut: Equatable {
 	case setFontSize(Double)
 	case changeFontSize(by: Double)

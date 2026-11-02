@@ -31,7 +31,7 @@ struct DropdownItem {
 	}
 }
 
-/// A dropdown's open panel; the surface it belongs to draws it, anchored under its trigger, while a popup layer routes its keys (`Sources/Layers/CLAUDE.md`).
+/// A dropdown's open panel; the surface it belongs to draws it, anchored under its trigger, while a popup layer routes its keys (`Sources/Layers/AGENTS.md`).
 struct DropdownPanel: View {
 	let items: [DropdownItem]
 	/// Runs before a row's `select`, which closes the dropdown.

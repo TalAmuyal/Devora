@@ -46,7 +46,7 @@ Nothing else registers a global key listener, and no surface carries a `z-index`
 
 Two shortcuts change deliberately as a result: **`Ctrl+S` opens only** and is never a dismissal, and **`F1` is unconditional** except when the guide is already open.
 
-The current contract — the routing table, shortcut availability, the presets, and when a sub-view needs to be its own layer — is documented where it is implemented; see [`project-ember/src/ui/layers/CLAUDE.md`](../../project-ember/src/ui/layers/CLAUDE.md). This record deliberately does not restate it.
+The current contract — the routing table, shortcut availability, the presets, and when a sub-view needs to be its own layer — is documented where it is implemented; see [`project-ember/src/ui/layers/AGENTS.md`](../../project-ember/src/ui/layers/AGENTS.md). This record deliberately does not restate it.
 
 ## Alternatives considered
 

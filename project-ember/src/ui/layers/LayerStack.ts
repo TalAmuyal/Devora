@@ -17,7 +17,7 @@ interface LayerEntry {
 }
 
 /**
- * An ordered stack of UI surfaces that owns their mounting, focus, and key routing — see `./CLAUDE.md` for the cross-file reference.
+ * An ordered stack of UI surfaces that owns their mounting, focus, and key routing — see `./AGENTS.md` for the cross-file reference.
  *
  * The stack is a mechanism with no domain knowledge and no keyboard listener of its own: `LayerRouter` owns the single listener and calls `route`.
  * There is one stack per tab plus one for the window, which is what decides how far a surface extends.

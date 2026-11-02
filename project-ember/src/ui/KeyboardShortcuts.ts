@@ -51,7 +51,7 @@ export interface KeyboardShortcutsDeps {
 }
 
 /**
- * The app-wide shortcut *policy*, and a participant in the layer system — see `./layers/CLAUDE.md` for the routing order and the availability table this file implements.
+ * The app-wide shortcut *policy*, and a participant in the layer system — see `./layers/AGENTS.md` for the routing order and the availability table this file implements.
  *
  * `LayerRouter` runs it before any layer sees a key, so each shortcut states its own availability here instead of a surface deciding after the fact which app keys survive it.
  *

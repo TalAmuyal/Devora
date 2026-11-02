@@ -1,5 +1,5 @@
 /** Custom dropdown: a trigger button opening a popup of selectable options and action rows (with separators).
- * The open popup is a `popupLayer` on the window stack (see `../layers/CLAUDE.md`), so Escape/q close only the dropdown (central dismissal) and it auto-closes when its host surface is removed.
+ * The open popup is a `popupLayer` on the window stack (see `../layers/AGENTS.md`), so Escape/q close only the dropdown (central dismissal) and it auto-closes when its host surface is removed.
  * The popup is position:fixed so ancestor overflow clipping cannot hide it, and flips above the trigger when there is no room below.
  * It also closes on select, outside click, ancestor scroll, and window resize.
  * Returns a handle for imperative control.

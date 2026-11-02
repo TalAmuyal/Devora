@@ -208,7 +208,7 @@ Judgess records what it does and what it does not know under `~/.claude/judgess/
 
 To help expand Judgess's coverage, from a Devora source checkout:
 1. Run `mise run -C project-judgess classify` to label the unknown requests (approve, deny, defer, abstain, delete, or skip)
-2. Have an agent implement the rules for the labelled requests (see `project-judgess/CLAUDE.md`)
+2. Have an agent implement the rules for the labelled requests (see `project-judgess/AGENTS.md`)
 3. Run `mise run -C project-judgess export` to move the labelled requests, with private details redacted, into the project's regression cases (`project-judgess/cases.json`)
 
 ## Optional Additions

@@ -20,7 +20,7 @@ public enum DismissDecision: Sendable, Equatable {
 	case veto
 }
 
-/// A stacked surface, described by its behavior; how far it extends comes from the stack it is pushed onto (see `CLAUDE.md`).
+/// A stacked surface, described by its behavior; how far it extends comes from the stack it is pushed onto (see `AGENTS.md`).
 ///
 /// Call sites use the presets below (`pageLayer`, `modalLayer`, `popupLayer`, `terminalLayer`) rather than setting the flags by hand.
 @MainActor

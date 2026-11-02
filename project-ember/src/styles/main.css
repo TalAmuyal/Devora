@@ -52,7 +52,7 @@ body {
 }
 
 /*
- * Layer wrappers (see src/ui/layers/CLAUDE.md).
+ * Layer wrappers (see src/ui/layers/AGENTS.md).
  *
  * Every stack-owned surface is appended to its stack's host in stack order, so paint order follows DOM order and no layer carries a z-index: a surface pushed later is simply later in the DOM.
  * How far a surface extends comes from the host it is in — the window host (#app) covers the app, a session's container covers only that session.

@@ -5,7 +5,7 @@ public struct LayerHandle: Hashable, Sendable {
 	let id: Int
 }
 
-/// An ordered stack of surfaces that owns their order, focus, dismissal and key walk; `LayerHost` draws it (see `CLAUDE.md`).
+/// An ordered stack of surfaces that owns their order, focus, dismissal and key walk; `LayerHost` draws it (see `AGENTS.md`).
 ///
 /// It is a mechanism with no domain knowledge and no key monitor of its own: `LayerRouter` owns the one entry point and calls `route`.
 /// There is one stack per tab plus one for the window, which is what decides how far a surface extends.

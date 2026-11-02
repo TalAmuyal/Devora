@@ -109,7 +109,7 @@ Non-UI logic (workspaces, profiles, settings, credentials, theme parsing, termin
 | `session/SessionTab.ts` | Session tab: holds a terminal pane, its preview panes, and its own layer stack |
 | `session/SessionManager.ts` | Manages ordered list of session tabs: create, close, switch, reorder |
 | `ui/TabBar.ts` | Bottom tab bar showing all session tabs |
-| `ui/layers/LayerStack.ts` | Layer system: single keydown dispatcher and focus-by-stack-position for pages, modals, popups, and session panels (see `ui/layers/CLAUDE.md`) |
+| `ui/layers/LayerStack.ts` | Layer system: single keydown dispatcher and focus-by-stack-position for pages, modals, popups, and session panels (see `ui/layers/AGENTS.md`) |
 | `ui/KeyboardShortcuts.ts` | App-wide keyboard shortcut policy, driven by the LayerStack |
 | `workspace/WorkspaceHub.ts` | Workspace Hub (tab-covering overlay): list, filter, create, open workspaces |
 | `webview/WebContentOverlay.ts` | Web content rendering for the User Guide and preview panes (Markdown via `marked`, HTML in a sandboxed iframe) |
@@ -120,7 +120,7 @@ Non-UI logic (workspaces, profiles, settings, credentials, theme parsing, termin
 Stacked UI surfaces (pages, modals, popups, and per-session panels) are managed by a single `LayerStack` (`src/ui/layers/`) that owns the only `window`-capture keydown listener and resolves focus from stack position.
 Dismissing a page (`Escape`, `q`, or `Ctrl+S`) restores focus to the revealed layer, or to the active terminal when the stack empties.
 
-See [`src/ui/layers/CLAUDE.md`](src/ui/layers/CLAUDE.md) for the routing order, shortcut availability, presets, and focus behavior, and [ADR-003](../docs/adrs/ADR-003-ember-layer-system.md) for why the system exists.
+See [`src/ui/layers/AGENTS.md`](src/ui/layers/AGENTS.md) for the routing order, shortcut availability, presets, and focus behavior, and [ADR-003](../docs/adrs/ADR-003-ember-layer-system.md) for why the system exists.
 
 ## Keyboard Shortcuts
 
@@ -194,5 +194,6 @@ project-ember/
 │   └── support/            # Helpers: app-driver, ui-driver, fixture-helper, ws-hub-helper, fake API server
 ├── mockups/
 ├── DEFERRED.md
+├── AGENTS.md
 └── CLAUDE.md
 ```

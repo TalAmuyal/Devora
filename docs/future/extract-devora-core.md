@@ -62,7 +62,7 @@ To that end, all other work will halt until this ticket is done (as a single mul
 - Prefer **moving code first, then decoupling** in separate commits, so reviewers can tell a pure move from a semantic change
 - Land it in **small slices** (one domain area at a time) instead of one big-bang commit. Each commit in the PR should leave `master` green
 - Any domain module added after this ticket was written belongs in the core too, as long as it fits the rule of thumb above
-- Once the crate exists, new domain logic should land in the core by default. Add a short note on that boundary to the relevant `CLAUDE.md` so it holds
+- Once the crate exists, new domain logic should land in the core by default. Add a short note on that boundary to the relevant `AGENTS.md` so it holds
 
 ## Acceptance criteria
 

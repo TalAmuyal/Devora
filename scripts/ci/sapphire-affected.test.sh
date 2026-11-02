@@ -29,7 +29,7 @@ check true
 check false project-ember/src/main.ts
 check false project-ember/src-tauri/src/lib.rs project-ember/tests/steps/session.steps.ts
 check false project-debi/cmd/main.go project-judgess/src/lib.rs
-check false CHANGELOG.md docs/adrs/ADR-010-sapphire-ui-stack.md project-core/CLAUDE.md
+check false CHANGELOG.md docs/adrs/ADR-010-sapphire-ui-stack.md project-core/AGENTS.md project-core/CLAUDE.md
 check false bundler/macos-ember/bundle-fingerprint.sh .github/workflows/cd.yml
 if [ "$failures" -gt 0 ]; then exit 1; fi
 echo "sapphire-affected: all cases pass"
