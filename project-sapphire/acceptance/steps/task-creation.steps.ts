@@ -193,7 +193,7 @@ Then('the task creation should fail with {string}', async function (this: Sapphi
   const state = await this.bridge.waitFor(
     'the creation to fail',
     () => this.bridge.state(),
-    (s) => activeTab(s)?.progress?.failure != null,
+    (s) => activeTab(s)?.kind === 'creationFailed' && activeTab(s)?.progress?.failure != null,
     30_000,
   );
   const tab = activeTab(state)!;

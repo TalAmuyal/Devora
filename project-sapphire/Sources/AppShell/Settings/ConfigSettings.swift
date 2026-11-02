@@ -106,7 +106,23 @@ enum TextMode: String, CaseIterable {
 	var label: String { rawValue.capitalized }
 }
 
-/// One scope's config settings in the Settings Hub, Ember's `settingsEditor`: the User Defaults (`profilePath` nil) or a profile's, which its three cards share.
+/// Config cards edit the same JSON file: queue writes across card types, including each write's re-read.
+@MainActor
+final class SettingsWriteQueue {
+	private var tail: Task<Void, Never>?
+
+	func enqueue(_ operation: @escaping @MainActor () async -> Void) {
+		let previous = tail
+		tail = Task {
+			await previous?.value
+			await operation()
+		}
+	}
+
+	func settled() async { await tail?.value }
+}
+
+/// One scope's config settings in the Settings Hub, Ember's `settingsEditor`: the User Defaults (`profilePath` nil) or a profile's, with a write queue shared by all its cards.
 ///
 /// It writes one key at a time, in order, and reads the scope again after each write, so that every inherited hint is the live resolution.
 /// A text setting switched to Set but not committed stays revealed, and what is typed into it stays, across the reloads other settings' writes make.
@@ -114,6 +130,8 @@ enum TextMode: String, CaseIterable {
 @Observable
 final class ConfigSettingsModel {
 	let profilePath: String?
+	var claude: ClaudeSettingsModel?
+	var asana: AsanaTokenModel?
 	/// Nil until the first read.
 	private(set) var settings: ConfigSettings?
 	/// The text settings switched to Set and not committed yet.
@@ -125,27 +143,31 @@ final class ConfigSettingsModel {
 
 	@ObservationIgnored private let read: () async -> ConfigSettings?
 	@ObservationIgnored private let write: (_ key: String, _ value: String?) async -> Bool
-	@ObservationIgnored private var writes: Task<Void, Never>?
+	@ObservationIgnored let writeQueue: SettingsWriteQueue
 
 	/// `read` and `write` are the core's calls, nil and false when they failed, with their banners.
 	init(
 		profilePath: String?, read: @escaping () async -> ConfigSettings?,
-		write: @escaping (_ key: String, _ value: String?) async -> Bool
+		write: @escaping (_ key: String, _ value: String?) async -> Bool,
+		writeQueue: SettingsWriteQueue = SettingsWriteQueue()
 	) {
 		self.profilePath = profilePath
 		self.read = read
 		self.write = write
+		self.writeQueue = writeQueue
 	}
 
 	/// Reads the scope's settings; a failed read keeps the ones it has.
 	func reload() async {
 		guard let settings = await read() else { return }
 		self.settings = settings
+		await claude?.reload()
+		if usesAsana { await asana?.reload() }
 	}
 
 	/// Waits for the writes queued so far, and their reloads.
 	func settled() async {
-		await writes?.value
+		await writeQueue.settled()
 	}
 
 	func stored(_ key: String) -> ConfigValue? { settings?.stored[key] }
@@ -252,9 +274,7 @@ final class ConfigSettingsModel {
 
 	/// Queues the write behind the earlier ones, then reads the scope again; a failed write, which has its banner, doesn't hold up the next.
 	private func persist(_ key: String, _ value: String?) {
-		let previous = writes
-		writes = Task { [weak self, write] in
-			await previous?.value
+		writeQueue.enqueue { [weak self, write] in
 			guard await write(key, value) else { return }
 			await self?.reload()
 		}
@@ -268,5 +288,7 @@ extension ConfigSettingsModel {
 			profilePath: profilePath,
 			read: { await store.configSettings(profilePath: profilePath) },
 			write: { key, value in await store.setConfigSetting(profilePath: profilePath, key: key, value: value) })
+		claude = ClaudeSettingsModel(store: store, profilePath: profilePath, writes: writeQueue)
+		asana = AsanaTokenModel(store: store, writes: writeQueue)
 	}
 }

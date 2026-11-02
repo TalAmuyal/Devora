@@ -323,6 +323,37 @@ public final class Store {
 		return (try? await call("set_config_setting") { try core.setConfigSetting(profilePath: profilePath, key: key, value: value) }) != nil
 	}
 
+	/// Reads Claude settings against this store's user config; errors follow the normal banner path.
+	public func claudeSettings(profilePath: String?) async -> ClaudeSettings? {
+		guard let core else { return nil }
+		return try? await call("get_claude_settings") { try core.getClaudeSettings(profilePath: profilePath) }
+	}
+
+	public func claudeSettingChoices() async -> ClaudeSettingChoices? {
+		guard let core else { return nil }
+		return try? await call("get_claude_setting_choices") { try core.getClaudeSettingChoices() }
+	}
+
+	public func setClaudeSetting(profilePath: String?, key: String, value: ClaudeValue?) async -> Bool {
+		guard let core else { return false }
+		return (try? await call("set_claude_setting") { try core.setClaudeSetting(profilePath: profilePath, key: key, value: value) }) != nil
+	}
+
+	public func asanaTokenStatus() async -> Bool? {
+		guard let core else { return nil }
+		return try? await call("get_asana_token_status") { try core.getAsanaTokenStatus() }
+	}
+
+	public func setAsanaToken(_ token: String) async -> Bool {
+		guard let core else { return false }
+		return (try? await call("set_asana_token") { try core.setAsanaToken(token: token) }) != nil
+	}
+
+	public func clearAsanaToken() async -> Bool {
+		guard let core else { return false }
+		return (try? await call("clear_asana_token") { try core.clearAsanaToken() }) != nil
+	}
+
 	/// Writes the latest load's latencies to `<profile>/diagnostics/hub-profile-<timestamp>.json` and returns the file's path; nil when there is nothing to write or the write failed.
 	public func saveLoadingLatencies() async -> String? {
 		guard let core, let latencies = loadingLatencies else { return nil }

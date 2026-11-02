@@ -192,7 +192,7 @@ private struct RepoGrid: View {
 }
 
 /// A titled card of the detail panel, as Ember's `SettingsCard`.
-private struct SettingsCard<Content: View>: View {
+struct SettingsCard<Content: View>: View {
 	let title: String
 	@ViewBuilder let content: Content
 
@@ -214,6 +214,7 @@ private struct ScopeCards: View {
 	@FocusState private var focus: String?
 
 	var body: some View {
+		if let claude = scope.claude { ClaudeSettingsCard(model: claude) }
 		ForEach(ConfigCard.all, id: \.title) { card in
 			SettingsCard(title: card.title) {
 				if scope.settings == nil {
@@ -221,6 +222,9 @@ private struct ScopeCards: View {
 				} else {
 					ForEach(card.fields.filter(scope.isVisible), id: \.key) { field in
 						ConfigRow(field: field, scope: scope, focus: $focus)
+					}
+					if card.title == ConfigCard.taskTracker.title, scope.usesAsana, let token = scope.asana {
+						AsanaTokenRow(model: token)
 					}
 				}
 			}

@@ -105,7 +105,11 @@ export interface SettingsState {
     repos: { name: string; source: string; path: string }[] | null;
   } | null;
   /** The focused row's settings, for the User Defaults (`profilePath` null) or a profile; `fields` are the ones shown. */
-  scope: { profilePath: string | null; loaded: boolean; fields?: SettingState[] } | null;
+  scope: {
+    profilePath: string | null; loaded: boolean; fields?: SettingState[];
+    claude?: { loaded: boolean; effort: string; effortLevels: string[]; defaultModelOn: boolean; fields: { key: string; segment: string; hint: string; input: string | null; showsSave: boolean; suggestions: string[] }[] };
+    asana?: { isSet: boolean | null; canSave: boolean; hasDraft: boolean };
+  } | null;
 }
 
 /** A click on what the open Settings Hub draws: a master row, a profile detail's button, or a settings card's control. */
@@ -117,7 +121,9 @@ export type SettingsAction =
   | { action: 'selectSegment'; key: string; label: string }
   | { action: 'type'; key: string; value: string }
   | { action: 'commit'; key: string }
-  | { action: 'save'; key: string };
+  | { action: 'save'; key: string }
+  | { action: 'clear'; key: string }
+  | { action: 'suggest'; key: string; label: string };
 
 /** A click on what the open New Task dialog draws. */
 export type NewTaskAction =
