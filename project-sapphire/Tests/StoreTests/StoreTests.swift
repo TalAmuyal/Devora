@@ -56,6 +56,23 @@ struct Fixture: ~Copyable {
 	}
 }
 
+/// Runs git and waits for it without blocking a thread: the tests share the main actor, which a `waitUntilExit()` would hold up for every one of them.
+func runGit(_ arguments: [String], in directory: String) async throws {
+	let process = Process()
+	process.executableURL = URL(filePath: "/usr/bin/git")
+	process.arguments = arguments
+	process.currentDirectoryURL = URL(filePath: directory)
+	let status = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Int32, any Error>) in
+		process.terminationHandler = { continuation.resume(returning: $0.terminationStatus) }
+		do {
+			try process.run()
+		} catch {
+			continuation.resume(throwing: error)
+		}
+	}
+	guard status == 0 else { throw CocoaError(.fileWriteUnknown) }
+}
+
 @MainActor
 struct StoreTests {
 	@Test func loadsProfilesAndTheFirstProfilesWorkspaces() async throws {
@@ -104,8 +121,7 @@ struct StoreTests {
 		for repo in [api, web] {
 			try FileManager.default.createDirectory(atPath: repo, withIntermediateDirectories: true)
 		}
-		let initialize = try Process.run(URL(filePath: "/usr/bin/git"), arguments: ["init", "-q", api])
-		initialize.waitUntilExit()
+		try await runGit(["init", "-q", api], in: fixture.root.path)
 		try Data().write(to: URL(filePath: "\(api)/new.txt"))
 		try fixture.registerProfiles([work])
 		let store = Store(configPath: fixture.configPath, state: .inMemory, log: try fixture.log())

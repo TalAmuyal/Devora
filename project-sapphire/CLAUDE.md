@@ -155,3 +155,6 @@ Real input (key events, focus, the IME, libghostty's key path) is what the bridg
 - The XCUITests launch the app themselves, each on a state directory of its own; `scripts/test-ui.sh` skips them, saying why, when the screen is locked or `SAPPHIRE_SKIP_UI_TESTS=1`.
 	Those that close the launch's hub register a profile first (`writeConfigWithAProfile`), since the first-run welcome can't be closed.
 	Their runner is sandboxed, where git can't run, so `scripts/test-ui.sh` makes the git repo they copy into their fixtures (`SAPPHIRE_GIT_REPO`).
+- The store tests run in parallel on the one main actor, where the store folds its events, so a test that blocks it (a `waitUntilExit()`, a synchronous wait) stalls every other test's `eventually`; their fixtures await git through `runGit` instead.
+	Opening a state another store holds blocks it for the core's busy timeout (1 s), which only `aStateHeldByAnotherStoreIsInUse` does.
+	The acceptance scenarios need an unlocked screen too: with the screen locked, the display link doesn't fire, so the app's events never fold.
