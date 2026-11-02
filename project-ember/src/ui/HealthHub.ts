@@ -13,62 +13,18 @@ import { createToast } from './components/Toast';
 import { isEditableElementFocused } from './focus';
 import { createVimScroll } from './vimScroll';
 
-interface DependencyStatus {
-  name: string;
-  found: boolean;
-  version: string;
-  path: string;
-}
-
-type CredentialStatus = 'ok' | 'failed' | 'unchecked' | 'info';
-
-interface CredentialReport {
-  name: string;
-  status: CredentialStatus | string;
-  message: string;
-  fixHint?: string;
-}
-
-interface FileCheck {
-  path: string;
-  found: boolean;
-  fixHint?: string;
-}
-
-interface HealthSummary {
-  requiredMet: number;
-  requiredTotal: number;
-  optionalMet: number;
-  optionalTotal: number;
-  credentialsMet: number;
-  credentialsTotal: number;
-}
-
+type HealthState = 'ok' | 'warn' | 'error' | 'info';
+interface HealthItem { name: string; state: HealthState; message: string; version: string | null; path: string | null; fixHint: string | null }
+interface HealthSection { title: string; count: string | null; state: HealthState; items: HealthItem[] }
 interface HealthReport {
   version: string;
-  config: FileCheck;
-  completion: FileCheck;
-  required: DependencyStatus[];
-  optional: DependencyStatus[];
-  credentials: CredentialReport[];
-  summary: HealthSummary;
+  overallState: HealthState;
+  overallLabel: string;
+  tiles: { label: string; met: number; total: number; state: HealthState }[];
+  sections: HealthSection[];
 }
-
-/** Health-domain status, mapped onto the shared StatusDot variants. */
-type HealthState = 'ok' | 'warn' | 'error' | 'info';
-
 const STATE_TO_DOT: Record<HealthState, StatusDotVariant> = {
-  ok: 'clean',
-  warn: 'modified',
-  error: 'error',
-  info: 'pending',
-};
-
-const CRED_STATE: Record<string, HealthState> = {
-  ok: 'ok',
-  failed: 'error',
-  unchecked: 'warn',
-  info: 'info',
+  ok: 'clean', warn: 'modified', error: 'error', info: 'pending',
 };
 
 export interface HealthHubOptions {
@@ -115,17 +71,17 @@ export class HealthHub {
 
     const token = ++this.loadToken;
     try {
-      const json = await invoke<string>('run_health_check', {
+      const report = await invoke<HealthReport>('run_health_check', {
         profilePath: this.getProfilePath() ?? null,
       });
       if (token !== this.loadToken) return;
-      this.report = JSON.parse(json) as HealthReport;
+      this.report = report;
       this.error = null;
     } catch (e) {
       if (token !== this.loadToken) return;
       // invoke already surfaced a banner for command failures; this is the in-body fallback (covers both command rejection and JSON parse errors).
       this.report = null;
-      this.error = e instanceof SyntaxError ? 'Could not parse the health report.' : 'Could not run the health check.';
+      this.error = `Could not run the health check: ${String(e)}`;
     } finally {
       if (token === this.loadToken) {
         this.loading = false;
@@ -171,10 +127,7 @@ export class HealthHub {
       content.appendChild(err);
     } else if (this.report) {
       content.appendChild(this.renderTiles(this.report));
-      content.appendChild(this.renderDepSection('Required dependencies', this.report.required, true));
-      content.appendChild(this.renderDepSection('Optional dependencies', this.report.optional, false));
-      content.appendChild(this.renderCredentialSection(this.report));
-      content.appendChild(this.renderConfigSection(this.report));
+      for (const section of this.report.sections) content.appendChild(this.renderSection(section));
     }
 
     this.containerEl.appendChild(content);
@@ -224,23 +177,8 @@ export class HealthHub {
     return header;
   }
 
-  /** Overall verdict: missing required → error; any optional/credential/completion gap → warn; else ok. */
-  private overallState(r: HealthReport): { state: HealthState; label: string } {
-    if (r.summary.requiredMet < r.summary.requiredTotal) {
-      return { state: 'error', label: 'Missing required' };
-    }
-    const hasGap =
-      r.summary.optionalMet < r.summary.optionalTotal ||
-      r.summary.credentialsMet < r.summary.credentialsTotal ||
-      !r.completion.found;
-    if (hasGap) {
-      return { state: 'warn', label: 'Issues found' };
-    }
-    return { state: 'ok', label: 'Healthy' };
-  }
-
   private renderOverallPill(r: HealthReport): HTMLElement {
-    const { state, label } = this.overallState(r);
+    const { overallState: state, overallLabel: label } = r;
     const pill = document.createElement('span');
     pill.className = `health-overall-pill ${state}`;
     pill.appendChild(this.dot(state));
@@ -251,26 +189,13 @@ export class HealthHub {
   }
 
   private renderTiles(r: HealthReport): HTMLElement {
-    const setupMet = (r.config.found ? 1 : 0) + (r.completion.found ? 1 : 0);
-
     const tiles = document.createElement('div');
     tiles.className = 'health-tiles';
-    tiles.appendChild(
-      this.renderTile('Required', r.summary.requiredMet, r.summary.requiredTotal, true),
-    );
-    tiles.appendChild(
-      this.renderTile('Optional', r.summary.optionalMet, r.summary.optionalTotal, false),
-    );
-    tiles.appendChild(
-      this.renderTile('Credentials', r.summary.credentialsMet, r.summary.credentialsTotal, false),
-    );
-    tiles.appendChild(this.renderTile('Setup', setupMet, 2, false));
+    for (const tile of r.tiles) tiles.appendChild(this.renderTile(tile.label, tile.met, tile.total, tile.state));
     return tiles;
   }
 
-  private renderTile(label: string, met: number, total: number, requiredGroup: boolean): HTMLElement {
-    const complete = met >= total;
-    const state: HealthState = complete ? 'ok' : requiredGroup ? 'error' : 'warn';
+  private renderTile(label: string, met: number, total: number, state: HealthState): HTMLElement {
 
     const tile = document.createElement('div');
     tile.className = 'health-tile';
@@ -296,79 +221,17 @@ export class HealthHub {
     return tile;
   }
 
-  private renderDepSection(
-    title: string,
-    deps: DependencyStatus[],
-    requiredGroup: boolean,
-  ): HTMLElement {
-    const met = deps.filter((d) => d.found).length;
-    const countState: HealthState = met >= deps.length ? 'ok' : requiredGroup ? 'error' : 'warn';
-    const section = this.sectionShell(title, `${met} / ${deps.length}`, countState, true);
-    const card = section.card;
-
-    for (const dep of deps) {
-      const state: HealthState = dep.found ? 'ok' : requiredGroup ? 'error' : 'warn';
-      const row = this.rowShell(state, dep.name);
-
-      if (dep.found) {
-        this.appendText(row, 'health-version-badge', dep.version || '—');
-        this.appendText(row, 'health-row-path', dep.path);
-      } else {
-        this.appendText(row, 'health-row-msg', 'not found');
-      }
-
-      card.appendChild(row);
+  private renderSection(section: HealthSection): HTMLElement {
+    const shell = this.sectionShell(section.title, section.count ?? '', section.state, section.count !== null);
+    for (const item of section.items) {
+      const row = this.rowShell(item.state, item.name);
+      if (item.version) this.appendText(row, 'health-version-badge', item.version);
+      if (item.message) this.appendText(row, 'health-row-msg', item.message);
+      if (item.path) this.appendText(row, 'health-row-path', item.path);
+      if (item.fixHint) row.appendChild(this.renderFixHint(item.fixHint));
+      shell.card.appendChild(row);
     }
-
-    return section.section;
-  }
-
-  private renderCredentialSection(r: HealthReport): HTMLElement {
-    const countState: HealthState =
-      r.summary.credentialsMet >= r.summary.credentialsTotal ? 'ok' : 'warn';
-    const section = this.sectionShell(
-      'Credentials',
-      `${r.summary.credentialsMet} / ${r.summary.credentialsTotal}`,
-      countState,
-      true,
-    );
-
-    for (const cred of r.credentials) {
-      const state = CRED_STATE[cred.status] ?? 'info';
-      const row = this.rowShell(state, cred.name);
-
-      this.appendText(row, 'health-row-msg', cred.message);
-
-      if (cred.fixHint) {
-        row.appendChild(this.renderFixHint(cred.fixHint));
-      }
-
-      section.card.appendChild(row);
-    }
-
-    return section.section;
-  }
-
-  private renderConfigSection(r: HealthReport): HTMLElement {
-    const section = this.sectionShell('Configuration', '', 'ok', false);
-
-    // Config file (a missing config is informational, not a failure).
-    const configRow = this.rowShell(r.config.found ? 'ok' : 'warn', 'config');
-    this.appendText(configRow, 'health-row-msg', r.config.found ? 'found' : 'not found');
-    this.appendText(configRow, 'health-row-path', r.config.path);
-    section.card.appendChild(configRow);
-
-    // zsh completion.
-    const compRow = this.rowShell(r.completion.found ? 'ok' : 'warn', 'zsh completion');
-    this.appendText(compRow, 'health-row-msg', r.completion.found ? 'installed' : 'not installed');
-    if (r.completion.found) {
-      this.appendText(compRow, 'health-row-path', r.completion.path);
-    } else if (r.completion.fixHint) {
-      compRow.appendChild(this.renderFixHint(r.completion.fixHint));
-    }
-    section.card.appendChild(compRow);
-
-    return section.section;
+    return shell.section;
   }
 
   private renderFixHint(command: string): HTMLElement {

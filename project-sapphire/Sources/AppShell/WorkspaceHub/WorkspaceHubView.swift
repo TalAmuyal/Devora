@@ -57,14 +57,7 @@ struct WorkspaceHubView: View {
 		.background(.windowBackground)
 		.overlay(alignment: .bottom) {
 			if let toast = model.toast {
-				Text(toast)
-					.padding(.horizontal, 14)
-					.padding(.vertical, 8)
-					.background(.regularMaterial, in: .capsule)
-					.shadow(radius: 4)
-					.padding(.bottom, 48)
-					.transition(.opacity)
-					.accessibilityIdentifier("hub-toast")
+				ToastCapsule(text: toast, identifier: "hub-toast")
 			}
 		}
 		.animation(.easeInOut(duration: 0.2), value: model.toast)

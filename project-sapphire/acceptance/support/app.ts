@@ -33,7 +33,7 @@ export async function launch(configPath: string, stateDir: string): Promise<Laun
 
   // Launched directly rather than through `open`, so the harness owns the process and its stderr; Sapphire takes no bare arguments, so a window opens.
   const app = spawn(APP_BINARY, [], {
-    env: { ...env, DEVORA_TEST_MODE: '1', DEVORA_CONFIG_PATH: configPath, DEVORA_STATE_DIR: stateDir },
+    env: { ...env, DEVORA_TEST_MODE: '1', DEVORA_TEST_HEALTH_FIXTURE: path.join(path.dirname(configPath), 'health-report.json'), DEVORA_CONFIG_PATH: configPath, DEVORA_STATE_DIR: stateDir },
     stdio: ['ignore', 'ignore', 'pipe'],
   });
   const stderr: string[] = [];

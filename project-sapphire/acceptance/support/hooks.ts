@@ -22,6 +22,7 @@ Before(async function (this: SapphireWorld) {
   this.testConfigPath = path.join(this.scenarioDir, 'config.json');
   this.stateDir = path.join(this.scenarioDir, 'state');
   writeTestConfig(this.testConfigPath, []);
+  fs.copyFileSync(path.resolve(import.meta.dirname, '../../../acceptance/fixtures/health-report.json'), path.join(this.scenarioDir, 'health-report.json'));
   await this.launch();
   // A fresh state restores no tabs, so the launch opens the Workspace Hub.
   await waitUntilReady(this.bridge);

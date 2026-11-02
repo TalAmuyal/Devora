@@ -15,7 +15,6 @@ final class WorkspaceHubModel {
 	static let refreshingMinimum = Duration.seconds(1)
 	static let refreshedDuration = Duration.seconds(3)
 	/// The tooltip of the controls that lead to what Sapphire doesn't have yet, which are shown disabled.
-	static let notYet = "Not in Sapphire yet"
 
 	let store: Store
 	var category = HubCategory.active {
@@ -48,6 +47,7 @@ final class WorkspaceHubModel {
 	@ObservationIgnored var newTask: (_ duplicating: Workspace?) -> Void = { _ in }
 	/// Opens the Settings Hub, on the active profile or on the New Profile form.
 	@ObservationIgnored var openSettings: (SettingsHubModel.Opening) -> Void = { _ in }
+	@ObservationIgnored var openHealth: () -> Void = {}
 	/// Opens the Add Repo dialog for an active workspace.
 	@ObservationIgnored var addRepo: (Workspace) -> Void = { _ in }
 	@ObservationIgnored private let isEditingText: () -> Bool
@@ -166,7 +166,6 @@ final class WorkspaceHubModel {
 
 	/// The rows of a header dropdown; the actions that lead to surfaces Sapphire doesn't have yet are shown disabled.
 	func menuItems(_ menu: HubMenu) -> [DropdownItem] {
-		let notYet = Self.notYet
 		switch menu {
 		case .profiles:
 			return store.profiles.map { profile in
@@ -184,7 +183,7 @@ final class WorkspaceHubModel {
 			if !store.profiles.isEmpty {
 				items.append(.action("Settings", systemImage: "gearshape") { [weak self] in self?.openSettings(.list) })
 			}
-			items.append(.action("Health", systemImage: "cross.case", enabled: false, help: notYet))
+			items.append(.action("Health", systemImage: "cross.case") { [weak self] in self?.openHealth() })
 			if store.loadingLatencies != nil {
 				items += [.separator, .action("Save loading latencies", systemImage: "square.and.arrow.down") { [weak self] in self?.saveLoadingLatencies() }]
 			}
@@ -219,6 +218,7 @@ final class WorkspaceHubModel {
 		case "3": category = .all
 		case "n": newTask(nil)
 		case "P": openSettings(.list)
+		case "H": openHealth()
 		case "j": cursor.move(by: 1, in: items.count)
 		case "k": cursor.move(by: -1, in: items.count)
 		case "R": refresh()

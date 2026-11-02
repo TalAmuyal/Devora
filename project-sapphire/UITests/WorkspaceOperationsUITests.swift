@@ -102,7 +102,7 @@ final class WorkspaceOperationsUITests: XCTestCase {
 		element("hub-menu").click()
 		let menu = element("hub-dropdown-main")
 		XCTAssertTrue(menu.waitForExistence(timeout: 5))
-		XCTAssertFalse(menu.buttons["Health"].isEnabled, "the Health Hub isn't in Sapphire yet")
+		XCTAssertTrue(menu.buttons["Health"].isEnabled, "Health opens the Health Hub")
 		menu.buttons["Save loading latencies"].click()
 		XCTAssertTrue(element("hub-toast").waitForExistence(timeout: 5))
 		let diagnostics = try FileManager.default.contentsOfDirectory(atPath: home.appending(path: "diagnostics").path)
