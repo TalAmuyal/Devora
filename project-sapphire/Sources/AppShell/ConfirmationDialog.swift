@@ -10,11 +10,14 @@ struct Confirmation: Equatable {
 
 	var title: String
 	var intro: String
-	/// Listed between the intro and the warning, each with its name in bold.
+	/// Listed between the intro and the warning, each with its name in bold, and its detail if it has one.
 	var items: [Item] = []
 	var warning: String = ""
 	var confirmLabel: String
-	var cancelLabel = "Cancel"
+	/// Nil for a notice, which only has its confirm button, as Ember's `hideCancel`.
+	var cancelLabel: String? = "Cancel"
+	/// A destructive confirm button is red.
+	var isDestructive = true
 }
 
 /// One open confirmation dialog: a modal layer over the window (`Surfaces.confirm`).
@@ -48,8 +51,9 @@ final class ConfirmationDialogModel {
 	func confirm() { onConfirm() }
 	func cancel() { onCancel() }
 
-	/// Two buttons, so either direction moves to the other one.
+	/// Two buttons, so either direction moves to the other one; a notice has one.
 	func cycleFocus(backward _: Bool) {
+		guard confirmation.cancelLabel != nil else { return }
 		focused = focused == .confirm ? .cancel : .confirm
 	}
 
@@ -83,7 +87,7 @@ struct ConfirmationDialogView: View {
 				if !confirmation.items.isEmpty {
 					VStack(alignment: .leading, spacing: 4) {
 						ForEach(confirmation.items, id: \.name) { item in
-							Text("• **\(item.name)** — \(item.detail)")
+							Text(item.detail.isEmpty ? "• **\(item.name)**" : "• **\(item.name)** — \(item.detail)")
 						}
 					}
 					.padding(.leading, 8)
@@ -93,8 +97,12 @@ struct ConfirmationDialogView: View {
 				}
 				HStack(spacing: 10) {
 					Spacer()
-					DialogButton(title: confirmation.cancelLabel, isFocused: model.focused == .cancel, action: model.cancel)
-					DialogButton(title: confirmation.confirmLabel, isFocused: model.focused == .confirm, tint: .red, action: model.confirm)
+					if let cancelLabel = confirmation.cancelLabel {
+						DialogButton(title: cancelLabel, isFocused: model.focused == .cancel, action: model.cancel)
+					}
+					DialogButton(
+						title: confirmation.confirmLabel, isFocused: model.focused == .confirm,
+						tint: confirmation.isDestructive ? .red : .accentColor, action: model.confirm)
 				}
 				.padding(.top, 4)
 			}

@@ -59,7 +59,7 @@ export interface CloneRepoState {
   progress: RepoOperationState | null;
 }
 
-/** The open profile form: the New Profile dialog's, or else the first-run welcome's; `status` is null while the path is empty or unvalidated. */
+/** The open profile form: the Settings Hub's New Profile row's, or else the first-run welcome's; `status` is null while the path is empty or unvalidated. */
 export interface ProfileFormState {
   name: string;
   /** An existing profile's name replaces the one typed, and can't be edited. */
@@ -79,6 +79,45 @@ export type ProfileFormAction =
   | { action: 'setPath'; value: string }
   | { action: 'submit' }
   | { action: 'cancel' };
+
+/** A setting of the focused row's scope as its card shows it; `input` is the revealed input's text, null while the setting is on Default. */
+export interface SettingState {
+  key: string;
+  /** The selected segment's label: Set/Default, On/Off/Default, or the option. */
+  segment: string | null;
+  input?: string | null;
+  showsSave?: boolean;
+  /** The inherited value shown beside Default; null for a setting that doesn't show it. */
+  hint: string | null;
+}
+
+/** The open Settings Hub; `detail` is the focused profile's, null on the User Defaults and the New Profile rows. */
+export interface SettingsState {
+  loaded: boolean;
+  rows: { kind: 'userDefaults' | 'profile' | 'newProfile'; label: string; focused: boolean; active?: boolean; repoCount?: number }[];
+  focused: string;
+  detail: {
+    name: string;
+    path: string;
+    active: boolean;
+    workspaceCount: number | null;
+    activeTaskCount: number | null;
+    repos: { name: string; source: string; path: string }[] | null;
+  } | null;
+  /** The focused row's settings, for the User Defaults (`profilePath` null) or a profile; `fields` are the ones shown. */
+  scope: { profilePath: string | null; loaded: boolean; fields?: SettingState[] } | null;
+}
+
+/** A click on what the open Settings Hub draws: a master row, a profile detail's button, or a settings card's control. */
+export type SettingsAction =
+  | { action: 'selectRow'; label: string }
+  | { action: 'setActive' }
+  | { action: 'cloneRepo' }
+  | { action: 'delete' }
+  | { action: 'selectSegment'; key: string; label: string }
+  | { action: 'type'; key: string; value: string }
+  | { action: 'commit'; key: string }
+  | { action: 'save'; key: string };
 
 /** A click on what the open New Task dialog draws. */
 export type NewTaskAction =
@@ -139,6 +178,8 @@ export interface DialogState {
   intro: string;
   items: { name: string; detail: string }[];
   confirmLabel: string;
+  /** Null for a notice, which has only its confirm button. */
+  cancelLabel: string | null;
   focused: 'confirm' | 'cancel';
 }
 
@@ -159,6 +200,7 @@ export interface AppState {
   addRepo: AddRepoState | null;
   cloneRepo: CloneRepoState | null;
   profileForm: ProfileFormState | null;
+  settings: SettingsState | null;
   version: string;
   profiles: { name: string; path: string }[];
   selectedProfile: string | null;
@@ -257,6 +299,11 @@ export class Bridge {
   /** Fills in or clicks the open profile form; a disabled submit is a 409. */
   async profileForm(action: ProfileFormAction): Promise<void> {
     await this.request('POST', '/test/profile-form', action);
+  }
+
+  /** Clicks what the open Settings Hub draws, or types into a revealed input of its cards. */
+  async settings(action: SettingsAction): Promise<void> {
+    await this.request('POST', '/test/settings', action);
   }
 
   /** Teardown: removes every window surface, the first-run welcome included, as Ember's `__test.layers.clear()`. */

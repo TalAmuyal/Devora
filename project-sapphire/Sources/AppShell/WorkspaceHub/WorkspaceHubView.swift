@@ -49,7 +49,7 @@ struct WorkspaceHubView: View {
 				Divider()
 				KeyHintBar(hints: [
 					("j/k", "navigate"), ("Enter", "open"), ("f", "filter"), ("1/2/3", "active/inactive/all"),
-					("n", "new task"), ("R", "refresh"), ("q/Esc", "close"), ("?", "all shortcuts"),
+					("n", "new task"), ("P", "profiles"), ("R", "refresh"), ("q/Esc", "close"), ("?", "all shortcuts"),
 				])
 				.accessibilityIdentifier("hub-hint-bar")
 			}
@@ -350,7 +350,7 @@ private struct RepoTable: View {
 	}
 }
 
-private struct Badge: View {
+struct Badge: View {
 	let text: String
 	let color: Color
 

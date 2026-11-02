@@ -73,6 +73,10 @@ Then('the profile form should detect the existing profile {string}', async funct
   );
 });
 
+Then('the profile form should report a new profile', async function (this: SapphireWorld) {
+  await waitForForm(this, 'a new profile', (form) => form.status?.kind === 'new');
+});
+
 Then('the profile form submit button should read {string}', async function (this: SapphireWorld, label: string) {
   assert.strictEqual((await this.bridge.state()).profileForm?.submitLabel, label);
 });

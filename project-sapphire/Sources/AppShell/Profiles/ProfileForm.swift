@@ -7,7 +7,7 @@ import SwiftUI
 /// Ember's profile form (`ProfileForm.ts`): a name and a root path, which it validates 250 ms after the last edit, as a new profile, an existing one, or an invalid path.
 ///
 /// An existing profile locks the name to its own and turns "Create Profile" into "Register Profile"; the name typed before comes back when the path changes again.
-/// It is in the first-run welcome (`WorkspaceHubModel.welcome`) and in the New Profile dialog (`Surfaces.openNewProfileDialog`), which handle Tab and Escape; it handles the other keys, and draws its buttons' focus itself, as the dialogs do.
+/// It is in the first-run welcome (`WorkspaceHubModel.welcome`) and in the Settings Hub's New Profile row (`SettingsHubModel.form`), which handle Tab and Escape; it handles the other keys, and draws its buttons' focus itself, as the dialogs do.
 @MainActor
 @Observable
 final class ProfileFormModel {
@@ -52,7 +52,7 @@ final class ProfileFormModel {
 	var focus: Focus? {
 		didSet { if focus?.isTextField != true { clearFocus() } }
 	}
-	/// Whether the form has a Cancel button: the New Profile dialog's has, the first-run welcome's hasn't.
+	/// Whether the form has a Cancel button: the Settings Hub's has, the first-run welcome's hasn't.
 	let hasCancel: Bool
 
 	@ObservationIgnored private let validate: (String) async -> ProfilePathValidation?

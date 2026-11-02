@@ -21,8 +21,8 @@ final class Surfaces {
 	@ObservationIgnored private(set) var dialog: ConfirmationDialogModel?
 	/// The open New Task dialog; nil while none is.
 	@ObservationIgnored private(set) var newTask: NewTaskDialogModel?
-	/// The open New Profile dialog's form; nil while none is.
-	@ObservationIgnored private(set) var newProfile: ProfileFormModel?
+	/// The open Settings Hub; nil while it is closed.
+	@ObservationIgnored private(set) var settings: SettingsHubModel?
 	/// The open Add Repo dialog; nil while none is.
 	@ObservationIgnored private(set) var addRepo: AddRepoDialogModel?
 	/// The open Clone Repo dialog; nil while none is.
@@ -108,7 +108,10 @@ final class Surfaces {
 		model.closeMenu = { [unowned self] in closeHubMenu() }
 		model.confirm = { [unowned self] confirmation, action in confirm(confirmation, then: action) }
 		model.newTask = { [unowned self] source in openNewTaskDialog(duplicating: source) }
-		model.newProfile = { [unowned self, unowned model] in openNewProfileDialog(over: model) }
+		model.openSettings = { [unowned self] opening in
+			closeHubMenu()
+			openSettingsHub(opening)
+		}
 		model.addRepo = { [unowned self, unowned model] workspace in
 			closeHubMenu()
 			openAddRepoDialog(for: AddRepoTarget(workspace)) { [weak model] in model?.repoAdded() }
@@ -272,37 +275,25 @@ final class Surfaces {
 		cloneRepo = model
 	}
 
-	/// Opens the New Profile dialog over the hub, a modal layer with the profile form, which stands in for the Settings Hub's inline form that Ember's "New Profile…" opens.
-	/// Registering closes it and selects the new profile, as Ember's closes the Settings Hub over the hub; Escape cancels, as the New Task dialog's does.
-	private func openNewProfileDialog(over hub: WorkspaceHubModel) {
-		guard windowStack.find(NewProfileDialog.layerName) == nil else { return }
-		var handle: LayerHandle?
-		let close = { [unowned self] in
-			if let handle { windowStack.remove(handle) }
-		}
+	/// Opens the Settings Hub over the Workspace Hub, a page, so that closing it reloads the hub, which lists the active profile's workspaces.
+	private func openSettingsHub(_ opening: SettingsHubModel.Opening) {
+		guard windowStack.find(SettingsHubModel.layerName) == nil else { return }
 		let router = router!
-		let form = ProfileFormModel(
-			store: store, hasCancel: true, onCancel: close, clearFocus: { router.clearFocus() },
-			onRegistered: { [unowned hub] path in
-				close()
-				hub.profileRegistered(path)
-			})
-		var spec = modalLayer(LayerSpec(name: NewProfileDialog.layerName) { NewProfileDialog(form: form) })
-		spec.onKey = { key in
-			guard key.keyCode == KeyCode.escape, key.modifiers.isDisjoint(with: [.control, .option, .command]) else {
-				return form.handleKey(key)
-			}
-			form.cancel()
-			return true
-		}
-		spec.cycleFocus = { form.cycleFocus(backward: $0) }
-		spec.focus = { form.focus = .name }
+		let model = SettingsHubModel(
+			store: store, opening: opening, isEditingText: { router.isEditingText }, clearFocus: { router.clearFocus() })
+		var spec = pageLayer(LayerSpec(name: SettingsHubModel.layerName) { SettingsHubView(model: model) })
+		spec.onKey = model.handleKey
 		spec.onCleanup = { [unowned self] in
-			if newProfile === form { newProfile = nil }
+			if settings === model { settings = nil }
 		}
-		closeHubMenu()
-		handle = windowStack.push(spec)
-		newProfile = form
+		let handle = windowStack.push(spec)
+		model.close = { [unowned self] in windowStack.remove(handle) }
+		model.confirm = { [unowned self] confirmation, action in confirm(confirmation, then: action) }
+		model.cloneRepo = { [unowned self] profilePath, onCloned in
+			openCloneRepoDialog(profilePath: profilePath) { _ in onCloned() }
+		}
+		settings = model
+		model.load()
 	}
 
 	/// The hub's shortcuts on a page of their own; `?` closes it as it opened it, and the hub's keys reach nothing meanwhile.

@@ -1,0 +1,149 @@
+Feature: Settings Hub profiles
+  The Settings Hub is a page over the Workspace Hub (P, the profile dropdown or the burger menu) for listing the profiles, switching the active one, creating or registering one (the inline form behind the pinned "New Profile…" row), and deleting one from the registry.
+
+  Scenario: Opening the Settings Hub with P and returning with q
+    Given a profile "Work" with 1 active workspaces
+    And the Workspace Hub is open
+    When the user presses "P"
+    Then the Settings Hub should be visible
+    And the Settings Hub should list 1 profile and a New Profile row
+    When the user presses "q"
+    Then the Workspace Hub overlay should be present
+
+  Scenario: Hub profile dropdown offers New Profile and Manage Profiles
+    Given a profile "Work" with 1 active workspaces
+    And the Workspace Hub is open
+    When the user clicks the profile dropdown
+    Then the profile dropdown should list profile "Work"
+    And the profile dropdown should offer "New Profile…" and "Manage Profiles…"
+    When the user clicks the "Manage Profiles…" dropdown action
+    Then the Settings Hub should be visible
+
+  Scenario: Hub burger menu opens the Settings Hub
+    Given a profile "Work" with 1 active workspaces
+    And the Workspace Hub is open
+    When the user opens Settings from the Workspace Hub menu
+    Then the Settings Hub should be visible
+
+  Scenario: Creating a new profile from the Settings Hub
+    Given a profile "Work" with 1 active workspaces
+    And the Workspace Hub is open
+    When the user presses "P"
+    Then the Settings Hub should list 1 profile and a New Profile row
+    When the user presses "n"
+    And the user enters profile name "Personal" and path "personal" under the fixture root
+    Then the profile form should report a new profile
+    When the user submits the profile form
+    Then the Workspace Hub overlay should be present
+    And the profile dropdown should be labeled "Personal"
+    And the global config should list 2 profiles
+
+  Scenario: Registering an existing profile directory
+    Given a profile "Work" with 1 active workspaces
+    And an unregistered initialized profile directory "Legacy"
+    And the Workspace Hub is open
+    When the user presses "P"
+    Then the Settings Hub should list 1 profile and a New Profile row
+    When the user presses "n"
+    And the user enters path "Legacy" under the fixture root in the profile form
+    Then the profile form should detect the existing profile "Legacy"
+    And the profile form submit button should read "Register Profile"
+    When the user submits the profile form
+    Then the profile dropdown should be labeled "Legacy"
+    And the global config should list 2 profiles
+
+  Scenario: Switching the active profile from the Settings Hub
+    Given a profile "Work" with 2 active workspaces with worktrees
+    And a profile "Personal" with 1 active workspace with worktrees
+    And the Workspace Hub is open
+    Then the Workspace Hub should show 2 workspace items
+    When the user presses "P"
+    Then the Settings Hub should list 2 profiles and a New Profile row
+    When the user presses "j"
+    Then the focused profile should be "Personal"
+    When the user presses "Enter"
+    Then the Workspace Hub overlay should be present
+    And the Workspace Hub should show 1 workspace items
+    And the profile dropdown should be labeled "Personal"
+
+  Scenario: Deleting a profile removes it from the registry but not from disk
+    Given a profile "Work" with 1 active workspace with worktrees
+    And a profile "Personal" with 1 active workspace with worktrees
+    And the Workspace Hub is open
+    When the user presses "P"
+    Then the Settings Hub should list 2 profiles and a New Profile row
+    When the user presses "j"
+    And the user presses "d"
+    Then a confirmation dialog should be visible
+    And the confirmation dialog should mention "remains on disk"
+    When the user confirms the dialog
+    Then the Settings Hub should list 1 profile and a New Profile row
+    And the profile directory "Personal" should still exist on disk
+    And the global config should list 1 profile
+
+  # The delete confirmation is a modal layer: Escape cancels the dialog only, the Settings Hub stays open beneath.
+  Scenario: Escape on the delete-profile confirmation cancels only the dialog
+    Given a profile "Work" with 1 active workspace with worktrees
+    And a profile "Personal" with 1 active workspace with worktrees
+    And the Workspace Hub is open
+    When the user presses "P"
+    Then the Settings Hub should list 2 profiles and a New Profile row
+    When the user presses "j"
+    And the user presses "d"
+    Then a confirmation dialog should be visible
+    When the user presses "Escape"
+    Then no confirmation dialog should appear
+    And the Settings Hub should be visible
+    And the global config should list 2 profiles
+
+  # Enter is consumed by the modal (confirm), not by the Settings row beneath it.
+  Scenario: Enter on the delete-profile confirmation confirms instead of acting on the Settings row
+    Given a profile "Work" with 1 active workspace with worktrees
+    And a profile "Personal" with 1 active workspace with worktrees
+    And the Workspace Hub is open
+    When the user presses "P"
+    Then the Settings Hub should list 2 profiles and a New Profile row
+    When the user presses "j"
+    And the user presses "d"
+    Then a confirmation dialog should be visible
+    When the user presses "Enter"
+    Then the Settings Hub should list 1 profile and a New Profile row
+    And the global config should list 1 profile
+
+  # The modal barrier stops a second "d" from reaching the Settings Hub, so no second dialog stacks.
+  Scenario: Pressing d again over the delete confirmation opens only one dialog
+    Given a profile "Work" with 1 active workspace with worktrees
+    And a profile "Personal" with 1 active workspace with worktrees
+    And the Workspace Hub is open
+    When the user presses "P"
+    Then the Settings Hub should list 2 profiles and a New Profile row
+    When the user presses "j"
+    And the user presses "d"
+    Then a confirmation dialog should be visible
+    When the user presses "d"
+    Then exactly 1 confirmation dialog should be visible
+
+  Scenario: Deleting a profile is blocked while it has open sessions
+    Given a profile "Work" with 1 active workspace with worktrees
+    And the Workspace Hub is open
+    When the user presses "Enter"
+    Then a workspace session should be open
+    When the Workspace Hub is open
+    And the user presses "P"
+    Then the Settings Hub should list 1 profile and a New Profile row
+    When the user presses "d"
+    Then a notice dialog titled "Cannot delete profile" should be visible
+    And the notice dialog should have no cancel button
+    When the user confirms the dialog
+    Then the Settings Hub should list 1 profile and a New Profile row
+    And the global config should list 1 profile
+
+  Scenario: Deleting the last profile returns to the first-run welcome
+    Given a profile "Work" with 0 active workspaces
+    And the Workspace Hub is open
+    When the user presses "P"
+    Then the Settings Hub should list 1 profile and a New Profile row
+    When the user presses "d"
+    And the user confirms the dialog
+    Then the Workspace Hub overlay should be present
+    And the first-run welcome card should be visible

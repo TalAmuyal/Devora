@@ -22,6 +22,7 @@ bindgen = ["uniffi/cli"]
 
 [dependencies]
 devora-core.workspace = true
+serde_json.workspace = true
 uniffi = "=0.32.2"
 
 [dev-dependencies]
