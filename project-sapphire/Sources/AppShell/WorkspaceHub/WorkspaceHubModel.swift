@@ -14,8 +14,6 @@ final class WorkspaceHubModel {
 	/// "Refreshing…" stays up at least this long, even when the reload is instant; "Refreshed successfully" stays this long.
 	static let refreshingMinimum = Duration.seconds(1)
 	static let refreshedDuration = Duration.seconds(3)
-	/// The tooltip of the controls that lead to what Sapphire doesn't have yet, which are shown disabled.
-
 	let store: Store
 	var category = HubCategory.active {
 		didSet { cursor.select(0) }
@@ -47,6 +45,7 @@ final class WorkspaceHubModel {
 	@ObservationIgnored var newTask: (_ duplicating: Workspace?) -> Void = { _ in }
 	/// Opens the Settings Hub, on the active profile or on the New Profile form.
 	@ObservationIgnored var openSettings: (SettingsHubModel.Opening) -> Void = { _ in }
+	/// Opens the Health Hub.
 	@ObservationIgnored var openHealth: () -> Void = {}
 	/// Opens the Add Repo dialog for an active workspace.
 	@ObservationIgnored var addRepo: (Workspace) -> Void = { _ in }
@@ -164,7 +163,7 @@ final class WorkspaceHubModel {
 		}
 	}
 
-	/// The rows of a header dropdown; the actions that lead to surfaces Sapphire doesn't have yet are shown disabled.
+	/// The rows of a header dropdown; all current menu actions are available.
 	func menuItems(_ menu: HubMenu) -> [DropdownItem] {
 		switch menu {
 		case .profiles:

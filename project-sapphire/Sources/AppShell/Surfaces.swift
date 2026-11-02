@@ -23,6 +23,7 @@ final class Surfaces {
 	@ObservationIgnored private(set) var newTask: NewTaskDialogModel?
 	/// The open Settings Hub; nil while it is closed.
 	@ObservationIgnored private(set) var settings: SettingsHubModel?
+	/// The open Health Hub; nil while it is closed.
 	@ObservationIgnored private(set) var health: HealthHubModel?
 	/// The open Add Repo dialog; nil while none is.
 	@ObservationIgnored private(set) var addRepo: AddRepoDialogModel?
