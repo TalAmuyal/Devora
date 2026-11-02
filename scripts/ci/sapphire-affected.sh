@@ -12,7 +12,7 @@ irrelevant() {
 		bundler/macos-ember/* | bundler/hdiutil-create-retry.sh | bundler/CLAUDE.md | bundler/docs/*) return 0 ;;
 		docs/* | scripts/hooks/*) return 0 ;;
 		.github/workflows/cd.yml | .github/workflows/changelog.yml | .github/workflows/auto-tag.yml) return 0 ;;
-		CHANGELOG.md | README.md | CONTRIBUTING.md | SECURITY.md | LICENSE | THIRD_PARTY_LICENSES.md | install.sh | cut-release.sh | base-icon-ember.png | additional-instructions.md) return 0 ;;
+		AGENTS.md | CHANGELOG.md | README.md | CONTRIBUTING.md | SECURITY.md | LICENSE | THIRD_PARTY_LICENSES.md | install.sh | cut-release.sh | base-icon-ember.png | additional-instructions.md) return 0 ;;
 		CLAUDE.md | */CLAUDE.md) return 0 ;;
 		*) return 1 ;;
 	esac
