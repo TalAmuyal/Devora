@@ -124,6 +124,9 @@ impl WorkspaceCreationManager {
     }
 }
 
+mod recovery;
+pub use recovery::{recover, RecoveryDescriptor};
+
 enum Mode {
     Fresh,
     Reuse,
@@ -156,6 +159,30 @@ pub fn create(
     on_event: &EventSink,
     warnings: &mut Vec<String>,
 ) -> Result<Outcome, String> {
+    create_with_claim(
+        handle,
+        profile_path,
+        repo_paths,
+        task_name,
+        source_workspace_path,
+        on_event,
+        warnings,
+        &|_| Ok(()),
+    )
+}
+
+/// Records recovery intent while selection is locked and before claiming the workspace.
+#[allow(clippy::too_many_arguments)]
+pub fn create_with_claim(
+    handle: &CreationHandle,
+    profile_path: &str,
+    repo_paths: &[String],
+    task_name: &str,
+    source_workspace_path: Option<&str>,
+    on_event: &EventSink,
+    warnings: &mut Vec<String>,
+    on_claim: &dyn Fn(&RecoveryDescriptor) -> Result<(), String>,
+) -> Result<Outcome, String> {
     let workspaces_dir = Path::new(profile_path).join("workspaces");
     fs::create_dir_all(&workspaces_dir)
         .map_err(|e| format!("failed to create workspaces dir: {e}"))?;
@@ -187,7 +214,8 @@ pub fn create(
         label: "Resolving workspace".to_string(),
     });
 
-    let (ws_path, ws_name, mode) = select_workspace(&workspaces_dir, &repo_names, task_name)?;
+    let (ws_path, ws_name, mode) =
+        select_workspace(&workspaces_dir, &repo_names, task_name, on_claim)?;
 
     let body = run_body(
         handle,
@@ -207,6 +235,9 @@ pub fn create(
         Ok(()) => {
             if matches!(mode, Mode::Fresh) {
                 finalize_fresh(&ws_path, task_name)?;
+            }
+            if matches!(mode, Mode::Reuse) {
+                workspace::write_task_json(&ws_path, task_name)?;
             }
             // Duplication overwrites the new workspace's CLAUDE.md with the source's (for both fresh and reused workspaces), so it carries the source's workspace-level guidance.
             if let Some(src) = source_workspace_path {
@@ -437,6 +468,7 @@ fn select_workspace(
     workspaces_dir: &Path,
     repo_names: &[String],
     task_name: &str,
+    on_claim: &dyn Fn(&RecoveryDescriptor) -> Result<(), String>,
 ) -> Result<(PathBuf, String, Mode), String> {
     use fs2::FileExt;
 
@@ -454,7 +486,9 @@ fn select_workspace(
     let result = (|| {
         if let Some(reused) = find_reusable_workspace(workspaces_dir, repo_names) {
             // Claim immediately so a concurrent creation's search skips this now-active workspace.
-            workspace::write_task_json(&reused, task_name)?;
+            let descriptor = RecoveryDescriptor::new(&reused, repo_names, false);
+            on_claim(&descriptor)?;
+            descriptor.claim(task_name)?;
             let name = reused
                 .file_name()
                 .map(|n| n.to_string_lossy().into_owned())
@@ -463,7 +497,9 @@ fn select_workspace(
         } else {
             let name = workspace::find_next_workspace_id(workspaces_dir)?;
             let path = workspaces_dir.join(&name);
-            fs::create_dir_all(&path).map_err(|e| format!("failed to create {name}: {e}"))?;
+            let descriptor = RecoveryDescriptor::new(&path, repo_names, true);
+            on_claim(&descriptor)?;
+            descriptor.claim_fresh(task_name)?;
             Ok((path, name, Mode::Fresh))
         }
     })();
@@ -825,23 +861,7 @@ fn copy_source_claude_md(src_ws: &Path, dst_ws: &Path) -> Result<(), String> {
 /// Undo a creation that was cancelled or failed.
 /// A fresh workspace is removed entirely (worktrees deregistered, then directory deleted); a reused workspace reverts to inactive by dropping the claim (`task.json`) while keeping its cached worktrees.
 fn cleanup_aborted(ws_path: &Path, repo_names: &[String], mode: &Mode) {
-    match mode {
-        Mode::Fresh => {
-            for name in repo_names {
-                let worktree = ws_path.join(name);
-                if worktree.join(".git").exists() {
-                    let _ = Command::new("git")
-                        .args(["worktree", "remove", "--force", "."])
-                        .current_dir(&worktree)
-                        .output();
-                }
-            }
-            let _ = fs::remove_dir_all(ws_path);
-        }
-        Mode::Reuse => {
-            let _ = fs::remove_file(ws_path.join("task.json"));
-        }
-    }
+    let _ = recovery::cleanup_path(ws_path, repo_names, matches!(mode, Mode::Fresh));
 }
 
 /// Roll back a single added worktree (used when an add-repo is cancelled): deregister it from its source repo, then remove the directory.

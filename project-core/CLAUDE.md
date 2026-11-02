@@ -27,4 +27,5 @@ It is being extracted from Ember's `src-tauri/` area by area (TalAmuyal/Devora#2
 - The facade's UniFFI side (for Sapphire) follows ADR-010's rules: every export returns `Result`, events are pulled in batches through a subscription object, and cancellation is an explicit command.
 - Each workspace belongs to exactly one profile, the one whose `workspaces/` holds it, which `list_workspaces` records on each entry (`profile_path`).
   Profile-scoped settings (Claude settings, `terminal.default-app`, git shortcuts, the prepare-command, and Debi's profile through `DEBI_PROFILE_PATH`) resolve through the workspace's own profile, carried by its session (`Session::profile_path`), never through the active profile.
+- The state persistence creation journal is internal recovery bookkeeping, outside the UI state and its Command/Event interface.
 - Tests live with the code they test; run them with `mise run test` (and `mise run lint`).
