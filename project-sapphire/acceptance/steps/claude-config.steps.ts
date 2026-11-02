@@ -50,6 +50,11 @@ When('the user switches Claude {string} to {string}', async function (this: Sapp
   await waitForClaude(this);
   await this.bridge.settings({ action: 'selectSegment', key, label });
 });
+When('the user selects the Claude {string} suggestion {string}', async function (this: SapphireWorld, key: string, label: string) {
+  await this.bridge.waitFor(`Claude ${key} suggestion ${label}`, () => this.bridge.state(), (s) =>
+    s.settings?.scope?.claude?.fields.some((f) => f.key === key && f.suggestions.includes(label)) === true);
+  await this.bridge.settings({ action: 'suggest', key, label });
+});
 When('the user types Claude {string} draft {string}', async function (this: SapphireWorld, key: string, value: string) {
   await this.bridge.settings({ action: 'type', key, value });
 });

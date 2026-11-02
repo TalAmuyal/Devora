@@ -16,8 +16,6 @@ Types of changes:
 
 ### Added
 
-- Sapphire's Settings Hub now edits Claude launch settings at User Defaults and profile scope, and saves or clears the shared Asana API token from the Task Tracker card.
-
 - The start of Devora Sapphire, the native macOS build (`project-sapphire/`): one window listing profiles and workspaces from the shared core and a libghostty login shell, built with `mise run -C project-sapphire build` over `devora-ffi`, the core's new UniFFI facade
 - Architecture decision records ADR-006 to ADR-010 for Project Sapphire, the planned native macOS build, and the shared Rust core it will share with Ember
 - `mise mac-install` accepts `-p/--path` to choose the install directory and `-s/--suffix` to install as `Devora-<suffix>.app`, with the suffix also shown in the window title and as the app name in the menu bar, Dock, and Cmd+Tab
@@ -37,6 +35,7 @@ Types of changes:
 - Devora Sapphire remembers the selected profile across restarts, falling back to the first profile when it is no longer registered (Ember always starts on the first profile)
 - Devora Sapphire has Ember's Add Repo and Clone Repo dialogs: "+ Clone Repo" in the New Task dialog clones a URL into the profile's `repos/` (with a live "Clones to:" hint), then lists and selects the clone, and the Workspace Hub's detail panel has "Add Repo" for an active workspace, adding a worktree of a repo (with an optional name postfix) to it; both stream their progress in the dialog and can be cancelled, which undoes the work
 - Devora Sapphire has Ember's Settings Hub (`P`, "Manage Profiles…", "New Profile…" or the burger menu's "Settings" in the Workspace Hub): the profiles with their details, repos and Set Active / Clone Repo / Delete (refused while tabs use the profile), the inline New Profile form in place of the dialog, and the Terminal & Session, Pull Requests and Task Tracker cards at the User Defaults' and each profile's scope, with "Default" inheriting and showing the inherited value; the core gains `get_config_settings` and `set_config_setting` over a given global config
+- Sapphire's Settings Hub now edits Claude launch settings at User Defaults and profile scope, and saves or clears the shared Asana API token from the Task Tracker card.
 
 ### Changed
 
