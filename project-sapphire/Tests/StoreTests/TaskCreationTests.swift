@@ -5,7 +5,7 @@ import Testing
 
 extension Fixture {
 	/// A selected profile `work` whose one repo, `repo`, has a bare origin with a commit on `main`, as a creation needs; `prepare` is its prepare-command.
-	func originBackedProfile(prepare: String?) throws -> (profile: String, repo: String) {
+	func originBackedProfile(prepare: String?) async throws -> (profile: String, repo: String) {
 		let profile = try makeProfile("work")
 		if let prepare {
 			let config = try JSONSerialization.data(withJSONObject: ["name": "work", "prepare-command": prepare])
@@ -15,25 +15,19 @@ extension Fixture {
 		let repo = "\(profile)/repos/repo"
 		try FileManager.default.createDirectory(atPath: origin, withIntermediateDirectories: true)
 		try FileManager.default.createDirectory(atPath: repo, withIntermediateDirectories: true)
-		try git(["init", "-q", "--bare", "-b", "main"], in: origin)
-		try git(["init", "-q", "-b", "main"], in: repo)
+		try await git(["init", "-q", "--bare", "-b", "main"], in: origin)
+		try await git(["init", "-q", "-b", "main"], in: repo)
 		try "v1\n".write(toFile: "\(repo)/file.txt", atomically: true, encoding: .utf8)
-		try git(["add", "."], in: repo)
-		try git(["commit", "-q", "-m", "c1"], in: repo)
-		try git(["remote", "add", "origin", origin], in: repo)
-		try git(["push", "-q", "-u", "origin", "main"], in: repo)
+		try await git(["add", "."], in: repo)
+		try await git(["commit", "-q", "-m", "c1"], in: repo)
+		try await git(["remote", "add", "origin", origin], in: repo)
+		try await git(["push", "-q", "-u", "origin", "main"], in: repo)
 		try registerProfiles([profile])
 		return (profile, repo)
 	}
 
-	private func git(_ arguments: [String], in directory: String) throws {
-		let process = Process()
-		process.executableURL = URL(filePath: "/usr/bin/git")
-		process.arguments = ["-c", "user.name=t", "-c", "user.email=t@t"] + arguments
-		process.currentDirectoryURL = URL(filePath: directory)
-		try process.run()
-		process.waitUntilExit()
-		guard process.terminationStatus == 0 else { throw CocoaError(.fileWriteUnknown) }
+	private func git(_ arguments: [String], in directory: String) async throws {
+		try await runGit(["-c", "user.name=t", "-c", "user.email=t@t"] + arguments, in: directory)
 	}
 }
 
@@ -52,7 +46,7 @@ struct TaskCreationTests {
 
 	@Test func aTaskOpensACreatingTabThatGetsItsWorkspace() async throws {
 		let fixture = try Fixture()
-		let (profile, repo) = try fixture.originBackedProfile(prepare: nil)
+		let (profile, repo) = try await fixture.originBackedProfile(prepare: nil)
 		let store = try await loadedStore(fixture)
 
 		await store.dispatch(.createTask(title: "Fix login", repoPaths: [repo], sourceWorkspacePath: nil)).value
@@ -69,7 +63,7 @@ struct TaskCreationTests {
 
 	@Test func theProgressFollowsTheStepsAndACancelUndoesTheWork() async throws {
 		let fixture = try Fixture()
-		let (profile, repo) = try fixture.originBackedProfile(prepare: "echo preparing; sleep 30")
+		let (profile, repo) = try await fixture.originBackedProfile(prepare: "echo preparing; sleep 30")
 		let store = try await loadedStore(fixture)
 
 		await store.dispatch(.createTask(title: "Will cancel", repoPaths: [repo], sourceWorkspacePath: nil)).value
@@ -89,7 +83,7 @@ struct TaskCreationTests {
 
 	@Test func aCancelAskedForBeforeTheCreationStartedIsAppliedOnceItHas() async throws {
 		let fixture = try Fixture()
-		let (profile, repo) = try fixture.originBackedProfile(prepare: "sleep 30")
+		let (profile, repo) = try await fixture.originBackedProfile(prepare: "sleep 30")
 		let store = try await loadedStore(fixture)
 		store.dispatch(.openShell)
 		try await eventually { store.app.window.tabs.count == 1 }
@@ -109,7 +103,7 @@ struct TaskCreationTests {
 
 	@Test func aFailureStaysOnItsTabWithItsBanner() async throws {
 		let fixture = try Fixture()
-		let (profile, _) = try fixture.originBackedProfile(prepare: nil)
+		let (profile, _) = try await fixture.originBackedProfile(prepare: nil)
 		let store = try await loadedStore(fixture)
 
 		await store.dispatch(.createTask(title: "Doomed", repoPaths: ["\(profile)/repos/missing"], sourceWorkspacePath: nil)).value
@@ -130,7 +124,7 @@ struct TaskCreationTests {
 
 	@Test func closingTheTabOfARunningCreationCancelsIt() async throws {
 		let fixture = try Fixture()
-		let (profile, repo) = try fixture.originBackedProfile(prepare: "echo preparing; sleep 30")
+		let (profile, repo) = try await fixture.originBackedProfile(prepare: "echo preparing; sleep 30")
 		let store = try await loadedStore(fixture)
 		await store.dispatch(.createTask(title: "Abandoned", repoPaths: [repo], sourceWorkspacePath: nil)).value
 		try await eventually { store.creations.values.first?.output.contains("preparing") == true }
@@ -144,7 +138,7 @@ struct TaskCreationTests {
 
 	@Test func theRegisteredReposAreTheSelectedProfiles() async throws {
 		let fixture = try Fixture()
-		let (_, repo) = try fixture.originBackedProfile(prepare: nil)
+		let (_, repo) = try await fixture.originBackedProfile(prepare: nil)
 		let store = try await loadedStore(fixture)
 
 		let repos = try #require(await store.registeredRepos())

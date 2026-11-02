@@ -82,12 +82,16 @@ struct AppStateTests {
 }
 
 /// Polls instead of sleeping a fixed time: events reach the store asynchronously.
+///
+/// The condition is checked once more after the deadline: the tests share the main actor, so a poll can wake past the deadline with the fold it waits for queued just before it.
 @MainActor
-func eventually(timeout: Duration = .seconds(5), _ condition: () -> Bool) async throws {
+func eventually(timeout: Duration = .seconds(5), sourceLocation: SourceLocation = #_sourceLocation, _ condition: () -> Bool) async throws {
 	let deadline = ContinuousClock.now + timeout
-	while ContinuousClock.now < deadline {
-		if condition() { return }
+	while !condition() {
+		guard ContinuousClock.now < deadline else {
+			Issue.record("condition not met within \(timeout)", sourceLocation: sourceLocation)
+			return
+		}
 		try await Task.sleep(for: .milliseconds(10))
 	}
-	Issue.record("condition not met within \(timeout)")
 }
