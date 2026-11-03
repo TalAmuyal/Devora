@@ -34,3 +34,8 @@ Feature: File preview pane
   Scenario: A preview for an unknown session is a no-op
     When a Markdown file is previewed for an unknown session
     Then the active session should have 0 preview panes
+
+  Scenario: Previewing an HTML file displays sandboxed content
+    When an HTML file is previewed in the active session
+    Then the active session should have 1 preview pane
+    And the preview pane should display sandboxed HTML

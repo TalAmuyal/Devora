@@ -30,6 +30,10 @@ struct PreviewPaneView: View {
 			if let error = model.error {
 				Text(error).foregroundStyle(.red).textSelection(.enabled)
 					.frame(maxWidth: .infinity, maxHeight: .infinity)
+			} else if ["html", "htm"].contains(URL(fileURLWithPath: preview.path).pathExtension.lowercased()) {
+				HTMLPreviewView(content: { try store.htmlPreviewContent(path: preview.path) },
+					onError: { model.error = Store.describe($0) }, onView: { model.webView = $0 },
+					revision: "\(preview.id):\(preview.revision)")
 			} else {
 				WebContentView(content: {
 					guard let resources = Bundle.main.resourcePath else { throw CocoaError(.fileNoSuchFile) }

@@ -703,12 +703,15 @@ public final class Store {
 		return error
 	}
 
+	/// An untrusted HTML read uses the same core file/error path as Markdown.
+	public func htmlPreviewContent(path: String) throws -> String {
+		guard let core else { throw CoreError.Failed(message: "the core isn't running") }
+		return try core.readPreview(path: path)
+	}
+
 	/// A preview read reports its error in the pane, rather than as a global banner.
 	public func previewContent(path: String, resourceDir: String) throws -> (String, [String: String]) {
 		guard let core else { throw CoreError.Failed(message: "the core isn't running") }
-		guard !["html", "htm"].contains(URL(fileURLWithPath: path).pathExtension.lowercased()) else {
-			throw CoreError.Failed(message: "HTML previews are not available yet")
-		}
 		let themePath = try core.bundledThemePath(resourceDir: resourceDir)
 		return (try core.readPreview(path: path), try core.loadTheme(path: themePath))
 	}

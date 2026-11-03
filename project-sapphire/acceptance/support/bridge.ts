@@ -300,9 +300,10 @@ export class Bridge {
    * `key` is a letter, a digit, `Minus`, `Equal`, `Slash`, `Space`, `Left`, `Right`, `Down`, `Up`, `Escape`, `Tab` or `Return`.
    * Returns whether the router consumed it, so that no view saw it.
    */
-  async preview(pane: number): Promise<{ heading: string; mermaid: string; fill: string }> {
+  async preview(pane: number): Promise<{ heading: string; mermaid: string; fill: string; htmlSandbox: boolean; scriptRan: string; fileStyle: string; images: {complete: boolean; width: number}[]; url: string }> {
     return this.request('GET', `/test/preview?pane=${pane}`);
   }
+  async previewAction(pane: number, action: string): Promise<void> { await this.request('POST', '/test/preview/action', { pane, action }); }
   async closePreview(pane: number): Promise<void> { await this.request('POST', '/test/preview/close', { pane }); }
 
   async press(key: string, modifiers: Modifier[] = []): Promise<boolean> {

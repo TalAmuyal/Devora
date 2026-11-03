@@ -16,6 +16,7 @@ Types of changes:
 
 ### Added
 
+- Devora Sapphire previews static HTML in isolated panes, with scripts, external resources and navigation blocked
 - Devora Sapphire opens durable Markdown/Mermaid preview panes through `debi preview`, with refresh, close and restore after restart
 - Devora Sapphire opens a searchable Command Palette with Shift-Shift, including session, workspace, profile and Repurpose actions
 - Devora Sapphire opens the themed User Guide with `F1`, even above dialogs, with Vim scrolling and Mermaid diagrams
