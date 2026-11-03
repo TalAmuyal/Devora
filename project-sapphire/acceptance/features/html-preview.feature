@@ -33,8 +33,8 @@ Feature: Isolated HTML previews
 
   Scenario: Switching file formats rebuilds the renderer
     When a Markdown file is previewed in the active session
-    Then the preview pane should render the HTML heading "First Doc"
+    Then the preview pane should render the Markdown heading "First Doc"
     When an HTML file is previewed in the active session
     Then the preview pane should display sandboxed HTML
     When another Markdown file is previewed in the active session
-    Then the preview pane should render the HTML heading "Second Doc"
+    Then the preview pane should render the Markdown heading "Second Doc"
