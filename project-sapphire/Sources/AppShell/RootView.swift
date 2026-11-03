@@ -38,7 +38,7 @@ public struct RootView: View {
 					TabBar(store: store)
 				}
 				.overlay { LayerHost(stack: surfaces.windowStack) }
-				.background(KeyRouterInstaller(router: surfaces.router))
+				.background(KeyRouterInstaller(router: surfaces.router, shortcuts: surfaces.shortcuts))
 			}
 		}
 		.overlay(alignment: .top) { ErrorBannerStack(store: store) }

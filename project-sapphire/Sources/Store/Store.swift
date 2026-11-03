@@ -22,6 +22,7 @@ public enum Command: Sendable {
 	case moveActiveTabForward
 	case moveActiveTabBackward
 	case closeTab(id: UInt64)
+	case setTabTitle(id: UInt64, title: String)
 	/// Opens a tab named `title` and creates a workspace for it in the selected profile, with these repos; `sourceWorkspacePath` duplicates that workspace's task.
 	case createTask(title: String, repoPaths: [String], sourceWorkspacePath: String?)
 	/// Cancels the workspace creation running in a tab; a cancel asked for before the creation has started is held until it has.
@@ -160,6 +161,8 @@ public final class Store {
 			apply(.moveActiveTabBackward)
 		case .closeTab(let id):
 			apply(.closeSession(tab: id))
+		case .setTabTitle(let id, let title):
+			apply(.setTitle(tab: id, title: title))
 		case .createTask(let title, let repoPaths, let source):
 			return Task { await createTask(title: title, repoPaths: repoPaths, sourceWorkspacePath: source) }
 		case .cancelCreation(let tab):
@@ -250,6 +253,19 @@ public final class Store {
 		guard (try? await call("remove_task", { try core.removeTask(workspacePath: path) })) != nil else { return false }
 		await workspaceChanged(path, core: core)
 		return true
+	}
+
+	/// Checks worktrees before showing the repurpose prompt; the core checks again on commit.
+	public func prepareRepurpose(workspacePath: String) async -> String? {
+		guard let core else { return nil }
+		return try? await call("prepare_repurpose_task") { try core.prepareRepurposeTask(workspacePath: workspacePath) }
+	}
+
+	public func repurpose(workspacePath: String, title: String, tab: UInt64) async {
+		guard let core else { return }
+		guard (try? await call("repurpose_task", { try core.repurposeTask(workspacePath: workspacePath, newTitle: title) })) != nil else { return }
+		if app.window.tabs.contains(where: { $0.id == tab }) { dispatch(.setTabTitle(id: tab, title: title)) }
+		await workspaceChanged(workspacePath, core: core)
 	}
 
 	/// Deletes a workspace (`delete_workspace`: its worktrees, then its directory), then lists the workspaces again; returns whether it was deleted.

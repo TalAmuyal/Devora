@@ -2,6 +2,32 @@ Feature: Tabs and the selected profile survive a restart
   Sapphire keeps its tabs in its app state, so they come back after a quit, a crash or a kill; each tab's terminal starts afresh.
   It keeps the selected profile there too, where Ember starts on the first profile.
 
+  @repurpose
+  Scenario: A repurposed session title survives a relaunch
+    Given Devora is running with no sessions open
+    And a profile "Work" with 1 active workspaces
+    And a session is opened for workspace "ws-1" from the Hub
+    When the user runs the "Repurpose Current Session" palette command
+    Then the repurpose dialog should be visible
+    When the user replaces the repurpose dialog input with "Follow-up task"
+    And the user confirms the repurpose dialog
+    Then the active session title should be "Follow-up task"
+    When Sapphire is quit and relaunched
+    Then the active session title should be "Follow-up task"
+
+  @repurpose
+  Scenario: Repurpose renames the initiating tab even if another tab becomes active
+    Given Devora is running with no sessions open
+    And a profile "Work" with 1 active workspaces
+    And a session is opened for workspace "ws-1" from the Hub
+    When the user runs the "Repurpose Current Session" palette command
+    Then the repurpose dialog should be visible
+    When a new session is created
+    And the user replaces the repurpose dialog input with "Follow-up task"
+    And the user confirms the repurpose dialog
+    Then the first session title should be "Follow-up task"
+    And the active session title should be "Shell"
+
   Scenario: Tabs survive a quit and relaunch
     Given a profile "work" with 2 active workspaces
     And a session exists

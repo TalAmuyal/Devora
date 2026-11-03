@@ -12,6 +12,7 @@ import TerminalKit
 @Observable
 final class Surfaces {
 	@ObservationIgnored private(set) var router: LayerRouter!
+	@ObservationIgnored private(set) var shortcuts: AppShortcuts!
 	private(set) var tabStacks: [UInt64: LayerStack] = [:]
 	/// The open Workspace Hub's model; nil while it is closed.
 	@ObservationIgnored private(set) var hub: WorkspaceHubModel?
@@ -25,6 +26,10 @@ final class Surfaces {
 	@ObservationIgnored private(set) var settings: SettingsHubModel?
 	/// The open Health Hub; nil while it is closed.
 	@ObservationIgnored private(set) var health: HealthHubModel?
+	/// The open Command Palette; nil while it is closed.
+	@ObservationIgnored private(set) var palette: CommandPaletteModel?
+	/// The open Repurpose dialog; nil while none is.
+	@ObservationIgnored private(set) var repurposeDialog: RepurposeDialogModel?
 	/// The open Add Repo dialog; nil while none is.
 	@ObservationIgnored private(set) var addRepo: AddRepoDialogModel?
 	/// The open Clone Repo dialog; nil while none is.
@@ -40,12 +45,105 @@ final class Surfaces {
 	init(store: Store) {
 		self.store = store
 		router = LayerRouter { [unowned self] in store.app.window.activeTab.flatMap { tabStacks[$0] } }
-		router.shortcuts = AppShortcuts(store: store, windowStack: router.windowStack,
+		shortcuts = AppShortcuts(store: store, windowStack: router.windowStack,
 			openWorkspaceHub: { [unowned self] in openWorkspaceHub() },
-			openUserGuide: { [unowned self] in openUserGuide() }).handle
+			openUserGuide: { [unowned self] in openUserGuide() })
+		router.shortcuts = shortcuts.handle
+		shortcuts.openCommandPalette = { [unowned self] in openCommandPalette() }
 	}
 
 	var windowStack: LayerStack { router.windowStack }
+
+	/// Opens immediately, then refreshes only the profile rows without delaying the search field.
+	func openCommandPalette() {
+		guard windowStack.find(CommandPaletteModel.layerName) == nil else { return }
+		let model = CommandPaletteModel(commands: PaletteCommand.commands(profiles: store.profiles, active: store.selectedProfilePath))
+		model.isEditingText = { [unowned self] in router.isEditingText }
+		var spec = pageLayer(LayerSpec(name: CommandPaletteModel.layerName) { CommandPaletteView(model: model) })
+		spec.onKey = model.handleKey
+		spec.focus = { model.fieldFocused = true }
+		spec.onCleanup = { [unowned self] in if palette === model { palette = nil } }
+		// SwiftUI mounts the field on the next turn; the previous terminal must not receive keys in between.
+		router.clearFocus()
+		let handle = windowStack.push(spec)
+		model.close = { [unowned self] in windowStack.remove(handle) }
+		model.run = { [unowned self] action in runPaletteCommand(action) }
+		palette = model
+		Task { [weak self, weak model, store] in
+			guard await store.listProfiles(), let self, let model, self.palette === model else { return }
+			model.updateProfiles(store.profiles, active: store.selectedProfilePath)
+		}
+	}
+
+	private func runPaletteCommand(_ action: PaletteCommand.Action) {
+		switch action {
+		case .workspaceHub: openWorkspaceHub()
+		case .newShell: store.dispatch(.openShell)
+		case .addRepo:
+			if let target = store.addRepoTargetOfActiveTab() { openAddRepoDialog(for: target) {} }
+		case .cloneRepo:
+			guard let profile = store.selectedProfilePath else {
+				store.showError("No active profile — open the Workspace Hub and set one first")
+				return
+			}
+			openCloneRepoDialog(profilePath: profile) { _ in }
+		case .closeSession:
+			if let tab = store.app.window.activeTab { store.dispatch(.closeTab(id: tab)) }
+		case .health: openHealthHub()
+		case .newProfile: openSettingsHub(.newProfile)
+		case .settings: openSettingsHub(.list)
+		case .switchProfile(let path):
+			Task { [unowned self, store] in
+				await store.dispatch(.selectProfile(path: path)).value
+				openWorkspaceHub()
+			}
+		case .duplicate: duplicateCurrentSession()
+		case .repurpose: repurposeCurrentSession()
+		}
+	}
+
+	private func duplicateCurrentSession() {
+		let window = store.app.window
+		guard let tab = window.tabs.first(where: { $0.id == window.activeTab }),
+		      case .workspace(let path) = tab.session.kind, let profile = tab.session.profilePath else {
+			store.showError("Cannot duplicate: the current session has no associated workspace")
+			return
+		}
+		Task { [unowned self, store] in
+			await store.dispatch(.selectProfile(path: profile)).value
+			guard let workspace = store.workspaces.first(where: { $0.path == path }) else {
+				store.showError("Cannot duplicate: the current workspace could not be found")
+				return
+			}
+			openWorkspaceHub()
+			openNewTaskDialog(duplicating: workspace)
+		}
+	}
+
+	private func repurposeCurrentSession() {
+		let window = store.app.window
+		guard let tab = window.tabs.first(where: { $0.id == window.activeTab }),
+		      case .workspace(let path) = tab.session.kind else {
+			store.showError("Cannot repurpose: the current session has no associated workspace")
+			return
+		}
+		let id = tab.id
+		Task { [unowned self, store] in
+			guard let title = await store.prepareRepurpose(workspacePath: path),
+			      windowStack.find(RepurposeDialogModel.layerName) == nil else { return }
+			let model = RepurposeDialogModel(title: title)
+			model.clearFocus = { [unowned self] in router.clearFocus() }
+			var spec = modalLayer(LayerSpec(name: RepurposeDialogModel.layerName) { RepurposeDialogView(model: model) })
+			spec.onKey = model.handleKey
+			spec.cycleFocus = { model.cycleFocus(backward: $0) }
+			spec.focus = { model.focus = .title }
+			spec.onCleanup = { [unowned self] in if repurposeDialog === model { repurposeDialog = nil } }
+			let handle = windowStack.push(spec)
+			model.close = { [unowned self] in windowStack.remove(handle) }
+			model.submit = { [store] title in Task { await store.repurpose(workspacePath: path, title: title, tab: id) } }
+			repurposeDialog = model
+		}
+	}
 
 	/// Makes a stack for each new tab, with a progress page while the tab creates its workspace, and tears down the stacks of closed tabs.
 	func sync(with tabs: [AppTab]) {
@@ -373,18 +471,21 @@ private struct TerminalTab: View {
 /// Hands the window to the key router once the view is in it, so that the router sees the window's key-downs.
 struct KeyRouterInstaller: NSViewRepresentable {
 	let router: LayerRouter
+	let shortcuts: AppShortcuts
 
 	func makeNSView(context: Context) -> InstallerView {
-		InstallerView(router: router)
+		InstallerView(router: router, shortcuts: shortcuts)
 	}
 
 	func updateNSView(_ view: InstallerView, context: Context) {}
 
 	final class InstallerView: NSView {
 		private let router: LayerRouter
+		private let shortcuts: AppShortcuts
 
-		init(router: LayerRouter) {
+		init(router: LayerRouter, shortcuts: AppShortcuts) {
 			self.router = router
+			self.shortcuts = shortcuts
 			super.init(frame: .zero)
 		}
 
@@ -393,7 +494,13 @@ struct KeyRouterInstaller: NSViewRepresentable {
 
 		override func viewDidMoveToWindow() {
 			super.viewDidMoveToWindow()
-			if let window { router.install(in: window) } else { router.uninstall() }
+			if let window {
+				router.install(in: window)
+				shortcuts.install(in: window)
+			} else {
+				router.uninstall()
+				shortcuts.uninstall()
+			}
 		}
 	}
 }

@@ -86,6 +86,12 @@ final class TestBridge {
 				return .init(status: 200, body: [:])
 			case ("POST", "/test/key"):
 				return .init(status: 200, body: ["consumed": try press(request.json())])
+			case ("POST", "/test/palette"):
+				try paletteAction(request.json())
+				return .init(status: 200, body: [:])
+			case ("POST", "/test/repurpose"):
+				try repurposeAction(request.json())
+				return .init(status: 200, body: [:])
 			case ("POST", "/test/hub"):
 				try hubAction(request.json())
 				return .init(status: 200, body: [:])
@@ -132,6 +138,36 @@ final class TestBridge {
 			return .init(status: error.status, body: ["error": error.message])
 		} catch {
 			return .init(status: 500, body: ["error": String(describing: error)])
+		}
+	}
+
+	private func paletteAction(_ body: [String: Any]) throws {
+		switch body["action"] as? String {
+		case "shiftShift":
+			let now = ProcessInfo.processInfo.systemUptime
+			for (offset, flags): (Double, KeyModifiers) in [(0, .shift), (0.05, []), (0.1, .shift), (0.15, [])] {
+				surfaces.shortcuts.handleFlags(keyCode: KeyCode.leftShift, modifiers: flags, at: now + offset)
+			}
+		case "filter":
+			guard let palette = surfaces.palette, let value = body["value"] as? String else { throw BridgeError(status: 409, "palette or value missing") }
+			palette.filter = value
+		case "blur":
+			guard let palette = surfaces.palette else { throw BridgeError(status: 409, "palette is not open") }
+			palette.fieldFocused = false
+			surfaces.router.clearFocus()
+		default: throw BridgeError(status: 400, "unknown palette action")
+		}
+	}
+
+	private func repurposeAction(_ body: [String: Any]) throws {
+		guard let dialog = surfaces.repurposeDialog else { throw BridgeError(status: 409, "repurpose dialog is not open") }
+		switch body["action"] as? String {
+		case "title":
+			guard let value = body["value"] as? String else { throw BridgeError(status: 400, "missing title") }
+			dialog.title = value
+		case "confirm": dialog.confirm()
+		case "cancel": dialog.close()
+		default: throw BridgeError(status: 400, "unknown repurpose action")
 		}
 	}
 
@@ -677,6 +713,12 @@ final class TestBridge {
 	private func state() -> [String: Any] {
 		let window = store.app.window
 		return [
+			"palette": surfaces.palette.map { palette in
+				["items": palette.items.map { ["id": $0.id, "title": $0.title] },
+				 "selected": palette.selected?.title ?? NSNull(), "filter": palette.filter,
+				 "focused": surfaces.router.isEditingText] as [String: Any]
+			} ?? NSNull(),
+			"repurpose": surfaces.repurposeDialog.map { ["title": $0.title] } ?? NSNull(),
 			"hub": hubState(),
 			"health": healthState(),
 			"dialog": dialogState(),

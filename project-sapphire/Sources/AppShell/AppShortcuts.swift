@@ -1,9 +1,21 @@
+import AppKit
 import Layers
 import Store
 import TerminalKit
 
 /// An app-wide shortcut: a chord the router runs before any surface sees it (`Sources/Layers/CLAUDE.md` has the availability table).
 enum AppShortcut: Equatable {
+	private struct Chord {
+		let keyCode: UInt16
+		let modifiers: KeyModifiers
+		let keyLabel: String
+		var label: String {
+			(modifiers.contains(.control) ? "⌃" : "") + (modifiers.contains(.shift) ? "⇧" : "") + keyLabel
+		}
+		func matches(_ key: KeyPress) -> Bool { key.keyCode == keyCode && key.modifiers == modifiers }
+	}
+	private static let workspaceHubChord = Chord(keyCode: KeyCode.s, modifiers: .control, keyLabel: "S")
+	private static let newShellChord = Chord(keyCode: KeyCode.s, modifiers: [.control, .shift], keyLabel: "S")
 	case setFontSize(Double)
 	case changeFontSize(by: Double)
 	case previousTab
@@ -13,11 +25,14 @@ enum AppShortcut: Equatable {
 	case newShell
 	case openWorkspaceHub
 	case openUserGuide
+	case openCommandPalette
 
 	/// The shortcut a key-down is, if any; matched on the physical key, since Control turns the characters into control codes.
 	/// Command and Option chords are never shortcuts, so they reach the menu and the terminal unchanged.
 	init?(_ key: KeyPress) {
 		if key.keyCode == KeyCode.f1 { self = .openUserGuide; return }
+		if Self.workspaceHubChord.matches(key) { self = .openWorkspaceHub; return }
+		if Self.newShellChord.matches(key) { self = .newShell; return }
 		guard key.modifiers.contains(.control), key.modifiers.isDisjoint(with: [.command, .option]) else { return nil }
 		let shift = key.modifiers.contains(.shift)
 		let reset = TerminalRuntime.defaultFontSize
@@ -26,8 +41,6 @@ enum AppShortcut: Equatable {
 		case (KeyCode.rightArrow, false): self = .nextTab
 		case (KeyCode.leftArrow, true): self = .moveTabBackward
 		case (KeyCode.rightArrow, true): self = .moveTabForward
-		case (KeyCode.s, true): self = .newShell
-		case (KeyCode.s, false): self = .openWorkspaceHub
 		case (KeyCode.equal, true), (KeyCode.keypadPlus, true): self = .changeFontSize(by: 2)
 		case (KeyCode.minus, true), (KeyCode.keypadMinus, true): self = .changeFontSize(by: -2)
 		case (KeyCode.equal, false), (KeyCode.digit2, false): self = .setFontSize(reset)
@@ -41,27 +54,77 @@ enum AppShortcut: Equatable {
 	var needsNoWindowSurface: Bool {
 		switch self {
 		case .setFontSize, .changeFontSize, .openUserGuide: false
-		case .previousTab, .nextTab, .moveTabBackward, .moveTabForward, .newShell, .openWorkspaceHub: true
+		case .previousTab, .nextTab, .moveTabBackward, .moveTabForward, .newShell, .openWorkspaceHub, .openCommandPalette: true
+		}
+	}
+
+	/// The label shown alongside a palette command using this shortcut.
+	var paletteLabel: String? {
+		switch self {
+		case .openWorkspaceHub: Self.workspaceHubChord.label
+		case .newShell: Self.newShellChord.label
+		default: nil
 		}
 	}
 }
 
 /// The app-wide shortcut policy: the router's first stage.
 @MainActor
-struct AppShortcuts {
+final class AppShortcuts {
 	static let fontSizes: ClosedRange<Double> = 8...40
 
 	let store: Store
 	let windowStack: LayerStack
 	let openWorkspaceHub: () -> Void
 	let openUserGuide: () -> Void
+	var openCommandPalette: () -> Void = {}
+	private var shiftTap = ShiftDoubleTap()
+	private var flagsMonitor: Any?
+
+	init(store: Store, windowStack: LayerStack, openWorkspaceHub: @escaping () -> Void, openUserGuide: @escaping () -> Void) {
+		self.store = store
+		self.windowStack = windowStack
+		self.openWorkspaceHub = openWorkspaceHub
+		self.openUserGuide = openUserGuide
+	}
 
 	/// Returns whether the key was a shortcut, which consumes it even when unavailable: a deliberate no-op, so the key reaches neither the surface that made it unavailable nor a terminal.
 	func handle(_ key: KeyPress) -> Bool {
+		shiftTap.reset()
 		guard let shortcut = AppShortcut(key) else { return false }
-		if shortcut.needsNoWindowSurface, windowStack.hasOpaqueLayer { return true }
+		if !available(shortcut) { return true }
 		run(shortcut)
 		return true
+	}
+
+	private func available(_ shortcut: AppShortcut) -> Bool {
+		!shortcut.needsNoWindowSurface || !windowStack.hasOpaqueLayer
+	}
+
+	func handleFlags(keyCode: UInt16, modifiers: KeyModifiers, at time: TimeInterval) {
+		let isAvailable = available(.openCommandPalette)
+		let fired = shiftTap.flagsChanged(keyCode: keyCode, modifiers: modifiers, at: time, available: isAvailable)
+		if fired {
+			run(.openCommandPalette)
+		}
+	}
+
+	/// Modifier events aren't key-downs and must continue to AppKit unchanged.
+	func install(in window: NSWindow) {
+		uninstall()
+		flagsMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { [weak self, weak window] event in
+			MainActor.assumeIsolated {
+				guard let self, let window, event.windowNumber == window.windowNumber else { return }
+				self.handleFlags(keyCode: event.keyCode, modifiers: KeyModifiers(event.modifierFlags), at: event.timestamp)
+			}
+			return event
+		}
+	}
+
+	func uninstall() {
+		if let flagsMonitor { NSEvent.removeMonitor(flagsMonitor) }
+		flagsMonitor = nil
+		shiftTap.reset()
 	}
 
 	private func run(_ shortcut: AppShortcut) {
@@ -78,6 +141,7 @@ struct AppShortcuts {
 		case .newShell: store.dispatch(.openShell)
 		case .openWorkspaceHub: openWorkspaceHub()
 		case .openUserGuide: openUserGuide()
+		case .openCommandPalette: openCommandPalette()
 		}
 	}
 }

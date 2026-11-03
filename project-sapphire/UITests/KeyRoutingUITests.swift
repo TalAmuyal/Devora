@@ -64,6 +64,23 @@ final class KeyRoutingUITests: XCTestCase {
 		XCTAssertEqual(try runInShell(" >$UITEST_OUT/composed", awaiting: "composed"), "é")
 	}
 
+	@MainActor
+	func testShiftShiftOpensAndReopensThePaletteWithRealModifierEvents() throws {
+		try launch()
+		func tapShift() {
+			XCUIElement.perform(withKeyModifiers: .shift) {}
+		}
+		let field = app.descendants(matching: .any)["command-palette-search"].firstMatch
+		tapShift(); tapShift()
+		app.typeText("q")
+		XCTAssertTrue(field.waitForExistence(timeout: 5), app.debugDescription)
+		XCTAssertEqual(field.value as? String, "q")
+		app.typeKey(.escape, modifierFlags: [])
+		XCTAssertTrue(field.waitForNonExistence(timeout: 5))
+		tapShift(); tapShift()
+		XCTAssertTrue(field.waitForExistence(timeout: 5))
+	}
+
 	/// Types a command and Return, then waits for the file it writes in `UITEST_OUT` and returns its contents.
 	@MainActor
 	private func runInShell(_ command: String, awaiting file: String) throws -> String {
