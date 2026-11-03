@@ -25,6 +25,9 @@ extension AppState {
 		case .sessionChanged(let id, let session):
 			guard let i = window.tabs.firstIndex(where: { $0.id == id }) else { return }
 			window.tabs[i].session = session
+		case .panesChanged(let id, let pane):
+			guard let i = window.tabs.firstIndex(where: { $0.id == id }) else { return }
+			window.tabs[i].pane = pane
 		case .activeProfileChanged(let path):
 			activeProfile = path
 		}
@@ -36,6 +39,16 @@ extension AppTab {
 	public var terminalID: UInt64 {
 		switch pane {
 		case .terminal(let id): id
+		case .previewRow(let terminal, _): terminal
+		}
+	}
+}
+
+extension AppTab {
+	public var previews: [PreviewPane] {
+		switch pane {
+		case .terminal: []
+		case .previewRow(_, let previews): previews
 		}
 	}
 }

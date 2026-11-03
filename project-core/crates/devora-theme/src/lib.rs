@@ -2,7 +2,12 @@
 
 use std::collections::HashMap;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+
+/// Where both apps bundle the theme, resolved from their resource directory.
+pub fn bundled_theme_path(resource_dir: &Path) -> PathBuf {
+    resource_dir.join("themes/catppuccin-macchiato.conf")
+}
 
 /// Returns the list of CSS custom property names that a theme key maps to.
 fn css_properties_for(key: &str) -> &'static [&'static str] {

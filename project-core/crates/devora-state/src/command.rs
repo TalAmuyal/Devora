@@ -1,6 +1,6 @@
 //! The named commands, the events they emit, and the reducer that applies one to the other.
 
-use crate::model::{AppState, Pane, Session, SessionKind, Tab, TabId, Window};
+use crate::model::{AppState, Pane, PreviewPane, Session, SessionKind, Tab, TabId, Window};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -49,6 +49,15 @@ pub enum Command {
         tab: TabId,
         reason: String,
     },
+    /// Open/replace a preview for this terminal, or refresh the same file without changing its pane ID.
+    OpenPreview {
+        terminal: u64,
+        path: String,
+    },
+    ClosePreview {
+        tab: TabId,
+        pane: u64,
+    },
     SetActiveProfile {
         profile_path: Option<String>,
     },
@@ -86,6 +95,10 @@ pub enum Event {
         tab: TabId,
         session: Session,
     },
+    PanesChanged {
+        tab: TabId,
+        pane: Pane,
+    },
     ActiveProfileChanged {
         profile_path: Option<String>,
     },
@@ -94,6 +107,12 @@ pub enum Event {
 /// Why a command was rejected; a rejected command changes nothing.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum StateError {
+    UnknownTerminal {
+        terminal: u64,
+    },
+    UnknownPreview {
+        pane: u64,
+    },
     UnknownTab {
         tab: TabId,
     },
@@ -118,6 +137,8 @@ pub enum StateError {
 impl fmt::Display for StateError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::UnknownTerminal { terminal } => write!(f, "no terminal pane with id {terminal}"),
+            Self::UnknownPreview { pane } => write!(f, "no preview pane with id {pane}"),
             Self::UnknownTab { tab } => write!(f, "no tab with id {tab}"),
             Self::IndexOutOfRange { index, len } => {
                 write!(f, "tab index {index} is out of range for {len} tabs")
@@ -247,6 +268,55 @@ pub(crate) fn apply(
         Command::WorkspaceCreationFailed { tab, reason } => {
             finish_creation(window, tab, SessionKind::CreationFailed { reason })?
         }
+        Command::OpenPreview { terminal, path } => {
+            let tab = window
+                .tabs
+                .iter_mut()
+                .find(|t| t.pane.terminal_id() == terminal)
+                .ok_or(StateError::UnknownTerminal { terminal })?;
+            let preview = match tab.pane.previews().iter().find(|p| p.path == path) {
+                Some(current) => PreviewPane {
+                    revision: current.revision.wrapping_add(1),
+                    ..current.clone()
+                },
+                None => PreviewPane {
+                    id: allocate(next_id),
+                    path,
+                    revision: 0,
+                },
+            };
+            tab.pane = Pane::PreviewRow {
+                terminal,
+                previews: vec![preview],
+            };
+            vec![Event::PanesChanged {
+                tab: tab.id,
+                pane: tab.pane.clone(),
+            }]
+        }
+        Command::ClosePreview { tab, pane } => {
+            let index = find(window, tab)?;
+            let current = &mut window.tabs[index].pane;
+            if !current.previews().iter().any(|p| p.id == pane) {
+                return Err(StateError::UnknownPreview { pane });
+            }
+            let terminal = current.terminal_id();
+            let previews = current
+                .previews()
+                .iter()
+                .filter(|p| p.id != pane)
+                .cloned()
+                .collect::<Vec<_>>();
+            *current = if previews.is_empty() {
+                Pane::Terminal { id: terminal }
+            } else {
+                Pane::PreviewRow { terminal, previews }
+            };
+            vec![Event::PanesChanged {
+                tab,
+                pane: current.clone(),
+            }]
+        }
         Command::SetActiveProfile { profile_path } => {
             if app.active_profile == profile_path {
                 vec![]
@@ -373,7 +443,7 @@ mod tests {
         let a = shell(&mut state, "a");
         state.apply(Command::CloseSession { tab: a }).unwrap();
         let b = shell(&mut state, "b");
-        let Pane::Terminal { id: pane } = state.snapshot().window.tabs[0].pane;
+        let pane = state.snapshot().window.tabs[0].pane.terminal_id();
         let mut ids = vec![a, b, pane];
         ids.sort();
         ids.dedup();

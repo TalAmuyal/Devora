@@ -3,6 +3,7 @@ import CoreBindings
 import Foundation
 import Layers
 import Network
+import WebKit
 import SwiftUI
 import Store
 import TerminalKit
@@ -68,6 +69,19 @@ final class TestBridge {
 			switch (request.method, request.path) {
 			case ("GET", "/test/state"):
 				return .init(status: 200, body: state())
+			case ("GET", "/test/preview"):
+				guard let id = request.query["pane"].flatMap(UInt64.init), let view = surfaces.previewModels[id]?.webView else { throw BridgeError(status: 409, "preview web view is not ready") }
+				let rendered = try await view.evaluateJavaScript("""
+					(() => { const svg = document.querySelector('.mermaid-diagram svg'); const shape = svg?.querySelector('.node rect, rect.basic, .node polygon, .node path'); return { heading: document.querySelector('h1')?.textContent ?? '', mermaid: svg?.textContent ?? '', fill: shape ? getComputedStyle(shape).fill : '' }; })()
+					""")
+				return .init(status: 200, body: rendered as? [String: Any] ?? [:])
+			case ("POST", "/test/preview/close"):
+				let body = try request.json()
+				let pane = try uint64(body, "pane")
+				guard let tab = store.app.window.tabs.first(where: { $0.previews.contains(where: { $0.id == pane }) }) else { throw BridgeError(status: 404, "preview not found") }
+				await store.dispatch(.closePreview(tab: tab.id, pane: pane)).value
+				surfaces.router.focusActiveTab()
+				return .init(status: 200, body: [:])
 			case ("POST", "/test/dispatch"):
 				try await dispatch(request.json())
 				return .init(status: 200, body: [:])
@@ -748,6 +762,7 @@ final class TestBridge {
 					"focused": session?.hasFocus ?? false,
 					"layers": surfaces.tabStacks[tab.id]?.layers.map(\.spec.name) ?? [],
 					"progress": progressState(of: tab),
+					"previews": tab.previews.map { preview in ["id": NSNumber(value: preview.id), "path": preview.path, "revision": NSNumber(value: preview.revision), "error": surfaces.previewModels[preview.id]?.error ?? NSNull()] as [String: Any] },
 				] as [String: Any]
 			},
 		]

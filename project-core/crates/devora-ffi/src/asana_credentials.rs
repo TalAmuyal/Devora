@@ -27,7 +27,7 @@ mod tests {
     fn injected_credentials_are_shared_and_empty_saves_preserve_the_token() {
         let root = tempfile::tempdir().unwrap();
         let store = Arc::new(MemoryTokenStore::default());
-        let mut core = DevoraCore::new(
+        let core = DevoraCore::with_credentials(
             Some(
                 root.path()
                     .join("config.json")
@@ -36,9 +36,9 @@ mod tests {
             ),
             None,
             crate::log::test_log(),
+            store.clone(),
         )
         .unwrap();
-        Arc::get_mut(&mut core).unwrap().credentials = store.clone();
         assert!(!core.get_asana_token_status().unwrap());
         core.set_asana_token(" test-token ".into()).unwrap();
         assert!(core.get_asana_token_status().unwrap());

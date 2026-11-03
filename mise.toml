@@ -36,10 +36,11 @@ description = "Run tests for all sub-projects"
 [tasks.lint]
 run = """
 set -e
+bash scripts/ci/lint-swift-indentation.sh
 mise run -C project-core lint
 mise run -C project-judgess lint
 """
-description = "Check Rust formatting and lint with clippy (core, judgess; Ember has ember-lint)"
+description = "Check Swift indentation and Rust formatting/clippy (core, judgess; Ember has ember-lint)"
 
 [tasks.lint-shell]
 run = "shellcheck install.sh bundler/macos-ember/populate-app-resources.sh bundler/macos-ember/install-completions.sh"

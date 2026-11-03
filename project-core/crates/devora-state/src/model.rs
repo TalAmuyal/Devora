@@ -35,13 +35,13 @@ impl Window {
     }
 }
 
-/// A workspace tab: one open session, shown in one pane.
+/// A workspace tab: one open session with its terminal and optional previews.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Tab {
     pub id: TabId,
     pub title: String,
     pub session: Session,
-    /// The tab's content; a single terminal for now, a split tree later.
+    /// The tab's terminal, optionally sharing its row with persistent file previews.
     pub pane: Pane,
 }
 
@@ -81,4 +81,32 @@ pub enum SessionKind {
 pub enum Pane {
     /// A terminal; the UI owns the live terminal and finds it by `id`.
     Terminal { id: PaneId },
+    /// A terminal with its persistent preview panes, in display order.
+    PreviewRow {
+        terminal: PaneId,
+        previews: Vec<PreviewPane>,
+    },
+}
+
+/// A file preview's durable identity; content is re-read by the UI on restore or revision change.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PreviewPane {
+    pub id: PaneId,
+    pub path: String,
+    pub revision: u64,
+}
+
+impl Pane {
+    pub fn terminal_id(&self) -> PaneId {
+        match self {
+            Self::Terminal { id } => *id,
+            Self::PreviewRow { terminal, .. } => *terminal,
+        }
+    }
+    pub fn previews(&self) -> &[PreviewPane] {
+        match self {
+            Self::Terminal { .. } => &[],
+            Self::PreviewRow { previews, .. } => previews,
+        }
+    }
 }

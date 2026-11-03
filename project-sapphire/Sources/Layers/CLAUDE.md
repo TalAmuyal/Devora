@@ -59,6 +59,10 @@ Option and Command chords are never shortcuts, where Ember's font-size keys igno
 - `F1` (User Guide) is a key-down matched in `AppShortcuts` before any layer; the guide is a page on the window stack.
 - Shift-Shift (Command Palette) arrives as `.flagsChanged` events, not key-downs: its tracking needs a monitor of its own in `AppShortcuts`, while every key-down already reaches `AppShortcuts.handle` first, which is where a pending tap is reset.
 
+## Preview content
+
+Preview panes are adjacent content in the tab row, not layers above the terminal. The existing tab layer stack continues to route terminal keys; a window surface covers the entire row. Closing a preview asks the router to focus the active terminal, respecting an open window surface. Preview paths/layout belong to core state; its web view and error model belong to AppShell/Preview.
+
 ## Where things live
 
 | Knowledge | Home |

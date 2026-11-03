@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use devora_core::state::{Pane, SessionKind};
+use devora_core::state::SessionKind;
 use devora_core::terminal::{
     self, HostApp, TerminalHost, TerminalRequest, TerminalSpec, TerminalTarget,
 };
@@ -36,7 +36,7 @@ impl DevoraCore {
             .window
             .tabs
             .iter()
-            .find(|tab| tab.pane == Pane::Terminal { id: pane })
+            .find(|tab| tab.pane.terminal_id() == pane)
             .ok_or_else(|| format!("no terminal pane with id {pane}"))?;
         let target = match &tab.session.kind {
             SessionKind::Shell => TerminalTarget::Shell { cwd: None },
@@ -55,8 +55,11 @@ impl DevoraCore {
         let host = TerminalHost {
             app: HostApp::Sapphire,
             resources_dir,
-            // Sapphire has no IPC server yet (TalAmuyal/Devora#226).
-            ipc_port: 0,
+            ipc_port: self
+                .ipc
+                .get()
+                .ok_or_else(|| "IPC server is not ready".to_string())?
+                .port(),
         };
         let terminal_id =
             u32::try_from(pane).map_err(|_| format!("pane id {pane} doesn't fit DEVORA_PTY_ID"))?;
@@ -94,8 +97,34 @@ mod tests {
         })
         .unwrap();
         let AppState { window, .. } = core.snapshot().unwrap();
-        let Pane::Terminal { id } = window.tabs.last().unwrap().pane;
+        let id = window.tabs.last().unwrap().pane.terminal_id();
         id
+    }
+
+    #[test]
+    fn ipc_preview_uses_the_terminal_port_and_commits_background_tab_state() {
+        use std::io::{Read, Write};
+        let core = core();
+        let terminal = open(&core, SessionKind::Shell, None);
+        open(&core, SessionKind::Shell, None);
+        let spec = core.terminal_spec(terminal, None).unwrap();
+        let port: u16 = spec.env["DEVORA_IPC_PORT"].parse().unwrap();
+        let mut stream = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
+        stream
+            .set_read_timeout(Some(std::time::Duration::from_secs(5)))
+            .unwrap();
+        let body = format!(r#"{{"ptyId":{terminal},"path":"/example.md","stack":false}}"#);
+        write!(stream, "POST /preview/open HTTP/1.1\r\nHost: localhost\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", body.len(), body).unwrap();
+        let mut response = String::new();
+        stream.read_to_string(&mut response).unwrap();
+        assert!(response.contains("200 OK"), "{response}");
+        let state = core.snapshot().unwrap();
+        assert_eq!(state.window.tabs[0].pane.previews()[0].path, "/example.md");
+        assert_eq!(state.window.active_tab, Some(state.window.tabs[1].id));
+        assert_eq!(
+            core.terminal_spec(terminal, None).unwrap().env["DEVORA_PTY_ID"],
+            terminal.to_string()
+        );
     }
 
     #[test]

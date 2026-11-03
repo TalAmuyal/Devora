@@ -140,9 +140,67 @@ pub struct DevoraCore {
     config_path: PathBuf,
     /// The app state (ADR-008).
     state: state::Store,
+    ipc: std::sync::OnceLock<devora_core::ipc::IpcServer>,
     log: Arc<AppLog>,
     creations: creation::Creations,
     credentials: Arc<dyn devora_core::credentials::TokenStore>,
+}
+
+impl DevoraCore {
+    fn with_credentials(
+        config_path: Option<String>,
+        state_path: Option<String>,
+        log: Arc<AppLog>,
+        credentials: Arc<dyn devora_core::credentials::TokenStore>,
+    ) -> Result<Arc<Self>, CoreError> {
+        let config_path = match config_path {
+            Some(path) => PathBuf::from(path),
+            None => config::global_config_path()?,
+        };
+        let state = match state_path {
+            Some(path) => app_state::open(path)?,
+            None => state::Store::new(),
+        };
+        if let Err(error) = creation::recover_pending(&state, &log) {
+            log.report(&format!("couldn't recover interrupted creations: {error}"));
+        }
+        let core = Arc::new(DevoraCore {
+            config_path,
+            state,
+            ipc: Default::default(),
+            log,
+            creations: Default::default(),
+            credentials,
+        });
+        let weak = Arc::downgrade(&core);
+        let error_log = Arc::clone(&core.log);
+        let server = devora_core::ipc::start(devora_core::ipc::IpcHandlers {
+            on_preview_open: Box::new(move |request| {
+                if request.stack {
+                    return Err("stacked previews are not available in Sapphire yet".into());
+                }
+                let core = weak.upgrade().ok_or("the core has closed")?;
+                match core.state.dispatch(state::Command::OpenPreview {
+                    terminal: u64::from(request.pty_id),
+                    path: request.path,
+                }) {
+                    Ok(_) => Ok(()),
+                    Err(state::StateError::UnknownTerminal { terminal }) => {
+                        core.log
+                            .warn(&format!("preview ignored: unknown terminal {terminal}"));
+                        Ok(())
+                    }
+                    Err(error) => Err(error.to_string()),
+                }
+            }),
+            on_error: Box::new(move |error| error_log.report(error)),
+        })
+        .map_err(|error| CoreError::from(format!("could not start IPC server: {error}")))?;
+        core.ipc
+            .set(server)
+            .map_err(|_| CoreError::from("IPC already started".to_string()))?;
+        Ok(core)
+    }
 }
 
 #[uniffi::export]
@@ -158,24 +216,18 @@ impl DevoraCore {
         state_path: Option<String>,
         log: Arc<AppLog>,
     ) -> Result<Arc<Self>, CoreError> {
-        let config_path = match config_path {
-            Some(path) => PathBuf::from(path),
-            None => config::global_config_path()?,
-        };
-        let state = match state_path {
-            Some(path) => app_state::open(path)?,
-            None => state::Store::new(),
-        };
-        if let Err(error) = creation::recover_pending(&state, &log) {
-            log.report(&format!("couldn't recover interrupted creations: {error}"));
-        }
-        Ok(Arc::new(DevoraCore {
+        Self::with_credentials(
             config_path,
-            state,
+            state_path,
             log,
-            creations: Default::default(),
-            credentials: devora_core::credentials::token_store(),
-        }))
+            devora_core::credentials::token_store(),
+        )
+    }
+
+    /// Re-read a preview file on open, refresh or restore; errors stay with its pane.
+    pub fn read_preview(&self, path: String) -> Result<String, CoreError> {
+        std::fs::read_to_string(&path)
+            .map_err(|error| format!("could not read {path}: {error}").into())
     }
 
     pub fn version(&self) -> Result<String, CoreError> {
@@ -266,6 +318,13 @@ impl DevoraCore {
                 .to_string_lossy()
                 .into_owned(),
         )
+    }
+
+    /// Resolve the theme bundled by both apps from their resource directory.
+    pub fn bundled_theme_path(&self, resource_dir: String) -> Result<String, CoreError> {
+        Ok(theme::bundled_theme_path(Path::new(&resource_dir))
+            .to_string_lossy()
+            .into_owned())
     }
 
     /// The theme file's colors, keyed by the CSS custom property names the UIs share.
@@ -546,9 +605,13 @@ mod tests {
     #[test]
     fn loads_a_theme_and_reports_a_missing_one() {
         let tmp = tempfile::tempdir().unwrap();
-        let theme_path = tmp.path().join("theme.conf");
-        fs::write(&theme_path, "background #24273A\n").unwrap();
         let core = core_with_config(tmp.path(), "{}");
+        let theme_path = PathBuf::from(
+            core.bundled_theme_path(tmp.path().to_string_lossy().into_owned())
+                .unwrap(),
+        );
+        fs::create_dir_all(theme_path.parent().unwrap()).unwrap();
+        fs::write(&theme_path, "background #24273A\n").unwrap();
 
         let tokens = core
             .load_theme(theme_path.to_string_lossy().into_owned())
