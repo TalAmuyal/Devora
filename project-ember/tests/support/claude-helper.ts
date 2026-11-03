@@ -1,4 +1,4 @@
-import { execSync } from 'node:child_process';
+import { execFileSync, execSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -33,13 +33,21 @@ export function createTestWorkspace(): string {
  * Pre-accept Claude Code's folder-trust dialog for `workspacePath`, so the tests don't depend on how that dialog is drawn or which option it defaults.
  */
 function trustWorkspace(workspacePath: string): void {
+  const running = testClaudeProcesses();
+  if (running.length > 0) throw new Error(`Cannot update workspace trust while test Claude processes are running: ${running.join(', ')}`);
   const configFile = path.join(CLAUDE_CONFIG_PATH, '.claude.json');
   const config = fs.existsSync(configFile) ? JSON.parse(fs.readFileSync(configFile, 'utf-8')) : {};
   config.projects ??= {};
   for (const key of new Set([workspacePath, fs.realpathSync(workspacePath)])) {
     config.projects[key] = { ...config.projects[key], hasTrustDialogAccepted: true };
   }
-  fs.writeFileSync(configFile, JSON.stringify(config, null, 2));
+  const temporary = path.join(fs.mkdtempSync(path.join(CLAUDE_CONFIG_PATH, '.trust-')), 'config.json');
+  try {
+    fs.writeFileSync(temporary, JSON.stringify(config, null, 2), { mode: 0o600 });
+    fs.renameSync(temporary, configFile);
+  } finally {
+    fs.rmSync(path.dirname(temporary), { recursive: true, force: true });
+  }
 }
 
 export function setupClaudeHook(
@@ -162,6 +170,7 @@ export async function startClaudeCode(driver: AppDriver): Promise<void> {
     // U+276F) with optional leading/trailing whitespace.
     const hasPrompt = lines.some(l => /^\s*❯\s*$/.test(l));
     if (hasPrompt) {
+      if (testClaudeProcesses().length === 0) throw new Error('Claude Code is ready but its test process could not be identified for teardown');
       return;
     }
 
@@ -234,14 +243,46 @@ export async function runClaudePrompt(
 
 /**
  * Cleanly shut down Claude Code by sending the `/exit` command.
- * Uses CR (raw-mode Enter) so the TUI processes it, then waits for the
- * shell prompt to return.
+ * Uses CR (raw-mode Enter) so the TUI processes it, then verifies every
+ * Claude process using this test config has exited before teardown continues.
  */
 export async function stopClaudeCode(driver: AppDriver): Promise<void> {
-  try {
-    await sendPromptToClaudeCode(driver, '/exit');
-    await new Promise(r => setTimeout(r, 2_000));
-  } catch {
-    // Session or PTY may already be closed
+  if (testClaudeProcesses().length === 0) return;
+  // A Claude session can be in a background tab. Address every PTY before the
+  // generic teardown closes them; writing to just the active tab misses it.
+  await driver.eval(`
+    for (const session of window.__test.sessionManager.getSessions()) {
+      const id = session.getPtyId();
+      if (id != null) await window.__TAURI_INTERNALS__.invoke('write_pty', {
+        id, data: ${JSON.stringify(Array.from(new TextEncoder().encode('/exit\r')))}
+      });
+    }
+  `);
+  const deadline = Date.now() + 15_000;
+  while (true) {
+    const remaining = testClaudeProcesses();
+    if (remaining.length === 0) return;
+    if (Date.now() >= deadline) throw new Error(`Claude Code did not exit after /exit; remaining test process IDs: ${remaining.join(', ')}`);
+    await new Promise(r => setTimeout(r, 100));
   }
+}
+
+/** Inspect only candidate CLI processes, returning IDs rather than logging their environments. */
+function testClaudeProcesses(): number[] {
+  const processes = execFileSync('ps', ['-axo', 'pid=,comm='], { encoding: 'utf8' });
+  const result: number[] = [];
+  for (const line of processes.split('\n')) {
+    const match = line.trim().match(/^(\d+)\s+(.+)$/);
+    if (!match || (!/^(claude(?:-[\w.-]+)?|node)$/.test(path.basename(match[2])) && !match[2].includes('/claude/versions/'))) continue;
+    const pid = Number(match[1]);
+    let command: string;
+    try {
+      command = execFileSync('ps', ['eww', '-p', String(pid), '-o', 'command='], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+    } catch (error: any) {
+      if (error.status === 1) continue; // Exited between the two snapshots.
+      throw error;
+    }
+    if (command.split(/\s+/).includes(`CLAUDE_CONFIG_DIR=${CLAUDE_CONFIG_PATH}`)) result.push(pid);
+  }
+  return result;
 }

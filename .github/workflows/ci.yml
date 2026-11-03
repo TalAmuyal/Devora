@@ -104,7 +104,9 @@ jobs:
           mise exec -C project-ember -- npm ci
 
       - name: Install Claude Code CLI
-        run: npm install -g @anthropic-ai/claude-code || true
+        run: |
+          npm install -g @anthropic-ai/claude-code@2.1.316
+          claude --version
 
       - name: Build Ember
         run: DEVORA_TEST_MODE=1 mise run build-ember-app
