@@ -208,6 +208,8 @@ export interface HealthState {
 }
 
 export interface AppState {
+	palette: { items: { id: string; title: string }[]; selected: string | null; filter: string; focused: boolean } | null;
+	repurpose: { title: string } | null;
   health: HealthState | null;
   hub: HubState | null;
   dialog: DialogState | null;
@@ -299,6 +301,14 @@ export class Bridge {
    */
   async press(key: string, modifiers: Modifier[] = []): Promise<boolean> {
     return (await this.request('POST', '/test/key', { key, modifiers })).consumed;
+  }
+
+  async palette(action: 'shiftShift' | 'filter' | 'blur', value?: string): Promise<void> {
+    await this.request('POST', '/test/palette', { action, value });
+  }
+
+  async repurpose(action: 'title' | 'confirm' | 'cancel', value?: string): Promise<void> {
+    await this.request('POST', '/test/repurpose', { action, value });
   }
 
   /** Makes a tab's terminal the window's first responder, as a click into it would. */

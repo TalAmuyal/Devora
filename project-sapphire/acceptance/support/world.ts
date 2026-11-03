@@ -33,6 +33,7 @@ export class SapphireWorld extends World {
   sessionsBeforeTask?: number;
   /** The commit a refreshed worktree should be at. */
   expectedHead?: string;
+	originalTaskUid?: string;
   /** Whether the app's key router consumed the latest key typed into a field. */
   lastKeyConsumed?: boolean;
 

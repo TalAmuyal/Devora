@@ -16,6 +16,7 @@ Types of changes:
 
 ### Added
 
+- Devora Sapphire opens a searchable Command Palette with Shift-Shift, including session, workspace, profile and Repurpose actions
 - Devora Sapphire opens the themed User Guide with `F1`, even above dialogs, with Vim scrolling and Mermaid diagrams
 - Devora Sapphire has a Health Hub, opened with `H` or the Workspace Hub menu, with dependency and configuration checks, copyable fixes and `r` to re-run
 - The start of Devora Sapphire, the native macOS build (`project-sapphire/`): one window listing profiles and workspaces from the shared core and a libghostty login shell, built with `mise run -C project-sapphire build` over `devora-ffi`, the core's new UniFFI facade

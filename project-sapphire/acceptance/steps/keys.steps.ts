@@ -35,6 +35,7 @@ function pressable(name: string): { key: string; modifiers: Modifier[] } {
 }
 
 When('the user presses {string}', async function (this: SapphireWorld, name: string) {
+	if ((name === 'j' || name === 'k') && (await this.bridge.state()).palette) await this.bridge.palette('blur');
   const { key, modifiers } = pressable(name);
   await this.bridge.press(key, modifiers);
 });

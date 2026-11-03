@@ -4,7 +4,7 @@ Feature: Command Palette
   The Command Palette and the Workspace Hub are mutually exclusive overlays.
 
   Background:
-    Given Ember is running
+    Given Devora is running with no sessions open
 
   Scenario: Open the Command Palette with shift+shift
     Given no overlay is open

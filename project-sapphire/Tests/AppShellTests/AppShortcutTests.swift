@@ -15,6 +15,8 @@ struct AppShortcutTests {
 		#expect(AppShortcut(KeyPress(keyCode: KeyCode.equal, modifiers: [.control, .shift], characters: "+")) == .changeFontSize(by: 2))
 		#expect(AppShortcut(KeyPress(keyCode: KeyCode.s, modifiers: [.control, .shift], characters: "\u{13}")) == .newShell)
 		#expect(AppShortcut(KeyPress(keyCode: KeyCode.s, modifiers: .control, characters: "\u{13}")) == .openWorkspaceHub)
+		#expect(AppShortcut.openWorkspaceHub.paletteLabel == "⌃S")
+		#expect(AppShortcut.newShell.paletteLabel == "⌃⇧S")
 		#expect(AppShortcut(KeyPress(keyCode: KeyCode.digit3, modifiers: .control, characters: "3")) == .setFontSize(26))
 		#expect(AppShortcut(KeyPress(keyCode: KeyCode.equal, modifiers: .control, characters: "=")) == .setFontSize(15))
 	}

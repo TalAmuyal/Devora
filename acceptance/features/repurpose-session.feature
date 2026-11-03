@@ -6,7 +6,7 @@ Feature: Repurpose current session
   leaving the worktrees untouched.
 
   Background:
-    Given Ember is running
+    Given Devora is running with no sessions open
 
   Scenario: Repurpose a clean, detached workspace
     Given a profile "Work" with 1 active workspaces

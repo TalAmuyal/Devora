@@ -228,6 +228,20 @@ impl DevoraCore {
         Ok(workspace::remove_task(&workspace_path)?)
     }
 
+    /// Validates a workspace before prompting for its replacement task title.
+    pub fn prepare_repurpose_task(&self, workspace_path: String) -> Result<String, CoreError> {
+        Ok(workspace::prepare_repurpose_task(&workspace_path)?.current_title)
+    }
+
+    /// Revalidates the workspace and replaces its task identity.
+    pub fn repurpose_task(
+        &self,
+        workspace_path: String,
+        new_title: String,
+    ) -> Result<(), CoreError> {
+        Ok(workspace::repurpose_task(&workspace_path, &new_title)?)
+    }
+
     /// Removes each repo's worktree (`git worktree remove --force`, in parallel), then the workspace's directory.
     pub fn delete_workspace(&self, workspace_path: String) -> Result<(), CoreError> {
         Ok(workspace::delete_workspace(&workspace_path)?)
@@ -499,6 +513,21 @@ mod tests {
         assert!(!ws.exists());
         assert!(!git_output(&source, &["worktree", "list"]).contains("ws-1"));
         assert!(source.exists());
+    }
+
+    #[test]
+    fn repurpose_revalidates_before_replacing_the_task() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (_, ws) = workspace_with_a_worktree(tmp.path());
+        let path = ws.to_string_lossy().into_owned();
+        let core = core_with_config(tmp.path(), "{}");
+
+        assert_eq!(core.prepare_repurpose_task(path.clone()).unwrap(), "Task");
+        fs::write(ws.join("repo").join("untracked.txt"), "").unwrap();
+        assert!(core.repurpose_task(path.clone(), "Next".into()).is_err());
+        fs::remove_file(ws.join("repo").join("untracked.txt")).unwrap();
+        core.repurpose_task(path.clone(), "Next".into()).unwrap();
+        assert_eq!(core.prepare_repurpose_task(path).unwrap(), "Next");
     }
 
     #[test]
