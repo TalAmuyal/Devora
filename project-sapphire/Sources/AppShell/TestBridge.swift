@@ -72,9 +72,22 @@ final class TestBridge {
 			case ("GET", "/test/preview"):
 				guard let id = request.query["pane"].flatMap(UInt64.init), let view = surfaces.previewModels[id]?.webView else { throw BridgeError(status: 409, "preview web view is not ready") }
 				let rendered = try await view.evaluateJavaScript("""
-					(() => { const svg = document.querySelector('.mermaid-diagram svg'); const shape = svg?.querySelector('.node rect, rect.basic, .node polygon, .node path'); return { heading: document.querySelector('h1')?.textContent ?? '', mermaid: svg?.textContent ?? '', fill: shape ? getComputedStyle(shape).fill : '' }; })()
+					(() => { const svg = document.querySelector('.mermaid-diagram svg'); const shape = svg?.querySelector('.node rect, rect.basic, .node polygon, .node path'); return { heading: document.querySelector('h1')?.textContent ?? '', mermaid: svg?.textContent ?? '', fill: shape ? getComputedStyle(shape).fill : '', scriptRan: document.body?.dataset.scriptRan ?? '', fileStyle: getComputedStyle(document.body).getPropertyValue('--file-loaded').trim(), images: Array.from(document.images).map(i => ({ complete: i.complete, width: i.naturalWidth })) }; })()
 					""")
-				return .init(status: 200, body: rendered as? [String: Any] ?? [:])
+				var observation = rendered as? [String: Any] ?? [:]
+				observation["htmlSandbox"] = !view.configuration.websiteDataStore.isPersistent
+					&& !view.configuration.defaultWebpagePreferences.allowsContentJavaScript
+					&& view.configuration.urlSchemeHandler(forURLScheme: "devora-renderer") == nil
+				observation["url"] = view.url?.absoluteString ?? ""
+				return .init(status: 200, body: observation)
+			case ("POST", "/test/preview/action"):
+				let body = try request.json()
+				let pane = try uint64(body, "pane")
+				guard let view = surfaces.previewModels[pane]?.webView else { throw BridgeError(status: 409, "preview web view is not ready") }
+				let actions = ["link": "document.getElementById('remote-link').click()", "popup": "document.getElementById('popup-link').click()", "file": "document.getElementById('file-link').click()", "renderer": "document.getElementById('renderer-link').click()", "form": "document.getElementById('remote-form').requestSubmit()"]
+				guard let action = body["action"] as? String, let script = actions[action] else { throw BridgeError(status: 400, "unknown preview action") }
+				_ = try await view.evaluateJavaScript(script)
+				return .init(status: 200, body: [:])
 			case ("POST", "/test/preview/close"):
 				let body = try request.json()
 				let pane = try uint64(body, "pane")

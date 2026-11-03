@@ -142,7 +142,7 @@ Then(
   },
 );
 
-Then('the preview pane should contain a sandboxed iframe', async function (this: EmberWorld) {
+Then('the preview pane should display sandboxed HTML', async function (this: EmberWorld) {
   await this.driver.pollFor(
     `return (() => {
       const f = document.querySelector('.preview-pane iframe.web-content-iframe');
