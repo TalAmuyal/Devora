@@ -7,10 +7,9 @@
     "build": "vite build"
   },
   "dependencies": {
+    "@devora/web-renderer": "file:../web-renderer",
     "@tauri-apps/api": "^2",
-    "@tauri-apps/plugin-dialog": "^2.7.1",
-    "marked": "^18.0.3",
-    "mermaid": "^11.15.0"
+    "@tauri-apps/plugin-dialog": "^2.7.1"
   },
   "devDependencies": {
     "@cucumber/cucumber": "^11",
@@ -22,6 +21,7 @@
     "@xterm/addon-webgl": "^0.19.0",
     "@xterm/xterm": "^6.0.0",
     "happy-dom": "^18.0.1",
+    "jsdom": "^27.4.0",
     "tsx": "^4",
     "typescript": "^6.0.3",
     "vite": "^6",

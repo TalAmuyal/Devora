@@ -70,6 +70,7 @@ if [[ ${#INPUTS[@]} -eq 0 ]]; then
 		[[ -n "$line" ]] && INPUTS+=("$line")
 	done <<< "$LIST_OUTPUT"
 	INPUTS+=(
+		web-renderer
 		project-ember/src
 		project-ember/src-tauri
 		project-core

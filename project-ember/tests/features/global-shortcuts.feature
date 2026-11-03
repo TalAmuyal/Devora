@@ -19,11 +19,3 @@ Feature: App-wide keyboard shortcuts
     And the user opens the New Task form
     When the user presses Ctrl+1
     Then the UI font size should be "12px"
-
-  Scenario: F1 opens the User Guide over a dialog
-    Given a profile "Work" with repos "repo-alpha"
-    And the Workspace Hub is open
-    And the user opens the New Task form
-    When the user presses F1
-    Then the User Guide should be visible
-    And the User Guide should be stacked above the dialog

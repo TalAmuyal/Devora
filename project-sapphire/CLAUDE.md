@@ -5,6 +5,7 @@ The app is one window: the active tab's terminal (libghostty) over a tab bar, un
 It reopens the tabs it had when it last quit, crashed or was killed, without the Workspace Hub; with no tabs to reopen, it opens on the Workspace Hub, as Ember always does.
 `+` opens a shell tab, and the Workspace Hub opens a workspace in a new tab, or creates a task in one.
 Keys go through ADR-003's layer routing (`Sources/Layers/CLAUDE.md`): `Ctrl+S` opens the Workspace Hub, `Ctrl+←/→` switch tabs, `Ctrl+Shift+←/→` move the active tab, `Ctrl+Shift+S` opens a shell, and `Ctrl+1/2/3`, `Ctrl+=` and `Ctrl+Shift+=`/`-` set the terminals' font size; every other key reaches the terminal.
+`F1` opens the User Guide above any window surface; it renders Markdown in the shared, local-only web renderer and closes with `q` or Escape.
 Closing the window quits the app.
 
 ## State and terminals

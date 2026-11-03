@@ -68,3 +68,11 @@ Then('the User Guide should be stacked above the dialog', async function (this: 
   `);
   assert.strictEqual(guideIsLater, true);
 });
+
+Then('the User Guide should be open only once', async function (this: EmberWorld) {
+  const count = await this.driver.eval(`return Array.from(document.querySelectorAll('#app > .layer-wrapper .web-content')).length`);
+  assert.strictEqual(count, 1);
+});
+Then('the User Guide should be closed and the dialog restored', async function (this: EmberWorld) {
+  await this.driver.pollFor(`return window.__test.layers.find('user-guide') === null && !!document.querySelector('#app > .layer-wrapper.layer-modal')`, true, 5_000);
+});

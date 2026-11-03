@@ -40,9 +40,9 @@ final class Surfaces {
 	init(store: Store) {
 		self.store = store
 		router = LayerRouter { [unowned self] in store.app.window.activeTab.flatMap { tabStacks[$0] } }
-		router.shortcuts = AppShortcuts(store: store, windowStack: router.windowStack) { [unowned self] in
-			openWorkspaceHub()
-		}.handle
+		router.shortcuts = AppShortcuts(store: store, windowStack: router.windowStack,
+			openWorkspaceHub: { [unowned self] in openWorkspaceHub() },
+			openUserGuide: { [unowned self] in openUserGuide() }).handle
 	}
 
 	var windowStack: LayerStack { router.windowStack }
@@ -315,6 +315,15 @@ final class Surfaces {
 		windowStack.push(spec)
 		health = model
 		model.rerun()
+	}
+
+	/// Opens the guide above any window surface, without stacking duplicates.
+	private func openUserGuide() {
+		guard windowStack.find(UserGuideModel.layerName) == nil else { return }
+		let model = UserGuideModel(store: store)
+		var spec = pageLayer(LayerSpec(name: UserGuideModel.layerName) { UserGuideView(model: model) })
+		spec.onKey = model.handleKey
+		windowStack.push(spec)
 	}
 
 	/// The hub's shortcuts on a page of their own; `?` closes it as it opened it, and the hub's keys reach nothing meanwhile.

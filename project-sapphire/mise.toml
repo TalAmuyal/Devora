@@ -58,9 +58,23 @@ xcodebuild -showComponent MetalToolchain >/dev/null 2>&1 || xcodebuild -download
 command -v msgfmt >/dev/null || brew install gettext
 """
 
+[tasks.web-renderer-install]
+description = "Install the shared web renderer's pinned dependencies"
+sources = ["../web-renderer/package.json", "../web-renderer/package-lock.json"]
+outputs = ["../web-renderer/node_modules/.package-lock.json"]
+run = "npm ci --prefix ../web-renderer --no-audit --no-fund"
+
+[tasks.web-renderer]
+description = "Build the shared web renderer into the Sapphire resource directory"
+depends = ["web-renderer-install"]
+sources = ["../web-renderer/package.json", "../web-renderer/package-lock.json", "../web-renderer/index.html", "../web-renderer/vite.config.js", "../web-renderer/src/**/*"]
+outputs = ["build/web-renderer/index.html", "build/web-renderer/.vite/manifest.json"]
+run = "npm run build --prefix ../web-renderer"
+
 [tasks.generate]
+depends = ["web-renderer"]
 description = "Generate the thin app target's Xcode project with XcodeGen"
-run = "xcodegen generate --quiet --spec App/project.yml"
+run = "node ./scripts/check-web-renderer.mjs && xcodegen generate --quiet --spec App/project.yml"
 
 [tasks.build]
 description = "Build Devora Sapphire.app (builds GhosttyKit first if it is missing)"

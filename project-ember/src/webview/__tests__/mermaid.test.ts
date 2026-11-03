@@ -1,15 +1,11 @@
+// @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// happy-dom has no SVG layout engine, so the real mermaid cannot render here.
-// Mock the library at its boundary and drive its render result, so these tests exercise OUR transform/fallback logic (the marked override, the source round-trip, the per-block error handling) deterministically.
-vi.mock('mermaid', () => ({
-  default: { initialize: vi.fn(), render: vi.fn() },
-}));
-
-import mermaid from 'mermaid';
+// happy-dom has no SVG layout engine; inject a renderer to test the transform and fallback.
 import { markdownToHtml, renderMermaidDiagrams } from '../mermaid';
 
-const mermaidMock = vi.mocked(mermaid);
+const mermaidMock = { initialize: vi.fn(), render: vi.fn() };
+const loadMermaid = async () => mermaidMock as never;
 
 function bodyFrom(html: string): HTMLElement {
   const el = document.createElement('div');
@@ -36,6 +32,12 @@ describe('markdownToHtml', () => {
     expect(html).not.toContain('class="mermaid"');
   });
 
+  it('removes executable content from markdown', async () => {
+    const html = await markdownToHtml('<img src=x onerror=alert(1)><script>alert(2)</script>');
+    expect(html).not.toContain('onerror');
+    expect(html).not.toContain('<script');
+  });
+
   it('renders ordinary markdown normally', async () => {
     expect(await markdownToHtml('# Title\n')).toContain('<h1>Title</h1>');
   });
@@ -46,7 +48,7 @@ describe('renderMermaidDiagrams', () => {
     mermaidMock.render.mockResolvedValue({ svg: '<svg><text>Client</text></svg>' } as never);
     const body = bodyFrom(await markdownToHtml('```mermaid\nflowchart LR\n  A[Client] & <x>\n```\n'));
 
-    await renderMermaidDiagrams(body);
+    await renderMermaidDiagrams(body, loadMermaid);
 
     expect(body.querySelector('pre.mermaid')).toBeNull();
     const svg = body.querySelector('.mermaid-diagram svg');
@@ -64,7 +66,7 @@ describe('renderMermaidDiagrams', () => {
       await markdownToHtml('```mermaid\nBROKEN\n```\n\n```mermaid\nflowchart LR\n  A\n```\n'),
     );
 
-    await renderMermaidDiagrams(body);
+    await renderMermaidDiagrams(body, loadMermaid);
 
     const failed = body.querySelector('pre.mermaid.mermaid-error');
     expect(failed).not.toBeNull();
@@ -73,7 +75,9 @@ describe('renderMermaidDiagrams', () => {
   });
 
   it('does nothing (no render) when there are no mermaid blocks', async () => {
-    await renderMermaidDiagrams(bodyFrom(await markdownToHtml('# Just text\n')));
+    const load = vi.fn(loadMermaid);
+    await renderMermaidDiagrams(bodyFrom(await markdownToHtml('# Just text\n')), load);
+    expect(load).not.toHaveBeenCalled();
     expect(mermaidMock.render).not.toHaveBeenCalled();
   });
 });

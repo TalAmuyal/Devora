@@ -12,10 +12,12 @@ enum AppShortcut: Equatable {
 	case moveTabForward
 	case newShell
 	case openWorkspaceHub
+	case openUserGuide
 
 	/// The shortcut a key-down is, if any; matched on the physical key, since Control turns the characters into control codes.
 	/// Command and Option chords are never shortcuts, so they reach the menu and the terminal unchanged.
 	init?(_ key: KeyPress) {
+		if key.keyCode == KeyCode.f1 { self = .openUserGuide; return }
 		guard key.modifiers.contains(.control), key.modifiers.isDisjoint(with: [.command, .option]) else { return nil }
 		let shift = key.modifiers.contains(.shift)
 		let reset = TerminalRuntime.defaultFontSize
@@ -38,7 +40,7 @@ enum AppShortcut: Equatable {
 	/// Font size is a display preference, which no surface has a reason to make unavailable; the rest open a window surface or switch tabs, so an open window surface makes them unavailable.
 	var needsNoWindowSurface: Bool {
 		switch self {
-		case .setFontSize, .changeFontSize: false
+		case .setFontSize, .changeFontSize, .openUserGuide: false
 		case .previousTab, .nextTab, .moveTabBackward, .moveTabForward, .newShell, .openWorkspaceHub: true
 		}
 	}
@@ -52,6 +54,7 @@ struct AppShortcuts {
 	let store: Store
 	let windowStack: LayerStack
 	let openWorkspaceHub: () -> Void
+	let openUserGuide: () -> Void
 
 	/// Returns whether the key was a shortcut, which consumes it even when unavailable: a deliberate no-op, so the key reaches neither the surface that made it unavailable nor a terminal.
 	func handle(_ key: KeyPress) -> Bool {
@@ -74,6 +77,7 @@ struct AppShortcuts {
 		case .moveTabForward: store.dispatch(.moveActiveTabForward)
 		case .newShell: store.dispatch(.openShell)
 		case .openWorkspaceHub: openWorkspaceHub()
+		case .openUserGuide: openUserGuide()
 		}
 	}
 }

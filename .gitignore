@@ -26,3 +26,7 @@ project-ember/src-tauri/gen/
 *.log
 *.swp
 *.swo
+
+# Shared web renderer dependencies and generated bundle
+web-renderer/node_modules/
+web-renderer/dist/

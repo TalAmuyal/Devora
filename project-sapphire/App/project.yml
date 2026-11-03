@@ -18,6 +18,12 @@ targets:
     sources:
       - path: .
         excludes: ["project.yml", "*.xcodeproj"]
+      - path: ../../themes
+        type: folder
+        buildPhase: resources
+      - path: ../build/web-renderer
+        type: folder
+        buildPhase: resources
     dependencies:
       - package: DevoraSapphire
         product: AppShell

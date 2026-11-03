@@ -118,11 +118,22 @@ Then('the setting {string} should not be shown', async function (this: SapphireW
 async function expectConfig(file: string, key: string, expected: unknown): Promise<void> {
   const deadline = Date.now() + 5_000;
   let actual: unknown;
+  let parseError: SyntaxError | undefined;
   for (;;) {
-    const config = JSON.parse(fs.readFileSync(file, 'utf-8'));
-    actual = key.split('.').reduce<any>((node, part) => (node == null ? undefined : node[part]), config);
-    if (actual === expected) return;
-    if (Date.now() > deadline) assert.fail(`${key} in ${file} should be ${JSON.stringify(expected)}, is ${JSON.stringify(actual)}`);
+    try {
+      const config = JSON.parse(fs.readFileSync(file, 'utf-8'));
+      parseError = undefined;
+      actual = key.split('.').reduce<any>((node, part) => (node == null ? undefined : node[part]), config);
+      if (actual === expected) return;
+    } catch (error) {
+      // The writer may be between truncating the file and completing its JSON write.
+      if (!(error instanceof SyntaxError)) throw error;
+      parseError = error;
+    }
+    if (Date.now() > deadline) {
+      if (parseError) throw parseError;
+      assert.fail(`${key} in ${file} should be ${JSON.stringify(expected)}, is ${JSON.stringify(actual)}`);
+    }
     await new Promise((r) => setTimeout(r, 100));
   }
 }
