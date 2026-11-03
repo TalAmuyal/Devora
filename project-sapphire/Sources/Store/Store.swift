@@ -703,22 +703,22 @@ public final class Store {
 		return error
 	}
 
-    /// A preview read reports its error in the pane, rather than as a global banner.
-    public func previewContent(path: String, resourceDir: String) throws -> (String, [String: String]) {
-        guard let core else { throw CoreError.Failed(message: "the core isn't running") }
-        guard !["html", "htm"].contains(URL(fileURLWithPath: path).pathExtension.lowercased()) else {
-            throw CoreError.Failed(message: "HTML previews are not available yet")
-        }
-        let themePath = URL(fileURLWithPath: resourceDir).appending(path: "themes/catppuccin-macchiato.conf").path
-        return (try core.readPreview(path: path), try core.loadTheme(path: themePath))
-    }
+	/// A preview read reports its error in the pane, rather than as a global banner.
+	public func previewContent(path: String, resourceDir: String) throws -> (String, [String: String]) {
+		guard let core else { throw CoreError.Failed(message: "the core isn't running") }
+		guard !["html", "htm"].contains(URL(fileURLWithPath: path).pathExtension.lowercased()) else {
+			throw CoreError.Failed(message: "HTML previews are not available yet")
+		}
+		let themePath = try core.bundledThemePath(resourceDir: resourceDir)
+		return (try core.readPreview(path: path), try core.loadTheme(path: themePath))
+	}
 
 	/// Resolve the guide and theme through the shared core.
 	public func userGuideContent(resourceDir: String) throws -> (String, [String: String]) {
 		guard let core else { throw CoreError.Failed(message: "the core isn't running") }
 		// TODO(#230): the Sapphire distribution will bundle USER_GUIDE.md.
 		let guide = try core.userGuidePath(resourceDir: resourceDir)
-		let themePath = URL(fileURLWithPath: resourceDir).appending(path: "themes/catppuccin-macchiato.conf").path
+		let themePath = try core.bundledThemePath(resourceDir: resourceDir)
 		return (try String(contentsOfFile: guide, encoding: .utf8), try core.loadTheme(path: themePath))
 	}
 

@@ -91,18 +91,18 @@ private struct TabPane: View {
 		if let reason = session?.startFailure {
 			Message(title: "The terminal couldn't start", detail: reason)
 		} else if let stack {
-            HStack(spacing: 0) {
-                LayerHost(stack: stack).frame(minWidth: 240, maxWidth: .infinity)
-                ForEach(tab.previews, id: \.id) { preview in
-                    Divider()
-                    if let model = surfaces.previewModels[preview.id] {
-                    PreviewPaneView(preview: preview, store: store, model: model) {
-                        store.dispatch(.closePreview(tab: tab.id, pane: preview.id))
-                        surfaces.router.focusActiveTab()
-                    }.frame(minWidth: 240, maxWidth: .infinity)
-                    }
-                }
-            }
+			HStack(spacing: 0) {
+				LayerHost(stack: stack).frame(minWidth: 240, maxWidth: .infinity)
+				ForEach(tab.previews, id: \.id) { preview in
+					Divider()
+					if let model = surfaces.previewModels[preview.id] {
+					PreviewPaneView(preview: preview, store: store, model: model) {
+						store.dispatch(.closePreview(tab: tab.id, pane: preview.id))
+						surfaces.router.focusActiveTab()
+					}.frame(minWidth: 240, maxWidth: .infinity)
+					}
+				}
+			}
 		}
 	}
 }

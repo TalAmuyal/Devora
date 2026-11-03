@@ -153,6 +153,8 @@ Sapphire follows Ember's error reporting (ADR-002).
 
 ## Commands
 
+- From the repository root, `mise run lint` checks handwritten Swift for tab indentation (including new, nonignored files) as well as Rust formatting and clippy. Generated bindings and ignored build/vendor files are excluded.
+
 - `mise run build`: the core, the bindings, the Xcode project and `build/DerivedData/Build/Products/Release/Devora Sapphire.app`; it builds GhosttyKit first if `build/GhosttyKit.xcframework` is missing.
 - `mise run run`: launches the app through LaunchServices (`open -n`); arguments are `--flag value` pairs, since a bare argument makes AppKit open no window.
 	`--open-workspace <path>` opens a workspace of the selected profile in a new tab; `--surface workspace-hub` opens the Workspace Hub.

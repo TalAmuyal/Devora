@@ -1,6 +1,7 @@
 import { When, Then } from '@cucumber/cucumber';
-import { writeToTerminal } from '../support/terminal-helper';
+import { waitForTerminalContent, writeToTerminal } from '../support/terminal-helper';
 import { EmberWorld } from '../support/world';
+import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -16,8 +17,11 @@ function makeTempFile(world: EmberWorld, ext: string, heading: string): string {
 
 async function sendPreview(world: EmberWorld, filePath: string, stack: boolean): Promise<void> {
   const quoted = "'" + filePath.replaceAll("'", "'\"'\"'") + "'";
-  await writeToTerminal(world.driver, `debi preview ${stack ? '--stack ' : ''}${quoted}`);
-  await new Promise((r) => setTimeout(r, 200));
+  const token = randomUUID().slice(0, 8);
+  const marker = `PREVIEW_SENT_${token}`;
+  // The complete marker must occur only in output, never in the echoed command.
+  await writeToTerminal(world.driver, `debi preview ${stack ? '--stack ' : ''}${quoted} && printf '\\nPREVIEW_SENT_%s\\n' ${token}`);
+  await waitForTerminalContent(world.driver, marker + '\n', 10_000);
 }
 
 When('a Markdown file is previewed in the active session', async function (this: EmberWorld) {
@@ -61,7 +65,6 @@ When(
 When('a Markdown file is previewed for an unknown session', async function (this: EmberWorld) {
   const file = makeTempFile(this, '.md', 'Orphan');
   await this.driver.ipcPost('/preview/open', { ptyId: 999999, path: file, stack: false });
-  await new Promise((r) => setTimeout(r, 200));
 });
 
 When('the preview pane close button is clicked', async function (this: EmberWorld) {

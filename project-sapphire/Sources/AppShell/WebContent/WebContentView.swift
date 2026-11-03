@@ -22,16 +22,16 @@ struct WebContentView: NSViewRepresentable {
 		return view
 	}
 
-    func updateNSView(_ view: WKWebView, context: Context) {
-        context.coordinator.content = content
-        context.coordinator.revision = revision
-        context.coordinator.render(in: view)
-    }
+	func updateNSView(_ view: WKWebView, context: Context) {
+		context.coordinator.content = content
+		context.coordinator.revision = revision
+		context.coordinator.render(in: view)
+	}
 
-    static func dismantleNSView(_ view: WKWebView, coordinator: Coordinator) {
-        view.configuration.userContentController.removeScriptMessageHandler(forName: "devoraRenderer")
-        view.stopLoading()
-    }
+	static func dismantleNSView(_ view: WKWebView, coordinator: Coordinator) {
+		view.configuration.userContentController.removeScriptMessageHandler(forName: "devoraRenderer")
+		view.stopLoading()
+	}
 
 	@MainActor
 	final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
@@ -53,29 +53,29 @@ struct WebContentView: NSViewRepresentable {
 				onError(NSError(domain: "WebContent", code: 1, userInfo: [NSLocalizedDescriptionKey: error]))
 				return
 			}
-            guard body["ready"] as? Bool == true else { return }
-            ready = true
-            render(in: webView)
-        }
+			guard body["ready"] as? Bool == true else { return }
+			ready = true
+			render(in: webView)
+		}
 
-        func render(in webView: WKWebView) {
-            guard ready, !rendering, revision != renderedRevision else { return }
-            let requested = revision
-            do {
-                let (markdown, theme) = try content()
-                rendering = true
-                webView.callAsyncJavaScript("await window.devoraRender(markdown, theme)", arguments: ["markdown": markdown, "theme": theme], in: nil, in: .page) { [weak self, weak webView] result in
-                    guard let self, let webView else { return }
-                    self.rendering = false
-                    self.renderedRevision = requested
-                    if self.revision == requested, case .failure(let error) = result { self.onError(error) }
-                    self.render(in: webView)
-                }
-            } catch {
-                renderedRevision = requested
-                onError(error)
-            }
-        }
+		func render(in webView: WKWebView) {
+			guard ready, !rendering, revision != renderedRevision else { return }
+			let requested = revision
+			do {
+				let (markdown, theme) = try content()
+				rendering = true
+				webView.callAsyncJavaScript("await window.devoraRender(markdown, theme)", arguments: ["markdown": markdown, "theme": theme], in: nil, in: .page) { [weak self, weak webView] result in
+					guard let self, let webView else { return }
+					self.rendering = false
+					self.renderedRevision = requested
+					if self.revision == requested, case .failure(let error) = result { self.onError(error) }
+					self.render(in: webView)
+				}
+			} catch {
+				renderedRevision = requested
+				onError(error)
+			}
+		}
 
 		func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: any Error) {
 			onError(error)

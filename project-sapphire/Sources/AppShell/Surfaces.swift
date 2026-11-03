@@ -14,7 +14,8 @@ final class Surfaces {
 	@ObservationIgnored private(set) var router: LayerRouter!
 	@ObservationIgnored private(set) var shortcuts: AppShortcuts!
 	private(set) var tabStacks: [UInt64: LayerStack] = [:]
-    private(set) var previewModels: [UInt64: PreviewPaneModel] = [:]
+	/// Transient preview rendering models, keyed by the core-owned pane ID.
+	private(set) var previewModels: [UInt64: PreviewPaneModel] = [:]
 	/// The open Workspace Hub's model; nil while it is closed.
 	@ObservationIgnored private(set) var hub: WorkspaceHubModel?
 	/// The open cheatsheet's scrolling; nil while it is closed.
@@ -148,9 +149,9 @@ final class Surfaces {
 
 	/// Makes a stack for each new tab, with a progress page while the tab creates its workspace, and tears down the stacks of closed tabs.
 	func sync(with tabs: [AppTab]) {
-        let previewIDs = Set(tabs.flatMap { $0.previews.map(\.id) })
-        previewModels = previewModels.filter { previewIDs.contains($0.key) }
-        for id in previewIDs where previewModels[id] == nil { previewModels[id] = PreviewPaneModel() }
+		let previewIDs = Set(tabs.flatMap { $0.previews.map(\.id) })
+		previewModels = previewModels.filter { previewIDs.contains($0.key) }
+		for id in previewIDs where previewModels[id] == nil { previewModels[id] = PreviewPaneModel() }
 		let live = Set(tabs.map(\.id))
 		for (id, stack) in tabStacks where !live.contains(id) {
 			stack.clear()

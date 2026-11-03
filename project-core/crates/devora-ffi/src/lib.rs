@@ -320,6 +320,13 @@ impl DevoraCore {
         )
     }
 
+    /// Resolve the theme bundled by both apps from their resource directory.
+    pub fn bundled_theme_path(&self, resource_dir: String) -> Result<String, CoreError> {
+        Ok(theme::bundled_theme_path(Path::new(&resource_dir))
+            .to_string_lossy()
+            .into_owned())
+    }
+
     /// The theme file's colors, keyed by the CSS custom property names the UIs share.
     pub fn load_theme(&self, path: String) -> Result<HashMap<String, String>, CoreError> {
         Ok(theme::load_theme(Path::new(&path))?)
@@ -598,9 +605,13 @@ mod tests {
     #[test]
     fn loads_a_theme_and_reports_a_missing_one() {
         let tmp = tempfile::tempdir().unwrap();
-        let theme_path = tmp.path().join("theme.conf");
-        fs::write(&theme_path, "background #24273A\n").unwrap();
         let core = core_with_config(tmp.path(), "{}");
+        let theme_path = PathBuf::from(
+            core.bundled_theme_path(tmp.path().to_string_lossy().into_owned())
+                .unwrap(),
+        );
+        fs::create_dir_all(theme_path.parent().unwrap()).unwrap();
+        fs::write(&theme_path, "background #24273A\n").unwrap();
 
         let tokens = core
             .load_theme(theme_path.to_string_lossy().into_owned())

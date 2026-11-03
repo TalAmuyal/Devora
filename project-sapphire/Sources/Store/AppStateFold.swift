@@ -45,10 +45,10 @@ extension AppTab {
 }
 
 extension AppTab {
-    public var previews: [PreviewPane] {
-        switch pane {
-        case .terminal: []
-        case .previewRow(_, let previews): previews
-        }
-    }
+	public var previews: [PreviewPane] {
+		switch pane {
+		case .terminal: []
+		case .previewRow(_, let previews): previews
+		}
+	}
 }

@@ -11,7 +11,11 @@ export async function getTerminalContent(driver: AppDriver): Promise<string> {
     if (!term) return '';
     const lines = [];
     for (let i = 0; i < term.buffer.active.length; i++) {
-      lines.push(term.buffer.active.getLine(i)?.translateToString(true) ?? '');
+      const line = term.buffer.active.getLine(i);
+      // Match logical output even when preview panes make the terminal narrow.
+      const text = line?.translateToString(!term.buffer.active.getLine(i + 1)?.isWrapped) ?? '';
+      if (line?.isWrapped && lines.length > 0) lines[lines.length - 1] += text;
+      else lines.push(text);
     }
     return lines.join('\\n');
   `);

@@ -16,6 +16,8 @@ check true web-renderer/src/index.ts
 check true project-sapphire/Sources/Store/Store.swift
 check true project-core/crates/devora-state/src/store.rs
 check true project-core/Cargo.lock
+check true project-debi/internal/cli/preview.go
+check true project-debi/go.mod
 check true acceptance/features/workspace-hub.feature
 check true project-ember/tests/support/fixture-helper.ts
 check true mise.toml
@@ -29,7 +31,7 @@ check true project-ember/src/main.ts project-sapphire/App/project.yml
 check true
 check false project-ember/src/main.ts
 check false project-ember/src-tauri/src/lib.rs project-ember/tests/steps/session.steps.ts
-check false project-debi/cmd/main.go project-judgess/src/lib.rs
+check false project-judgess/src/lib.rs
 check false AGENTS.md CHANGELOG.md docs/adrs/ADR-010-sapphire-ui-stack.md project-core/CLAUDE.md
 check false bundler/macos-ember/bundle-fingerprint.sh .github/workflows/cd.yml
 if [ "$failures" -gt 0 ]; then exit 1; fi
