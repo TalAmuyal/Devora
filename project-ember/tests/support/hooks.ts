@@ -235,7 +235,6 @@ After({ tags: '@real-claude' }, async function (this: EmberWorld) {
     this.stopAutoApprove();
     this.stopAutoApprove = undefined;
   }
-  await stopClaudeCode(this.driver);
 
   await fakeClaudeServer!.saveCassette();
   fakeClaudeServer!.reset();
@@ -246,7 +245,14 @@ Before({ tags: '@screen-capture' }, function () {
   if (!process.env.CI && !canCaptureScreen()) return 'skipped';
 });
 
-After(async function (this: EmberWorld) {
+After(async function (this: EmberWorld, scenario) {
+  // Cucumber runs After hooks in reverse registration order: verify CLI exit
+  // here, before closing PTYs or deleting fixtures, rather than in the tagged hook.
+  if (scenario.pickle.tags.some(tag => tag.name === '@real-claude')) {
+    this.stopAutoApprove?.();
+    this.stopAutoApprove = undefined;
+    await stopClaudeCode(this.driver);
+  }
   // A scenario can end while the app is still loading (e.g. a hub fetching settings); deleting the fixtures under a command in flight fails it and reports a backend error, so let the app settle first.
   await this.driver.pollFor(`return window.__test.invokesInFlight()`, 0, 5_000);
   if (this.fixtureRoot) {
