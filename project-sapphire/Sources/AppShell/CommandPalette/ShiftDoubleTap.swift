@@ -18,7 +18,7 @@ struct ShiftDoubleTap {
 	mutating func flagsChanged(keyCode: UInt16, modifiers: KeyModifiers, at time: TimeInterval, available: Bool) -> Bool {
 		guard available else { reset(); return false }
 		guard modifiers.isSubset(of: .shift) else { reset(); return false }
-		guard keyCode == 0x38 || keyCode == 0x3c else { reset(); return false }
+		guard keyCode == KeyCode.leftShift || keyCode == KeyCode.rightShift else { reset(); return false }
 		if overlappingShifts {
 			if !modifiers.contains(.shift) { reset() }
 			return false

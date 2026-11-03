@@ -26,9 +26,10 @@ final class Surfaces {
 	@ObservationIgnored private(set) var settings: SettingsHubModel?
 	/// The open Health Hub; nil while it is closed.
 	@ObservationIgnored private(set) var health: HealthHubModel?
+	/// The open Command Palette; nil while it is closed.
 	@ObservationIgnored private(set) var palette: CommandPaletteModel?
+	/// The open Repurpose dialog; nil while none is.
 	@ObservationIgnored private(set) var repurposeDialog: RepurposeDialogModel?
-	@ObservationIgnored private var paletteOpening = false
 	/// The open Add Repo dialog; nil while none is.
 	@ObservationIgnored private(set) var addRepo: AddRepoDialogModel?
 	/// The open Clone Repo dialog; nil while none is.
@@ -53,23 +54,24 @@ final class Surfaces {
 
 	var windowStack: LayerStack { router.windowStack }
 
-	/// Refresh profiles on every opening so the dynamic commands reflect registrations and the current selection.
+	/// Opens immediately, then refreshes only the profile rows without delaying the search field.
 	func openCommandPalette() {
-		guard !paletteOpening, windowStack.find(CommandPaletteModel.layerName) == nil else { return }
-		paletteOpening = true
-		Task { [unowned self, store] in
-			defer { paletteOpening = false }
-			let loaded = await store.load()
-			guard loaded, !windowStack.hasOpaqueLayer else { return }
-			let model = CommandPaletteModel(commands: PaletteCommand.commands(profiles: store.profiles, active: store.selectedProfilePath))
-			var spec = pageLayer(LayerSpec(name: CommandPaletteModel.layerName) { CommandPaletteView(model: model) })
-			spec.onKey = model.handleKey
-			spec.focus = { model.fieldFocused = true }
-			spec.onCleanup = { [unowned self] in if palette === model { palette = nil } }
-			let handle = windowStack.push(spec)
-			model.close = { [unowned self] in windowStack.remove(handle) }
-			model.run = { [unowned self] action in runPaletteCommand(action) }
-			palette = model
+		guard windowStack.find(CommandPaletteModel.layerName) == nil else { return }
+		let model = CommandPaletteModel(commands: PaletteCommand.commands(profiles: store.profiles, active: store.selectedProfilePath))
+		model.isEditingText = { [unowned self] in router.isEditingText }
+		var spec = pageLayer(LayerSpec(name: CommandPaletteModel.layerName) { CommandPaletteView(model: model) })
+		spec.onKey = model.handleKey
+		spec.focus = { model.fieldFocused = true }
+		spec.onCleanup = { [unowned self] in if palette === model { palette = nil } }
+		// SwiftUI mounts the field on the next turn; the previous terminal must not receive keys in between.
+		router.clearFocus()
+		let handle = windowStack.push(spec)
+		model.close = { [unowned self] in windowStack.remove(handle) }
+		model.run = { [unowned self] action in runPaletteCommand(action) }
+		palette = model
+		Task { [weak self, weak model, store] in
+			guard await store.listProfiles(), let self, let model, self.palette === model else { return }
+			model.updateProfiles(store.profiles, active: store.selectedProfilePath)
 		}
 	}
 

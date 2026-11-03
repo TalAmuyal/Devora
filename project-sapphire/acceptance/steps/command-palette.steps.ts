@@ -11,6 +11,8 @@ Given('the Command Palette is open', async function (this: SapphireWorld) {
   await this.bridge.waitFor('the palette to open', () => this.bridge.state(), (s) => s.palette !== null && s.palette.focused);
 });
 
+Given('the user leaves the search field', async function (this: SapphireWorld) { await this.bridge.palette('blur'); });
+
 When('the user opens the Command Palette via shift+shift', async function (this: SapphireWorld) {
   await this.bridge.palette('shiftShift');
 });

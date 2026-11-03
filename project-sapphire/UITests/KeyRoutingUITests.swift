@@ -72,8 +72,8 @@ final class KeyRoutingUITests: XCTestCase {
 		}
 		let field = app.descendants(matching: .any)["command-palette-search"].firstMatch
 		tapShift(); tapShift()
-		XCTAssertTrue(field.waitForExistence(timeout: 5), app.debugDescription)
 		app.typeText("q")
+		XCTAssertTrue(field.waitForExistence(timeout: 5), app.debugDescription)
 		XCTAssertEqual(field.value as? String, "q")
 		app.typeKey(.escape, modifierFlags: [])
 		XCTAssertTrue(field.waitForNonExistence(timeout: 5))

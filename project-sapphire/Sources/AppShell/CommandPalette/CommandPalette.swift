@@ -37,14 +37,25 @@ struct PaletteCommand: Identifiable {
 @Observable
 final class CommandPaletteModel {
 	static let layerName = "command-palette"
-	let commands: [PaletteCommand]
+	private(set) var commands: [PaletteCommand]
 	var filter = "" { didSet { cursor.filterChanged(count: items.count) } }
 	var fieldFocused = false
 	private(set) var cursor = ListCursor()
 	@ObservationIgnored var run: (PaletteCommand.Action) -> Void = { _ in }
 	@ObservationIgnored var close: () -> Void = {}
+	@ObservationIgnored var isEditingText: () -> Bool = { true }
 
 	init(commands: [PaletteCommand]) { self.commands = commands }
+	/// Refresh the dynamic profile rows without losing the user's filter or selection.
+	func updateProfiles(_ profiles: [Profile], active: String?) {
+		let selectedID = selected?.id
+		commands = PaletteCommand.commands(profiles: profiles, active: active)
+		if let index = items.firstIndex(where: { $0.id == selectedID }) {
+			cursor.select(index)
+		} else {
+			cursor.filterChanged(count: items.count)
+		}
+	}
 	var items: [PaletteCommand] {
 		guard !filter.isEmpty else { return commands }
 		return commands.filter { $0.title.localizedCaseInsensitiveContains(filter) || $0.description.localizedCaseInsensitiveContains(filter) }
@@ -61,7 +72,16 @@ final class CommandPaletteModel {
 		case KeyCode.downArrow: cursor.move(by: 1, in: items.count)
 		case KeyCode.upArrow: cursor.move(by: -1, in: items.count)
 		default:
-			if fieldFocused { return false }
+			if fieldFocused {
+				// SwiftUI mounts the field after the layer is pushed. Keep early typing in the
+				// model until the field editor actually owns focus; otherwise q dismisses the page.
+				if !isEditingText(), !key.characters.isEmpty,
+				   key.characters.rangeOfCharacter(from: .controlCharacters) == nil {
+					filter += key.characters
+					return true
+				}
+				return false
+			}
 			switch key.characters {
 			case "j": cursor.move(by: 1, in: items.count)
 			case "k": cursor.move(by: -1, in: items.count)

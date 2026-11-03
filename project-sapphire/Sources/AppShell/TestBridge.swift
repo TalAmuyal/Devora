@@ -146,7 +146,7 @@ final class TestBridge {
 		case "shiftShift":
 			let now = ProcessInfo.processInfo.systemUptime
 			for (offset, flags): (Double, KeyModifiers) in [(0, .shift), (0.05, []), (0.1, .shift), (0.15, [])] {
-				surfaces.shortcuts.handleFlags(keyCode: 0x38, modifiers: flags, at: now + offset)
+				surfaces.shortcuts.handleFlags(keyCode: KeyCode.leftShift, modifiers: flags, at: now + offset)
 			}
 		case "filter":
 			guard let palette = surfaces.palette, let value = body["value"] as? String else { throw BridgeError(status: 409, "palette or value missing") }
@@ -165,7 +165,7 @@ final class TestBridge {
 		case "title":
 			guard let value = body["value"] as? String else { throw BridgeError(status: 400, "missing title") }
 			dialog.title = value
-		case "confirm": _ = dialog.handleKey(KeyPress(keyCode: KeyCode.returnKey))
+		case "confirm": dialog.confirm()
 		case "cancel": dialog.close()
 		default: throw BridgeError(status: 400, "unknown repurpose action")
 		}

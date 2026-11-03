@@ -28,6 +28,7 @@ Feature: Command Palette
 
   Scenario: Navigate with j and run the New Shell command
     Given the Command Palette is open
+    And the user leaves the search field
     When the user presses "j"
     And the user presses "Enter"
     Then the Command Palette should not be visible
@@ -36,6 +37,7 @@ Feature: Command Palette
   Scenario: Keyboard navigation works when a terminal session was focused
     Given a session exists
     And the Command Palette is open
+    And the user leaves the search field
     When the user presses "j"
     Then the selected command should be "New Shell"
 
@@ -84,6 +86,12 @@ Feature: Command Palette
     And the search field should be focused
     When the user presses "q" without first taking focus
     Then the Command Palette should be visible
+
+  Scenario: Pressing j in the focused search field keeps the palette open
+    Given the Command Palette is open
+    When the user presses "j" without first taking focus
+    Then the Command Palette should be visible
+    And the search field should be focused
 
   Scenario: Filter commands
     Given the Command Palette is open

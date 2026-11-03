@@ -20,15 +20,18 @@ final class RepurposeDialogModel {
 		let index = items.firstIndex(of: focus) ?? 0
 		focus = items[(index + (backward ? items.count - 1 : 1)) % items.count]
 	}
+	func confirm() {
+		let value = title.trimmingCharacters(in: .whitespacesAndNewlines)
+		if !value.isEmpty { close(); submit(value) }
+	}
 	func handleKey(_ key: Layers.KeyPress) -> Bool {
 		guard key.modifiers.isDisjoint(with: [.control, .option, .command]) else { return false }
 		switch key.keyCode {
 		case KeyCode.escape: close()
 		case KeyCode.returnKey, KeyCode.keypadEnter:
-			let value = title.trimmingCharacters(in: .whitespacesAndNewlines)
-			if !value.isEmpty { close(); submit(value) }
+			if focus == .cancel { close() } else { confirm() }
 		case KeyCode.space where focus != .title:
-			if focus == .cancel { close() } else { _ = handleKey(KeyPress(keyCode: KeyCode.returnKey)) }
+			if focus == .cancel { close() } else { confirm() }
 		default: return focus != .title && key.isUnusedOnAPage
 		}
 		return true
@@ -47,9 +50,8 @@ struct RepurposeDialogView: View {
 			HStack {
 				Spacer()
 				DialogButton(title: "Cancel", isFocused: model.focus == .cancel, action: model.close)
-				DialogButton(title: "Repurpose", isFocused: model.focus == .confirm, tint: .accentColor) {
-					_ = model.handleKey(Layers.KeyPress(keyCode: KeyCode.returnKey))
-				}.disabled(model.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+				DialogButton(title: "Repurpose", isFocused: model.focus == .confirm, tint: .accentColor, action: model.confirm)
+					.disabled(model.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 			}
 		}
 		.onChange(of: model.focus, initial: true) { _, value in focused = value == .title }

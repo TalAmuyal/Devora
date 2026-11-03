@@ -26,6 +26,13 @@ Given('the Command Palette is open', async function (this: EmberWorld) {
   await openCommandPalette(this.driver);
 });
 
+Given('the user leaves the search field', async function (this: EmberWorld) {
+  await this.driver.eval(`
+    const input = need(document.querySelector('.search-input-field'), 'the Command Palette search field');
+    input.blur();
+  `);
+});
+
 When('the user opens the Command Palette via shift+shift', async function (this: EmberWorld) {
   await dispatchShiftShift(this.driver);
   // Give the toggle a moment to (not) open the overlay before asserting.

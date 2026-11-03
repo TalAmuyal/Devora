@@ -56,6 +56,8 @@ public enum KeyCode {
 	public static let tab: UInt16 = 0x30
 	public static let space: UInt16 = 0x31
 	public static let escape: UInt16 = 0x35
+	public static let leftShift: UInt16 = 0x38
+	public static let rightShift: UInt16 = 0x3C
 	public static let keypadPlus: UInt16 = 0x45
 	public static let keypadEnter: UInt16 = 0x4C
 	public static let keypadMinus: UInt16 = 0x4E
