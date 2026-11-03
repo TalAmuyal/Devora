@@ -234,7 +234,7 @@ pub(crate) fn recover_pending(state: &feeds::Store, log: &crate::AppLog) -> Resu
 mod tests {
     use super::*;
     use crate::test_support::{core, label, profile, pull_all, Profile};
-    use devora_core::state::{AppState, Pane, Tab};
+    use devora_core::state::{AppState, Tab};
     use futures_lite::future::block_on;
     use std::path::Path;
 
@@ -303,7 +303,7 @@ mod tests {
                 path: workspace.to_string_lossy().into_owned()
             }
         );
-        let Pane::Terminal { id } = opened.pane;
+        let id = opened.pane.terminal_id();
         assert_eq!(
             core.terminal_spec(id, None).unwrap().cwd,
             workspace.join("repo").to_string_lossy()

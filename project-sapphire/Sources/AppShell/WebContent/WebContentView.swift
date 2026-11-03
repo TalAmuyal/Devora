@@ -7,8 +7,9 @@ struct WebContentView: NSViewRepresentable {
 	let content: () throws -> (String, [String: String])
 	let onError: (any Error) -> Void
 	let onView: (WKWebView) -> Void
+	var revision: String = "guide"
 
-	func makeCoordinator() -> Coordinator { Coordinator(content: content, onError: onError) }
+	func makeCoordinator() -> Coordinator { Coordinator(content: content, onError: onError, revision: revision) }
 
 	func makeNSView(context: Context) -> WKWebView {
 		let configuration = WKWebViewConfiguration()
@@ -21,14 +22,27 @@ struct WebContentView: NSViewRepresentable {
 		return view
 	}
 
-	func updateNSView(_ view: WKWebView, context: Context) {}
+    func updateNSView(_ view: WKWebView, context: Context) {
+        context.coordinator.content = content
+        context.coordinator.revision = revision
+        context.coordinator.render(in: view)
+    }
+
+    static func dismantleNSView(_ view: WKWebView, coordinator: Coordinator) {
+        view.configuration.userContentController.removeScriptMessageHandler(forName: "devoraRenderer")
+        view.stopLoading()
+    }
 
 	@MainActor
 	final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
-		let content: () throws -> (String, [String: String])
+		var content: () throws -> (String, [String: String])
 		let onError: (any Error) -> Void
-		private var rendered = false
-		init(content: @escaping () throws -> (String, [String: String]), onError: @escaping (any Error) -> Void) {
+		var revision: String
+		private var ready = false
+		private var rendering = false
+		private var renderedRevision: String?
+		init(content: @escaping () throws -> (String, [String: String]), onError: @escaping (any Error) -> Void, revision: String) {
+			self.revision = revision
 			self.content = content
 			self.onError = onError
 		}
@@ -39,15 +53,29 @@ struct WebContentView: NSViewRepresentable {
 				onError(NSError(domain: "WebContent", code: 1, userInfo: [NSLocalizedDescriptionKey: error]))
 				return
 			}
-			guard body["ready"] as? Bool == true, !rendered else { return }
-			rendered = true
-			do {
-				let (markdown, theme) = try content()
-				webView.callAsyncJavaScript("await window.devoraRender(markdown, theme)", arguments: ["markdown": markdown, "theme": theme], in: nil, in: .page) { [onError] result in
-					if case .failure(let error) = result { onError(error) }
-				}
-			} catch { onError(error) }
-		}
+            guard body["ready"] as? Bool == true else { return }
+            ready = true
+            render(in: webView)
+        }
+
+        func render(in webView: WKWebView) {
+            guard ready, !rendering, revision != renderedRevision else { return }
+            let requested = revision
+            do {
+                let (markdown, theme) = try content()
+                rendering = true
+                webView.callAsyncJavaScript("await window.devoraRender(markdown, theme)", arguments: ["markdown": markdown, "theme": theme], in: nil, in: .page) { [weak self, weak webView] result in
+                    guard let self, let webView else { return }
+                    self.rendering = false
+                    self.renderedRevision = requested
+                    if self.revision == requested, case .failure(let error) = result { self.onError(error) }
+                    self.render(in: webView)
+                }
+            } catch {
+                renderedRevision = requested
+                onError(error)
+            }
+        }
 
 		func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: any Error) {
 			onError(error)

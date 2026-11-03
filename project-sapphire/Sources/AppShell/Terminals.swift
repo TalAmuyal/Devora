@@ -60,7 +60,7 @@ struct TabContent: View {
 			}
 			ForEach(window.tabs, id: \.terminalID) { tab in
 				let isActive = tab.id == window.activeTab
-				TabPane(session: terminals.sessions[tab.terminalID], stack: surfaces.tabStacks[tab.id])
+				TabPane(session: terminals.sessions[tab.terminalID], stack: surfaces.tabStacks[tab.id], tab: tab, store: store, surfaces: surfaces)
 				.opacity(isActive ? 1 : 0)
 				.allowsHitTesting(isActive)
 			}
@@ -83,12 +83,26 @@ struct TabContent: View {
 private struct TabPane: View {
 	let session: TerminalSession?
 	let stack: LayerStack?
+	let tab: AppTab
+	let store: Store
+	let surfaces: Surfaces
 
 	var body: some View {
 		if let reason = session?.startFailure {
 			Message(title: "The terminal couldn't start", detail: reason)
 		} else if let stack {
-			LayerHost(stack: stack)
+            HStack(spacing: 0) {
+                LayerHost(stack: stack).frame(minWidth: 240, maxWidth: .infinity)
+                ForEach(tab.previews, id: \.id) { preview in
+                    Divider()
+                    if let model = surfaces.previewModels[preview.id] {
+                    PreviewPaneView(preview: preview, store: store, model: model) {
+                        store.dispatch(.closePreview(tab: tab.id, pane: preview.id))
+                        surfaces.router.focusActiveTab()
+                    }.frame(minWidth: 240, maxWidth: .infinity)
+                    }
+                }
+            }
 		}
 	}
 }

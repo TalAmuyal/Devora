@@ -9,8 +9,7 @@
 //!
 //! Everything that crosses this crate's API is owned data (records, plain enums, `String`, `u32`/`u64`), so the UniFFI facade can expose it as is.
 //!
-//! The model is deliberately the first release's: one terminal pane per tab.
-//! Inner tabs, splits, overlays and agent sessions (ADR-008) grow out of [`Tab`] and [`Pane`] later.
+//! A tab keeps its terminal identity while file previews share its row. Preview paths and refresh revisions are durable; rendered contents are re-read by the UI.
 
 mod command;
 mod feed;
@@ -20,7 +19,7 @@ mod store;
 
 pub use command::{Command, Event, StateError};
 pub use feed::{feed, Feed, Subscription};
-pub use model::{AppState, Pane, PaneId, Session, SessionKind, Tab, TabId, Window};
+pub use model::{AppState, Pane, PaneId, PreviewPane, Session, SessionKind, Tab, TabId, Window};
 pub use persist::set_aside;
 pub use store::Store;
 

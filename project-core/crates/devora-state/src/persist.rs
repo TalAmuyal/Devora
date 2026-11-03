@@ -39,6 +39,7 @@ const MIGRATIONS: &[&str] = &[
     INSERT INTO meta (id, next_id) VALUES (0, 0);
 ",
     "CREATE TABLE creation_journal (session_id INTEGER PRIMARY KEY, descriptor TEXT NOT NULL);",
+    "CREATE TABLE previews (id INTEGER PRIMARY KEY, tab_id INTEGER NOT NULL REFERENCES tabs(id), path TEXT NOT NULL, revision INTEGER NOT NULL);",
 ];
 
 pub(crate) struct Db {
@@ -268,9 +269,26 @@ fn load(conn: &Connection) -> Result<State, Error> {
         let kind: String = row.get(2)?;
         let kind = session_kind(&kind, row.get(3)?)
             .ok_or_else(|| inconsistent(format!("tab {id} has an unknown kind {kind:?}")))?;
-        let pane = panes
+        let mut pane = panes
             .remove(&id)
             .ok_or_else(|| inconsistent(format!("tab {id} has no pane")))?;
+        let mut statement =
+            conn.prepare("SELECT id, path, revision FROM previews WHERE tab_id = ?1 ORDER BY id")?;
+        let previews = statement
+            .query_map([id], |row| {
+                Ok(crate::PreviewPane {
+                    id: row.get(0)?,
+                    path: row.get(1)?,
+                    revision: row.get(2)?,
+                })
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        if !previews.is_empty() {
+            pane = Pane::PreviewRow {
+                terminal: pane.terminal_id(),
+                previews,
+            };
+        }
         tabs.push(Tab {
             id,
             title: row.get(1)?,
@@ -283,8 +301,9 @@ fn load(conn: &Connection) -> Result<State, Error> {
     }
 
     let mut ids = tabs.iter().flat_map(|tab| {
-        let Pane::Terminal { id: pane } = tab.pane;
-        [tab.id, pane]
+        std::iter::once(tab.id)
+            .chain(std::iter::once(tab.pane.terminal_id()))
+            .chain(tab.pane.previews().iter().map(|p| p.id))
     });
     if ids.any(|id| id > next_id) {
         return Err(inconsistent(format!(
@@ -312,6 +331,7 @@ fn load(conn: &Connection) -> Result<State, Error> {
 
 fn write(conn: &mut Connection, state: &State) -> rusqlite::Result<()> {
     let tx = conn.transaction()?;
+    tx.execute("DELETE FROM previews", [])?;
     tx.execute("DELETE FROM panes", [])?;
     tx.execute("DELETE FROM tabs", [])?;
     {
@@ -330,8 +350,13 @@ fn write(conn: &mut Connection, state: &State) -> rusqlite::Result<()> {
                 kind_data,
                 tab.session.profile_path
             ])?;
-            let Pane::Terminal { id: pane } = tab.pane;
-            insert_pane.execute(params![pane, tab.id, "terminal"])?;
+            insert_pane.execute(params![tab.pane.terminal_id(), tab.id, "terminal"])?;
+            for preview in tab.pane.previews() {
+                tx.execute(
+                    "INSERT INTO previews (id, tab_id, path, revision) VALUES (?1, ?2, ?3, ?4)",
+                    params![preview.id, tab.id, preview.path, preview.revision],
+                )?;
+            }
         }
     }
     tx.execute(
@@ -393,6 +418,89 @@ mod tests {
         }
     }
 
+    #[test]
+    fn previews_replace_refresh_close_and_restore_without_switching_tabs() {
+        let (_dir, path) = db_path();
+        let store = Store::open(&path).unwrap();
+        let first = open_tab(&store, "first", SessionKind::Shell);
+        let terminal = store.snapshot().window.tabs[0].pane.terminal_id();
+        let second = open_tab(&store, "second", SessionKind::Shell);
+        store
+            .dispatch(Command::OpenPreview {
+                terminal,
+                path: "/a.md".into(),
+            })
+            .unwrap();
+        let preview = store.snapshot().window.tabs[0].pane.previews()[0].clone();
+        assert_eq!(store.snapshot().window.active_tab, Some(second));
+        store
+            .dispatch(Command::OpenPreview {
+                terminal,
+                path: "/a.md".into(),
+            })
+            .unwrap();
+        let refreshed = store.snapshot().window.tabs[0].pane.previews()[0].clone();
+        assert_eq!(refreshed.id, preview.id);
+        assert_eq!(refreshed.revision, preview.revision + 1);
+        drop(store);
+        let store = Store::open(&path).unwrap();
+        assert_eq!(
+            store.snapshot().window.tabs[0].pane.previews(),
+            &[refreshed]
+        );
+        store
+            .dispatch(Command::OpenPreview {
+                terminal,
+                path: "/b.md".into(),
+            })
+            .unwrap();
+        let replacement = store.snapshot().window.tabs[0].pane.previews()[0].clone();
+        assert_ne!(replacement.id, preview.id);
+        store
+            .dispatch(Command::ClosePreview {
+                tab: first,
+                pane: replacement.id,
+            })
+            .unwrap();
+        assert_eq!(
+            store.snapshot().window.tabs[0].pane,
+            Pane::Terminal { id: terminal }
+        );
+        let before = store.snapshot();
+        assert!(store
+            .dispatch(Command::OpenPreview {
+                terminal: u64::MAX,
+                path: "/a.md".into()
+            })
+            .is_err());
+        assert_eq!(store.snapshot(), before);
+    }
+
+    #[test]
+    fn terminal_only_schema_migrates_forward_with_ids_intact() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("old.db");
+        let conn = Connection::open(&path).unwrap();
+        for migration in &super::MIGRATIONS[..2] {
+            conn.execute_batch(migration).unwrap();
+        }
+        conn.pragma_update(None, "user_version", 2).unwrap();
+        conn.execute_batch("UPDATE meta SET next_id=2, active_tab=1; INSERT INTO tabs(id,position,title,kind) VALUES(1,0,'old','shell'); INSERT INTO panes(id,tab_id,kind) VALUES(2,1,'terminal');").unwrap();
+        drop(conn);
+        let store = Store::open(&path).unwrap();
+        assert_eq!(
+            store.snapshot().window.tabs[0].pane,
+            Pane::Terminal { id: 2 }
+        );
+        store
+            .dispatch(Command::OpenPreview {
+                terminal: 2,
+                path: "/a.md".into(),
+            })
+            .unwrap();
+        assert!(store.snapshot().window.tabs[0].pane.previews()[0].id > 2);
+    }
+
     fn storage_error(result: Result<Store, StateError>) -> String {
         match result {
             Err(StateError::Storage { message }) => message,
@@ -452,7 +560,7 @@ mod tests {
 
         let store = Store::open(&path).unwrap();
         let second = open_tab(&store, "b", SessionKind::Shell);
-        let Pane::Terminal { id: pane } = store.snapshot().window.tabs[0].pane;
+        let pane = store.snapshot().window.tabs[0].pane.terminal_id();
         assert!(
             second > first && pane > first,
             "{first} was reused after the restart"

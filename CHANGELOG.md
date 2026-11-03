@@ -16,6 +16,7 @@ Types of changes:
 
 ### Added
 
+- Devora Sapphire opens durable Markdown/Mermaid preview panes through `debi preview`, with refresh, close and restore after restart
 - Devora Sapphire opens a searchable Command Palette with Shift-Shift, including session, workspace, profile and Repurpose actions
 - Devora Sapphire opens the themed User Guide with `F1`, even above dialogs, with Vim scrolling and Mermaid diagrams
 - Devora Sapphire has a Health Hub, opened with `H` or the Workspace Hub menu, with dependency and configuration checks, copyable fixes and `r` to re-run

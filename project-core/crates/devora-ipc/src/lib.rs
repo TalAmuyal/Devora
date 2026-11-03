@@ -36,6 +36,15 @@ pub struct IpcHandlers {
 
 pub struct IpcServer {
     port: u16,
+    shutdown: Option<tokio::sync::oneshot::Sender<()>>,
+}
+
+impl Drop for IpcServer {
+    fn drop(&mut self) {
+        if let Some(shutdown) = self.shutdown.take() {
+            let _ = shutdown.send(());
+        }
+    }
 }
 
 impl IpcServer {
@@ -44,7 +53,7 @@ impl IpcServer {
     }
 }
 
-/// Binds a free port on `127.0.0.1` and serves it on a new thread for the rest of the process.
+/// Binds a free port on `127.0.0.1` and serves it on a new thread until the owner is dropped.
 pub fn start(handlers: IpcHandlers) -> io::Result<IpcServer> {
     let listener = std::net::TcpListener::bind("127.0.0.1:0")?;
     let port = listener.local_addr()?.port();
@@ -54,14 +63,22 @@ pub fn start(handlers: IpcHandlers) -> io::Result<IpcServer> {
         .build()?;
     let handlers = Arc::new(handlers);
 
+    let (shutdown, stopped) = tokio::sync::oneshot::channel();
     std::thread::Builder::new()
         .name("devora-ipc".into())
-        .spawn(move || runtime.block_on(serve(listener, handlers)))?;
+        .spawn(move || runtime.block_on(serve(listener, handlers, stopped)))?;
 
-    Ok(IpcServer { port })
+    Ok(IpcServer {
+        port,
+        shutdown: Some(shutdown),
+    })
 }
 
-async fn serve(listener: std::net::TcpListener, handlers: Arc<IpcHandlers>) {
+async fn serve(
+    listener: std::net::TcpListener,
+    handlers: Arc<IpcHandlers>,
+    mut stopped: tokio::sync::oneshot::Receiver<()>,
+) {
     let listener = match TcpListener::from_std(listener) {
         Ok(listener) => listener,
         Err(e) => {
@@ -71,7 +88,18 @@ async fn serve(listener: std::net::TcpListener, handlers: Arc<IpcHandlers>) {
     };
 
     loop {
-        let stream = match listener.accept().await {
+        use std::future::Future;
+        let accept = listener.accept();
+        let mut accept = std::pin::pin!(accept);
+        let accepted = std::future::poll_fn(|cx| {
+            if std::pin::Pin::new(&mut stopped).poll(cx).is_ready() {
+                return std::task::Poll::Ready(None);
+            }
+            accept.as_mut().poll(cx).map(Some)
+        })
+        .await;
+        let Some(accepted) = accepted else { return };
+        let stream = match accepted {
             Ok((stream, _addr)) => stream,
             Err(e) => {
                 (handlers.on_error)(&format!("IPC server accept failed: {e}"));
@@ -170,6 +198,22 @@ mod tests {
         let status = response[9..12].parse().unwrap();
         let body = response.split("\r\n\r\n").nth(1).unwrap_or("").to_string();
         (status, body)
+    }
+
+    #[test]
+    fn dropping_the_owner_releases_the_listener_and_handlers() {
+        let (server, opened) = server(Ok(()));
+        let port = server.port();
+        drop(server);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while Arc::strong_count(&opened) != 1 {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "IPC handler was retained after shutdown"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        assert!(std::net::TcpStream::connect(("127.0.0.1", port)).is_err());
     }
 
     #[test]

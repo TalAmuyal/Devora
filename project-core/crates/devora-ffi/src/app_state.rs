@@ -8,7 +8,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use devora_core::bundle::AppVersion;
-use devora_core::state::{self, AppState, Command, Event, Pane, Session, SessionKind, Tab, Window};
+use devora_core::state::{
+    self, AppState, Command, Event, Pane, PreviewPane, Session, SessionKind, Tab, Window,
+};
 
 use crate::{CoreError, DevoraCore};
 
@@ -51,7 +53,20 @@ pub enum SessionKind {
 
 #[uniffi::remote(Enum)]
 pub enum Pane {
-    Terminal { id: u64 },
+    Terminal {
+        id: u64,
+    },
+    PreviewRow {
+        terminal: u64,
+        previews: Vec<PreviewPane>,
+    },
+}
+
+#[uniffi::remote(Record)]
+pub struct PreviewPane {
+    pub id: u64,
+    pub path: String,
+    pub revision: u64,
 }
 
 #[uniffi::remote(Enum)]
@@ -88,6 +103,14 @@ pub enum Command {
         tab: u64,
         reason: String,
     },
+    OpenPreview {
+        terminal: u64,
+        path: String,
+    },
+    ClosePreview {
+        tab: u64,
+        pane: u64,
+    },
     SetActiveProfile {
         profile_path: Option<String>,
     },
@@ -103,6 +126,7 @@ pub enum Event {
     TabMoved { tab: u64, from: u32, to: u32 },
     TitleChanged { tab: u64, title: String },
     SessionChanged { tab: u64, session: Session },
+    PanesChanged { tab: u64, pane: Pane },
     ActiveProfileChanged { profile_path: Option<String> },
 }
 

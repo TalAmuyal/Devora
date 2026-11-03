@@ -1,6 +1,7 @@
 /** A client for the app's test bridge (`Sources/AppShell/TestBridge.swift`). */
 
 export interface TabState {
+  previews: { id: number; path: string; revision: number; error: string | null }[];
   id: number;
   title: string;
   kind: 'shell' | 'workspace' | 'creatingWorkspace' | 'creationFailed';
@@ -299,6 +300,11 @@ export class Bridge {
    * `key` is a letter, a digit, `Minus`, `Equal`, `Slash`, `Space`, `Left`, `Right`, `Down`, `Up`, `Escape`, `Tab` or `Return`.
    * Returns whether the router consumed it, so that no view saw it.
    */
+  async preview(pane: number): Promise<{ heading: string; mermaid: string; fill: string }> {
+    return this.request('GET', `/test/preview?pane=${pane}`);
+  }
+  async closePreview(pane: number): Promise<void> { await this.request('POST', '/test/preview/close', { pane }); }
+
   async press(key: string, modifiers: Modifier[] = []): Promise<boolean> {
     return (await this.request('POST', '/test/key', { key, modifiers })).consumed;
   }

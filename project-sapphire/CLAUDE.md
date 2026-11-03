@@ -30,6 +30,14 @@ Closing the window quits the app.
 	A tab creating its workspace has no terminal until the workspace exists (its session is `CreatingWorkspace`, which has no terminal spec).
 - `Surfaces` (in `AppShell`) holds the key router and one layer stack per tab, with the tab's terminal as its bottom layer, under the progress page of a tab creating its workspace; the active tab's top layer has the keyboard focus unless a window surface is open.
 
+## Preview panes
+
+`debi preview <file>` sends a request to the core's loopback IPC server, whose port is supplied to each terminal alongside its stable pane ID. The core resolves the owning tab, commits an OpenPreview command and delivers PanesChanged through the normal subscription and per-frame fold. Unknown terminal IDs are warnings and no-ops. Preview panes are part of the tab's row, beside its terminal layer; opening one does not activate a background tab or take its terminal's focus. Closing one returns focus to the active tab's terminal unless a window surface owns it.
+
+Paths, pane IDs and refresh revisions are SQLite-backed core state. Restoring a tab re-reads each file; missing or unreadable files show an in-pane error. A new path replaces the existing preview; the same path keeps its pane ID and advances its revision. Markdown and themed Mermaid use WebContentView's revision-driven update path, shared with the guide. Rendered contents, web views and error text are transient UI models. HTML, stacking and draggable resizing are subsequent M5 slices; unsupported HTML/stack requests fail explicitly.
+
+The acceptance tests build a real Debi CLI with `test-tools` and run it inside the session's terminal, exercising its environment and the IPC server. Shared Markdown scenarios live in `acceptance/features/preview.feature`; HTML and stack scenarios remain Ember-only until their Sapphire implementation lands. Preview restore, missing-file and background-tab scenarios are Sapphire-specific. The test bridge exposes pane identity/error state and rendered DOM/SVG observations; the UI test clicks Close preview and verifies the terminal receives subsequent typing.
+
 ## Workspace Hub
 
 Ember's home page (`Sources/AppShell/WorkspaceHub/`): the selected profile's workspaces, beside the focused one's details, on a page layer over the whole window.

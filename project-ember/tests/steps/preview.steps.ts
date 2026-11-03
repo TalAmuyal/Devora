@@ -1,14 +1,9 @@
 import { When, Then } from '@cucumber/cucumber';
+import { writeToTerminal } from '../support/terminal-helper';
 import { EmberWorld } from '../support/world';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-
-async function activePtyId(world: EmberWorld): Promise<number> {
-  return world.driver.eval(
-    'return window.__test.sessionManager.getActiveSession().getPtyId()',
-  );
-}
 
 function makeTempFile(world: EmberWorld, ext: string, heading: string): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devora-preview-'));
@@ -20,8 +15,8 @@ function makeTempFile(world: EmberWorld, ext: string, heading: string): string {
 }
 
 async function sendPreview(world: EmberWorld, filePath: string, stack: boolean): Promise<void> {
-  const ptyId = await activePtyId(world);
-  await world.driver.ipcPost('/preview/open', { ptyId, path: filePath, stack });
+  const quoted = "'" + filePath.replaceAll("'", "'\"'\"'") + "'";
+  await writeToTerminal(world.driver, `debi preview ${stack ? '--stack ' : ''}${quoted}`);
   await new Promise((r) => setTimeout(r, 200));
 }
 

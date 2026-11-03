@@ -23,6 +23,7 @@ rm -rf "$git_repo"
 git init -q -b main "$git_repo"
 git -C "$git_repo" -c user.name=uitest -c user.email=uitest@localhost -c commit.gpgsign=false commit -q --allow-empty -m init
 export TEST_RUNNER_SAPPHIRE_GIT_REPO="$git_repo"
+export TEST_RUNNER_SAPPHIRE_TEST_DEBI="$PWD/build/test-tools/debi"
 # The sandboxed runner receives the shared, sanitized fixture through its environment.
 export TEST_RUNNER_DEVORA_HEALTH_FIXTURE_JSON="$(cat ../acceptance/fixtures/health-report.json)"
 

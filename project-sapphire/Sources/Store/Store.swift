@@ -21,6 +21,7 @@ public enum Command: Sendable {
 	/// Moves the active tab one place towards the end of the tab bar, without wrapping; `moveActiveTabBackward` goes the other way.
 	case moveActiveTabForward
 	case moveActiveTabBackward
+	case closePreview(tab: UInt64, pane: UInt64)
 	case closeTab(id: UInt64)
 	case setTabTitle(id: UInt64, title: String)
 	/// Opens a tab named `title` and creates a workspace for it in the selected profile, with these repos; `sourceWorkspacePath` duplicates that workspace's task.
@@ -159,6 +160,8 @@ public final class Store {
 			apply(.moveActiveTabForward)
 		case .moveActiveTabBackward:
 			apply(.moveActiveTabBackward)
+		case .closePreview(let tab, let pane):
+			apply(.closePreview(tab: tab, pane: pane))
 		case .closeTab(let id):
 			apply(.closeSession(tab: id))
 		case .setTabTitle(let id, let title):
@@ -699,6 +702,16 @@ public final class Store {
 		showError("\(call) failed: \(Self.describe(error))")
 		return error
 	}
+
+    /// A preview read reports its error in the pane, rather than as a global banner.
+    public func previewContent(path: String, resourceDir: String) throws -> (String, [String: String]) {
+        guard let core else { throw CoreError.Failed(message: "the core isn't running") }
+        guard !["html", "htm"].contains(URL(fileURLWithPath: path).pathExtension.lowercased()) else {
+            throw CoreError.Failed(message: "HTML previews are not available yet")
+        }
+        let themePath = URL(fileURLWithPath: resourceDir).appending(path: "themes/catppuccin-macchiato.conf").path
+        return (try core.readPreview(path: path), try core.loadTheme(path: themePath))
+    }
 
 	/// Resolve the guide and theme through the shared core.
 	public func userGuideContent(resourceDir: String) throws -> (String, [String: String]) {
