@@ -59,6 +59,7 @@ public enum KeyCode {
 	public static let keypadPlus: UInt16 = 0x45
 	public static let keypadEnter: UInt16 = 0x4C
 	public static let keypadMinus: UInt16 = 0x4E
+	public static let f1: UInt16 = 0x7A
 	public static let leftArrow: UInt16 = 0x7B
 	public static let rightArrow: UInt16 = 0x7C
 	public static let downArrow: UInt16 = 0x7D

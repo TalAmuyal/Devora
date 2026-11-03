@@ -684,6 +684,15 @@ public final class Store {
 		return error
 	}
 
+	/// Resolve the guide and theme through the shared core.
+	public func userGuideContent(resourceDir: String) throws -> (String, [String: String]) {
+		guard let core else { throw CoreError.Failed(message: "the core isn't running") }
+		// TODO(#230): the Sapphire distribution will bundle USER_GUIDE.md.
+		let guide = try core.userGuidePath(resourceDir: resourceDir)
+		let themePath = URL(fileURLWithPath: resourceDir).appending(path: "themes/catppuccin-macchiato.conf").path
+		return (try String(contentsOfFile: guide, encoding: .utf8), try core.loadTheme(path: themePath))
+	}
+
 	/// Creates a cancellable health run; its blocking work belongs on a detached task.
 	public func newHealthRun() throws -> HealthRun {
 		guard let core else { throw CoreError.Failed(message: "the core isn't running") }

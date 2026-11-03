@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use serde::Serialize;
@@ -46,7 +47,30 @@ pub fn write_pretty_json(path: &Path, value: &Value) -> Result<(), String> {
     value
         .serialize(&mut serializer)
         .map_err(|e| format!("failed to serialize {}: {e}", path.display()))?;
-    fs::write(path, buf).map_err(|e| format!("failed to write {}: {e}", path.display()))
+    // Follow an existing config symlink, as fs::write did, then replace its target atomically.
+    let target = if fs::symlink_metadata(path)
+        .is_ok_and(|metadata| metadata.file_type().is_symlink())
+    {
+        fs::canonicalize(path).map_err(|e| format!("failed to resolve {}: {e}", path.display()))?
+    } else {
+        path.to_path_buf()
+    };
+    let parent = target
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
+    let mut temp = tempfile::NamedTempFile::new_in(parent)
+        .map_err(|e| format!("failed to write {}: {e}", path.display()))?;
+    if let Ok(metadata) = fs::metadata(&target) {
+        temp.as_file()
+            .set_permissions(metadata.permissions())
+            .map_err(|e| format!("failed to write {}: {e}", path.display()))?;
+    }
+    temp.write_all(&buf)
+        .map_err(|e| format!("failed to write {}: {e}", path.display()))?;
+    temp.persist(&target)
+        .map_err(|e| format!("failed to write {}: {}", path.display(), e.error))?;
+    Ok(())
 }
 
 fn get_value_by_dot_path<'a>(root: &'a Value, dot_path: &str) -> Option<&'a Value> {
@@ -725,6 +749,42 @@ mod tests {
     // Serializes tests that mutate process-global env vars (HOME / DEVORA_CONFIG_PATH) read by `global_config_path`; concurrent mutation would make config reads non-deterministic.
     // `into_inner` recovers from a poisoned lock so one failing test doesn't cascade.
     static ENV_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    #[test]
+    fn atomic_write_replaces_config_without_leaving_temporary_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.json");
+        fs::write(&path, "{}").unwrap();
+        write_pretty_json(&path, &serde_json::json!({"name": "updated"})).unwrap();
+        assert_eq!(read_json_file(&path).unwrap()["name"], "updated");
+        let names: Vec<_> = fs::read_dir(dir.path())
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .collect();
+        assert_eq!(names, ["config.json"]);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn atomic_write_preserves_existing_permissions_and_symlink() {
+        use std::os::unix::fs::{symlink, PermissionsExt};
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("actual.json");
+        let link = dir.path().join("config.json");
+        fs::write(&target, "{}").unwrap();
+        fs::set_permissions(&target, fs::Permissions::from_mode(0o640)).unwrap();
+        symlink("actual.json", &link).unwrap();
+        write_pretty_json(&link, &serde_json::json!({"name": "updated"})).unwrap();
+        assert!(fs::symlink_metadata(&link)
+            .unwrap()
+            .file_type()
+            .is_symlink());
+        assert_eq!(
+            fs::metadata(&target).unwrap().permissions().mode() & 0o777,
+            0o640
+        );
+        assert_eq!(read_json_file(&target).unwrap()["name"], "updated");
+    }
 
     #[test]
     fn test_expand_tilde_with_home() {

@@ -751,6 +751,7 @@ private struct TestKey {
 			"Right": TestKey(keyCode: KeyCode.rightArrow, plain: "\u{F703}", shifted: "\u{F703}", isArrow: true),
 			"Down": TestKey(keyCode: KeyCode.downArrow, plain: "\u{F701}", shifted: "\u{F701}", isArrow: true),
 			"Up": TestKey(keyCode: KeyCode.upArrow, plain: "\u{F700}", shifted: "\u{F700}", isArrow: true),
+			"F1": TestKey(keyCode: KeyCode.f1, plain: "\u{F704}", shifted: "\u{F704}"),
 			"Escape": TestKey(keyCode: KeyCode.escape, plain: "\u{1B}", shifted: "\u{1B}"),
 			"Tab": TestKey(keyCode: KeyCode.tab, plain: "\t", shifted: "\t"),
 			"Return": TestKey(keyCode: KeyCode.returnKey, plain: "\r", shifted: "\r"),

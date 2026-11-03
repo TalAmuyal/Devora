@@ -32,6 +32,7 @@ A focused text field or text view (the window's first responder is an `NSTextVie
 
 | Shortcut | Available |
 |---|---|
+| User Guide: `F1` | Always |
 | Font size: `Ctrl+1/2/3` (12/15/26), `Ctrl+=` (15), `Ctrl+Shift+=`/`-` (±2, within 8–40) | Always |
 | `Ctrl+S` (open the Workspace Hub; never closes it), `Ctrl+Shift+S` (new shell) | When no opaque layer is in the window stack |
 | `Ctrl+←/→` (switch tab, wrapping), `Ctrl+Shift+←/→` (move the active tab, not wrapping) | When no opaque layer is in the window stack |
@@ -54,7 +55,7 @@ Option and Command chords are never shortcuts, where Ember's font-size keys igno
 - A dropdown: `popupLayer`, which takes no focus and passes on the keys it doesn't claim; Escape and `q` dismiss it.
 	As Ember's popups are mounted by their caller, the surface it belongs to draws it, and its layer's content is empty: the Workspace Hub's header dropdowns are the first (`Surfaces.toggleHubMenu`).
 	Close it before removing the surface beneath: removing a layer that isn't the top reveals nothing, so the focus wouldn't move on.
-- `F1` (User Guide) is a key-down: a new `AppShortcut` case, matched before any layer like `Ctrl+S` (Workspace Hub).
+- `F1` (User Guide) is a key-down matched in `AppShortcuts` before any layer; the guide is a page on the window stack.
 - Shift-Shift (Command Palette) arrives as `.flagsChanged` events, not key-downs: its tracking needs a monitor of its own in `AppShortcuts`, while every key-down already reaches `AppShortcuts.handle` first, which is where a pending tap is reset.
 
 ## Where things live

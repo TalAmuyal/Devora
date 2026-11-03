@@ -6,8 +6,8 @@ node = "22"
 
 [deps.npm_deps]
 auto = true
-sources = ["package.json", "package-lock.json"]
-run = "test -f package.json && npm install || true"
+sources = ["package.json", "package-lock.json", "../web-renderer/package.json", "../web-renderer/package-lock.json"]
+run = "npm ci --prefix ../web-renderer --no-audit --no-fund && npm install --no-audit --no-fund"
 description = "Automatically sync npm dependencies"
 
 [tasks.dev]

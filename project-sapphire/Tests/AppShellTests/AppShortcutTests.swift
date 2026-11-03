@@ -4,6 +4,11 @@ import Testing
 
 /// Which key-downs are app-wide shortcuts: the keys are Ember's, matched on the physical key.
 struct AppShortcutTests {
+	@Test func f1IsAvailableEvenWhenASurfaceIsOpen() {
+		#expect(AppShortcut(KeyPress(keyCode: KeyCode.f1)) == .openUserGuide)
+		#expect(AppShortcut.openUserGuide.needsNoWindowSurface == false)
+	}
+
 	@Test func controlChordsMatchOnThePhysicalKeyWhateverTheCharacters() {
 		// With Shift, the minus key types "_", and Control turns letters into control codes.
 		#expect(AppShortcut(KeyPress(keyCode: KeyCode.minus, modifiers: [.control, .shift], characters: "_")) == .changeFontSize(by: -2))

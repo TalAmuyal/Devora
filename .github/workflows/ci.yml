@@ -49,13 +49,17 @@ jobs:
         id: cache-npm
         uses: actions/cache@v5
         with:
-          path: project-ember/node_modules
-          key: ember-npm-${{ runner.os }}-${{ hashFiles('project-ember/package-lock.json') }}
+          path: |
+            project-ember/node_modules
+            web-renderer/node_modules
+          key: ember-npm-${{ runner.os }}-${{ hashFiles('project-ember/package-lock.json', 'web-renderer/package-lock.json') }}
           restore-keys: ember-npm-${{ runner.os }}-
 
       - name: Install npm dependencies
         if: steps.cache-npm.outputs.cache-hit != 'true'
-        run: mise exec -C project-ember -- npm ci
+        run: |
+          mise exec -C project-ember -- npm ci --prefix ../web-renderer
+          mise exec -C project-ember -- npm ci
 
       - name: Rust format and lint
         run: mise run ember-lint
@@ -87,13 +91,17 @@ jobs:
         id: cache-npm-bdd
         uses: actions/cache@v5
         with:
-          path: project-ember/node_modules
-          key: ember-npm-${{ runner.os }}-${{ hashFiles('project-ember/package-lock.json') }}
+          path: |
+            project-ember/node_modules
+            web-renderer/node_modules
+          key: ember-npm-${{ runner.os }}-${{ hashFiles('project-ember/package-lock.json', 'web-renderer/package-lock.json') }}
           restore-keys: ember-npm-${{ runner.os }}-
 
       - name: Install npm dependencies
         if: steps.cache-npm-bdd.outputs.cache-hit != 'true'
-        run: mise exec -C project-ember -- npm ci
+        run: |
+          mise exec -C project-ember -- npm ci --prefix ../web-renderer
+          mise exec -C project-ember -- npm ci
 
       - name: Install Claude Code CLI
         run: npm install -g @anthropic-ai/claude-code || true

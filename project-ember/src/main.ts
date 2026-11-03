@@ -1,3 +1,4 @@
+import '@devora/web-renderer/content.css';
 import '@xterm/xterm/css/xterm.css';
 import { listen } from '@tauri-apps/api/event';
 import { invoke, invokeLogOnly, invokesInFlight, Channel } from './invoke';

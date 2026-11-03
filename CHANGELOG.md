@@ -16,6 +16,7 @@ Types of changes:
 
 ### Added
 
+- Devora Sapphire opens the themed User Guide with `F1`, even above dialogs, with Vim scrolling and Mermaid diagrams
 - Devora Sapphire has a Health Hub, opened with `H` or the Workspace Hub menu, with dependency and configuration checks, copyable fixes and `r` to re-run
 - The start of Devora Sapphire, the native macOS build (`project-sapphire/`): one window listing profiles and workspaces from the shared core and a libghostty login shell, built with `mise run -C project-sapphire build` over `devora-ffi`, the core's new UniFFI facade
 - Architecture decision records ADR-006 to ADR-010 for Project Sapphire, the planned native macOS build, and the shared Rust core it will share with Ember
@@ -64,6 +65,8 @@ Types of changes:
 - Crit is no longer bundled with Devora
 
 ### Fixed
+
+- Config updates replace files atomically, so readers do not see partially written JSON
 
 - Sapphire recovers interrupted workspace creations on restart, removing incomplete fresh workspaces and releasing reused workspaces while preserving completed or re-claimed workspaces
 

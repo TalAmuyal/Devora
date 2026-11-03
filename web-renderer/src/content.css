@@ -1,0 +1,88 @@
+.web-content-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-xl);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-md);
+  color: var(--color-fg);
+  line-height: 1.6;
+}
+
+/* Markdown styling */
+.web-content-body h1,
+.web-content-body h2,
+.web-content-body h3 { color: var(--color-accent); }
+.web-content-body h1 { font-size: var(--font-size-h1); }
+.web-content-body h2 { font-size: var(--font-size-h2); }
+.web-content-body h3 { font-size: var(--font-size-h3); }
+
+.web-content-body code {
+  background: var(--color-bg-overlay);
+  padding: 0.1rem 0.3rem;
+  border-radius: 0.2rem;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+}
+
+.web-content-body pre {
+  background: var(--color-bg-secondary);
+  padding: var(--space-md);
+  border-radius: var(--tab-border-radius);
+  overflow-x: auto;
+}
+
+.web-content-body pre code {
+  background: none;
+  padding: 0;
+}
+
+.web-content-body a { color: var(--color-blue); }
+
+.web-content-body table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.web-content-body th,
+.web-content-body td {
+  border: 1px solid var(--color-border);
+  padding: var(--space-sm) var(--space-md);
+}
+
+.web-content-body th {
+  background: var(--color-bg-secondary);
+}
+
+.web-content-body blockquote {
+  border-left: 0.2rem solid var(--color-accent);
+  margin-left: 0;
+  padding-left: var(--space-lg);
+  color: var(--color-fg-secondary);
+}
+
+/* Rendered Mermaid diagram: centered, scrollable when wider than the pane. */
+.web-content-body .mermaid-diagram {
+  display: flex;
+  justify-content: center;
+  margin: var(--space-lg) 0;
+  overflow-x: auto;
+}
+
+.web-content-body .mermaid-diagram svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/* A diagram that failed to parse falls back to its source, flagged subtly. */
+.web-content-body pre.mermaid.mermaid-error {
+  border: 1px solid var(--color-status-error);
+}
+
+.web-content-body pre.mermaid.mermaid-error::before {
+  content: "⚠ Could not render this Mermaid diagram — showing source";
+  display: block;
+  margin-bottom: var(--space-sm);
+  color: var(--color-status-error);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-sm);
+}

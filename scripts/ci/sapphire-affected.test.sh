@@ -12,6 +12,7 @@ check() {
 		failures=$((failures + 1))
 	fi
 }
+check true web-renderer/src/index.ts
 check true project-sapphire/Sources/Store/Store.swift
 check true project-core/crates/devora-state/src/store.rs
 check true project-core/Cargo.lock

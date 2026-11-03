@@ -245,6 +245,15 @@ impl DevoraCore {
         )?)
     }
 
+    /// Locate the User Guide in the app resources or the development checkout.
+    pub fn user_guide_path(&self, resource_dir: Option<String>) -> Result<String, CoreError> {
+        Ok(
+            devora_core::bundle::user_guide_path(resource_dir.as_deref().map(Path::new))?
+                .to_string_lossy()
+                .into_owned(),
+        )
+    }
+
     /// The theme file's colors, keyed by the CSS custom property names the UIs share.
     pub fn load_theme(&self, path: String) -> Result<HashMap<String, String>, CoreError> {
         Ok(theme::load_theme(Path::new(&path))?)
@@ -490,6 +499,19 @@ mod tests {
         assert!(!ws.exists());
         assert!(!git_output(&source, &["worktree", "list"]).contains("ws-1"));
         assert!(source.exists());
+    }
+
+    #[test]
+    fn user_guide_path_prefers_the_bundled_guide() {
+        let tmp = tempfile::tempdir().unwrap();
+        let core = core_with_config(tmp.path(), "{}");
+        let guide = tmp.path().join("USER_GUIDE.md");
+        fs::write(&guide, "# Bundled guide").unwrap();
+        assert_eq!(
+            core.user_guide_path(Some(tmp.path().to_string_lossy().into_owned()))
+                .unwrap(),
+            guide.to_string_lossy()
+        );
     }
 
     #[test]
