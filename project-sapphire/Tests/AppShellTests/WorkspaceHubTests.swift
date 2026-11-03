@@ -60,6 +60,18 @@ struct WorkspaceListTests {
 }
 
 struct VimScrollTests {
+	@Test func gSequenceAndModifiersHaveOneSharedInterpretation() {
+		var keys = VimKeyParser()
+		let g = KeyPress(keyCode: 0x05, characters: "g")
+		#expect(keys.motion(for: g) == .pending)
+		#expect(keys.motion(for: g) == .top)
+		#expect(keys.motion(for: g) == .pending)
+		#expect(keys.motion(for: KeyPress(keyCode: 0x26, characters: "j")) == .line(1))
+		#expect(keys.motion(for: g) == .pending)
+		#expect(keys.motion(for: KeyPress(keyCode: 0x05, modifiers: .shift, characters: "G")) == .bottom)
+		#expect(keys.motion(for: KeyPress(keyCode: 0x26, modifiers: .command, characters: "j")) == nil)
+	}
+
 	@Test func motionsAreFractionsOfTheViewport() {
 		#expect(VimScroll.delta(for: KeyPress(keyCode: 0x26, characters: "j"), viewportHeight: 500) == 50)
 		#expect(VimScroll.delta(for: KeyPress(keyCode: KeyCode.upArrow), viewportHeight: 500) == -50)

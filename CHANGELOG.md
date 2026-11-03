@@ -66,6 +66,8 @@ Types of changes:
 
 ### Fixed
 
+- Config updates replace files atomically, so readers do not see partially written JSON
+
 - Sapphire recovers interrupted workspace creations on restart, removing incomplete fresh workspaces and releasing reused workspaces while preserving completed or re-claimed workspaces
 
 - A workspace opened from the Workspace Hub always uses its own profile's settings (Claude models and effort, default app, git shortcuts, `debi`'s profile); opening one right after switching profiles, before the hub had listed the new profile's workspaces, used the newly selected profile's

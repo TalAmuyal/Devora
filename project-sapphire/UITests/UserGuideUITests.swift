@@ -9,6 +9,7 @@ final class UserGuideUITests: XCTestCase {
 		defer { try? FileManager.default.removeItem(at: scratch) }
 		let config = try writeConfigWithAProfile(in: scratch)
 		let app = XCUIApplication()
+		app.launchEnvironment["DEVORA_TEST_MODE"] = "1"
 		app.launchEnvironment["DEVORA_CONFIG_PATH"] = config.path
 		app.launchEnvironment["DEVORA_STATE_DIR"] = scratch.appending(path: "state").path
 		app.launch()
@@ -26,7 +27,6 @@ final class UserGuideUITests: XCTestCase {
 			let capture = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
 			capture.lifetime = .keepAlways
 			add(capture)
-			print(app.debugDescription)
 		}
 		XCTAssertTrue(rendered, "the actual Markdown content renders")
 		app.typeKey(.escape, modifierFlags: [])

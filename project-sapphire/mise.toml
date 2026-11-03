@@ -67,9 +67,9 @@ run = "npm ci --prefix ../web-renderer --no-audit --no-fund"
 [tasks.web-renderer]
 description = "Build the shared web renderer into the Sapphire resource directory"
 depends = ["web-renderer-install"]
-sources = ["../web-renderer/package.json", "../web-renderer/package-lock.json", "../web-renderer/index.html", "../web-renderer/vite.config.js", "../web-renderer/src/**/*"]
+sources = ["../web-renderer/package.json", "../web-renderer/package-lock.json", "../web-renderer/index.html", "../web-renderer/vite.config.js", "../web-renderer/src/**/*", "../web-renderer/public/**/*"]
 outputs = ["build/web-renderer/index.html", "build/web-renderer/.vite/manifest.json"]
-run = "npm run build --prefix ../web-renderer"
+run = "npm run build --prefix ../web-renderer -- --outDir ../project-sapphire/build/web-renderer"
 
 [tasks.generate]
 depends = ["web-renderer"]

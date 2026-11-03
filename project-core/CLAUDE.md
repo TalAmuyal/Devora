@@ -8,7 +8,7 @@ It is being extracted from Ember's `src-tauri/` area by area (TalAmuyal/Devora#2
 - `crates/debi`: the Rust `debi` CLI. It runs `ccc` (also as a `ccc` symlink) and hands every other command to the Go `debi-go` until each command group is ported (ADR-007).
 - `crates/devora-agent`: how Devora launches Claude Code: the `ccc` command line resolved into arguments and environment.
 - `crates/devora-app`: the app process around the core: its per-app log file, error reporting (with a listener the UI surfaces errors through) and panic hook, and what its bundle ships (version, install suffix, user guide).
-- `crates/devora-config`: the global and per-profile config files, registered profiles, and the settings resolved from them (Claude settings, config fields, the prepare-command, git shortcuts).
+- `crates/devora-config`: the global and per-profile config files (replaced atomically on write), registered profiles, and the settings resolved from them (Claude settings, config fields, the prepare-command, git shortcuts).
 - `crates/devora-core`: the facade. A UI depends on this crate alone, never on the crates behind it.
 - `crates/devora-ffi`: the facade's UniFFI side, the `DevoraCore` object Sapphire binds; the records Swift sees are mapped here, so the other crates stay UniFFI-free.
 - `crates/devora-health`: the cancellable in-app health check (runs `debi health --json` through a login shell and derives the typed report shared by both UIs).

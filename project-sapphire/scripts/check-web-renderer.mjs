@@ -9,4 +9,6 @@ for (const entry of Object.values(manifest)) {
     if (!file || !fs.existsSync(path.join(root, file))) throw new Error(`Missing web renderer resource: ${file}`);
   }
 }
-if (!fs.existsSync(path.join(root, 'index.html'))) throw new Error('Missing web renderer index.html');
+for (const file of ['index.html', 'bootstrap.js']) {
+  if (!fs.existsSync(path.join(root, file))) throw new Error(`Missing web renderer ${file}`);
+}

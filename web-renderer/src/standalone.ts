@@ -18,3 +18,7 @@ Object.assign(window, {
     await renderMermaidDiagrams(content);
   },
 });
+
+// The native host renders only after this module has finished initializing.
+const host = (window as Window & { webkit?: { messageHandlers?: { devoraRenderer?: { postMessage: (message: unknown) => void } } } }).webkit;
+host?.messageHandlers?.devoraRenderer?.postMessage({ ready: true });
