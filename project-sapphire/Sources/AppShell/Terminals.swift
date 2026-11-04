@@ -86,6 +86,8 @@ private struct TabPane: View {
 	let tab: AppTab
 	let store: Store
 	let surfaces: Surfaces
+	/// A divider's width while it is dragged, and after its commit until the core's PanesChanged folds.
+	@State private var dragged: (pane: UInt64, width: CGFloat, committed: Bool)?
 
 	var body: some View {
 		if let reason = session?.startFailure {
@@ -93,14 +95,18 @@ private struct TabPane: View {
 		} else if let stack {
 			GeometryReader { geometry in
 				if let rules = store.previewLayoutRules {
-					let layout = PreviewRowLayout(available: geometry.size.width, preferred: tab.previews.map { CGFloat($0.width) }, rules: rules)
+					let preferred = tab.previews.map { preview in dragged.flatMap { $0.pane == preview.id ? $0.width : nil } ?? CGFloat(preview.width) }
+					let layout = PreviewRowLayout(available: geometry.size.width, preferred: preferred, rules: rules)
 					// Keep this hierarchy even without previews: the terminal's native view must not remount.
 					ScrollView(.horizontal) {
 						HStack(spacing: 0) {
 							LayerHost(stack: stack).frame(width: layout.terminal)
 							ForEach(Array(tab.previews.enumerated()), id: \.element.id) { index, preview in
 								PreviewDivider(pane: preview.id, width: layout.previews[index], minimum: CGFloat(rules.minimumPreviewWidth),
-									maximum: min(CGFloat(rules.maximumPreviewWidth), layout.previews[index] + layout.terminal - CGFloat(rules.minimumTerminalWidth))) { width in
+									maximum: min(CGFloat(rules.maximumPreviewWidth), layout.previews[index] + layout.terminal - CGFloat(rules.minimumTerminalWidth)),
+									drag: { dragged = (preview.id, $0, false) }) { width in
+									guard width != preview.width else { dragged = nil; return }
+									dragged = (preview.id, CGFloat(width), true)
 									store.dispatch(.resizePreview(tab: tab.id, pane: preview.id, width: width))
 								}.frame(width: PreviewRowLayout.divider)
 								if let model = surfaces.previewModels[preview.id] {
@@ -114,6 +120,7 @@ private struct TabPane: View {
 					}
 				}
 			}
+			.onChange(of: tab.previews) { if dragged?.committed == true { dragged = nil } }
 		}
 	}
 }

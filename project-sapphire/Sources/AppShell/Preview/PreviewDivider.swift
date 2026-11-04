@@ -1,15 +1,15 @@
 import AppKit
 import SwiftUI
 
-/// Pointer tracking is transient; every size change goes through the core's resize command.
+/// A drag only reports its transient width; the core's resize command runs once, when it ends.
 struct PreviewDivider: View {
 	let pane: UInt64
 	let width: CGFloat
 	let minimum: CGFloat
 	let maximum: CGFloat
-	let resize: (UInt32) -> Void
+	let drag: (CGFloat) -> Void
+	let commit: (UInt32) -> Void
 	@State private var initial: (width: CGFloat, bounds: ClosedRange<CGFloat>)?
-	@State private var lastSent: UInt32?
 	@State private var hovering = false
 
 	var body: some View {
@@ -21,13 +21,12 @@ struct PreviewDivider: View {
 		// Win over the row's horizontal scrolling while the pointer is on a divider.
 		.highPriorityGesture(DragGesture(minimumDistance: 0, coordinateSpace: .global)
 			.onChanged { value in
-				if initial == nil { initial = (width, minimum...max(minimum, maximum)); lastSent = UInt32(width.rounded()) }
-				update(translation: value.translation.width)
+				if initial == nil { initial = (width, minimum...max(minimum, maximum)) }
+				if let next = dragged(by: value.translation.width) { drag(next) }
 			}
 			.onEnded { value in
-				update(translation: value.translation.width)
+				if let next = dragged(by: value.translation.width) { commit(UInt32(next)) }
 				initial = nil
-				lastSent = nil
 			})
 		.onHover { inside in
 			guard inside != hovering else { return }
@@ -42,13 +41,12 @@ struct PreviewDivider: View {
 		.accessibilityAdjustableAction { direction in
 			let delta: CGFloat = direction == .increment ? 10 : -10
 			let next = UInt32(min(maximum, max(minimum, width + delta)).rounded())
-			if next != UInt32(width.rounded()) { resize(next) }
+			if next != UInt32(width.rounded()) { commit(next) }
 		}
 	}
 
-	private func update(translation: CGFloat) {
-		guard let initial else { return }
-		let next = UInt32(min(initial.bounds.upperBound, max(initial.bounds.lowerBound, initial.width - translation)).rounded())
-		if next != lastSent { lastSent = next; resize(next) }
+	private func dragged(by translation: CGFloat) -> CGFloat? {
+		guard let initial else { return nil }
+		return min(initial.bounds.upperBound, max(initial.bounds.lowerBound, initial.width - translation)).rounded()
 	}
 }
