@@ -111,10 +111,16 @@ outputs = ["node_modules/.package-lock.json"]
 run = "npm install --no-audit --no-fund"
 
 [tasks.test-tools]
-description = "Build the real Debi CLI used by preview acceptance and UI tests"
-sources = ["../project-debi/**/*.go", "../project-debi/go.mod", "../project-debi/go.sum"]
-outputs = ["build/test-tools/debi"]
-run = 'mkdir -p build/test-tools && mise exec -C ../project-debi -- go build -o "$PWD/build/test-tools/debi" .'
+description = "Build real Debi and CCC fixtures for preview and recorded CLI tests"
+sources = ["../project-debi/**/*.go", "../project-debi/go.mod", "../project-debi/go.sum", "../project-core/crates/**/*.rs", "../project-core/crates/**/Cargo.toml", "../project-core/Cargo.toml", "../project-core/Cargo.lock"]
+outputs = ["build/test-tools/debi", "build/test-tools/ccc"]
+run = '''
+set -e
+mkdir -p build/test-tools
+mise exec -C ../project-debi -- go build -o "$PWD/build/test-tools/debi" .
+mise exec -C ../project-core -- cargo build --release -p debi
+cp ../project-core/target/release/debi build/test-tools/ccc
+'''
 
 [tasks.test-acceptance]
 description = "Run the Gherkin acceptance scenarios against the built app, through its test bridge; arguments go to cucumber-js"

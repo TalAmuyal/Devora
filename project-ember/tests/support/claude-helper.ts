@@ -15,6 +15,18 @@ export type ClaudeHookType = 'PostToolUse' | 'PermissionRequest';
 
 export const CLAUDE_CONFIG_PATH = '/tmp/ember-bdd-claude';
 
+/** A native terminal uses the same interactive CLI/onboarding/permission/exit protocol. */
+export interface ClaudeTerminal {
+  start(): Promise<void>;
+  text(): Promise<string>;
+  bytes(data: readonly number[]): Promise<void>;
+  exitAll(): Promise<void>;
+}
+type ClaudeDriver = AppDriver | ClaudeTerminal;
+const text = (driver: ClaudeDriver) => 'text' in driver ? driver.text() : getTerminalContent(driver);
+const sendBytes = (driver: ClaudeDriver, data: readonly number[]) => 'bytes' in driver ? driver.bytes(data) : writeBytesToTerminal(driver, data);
+
+
 export function createTestWorkspace(): string {
   const workspacePath = fs.mkdtempSync(path.join(os.tmpdir(), 'ember-bdd-'));
 
@@ -129,7 +141,7 @@ const ONBOARDING_STEPS = [
  * Returns true if an action was taken (so the caller can re-poll).
  */
 async function dismissOnboardingIfNeeded(
-  driver: AppDriver,
+  driver: ClaudeDriver,
   content: string,
   dismissed: Set<string>,
 ): Promise<boolean> {
@@ -141,7 +153,7 @@ async function dismissOnboardingIfNeeded(
       if (i > 0 && 'delayMs' in step) {
         await new Promise(r => setTimeout(r, step.delayMs));
       }
-      await writeBytesToTerminal(driver, step.keys[i]);
+      await sendBytes(driver, step.keys[i]);
     }
     dismissed.add(step.id);
     return true;
@@ -155,14 +167,14 @@ async function dismissOnboardingIfNeeded(
  * Handles first-run onboarding screens if they appear, then waits for
  * the Claude Code input prompt (`>`) before returning.
  */
-export async function startClaudeCode(driver: AppDriver): Promise<void> {
-  await writeToTerminal(driver, 'ccc');
+export async function startClaudeCode(driver: ClaudeDriver): Promise<void> {
+  if ('start' in driver) await driver.start(); else await writeToTerminal(driver, 'ccc');
 
   const start = Date.now();
   let lastContent = '';
   const dismissed = new Set<string>();
   while (Date.now() - start < 60_000) {
-    const current = await getTerminalContent(driver);
+    const current = await text(driver);
     lastContent = current;
     const lines = current.split('\n');
 
@@ -192,10 +204,10 @@ export async function startClaudeCode(driver: AppDriver): Promise<void> {
  * key — not LF (0x0a).  We write the text bytes followed by a bare CR
  * so the TUI recognises the submit action.
  */
-export async function sendPromptToClaudeCode(driver: AppDriver, prompt: string): Promise<void> {
+export async function sendPromptToClaudeCode(driver: ClaudeDriver, prompt: string): Promise<void> {
   const bytes = Array.from(new TextEncoder().encode(prompt));
   bytes.push(0x0d);
-  await writeBytesToTerminal(driver, bytes);
+  await sendBytes(driver, bytes);
 }
 
 /**
@@ -206,16 +218,16 @@ export async function sendPromptToClaudeCode(driver: AppDriver, prompt: string):
  * writing files. This function polls the terminal and presses Enter
  * (which selects the default "Yes") whenever such a dialog appears.
  */
-export function autoApprovePermissions(driver: AppDriver): () => void {
+export function autoApprovePermissions(driver: ClaudeDriver): () => void {
   let running = true;
   const loop = (async () => {
     while (running) {
       try {
-        const content = await getTerminalContent(driver);
+        const content = await text(driver);
         const lines = content.split('\n');
         const hasYesSelected = lines.some(l => l.includes('❯') && l.includes('Yes'));
         if (hasYesSelected && content.includes('Do you want to create')) {
-          await writeBytesToTerminal(driver, KEY_CR);
+          await sendBytes(driver, KEY_CR);
         }
       } catch {
         // Session or PTY may already be closed
@@ -233,7 +245,7 @@ export function autoApprovePermissions(driver: AppDriver): () => void {
  * Returns a function to stop the auto-approve loop.
  */
 export async function runClaudePrompt(
-  driver: AppDriver,
+  driver: ClaudeDriver,
   prompt: string,
 ): Promise<() => void> {
   await startClaudeCode(driver);
@@ -246,11 +258,11 @@ export async function runClaudePrompt(
  * Uses CR (raw-mode Enter) so the TUI processes it, then verifies every
  * Claude process using this test config has exited before teardown continues.
  */
-export async function stopClaudeCode(driver: AppDriver): Promise<void> {
+export async function stopClaudeCode(driver: ClaudeDriver): Promise<void> {
   if (testClaudeProcesses().length === 0) return;
   // A Claude session can be in a background tab. Address every PTY before the
   // generic teardown closes them; writing to just the active tab misses it.
-  await driver.eval(`
+  if ('exitAll' in driver) await driver.exitAll(); else await driver.eval(`
     for (const session of window.__test.sessionManager.getSessions()) {
       const id = session.getPtyId();
       if (id != null) await window.__TAURI_INTERNALS__.invoke('write_pty', {
@@ -268,7 +280,7 @@ export async function stopClaudeCode(driver: AppDriver): Promise<void> {
 }
 
 /** Inspect only candidate CLI processes, returning IDs rather than logging their environments. */
-function testClaudeProcesses(): number[] {
+export function testClaudeProcesses(): number[] {
   const processes = execFileSync('ps', ['-axo', 'pid=,comm='], { encoding: 'utf8' });
   const result: number[] = [];
   for (const line of processes.split('\n')) {

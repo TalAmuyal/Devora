@@ -14,12 +14,12 @@ function file(world: SapphireWorld, contents: string, extension = ".md"): string
   world.previewFiles.push(name);
   return name;
 }
-async function preview(world: SapphireWorld, name: string, unknown = false, tab?: number): Promise<void> {
+async function preview(world: SapphireWorld, name: string, unknown = false, tab?: number, stack = false): Promise<void> {
   await world.bridge.waitFor('a running terminal', () => world.bridge.state(), s => s.tabs.some(t => t.id === (tab ?? s.activeTab) && t.terminal === 'running'));
   const token = Date.now();
   const marker = `PREVIEW_SENT_${token}`;
   // The complete marker must occur only in output, never in the echoed command.
-  await world.bridge.typeLine(`${unknown ? 'DEVORA_PTY_ID=999999 ' : ''}${quote(debi)} preview ${quote(name)} && printf '\\nPREVIEW_SENT_%s\\n' ${token}`, tab);
+  await world.bridge.typeLine(`${unknown ? 'DEVORA_PTY_ID=999999 ' : ''}${quote(debi)} preview ${stack ? '--stack ' : ''}${quote(name)} && printf '\\nPREVIEW_SENT_%s\\n' ${token}`, tab);
   await world.bridge.waitFor('debi preview to succeed', () => world.bridge.terminalText(tab), text => text.includes(marker + '\n') || text.includes(marker + '\r'));
 }
 async function active(world: SapphireWorld) {
@@ -131,4 +131,26 @@ Then('the HTML sandbox should block scripts resources and navigation', async fun
   assert.equal(value.url, 'about:blank');
   assert.ok(value.images.every(image => image.complete && image.width === 0));
   assert.deepEqual(htmlProbes.get(this)!.requests, []);
+});
+
+When('another Markdown file is previewed in the active session with --stack', async function (this: SapphireWorld) {
+  await preview(this, file(this, '# Stacked Doc\n'), false, undefined, true);
+});
+When('the first preview file is previewed again without --stack', async function (this: SapphireWorld) {
+  await preview(this, this.previewFiles[0]);
+});
+When('the first preview is resized to {int} points', async function (this: SapphireWorld, width: number) {
+  const state = await this.bridge.state();
+  const tab = state.tabs.find(t => t.id === state.activeTab)!;
+  await this.bridge.dispatch({ command: 'resizePreview', tab: tab.id, pane: tab.previews[0].id, width });
+  await this.bridge.waitFor('the committed preview width', () => active(this), tab => tab.previews[0]?.width === width);
+});
+Then('the first preview width should be {int} points', async function (this: SapphireWorld, width: number) {
+  await this.bridge.waitFor('the restored preview width', () => active(this), tab => tab.previews[0]?.width === width);
+});
+Then('the preview headings should be {string} and {string} in order', async function (this: SapphireWorld, first: string, second: string) {
+  await this.bridge.waitFor('both stacked documents', async () => {
+    const tab = await active(this);
+    return Promise.all(tab.previews.map(pane => this.bridge.preview(pane.id)));
+  }, previews => previews.length === 2 && previews[0].heading === first && previews[1].heading === second);
 });

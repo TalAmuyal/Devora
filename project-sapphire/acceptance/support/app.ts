@@ -3,6 +3,7 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import * as path from 'node:path';
 import { Bridge, type AppState } from './bridge';
+import { claudeEnvironment } from './claude';
 
 const PROJECT_DIR = path.resolve(import.meta.dirname, '../..');
 export const APP_BINARY = path.join(PROJECT_DIR, process.env.SAPPHIRE_APP!, 'Contents/MacOS/Devora Sapphire');
@@ -33,7 +34,7 @@ export async function launch(configPath: string, stateDir: string): Promise<Laun
 
   // Launched directly rather than through `open`, so the harness owns the process and its stderr; Sapphire takes no bare arguments, so a window opens.
   const app = spawn(APP_BINARY, [], {
-    env: { ...env, DEVORA_TEST_MODE: '1', DEVORA_TEST_HEALTH_FIXTURE: path.join(path.dirname(configPath), 'health-report.json'), DEVORA_CONFIG_PATH: configPath, DEVORA_STATE_DIR: stateDir },
+    env: { ...env, ...claudeEnvironment(), DEVORA_TEST_MODE: '1', DEVORA_TEST_HEALTH_FIXTURE: path.join(path.dirname(configPath), 'health-report.json'), DEVORA_CONFIG_PATH: configPath, DEVORA_STATE_DIR: stateDir },
     stdio: ['ignore', 'ignore', 'pipe'],
   });
   const stderr: string[] = [];

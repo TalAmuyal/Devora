@@ -5,6 +5,7 @@ import * as path from 'node:path';
 import { cleanupFixtures, writeTestConfig } from '../../../project-ember/tests/support/fixture-helper';
 import { APP_BINARY, hasExited, stderrOf, stop, waitUntilReady } from './app';
 import { SapphireWorld } from './world';
+import { stopTestClaude } from './claude';
 
 const PROJECT_DIR = path.resolve(import.meta.dirname, '../..');
 const FAILURE_CAPTURE_DIR = path.join(PROJECT_DIR, 'test-results/failures');
@@ -41,11 +42,13 @@ After(async function (this: SapphireWorld) {
       throw new Error(`Errors shown during the scenario:\n${errors.map((e) => `  - ${e}`).join('\n')}`);
     }
   } finally {
-    for (const app of [this.app, this.second?.app]) {
-      if (app) await stop(app, 'SIGTERM');
+    try { await stopTestClaude(this); } finally {
+      for (const app of [this.app, this.second?.app]) {
+        if (app) await stop(app, 'SIGTERM');
+      }
+      fs.rmSync(this.scenarioDir, { recursive: true, force: true });
+      if (this.fixtureRoot) cleanupFixtures(this.fixtureRoot);
     }
-    fs.rmSync(this.scenarioDir, { recursive: true, force: true });
-    if (this.fixtureRoot) cleanupFixtures(this.fixtureRoot);
   }
 });
 

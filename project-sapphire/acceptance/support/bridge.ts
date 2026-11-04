@@ -1,7 +1,8 @@
 /** A client for the app's test bridge (`Sources/AppShell/TestBridge.swift`). */
 
 export interface TabState {
-  previews: { id: number; path: string; revision: number; error: string | null }[];
+  terminalID: number;
+  previews: { id: number; path: string; revision: number; width: number; error: string | null }[];
   id: number;
   title: string;
   kind: 'shell' | 'workspace' | 'creatingWorkspace' | 'creationFailed';
@@ -251,6 +252,7 @@ export type Command =
   | { command: 'openWorkspace'; id: string }
   | { command: 'activateTab'; id: number }
   | { command: 'closeTab'; id: number }
+  | { command: 'resizePreview'; tab: number; pane: number; width: number }
   | { command: 'startFresh' }
   | { command: 'dismissError'; id: number };
 

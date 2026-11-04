@@ -88,12 +88,20 @@ pub enum Pane {
     },
 }
 
+/// Widths are logical display points; the terminal absorbs free row space.
+pub const MIN_PREVIEW_WIDTH: u32 = 200;
+pub const MIN_TERMINAL_WIDTH: u32 = 240;
+pub const DEFAULT_PREVIEW_WIDTH: u32 = 320;
+pub const MAX_PREVIEW_WIDTH: u32 = 16_384;
+
 /// A file preview's durable identity; content is re-read by the UI on restore or revision change.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PreviewPane {
     pub id: PaneId,
     pub path: String,
     pub revision: u64,
+    /// Preferred width; a smaller window may temporarily constrain the rendered row.
+    pub width: u32,
 }
 
 impl Pane {

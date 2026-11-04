@@ -30,4 +30,5 @@ It is being extracted from Ember's `src-tauri/` area by area (TalAmuyal/Devora#2
 - The state persistence creation journal is internal recovery bookkeeping, outside the UI state and its Command/Event interface.
 - Claude setting choices belong to `devora-config::config`; Ember reads their metadata with the settings response, and Sapphire uses the Result-returning FFI choices export.
 - `devora-platform::credentials::TokenStore` separates token operations from the system keychain; `DEVORA_TEST_MODE=1` selects process-shared in-memory credentials for either app's acceptance harness, while production retains the Debi-compatible keychain service and encoding.
+- Preview rows retain the terminal identity and ordered preview IDs, paths, revisions and preferred widths. OpenPreview replaces new paths, StackPreview appends them, and either refreshes an already-open path in place without removing siblings. ResizePreview validates the bounds exported to Sapphire; window-size constraints are a UI projection, not persisted writes.
 - Tests live with the code they test; run them with `mise run test` (and `mise run lint`).

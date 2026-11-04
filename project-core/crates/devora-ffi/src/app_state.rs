@@ -67,6 +67,7 @@ pub struct PreviewPane {
     pub id: u64,
     pub path: String,
     pub revision: u64,
+    pub width: u32,
 }
 
 #[uniffi::remote(Enum)]
@@ -106,6 +107,15 @@ pub enum Command {
     OpenPreview {
         terminal: u64,
         path: String,
+    },
+    StackPreview {
+        terminal: u64,
+        path: String,
+    },
+    ResizePreview {
+        tab: u64,
+        pane: u64,
+        width: u32,
     },
     ClosePreview {
         tab: u64,

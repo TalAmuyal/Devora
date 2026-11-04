@@ -214,6 +214,7 @@ final class TestBridge {
 			command = .openWorkspace(workspace)
 		case "activateTab": command = .activateTab(id: try uint64(body, "id"))
 		case "closeTab": command = .closeTab(id: try uint64(body, "id"))
+		case "resizePreview": command = .resizePreview(tab: try uint64(body, "tab"), pane: try uint64(body, "pane"), width: UInt32(clamping: try uint64(body, "width")))
 		case "startFresh": command = .startFresh
 		case "dismissError": command = .dismissError(id: try uint64(body, "id"))
 		default:
@@ -775,7 +776,8 @@ final class TestBridge {
 					"focused": session?.hasFocus ?? false,
 					"layers": surfaces.tabStacks[tab.id]?.layers.map(\.spec.name) ?? [],
 					"progress": progressState(of: tab),
-					"previews": tab.previews.map { preview in ["id": NSNumber(value: preview.id), "path": preview.path, "revision": NSNumber(value: preview.revision), "error": surfaces.previewModels[preview.id]?.error ?? NSNull()] as [String: Any] },
+					"terminalID": NSNumber(value: tab.terminalID),
+					"previews": tab.previews.map { preview in ["id": NSNumber(value: preview.id), "path": preview.path, "revision": NSNumber(value: preview.revision), "width": NSNumber(value: preview.width), "error": surfaces.previewModels[preview.id]?.error ?? NSNull()] as [String: Any] },
 				] as [String: Any]
 			},
 		]

@@ -22,6 +22,7 @@ public enum Command: Sendable {
 	case moveActiveTabForward
 	case moveActiveTabBackward
 	case closePreview(tab: UInt64, pane: UInt64)
+	case resizePreview(tab: UInt64, pane: UInt64, width: UInt32)
 	case closeTab(id: UInt64)
 	case setTabTitle(id: UInt64, title: String)
 	/// Opens a tab named `title` and creates a workspace for it in the selected profile, with these repos; `sourceWorkspacePath` duplicates that workspace's task.
@@ -56,6 +57,8 @@ public enum StartupProblem: Equatable, Sendable {
 @Observable
 public final class Store {
 	public private(set) var version = ""
+	/// Core-owned minimum widths and resize bounds, available before tab events fold.
+	public private(set) var previewLayoutRules: PreviewLayoutRules?
 	public private(set) var profiles: [Profile] = []
 	/// Whether the profiles have been listed once: with none, Ember's first-run welcome shows only after a listing that succeeded.
 	public private(set) var profilesListed = false
@@ -113,6 +116,7 @@ public final class Store {
 			case .app: try sapphireStatePath(resourcesDir: Bundle.main.resourcePath)
 			}
 			let core = try DevoraCore(configPath: configPath, statePath: statePath, log: log)
+			previewLayoutRules = try core.previewLayoutRules()
 			self.core = core
 			stateEvents = pullStateEvents(from: try core.subscribe())
 		} catch CoreError.StateInUse(let path, _) {
@@ -160,6 +164,8 @@ public final class Store {
 			apply(.moveActiveTabForward)
 		case .moveActiveTabBackward:
 			apply(.moveActiveTabBackward)
+		case .resizePreview(let tab, let pane, let width):
+			apply(.resizePreview(tab: tab, pane: pane, width: width))
 		case .closePreview(let tab, let pane):
 			apply(.closePreview(tab: tab, pane: pane))
 		case .closeTab(let id):

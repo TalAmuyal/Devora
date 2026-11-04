@@ -91,15 +91,26 @@ private struct TabPane: View {
 		if let reason = session?.startFailure {
 			Message(title: "The terminal couldn't start", detail: reason)
 		} else if let stack {
-			HStack(spacing: 0) {
-				LayerHost(stack: stack).frame(minWidth: 240, maxWidth: .infinity)
-				ForEach(tab.previews, id: \.id) { preview in
-					Divider()
-					if let model = surfaces.previewModels[preview.id] {
-					PreviewPaneView(preview: preview, store: store, model: model) {
-						store.dispatch(.closePreview(tab: tab.id, pane: preview.id))
-						surfaces.router.focusActiveTab()
-					}.frame(minWidth: 240, maxWidth: .infinity)
+			GeometryReader { geometry in
+				if let rules = store.previewLayoutRules {
+					let layout = PreviewRowLayout(available: geometry.size.width, preferred: tab.previews.map { CGFloat($0.width) }, rules: rules)
+					// Keep this hierarchy even without previews: the terminal's native view must not remount.
+					ScrollView(.horizontal) {
+						HStack(spacing: 0) {
+							LayerHost(stack: stack).frame(width: layout.terminal)
+							ForEach(Array(tab.previews.enumerated()), id: \.element.id) { index, preview in
+								PreviewDivider(pane: preview.id, width: layout.previews[index], minimum: CGFloat(rules.minimumPreviewWidth),
+									maximum: min(CGFloat(rules.maximumPreviewWidth), layout.previews[index] + layout.terminal - CGFloat(rules.minimumTerminalWidth))) { width in
+									store.dispatch(.resizePreview(tab: tab.id, pane: preview.id, width: width))
+								}.frame(width: PreviewRowLayout.divider)
+								if let model = surfaces.previewModels[preview.id] {
+									PreviewPaneView(preview: preview, store: store, model: model) {
+										store.dispatch(.closePreview(tab: tab.id, pane: preview.id))
+										surfaces.router.focusActiveTab()
+									}.frame(width: layout.previews[index])
+								}
+							}
+						}.frame(width: layout.content, height: geometry.size.height)
 					}
 				}
 			}
