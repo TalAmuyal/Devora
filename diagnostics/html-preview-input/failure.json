@@ -1,0 +1,31 @@
+{
+  "test": "PreviewUITests/testSandboxedHTMLCloseReturnsKeyboardFocusToTerminal()",
+  "source": "project-sapphire/UITests/PreviewUITests.swift:107",
+  "failure": "XCTAssertTrue(close.waitForExistence(timeout: 10)) failed",
+  "fullRun": {
+    "passed": 23,
+    "failed": 1
+  },
+  "isolatedRetry": {
+    "result": "Passed",
+    "passed": 1,
+    "failed": 0
+  },
+  "environment": {
+    "macOS": "27.2",
+    "build": "26B123",
+    "model": "Virtual Machine",
+    "architecture": "arm64"
+  },
+  "recording": "38631221-B3C7-4A2F-88A9-EC5E36E94AF5.mp4, original xcresult attachment",
+  "frame": "22 seconds into the original recording; extracted without image modification",
+  "observation": "The command is visible in the terminal. The executable path visually contains project-sapphir™e rather than project-sapphire; zsh reports no such file or directory. The exact terminal buffer was not separately captured.",
+  "activities": [
+    "Click New Shell",
+    "Wait for Shell StaticText",
+    "Type quoted Debi preview command",
+    "Wait 10 seconds for Close preview",
+    "XCTAssertTrue failed"
+  ],
+  "interpretation": "Command input reached the shell with an unexpected character. The mechanism of input corruption is unproven; passing a retry does not resolve this issue."
+}
