@@ -69,6 +69,10 @@ final class TestBridge {
 			switch (request.method, request.path) {
 			case ("GET", "/test/state"):
 				return .init(status: 200, body: state())
+			case ("GET", "/test/guide"):
+				guard let model = surfaces.userGuide, let view = model.webView else { throw BridgeError(status: 409, "guide web view is not ready") }
+				let text = try await view.evaluateJavaScript("document.body?.textContent ?? ''")
+				return .init(status: 200, body: ["text": text as? String ?? "", "error": model.error ?? NSNull()])
 			case ("GET", "/test/preview"):
 				guard let id = request.query["pane"].flatMap(UInt64.init), let view = surfaces.previewModels[id]?.webView else { throw BridgeError(status: 409, "preview web view is not ready") }
 				let rendered = try await view.evaluateJavaScript("""
@@ -773,6 +777,7 @@ final class TestBridge {
 					"title": tab.title,
 					"kind": Self.name(tab.session.kind),
 					"terminal": Self.status(session),
+					"launchPath": session?.launch?.env["PATH"] ?? NSNull(),
 					"focused": session?.hasFocus ?? false,
 					"layers": surfaces.tabStacks[tab.id]?.layers.map(\.spec.name) ?? [],
 					"progress": progressState(of: tab),

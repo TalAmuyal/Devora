@@ -2,14 +2,15 @@
 
 set -eEo pipefail
 
-HELPER_TEXT="Usage: $0 <app-dir> --version <ver>
+HELPER_TEXT="Usage: $0 <app-dir> --version <ver> [--app ember|sapphire]
        $0 --list-sources
 
-Copies all resources into an existing Ember .app bundle.
+Copies the shared resources into an existing Ember or Sapphire .app bundle.
 This is the single source of truth for what goes into the bundle.
 
 Arguments:
   <app-dir>            Path to the .app directory to populate
+  --app <app>          ember (default) or sapphire
   --version <ver>      Version string to write into the bundle
   --list-sources       Print the repo-relative paths that determine the
                        bundle's content (consumed by bundle-fingerprint.sh)
@@ -21,11 +22,17 @@ Arguments:
 APP_DIR=""
 VERSION=""
 LIST_SOURCES=0
+APP=ember
 while [[ $# -gt 0 ]]; do
 	case "$1" in
 		--help|-h)
 			echo -n "$HELPER_TEXT"
 			exit 0
+			;;
+		--app)
+			APP="${2:-}"
+			case "$APP" in ember|sapphire) ;; *) echo "Error: --app requires ember or sapphire" >&2; exit 1 ;; esac
+			shift 2
 			;;
 		--version)
 			if [[ -z "${2:-}" ]]; then
@@ -219,13 +226,20 @@ INFO_PLIST="$APP_DIR/Contents/Info.plist"
 plutil -replace CFBundleShortVersionString -string "$VERSION" "$INFO_PLIST"
 plutil -replace CFBundleVersion -string "$VERSION" "$INFO_PLIST"
 
+if [[ "$APP" == ember ]]; then
 # The published product is "Devora": this build takes over the "Devora" display name and bundle id, while the internal Tauri productName/identifier stay "Devora-Ember".
 # macOS Launch Services and TCC key off these plist values, so a user upgrading from the previous /Applications/Devora.app gets an in-place replacement at the same id — TCC permissions carry over and the shared ~/.config/devora config (which is independent of the bundle id) is untouched.
 plutil -replace CFBundleName -string "Devora" "$INFO_PLIST"
 plutil -replace CFBundleDisplayName -string "Devora" "$INFO_PLIST"
 plutil -replace CFBundleIdentifier -string "com.devora-org.devora" "$INFO_PLIST"
 
-FINGERPRINT="$("$SCRIPT_DIR/bundle-fingerprint.sh")"
+else
+	plutil -replace CFBundleName -string "Devora Sapphire" "$INFO_PLIST"
+	plutil -replace CFBundleDisplayName -string "Devora Sapphire" "$INFO_PLIST"
+	plutil -replace CFBundleIdentifier -string "dev.devora.sapphire" "$INFO_PLIST"
+fi
+
+FINGERPRINT="$("$SCRIPT_DIR/bundle-fingerprint.sh" --app "$APP")"
 echo -n "$FINGERPRINT" > "$RESOURCES_DIR/BUILD_FINGERPRINT"
 
 # --- Finalize ---

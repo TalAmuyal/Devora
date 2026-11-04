@@ -5,7 +5,7 @@ set -eEo pipefail
 HELPER_TEXT="Usage: $0 [--repo-root <dir>] [--inputs <path>...]
 
 Prints a content fingerprint (sha256 hex digest) of the repo files that
-determine the Ember app bundle's content. populate-app-resources.sh writes
+determine the selected app bundle's content. populate-app-resources.sh writes
 this fingerprint into the bundle as Contents/Resources/BUILD_FINGERPRINT,
 letting consumers (e.g. the acceptance-test harness) detect stale bundles.
 
@@ -14,10 +14,11 @@ excluded while uncommitted and untracked source edits are included. The hash
 covers file paths and contents only -- never timestamps.
 
 Options:
+  --app <app>         ember (default) or sapphire
   --repo-root <dir>    Repo to fingerprint (default: this script's repo)
   --inputs <path>...   Repo-relative paths to hash (default: derived from
                        'populate-app-resources.sh --list-sources' plus the
-                       Ember app sources)
+                       selected app sources)
   --help, -h           Show this help message and exit
 "
 
@@ -25,11 +26,17 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 REPO_ROOT=""
 INPUTS=()
+APP=ember
 while [[ $# -gt 0 ]]; do
 	case "$1" in
 		--help|-h)
 			echo -n "$HELPER_TEXT"
 			exit 0
+			;;
+		--app)
+			APP="${2:-}"
+			case "$APP" in ember|sapphire) ;; *) echo "Error: --app requires ember or sapphire" >&2; exit 1 ;; esac
+			shift 2
 			;;
 		--repo-root)
 			if [[ -z "${2:-}" ]]; then
@@ -65,22 +72,17 @@ if [[ ${#INPUTS[@]} -eq 0 ]]; then
 	# by cargo/vite rather than copied, so the populate script does not know
 	# them; they are listed here instead. Both scripts hash themselves so that
 	# changing what is bundled, or how it is hashed, changes the fingerprint.
-	LIST_OUTPUT="$("$SCRIPT_DIR/populate-app-resources.sh" --list-sources)"
+	LIST_OUTPUT="$("$SCRIPT_DIR/populate-app-resources.sh" --app "$APP" --list-sources)"
 	while IFS= read -r line; do
 		[[ -n "$line" ]] && INPUTS+=("$line")
 	done <<< "$LIST_OUTPUT"
-	INPUTS+=(
-		web-renderer
-		project-ember/src
-		project-ember/src-tauri
-		project-core
-		project-ember/package.json
-		project-ember/package-lock.json
-		project-ember/vite.config.ts
-		project-ember/tsconfig.json
-		bundler/macos-ember/populate-app-resources.sh
-		bundler/macos-ember/bundle-fingerprint.sh
-	)
+	INPUTS+=(web-renderer bundler VERSION)
+	if [[ "$APP" == sapphire ]]; then
+		INPUTS+=(project-sapphire mise.toml)
+	else
+		INPUTS+=(project-ember/src project-ember/src-tauri project-ember/package.json
+			project-ember/package-lock.json project-ember/vite.config.ts project-ember/tsconfig.json)
+	fi
 
 	# A missing input means the list has drifted from the repo (e.g. a moved
 	# file) -- fail loudly instead of silently hashing nothing for it.

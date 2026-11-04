@@ -153,13 +153,15 @@ Sapphire follows Ember's error reporting (ADR-002).
 
 ## Commands
 
+- `mise run bundle` (or root `sapphire-bundle`) builds the signed distribution with the shared tool/plugin/resource manifest into `build/bundle/Devora Sapphire.app`. Root `sapphire-install --path <directory> --suffix <name>` installs it; the suffix changes the visible name and core state directory. Plain `build` remains the development app, without the distribution resources. Health retains the core's PATH fallback and the guide retains its checkout fallback there.
+- `mise run test-bundle` packages the existing `build`/`test-tools` outputs and smoke-tests the distribution through the existing acceptance launcher and bridge: signatures, core launch PATH prefixes, real shell tool resolution, suffix state/name and F1 loading a uniquely marked bundled guide in an isolated copy. It uses a temporary HOME and does not touch developer state. It is the last stage of `mise run test` (also CI), packaging with `--prebuilt` to reuse its app and Debi test-tools. Shared post-login PATH reordering is tracked in #277; the smoke asserts actual command resolution rather than shell PATH order. `GET /test/guide` observes the open guide's DOM text/error.
 - From the repository root, `mise run lint` checks handwritten Swift for tab indentation (including new, nonignored files) as well as Rust formatting and clippy. Generated bindings and ignored build/vendor files are excluded.
 
 - `mise run build`: the core, the bindings, the Xcode project and `build/DerivedData/Build/Products/Release/Devora Sapphire.app`; it builds GhosttyKit first if `build/GhosttyKit.xcframework` is missing.
 - `mise run run`: launches the app through LaunchServices (`open -n`); arguments are `--flag value` pairs, since a bare argument makes AppKit open no window.
 	`--open-workspace <path>` opens a workspace of the selected profile in a new tab; `--surface workspace-hub` opens the Workspace Hub.
 	`--snapshot <out.png>` types a command into the first shell tab, if there is one, captures the window to `<out.png>` and the active tab's text to `<out.png>.txt`, then quits.
-- `mise run test`: every test, in order: `test-unit` (`swift test`, the store against the real core), `test-acceptance` (the scenarios over the test bridge) and `test-ui` (the XCUITests); the last two build the app first.
+- `mise run test`: every test, in order: `test-unit` (`swift test`, the store against the real core), `test-acceptance` (the scenarios over the test bridge), `test-ui` (the XCUITests), then `test-bundle` (package and smoke). Acceptance/UI build the app first; packaging reuses it.
 - `mise run core`, `mise run generate`, `mise run ghostty-fetch`, `mise run ghostty-build`: the build's steps.
 	`ghostty-build` needs Xcode's Metal Toolchain and gettext's `msgfmt` (`mise run ghostty-prereqs` installs whichever is missing; it is meant for CI, since it installs system-wide, so ask before running it on a developer's Mac); set `GHOSTTY_CLONE_SOURCE` to clone Ghostty from a local copy instead of GitHub.
 - `mise run ghostty-cache-key`: the key CI caches `build/GhosttyKit.xcframework` under (the `sapphire` job in `.github/workflows/ci.yml`).
