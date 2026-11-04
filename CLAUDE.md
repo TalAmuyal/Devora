@@ -58,6 +58,7 @@ Reference those homes rather than restating them.
 - [ADR-008: Core-Owned App State and Durability](docs/adrs/ADR-008-core-owned-state-and-durability.md) — the core owns tabs, splits, panes, drafts and agents; every mutation is a named command written through to SQLite; conversation history lives in a separate `conversations.db`
 - [ADR-009: Agent Runtime](docs/adrs/ADR-009-agent-runtime.md) — one persistent `claude -p` stream-json process per agent session, driven over the control protocol, with Judgess linked in-process as a `PreToolUse` hook callback
 - [ADR-010: Sapphire UI Stack and Build](docs/adrs/ADR-010-sapphire-ui-stack.md) — SwiftUI on macOS 27 over UniFFI, libghostty terminal, natively drawn `nvim --embed` prompt editor, `WKWebView` panes, SwiftPM modules plus a generated app target
+- [ADR-011: Sapphire Testing](docs/adrs/ADR-011-sapphire-testing.md) — unit tests against the real core, Gherkin over a test bridge shared with Ember, and XCUITests for real input and drawing, all under one `mise run test`; `project-sapphire/acceptance/PARITY.md` tracks what Sapphire doesn't share
 
 ## Vision
 
