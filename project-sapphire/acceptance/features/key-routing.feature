@@ -34,6 +34,13 @@ Feature: Key routing through the layers
     And the New Task form should still be visible
     And the New Task form title should be ""
 
+  Scenario: A smaller font refits every terminal, the background ones included
+    Given 2 sessions exist
+    And every session's terminal size is recorded
+    When the user presses Ctrl+Shift+-
+    Then the terminal font size should be 13
+    And every session's terminal should be refit to the same, wider size
+
   # With a profile, since the first-run welcome can't be closed.
   Scenario: Closing the Workspace Hub gives the keyboard focus back to the active session's terminal
     Given a profile "Work" with 0 active workspaces

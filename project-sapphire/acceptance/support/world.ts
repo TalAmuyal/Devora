@@ -27,6 +27,8 @@ export class SapphireWorld extends World {
   /** The tabs, as the persistence steps compare them, before the app was restarted. */
   tabsBeforeRestart?: RestartedTabs;
   previewFiles: string[] = [];
+  /** Each tab's PTY size, in tab order, as `stty size` reported it. */
+  recordedSizes?: { rows: number; cols: number }[];
   failureCapture?: FailureCapture;
   workspacePath?: string;
   hookLogPath?: string;
