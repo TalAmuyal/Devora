@@ -12,6 +12,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  CLAUDE_CODE_VERSION: "2.1.316"
+
 permissions:
   contents: read
 
@@ -105,7 +108,7 @@ jobs:
 
       - name: Install Claude Code CLI
         run: |
-          npm install -g @anthropic-ai/claude-code@2.1.316
+          npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
           claude --version
 
       - name: Build Ember
@@ -202,6 +205,11 @@ jobs:
 
       - name: Build the app
         run: mise run -C project-sapphire build
+
+      - name: Install Claude Code CLI
+        run: |
+          mise exec -C project-sapphire -- npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
+          mise exec -C project-sapphire -- claude --version
 
       # Unit tests, the acceptance scenarios over the test bridge, and the XCUITests where they can run.
       - name: Tests

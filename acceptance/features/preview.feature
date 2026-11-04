@@ -39,3 +39,14 @@ Feature: File preview pane
     When an HTML file is previewed in the active session
     Then the active session should have 1 preview pane
     And the preview pane should display sandboxed HTML
+
+  Scenario: Stacking opens an additional pane
+    When a Markdown file is previewed in the active session
+    And another Markdown file is previewed in the active session with --stack
+    Then the active session should have 2 preview panes
+
+  Scenario: Refreshing an existing path preserves its stacked siblings
+    When a Markdown file is previewed in the active session
+    And another Markdown file is previewed in the active session with --stack
+    And the first preview file is previewed again without --stack
+    Then the active session should have 2 preview panes

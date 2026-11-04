@@ -1,11 +1,11 @@
 @real-claude
 Feature: Claude Code hook integration
-  Claude Code runs inside an Ember terminal session. When it performs
-  tool use, configured hooks fire and can interact with the Ember UI
+  Claude Code runs inside an Devora terminal session. When it performs
+  tool use, configured hooks fire and can interact with the Devora UI
   through the IPC HTTP server.
 
   Background:
-    Given Ember is running
+    Given Devora is running with no sessions open
 
   Scenario: Claude Code hook opens a preview pane
     Given a workspace session exists with a Claude Code hook
@@ -25,3 +25,4 @@ Feature: Claude Code hook integration
     When Claude Code triggers a tool use in the first session
     Then the hook should open a preview pane on the first session
     And the second session should have 0 preview panes
+    And the second session should be active

@@ -25,6 +25,11 @@ export class SapphireWorld extends World {
   /** The tabs, as the persistence steps compare them, before the app was restarted. */
   tabsBeforeRestart?: RestartedTabs;
   previewFiles: string[] = [];
+  workspacePath?: string;
+  hookLogPath?: string;
+  hookRelease?: string;
+  claudeTab?: number;
+  stopAutoApprove?: () => void;
   fixtureRoot?: string;
   /** The profile the latest fixture step created. */
   profilePath?: string;

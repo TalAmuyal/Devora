@@ -152,3 +152,7 @@ Then('the preview pane should display sandboxed HTML', async function (this: Emb
     10_000,
   );
 });
+
+When('the first preview file is previewed again without --stack', async function (this: EmberWorld) {
+  await sendPreview(this, this.previewFiles![0], false);
+});

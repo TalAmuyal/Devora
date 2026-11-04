@@ -9,7 +9,7 @@
 //!
 //! Everything that crosses this crate's API is owned data (records, plain enums, `String`, `u32`/`u64`), so the UniFFI facade can expose it as is.
 //!
-//! A tab keeps its terminal identity while file previews share its row. Preview paths and refresh revisions are durable; rendered contents are re-read by the UI.
+//! A tab keeps its terminal identity while file previews share its row. Preview paths, order, preferred widths and refresh revisions are durable; rendered contents are re-read by the UI.
 
 mod command;
 mod feed;
@@ -19,7 +19,10 @@ mod store;
 
 pub use command::{Command, Event, StateError};
 pub use feed::{feed, Feed, Subscription};
-pub use model::{AppState, Pane, PaneId, PreviewPane, Session, SessionKind, Tab, TabId, Window};
+pub use model::{
+    AppState, Pane, PaneId, PreviewPane, Session, SessionKind, Tab, TabId, Window,
+    DEFAULT_PREVIEW_WIDTH, MAX_PREVIEW_WIDTH, MIN_PREVIEW_WIDTH, MIN_TERMINAL_WIDTH,
+};
 pub use persist::set_aside;
 pub use store::Store;
 

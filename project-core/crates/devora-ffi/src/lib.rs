@@ -25,6 +25,14 @@ mod test_support;
 
 pub use log::{AppLog, ErrorSubscription};
 
+/// Core-owned layout bounds, shared by command validation and the native row projection.
+#[derive(uniffi::Record)]
+pub struct PreviewLayoutRules {
+    pub minimum_preview_width: u32,
+    pub minimum_terminal_width: u32,
+    pub maximum_preview_width: u32,
+}
+
 uniffi::setup_scaffolding!();
 
 #[derive(Debug, PartialEq, uniffi::Error)]
@@ -176,14 +184,20 @@ impl DevoraCore {
         let error_log = Arc::clone(&core.log);
         let server = devora_core::ipc::start(devora_core::ipc::IpcHandlers {
             on_preview_open: Box::new(move |request| {
-                if request.stack {
-                    return Err("stacked previews are not available in Sapphire yet".into());
-                }
                 let core = weak.upgrade().ok_or("the core has closed")?;
-                match core.state.dispatch(state::Command::OpenPreview {
-                    terminal: u64::from(request.pty_id),
-                    path: request.path,
-                }) {
+                let terminal = u64::from(request.pty_id);
+                let command = if request.stack {
+                    state::Command::StackPreview {
+                        terminal,
+                        path: request.path,
+                    }
+                } else {
+                    state::Command::OpenPreview {
+                        terminal,
+                        path: request.path,
+                    }
+                };
+                match core.state.dispatch(command) {
                     Ok(_) => Ok(()),
                     Err(state::StateError::UnknownTerminal { terminal }) => {
                         core.log
@@ -222,6 +236,14 @@ impl DevoraCore {
             log,
             devora_core::credentials::token_store(),
         )
+    }
+
+    pub fn preview_layout_rules(&self) -> Result<PreviewLayoutRules, CoreError> {
+        Ok(PreviewLayoutRules {
+            minimum_preview_width: state::MIN_PREVIEW_WIDTH,
+            minimum_terminal_width: state::MIN_TERMINAL_WIDTH,
+            maximum_preview_width: state::MAX_PREVIEW_WIDTH,
+        })
     }
 
     /// Re-read a preview file on open, refresh or restore; errors stay with its pane.

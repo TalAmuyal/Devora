@@ -54,6 +54,16 @@ pub enum Command {
         terminal: u64,
         path: String,
     },
+    /// Add a pane, or refresh an already-open path in place without disturbing its siblings.
+    StackPreview {
+        terminal: u64,
+        path: String,
+    },
+    ResizePreview {
+        tab: TabId,
+        pane: u64,
+        width: u32,
+    },
     ClosePreview {
         tab: TabId,
         pane: u64,
@@ -107,6 +117,9 @@ pub enum Event {
 /// Why a command was rejected; a rejected command changes nothing.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum StateError {
+    InvalidPreviewWidth {
+        width: u32,
+    },
     UnknownTerminal {
         terminal: u64,
     },
@@ -137,6 +150,12 @@ pub enum StateError {
 impl fmt::Display for StateError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::InvalidPreviewWidth { width } => write!(
+                f,
+                "preview width {width} is outside {}..={}",
+                crate::MIN_PREVIEW_WIDTH,
+                crate::MAX_PREVIEW_WIDTH
+            ),
             Self::UnknownTerminal { terminal } => write!(f, "no terminal pane with id {terminal}"),
             Self::UnknownPreview { pane } => write!(f, "no preview pane with id {pane}"),
             Self::UnknownTab { tab } => write!(f, "no tab with id {tab}"),
@@ -269,30 +288,33 @@ pub(crate) fn apply(
             finish_creation(window, tab, SessionKind::CreationFailed { reason })?
         }
         Command::OpenPreview { terminal, path } => {
-            let tab = window
-                .tabs
+            open_preview(window, next_id, terminal, path, false)?
+        }
+        Command::StackPreview { terminal, path } => {
+            open_preview(window, next_id, terminal, path, true)?
+        }
+        Command::ResizePreview { tab, pane, width } => {
+            if !(crate::MIN_PREVIEW_WIDTH..=crate::MAX_PREVIEW_WIDTH).contains(&width) {
+                return Err(StateError::InvalidPreviewWidth { width });
+            }
+            let index = find(window, tab)?;
+            let current = &mut window.tabs[index].pane;
+            let Pane::PreviewRow { previews, .. } = current else {
+                return Err(StateError::UnknownPreview { pane });
+            };
+            let preview = previews
                 .iter_mut()
-                .find(|t| t.pane.terminal_id() == terminal)
-                .ok_or(StateError::UnknownTerminal { terminal })?;
-            let preview = match tab.pane.previews().iter().find(|p| p.path == path) {
-                Some(current) => PreviewPane {
-                    revision: current.revision.wrapping_add(1),
-                    ..current.clone()
-                },
-                None => PreviewPane {
-                    id: allocate(next_id),
-                    path,
-                    revision: 0,
-                },
-            };
-            tab.pane = Pane::PreviewRow {
-                terminal,
-                previews: vec![preview],
-            };
-            vec![Event::PanesChanged {
-                tab: tab.id,
-                pane: tab.pane.clone(),
-            }]
+                .find(|p| p.id == pane)
+                .ok_or(StateError::UnknownPreview { pane })?;
+            if preview.width == width {
+                vec![]
+            } else {
+                preview.width = width;
+                vec![Event::PanesChanged {
+                    tab,
+                    pane: current.clone(),
+                }]
+            }
         }
         Command::ClosePreview { tab, pane } => {
             let index = find(window, tab)?;
@@ -327,6 +349,40 @@ pub(crate) fn apply(
         }
     };
     Ok(events)
+}
+
+/// Same-path refresh always wins over replace/stack, matching Ember's session behavior.
+fn open_preview(
+    window: &mut Window,
+    next_id: &mut u64,
+    terminal: u64,
+    path: String,
+    stack: bool,
+) -> Result<Vec<Event>, StateError> {
+    let tab = window
+        .tabs
+        .iter_mut()
+        .find(|t| t.pane.terminal_id() == terminal)
+        .ok_or(StateError::UnknownTerminal { terminal })?;
+    let mut previews = tab.pane.previews().to_vec();
+    if let Some(current) = previews.iter_mut().find(|p| p.path == path) {
+        current.revision = current.revision.wrapping_add(1);
+    } else {
+        if !stack {
+            previews.clear();
+        }
+        previews.push(PreviewPane {
+            id: allocate(next_id),
+            path,
+            revision: 0,
+            width: crate::DEFAULT_PREVIEW_WIDTH,
+        });
+    }
+    tab.pane = Pane::PreviewRow { terminal, previews };
+    Ok(vec![Event::PanesChanged {
+        tab: tab.id,
+        pane: tab.pane.clone(),
+    }])
 }
 
 fn allocate(next_id: &mut u64) -> u64 {

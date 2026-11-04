@@ -40,6 +40,11 @@ const MIGRATIONS: &[&str] = &[
 ",
     "CREATE TABLE creation_journal (session_id INTEGER PRIMARY KEY, descriptor TEXT NOT NULL);",
     "CREATE TABLE previews (id INTEGER PRIMARY KEY, tab_id INTEGER NOT NULL REFERENCES tabs(id), path TEXT NOT NULL, revision INTEGER NOT NULL);",
+    // Frozen bounds/defaults for this migration; future policy changes append another migration.
+    "ALTER TABLE previews ADD COLUMN width INTEGER NOT NULL DEFAULT 320 CHECK (width BETWEEN 200 AND 16384);
+     ALTER TABLE previews ADD COLUMN position INTEGER NOT NULL DEFAULT 0 CHECK (position >= 0);
+     UPDATE previews SET position = (SELECT COUNT(*) FROM previews AS earlier WHERE earlier.tab_id = previews.tab_id AND earlier.id < previews.id);
+     CREATE UNIQUE INDEX preview_order ON previews(tab_id, position);",
 ];
 
 pub(crate) struct Db {
@@ -272,17 +277,27 @@ fn load(conn: &Connection) -> Result<State, Error> {
         let mut pane = panes
             .remove(&id)
             .ok_or_else(|| inconsistent(format!("tab {id} has no pane")))?;
-        let mut statement =
-            conn.prepare("SELECT id, path, revision FROM previews WHERE tab_id = ?1 ORDER BY id")?;
+        let mut statement = conn.prepare(
+            "SELECT id, path, revision, width FROM previews WHERE tab_id = ?1 ORDER BY position",
+        )?;
         let previews = statement
             .query_map([id], |row| {
                 Ok(crate::PreviewPane {
                     id: row.get(0)?,
                     path: row.get(1)?,
                     revision: row.get(2)?,
+                    width: row.get(3)?,
                 })
             })?
             .collect::<rusqlite::Result<Vec<_>>>()?;
+        if previews
+            .iter()
+            .any(|p| !(crate::MIN_PREVIEW_WIDTH..=crate::MAX_PREVIEW_WIDTH).contains(&p.width))
+        {
+            return Err(inconsistent(format!(
+                "tab {id} has an invalid preview width"
+            )));
+        }
         if !previews.is_empty() {
             pane = Pane::PreviewRow {
                 terminal: pane.terminal_id(),
@@ -351,10 +366,10 @@ fn write(conn: &mut Connection, state: &State) -> rusqlite::Result<()> {
                 tab.session.profile_path
             ])?;
             insert_pane.execute(params![tab.pane.terminal_id(), tab.id, "terminal"])?;
-            for preview in tab.pane.previews() {
+            for (position, preview) in tab.pane.previews().iter().enumerate() {
                 tx.execute(
-                    "INSERT INTO previews (id, tab_id, path, revision) VALUES (?1, ?2, ?3, ?4)",
-                    params![preview.id, tab.id, preview.path, preview.revision],
+                    "INSERT INTO previews (id, tab_id, path, revision, width, position) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                    params![preview.id, tab.id, preview.path, preview.revision, preview.width, position],
                 )?;
             }
         }
@@ -474,6 +489,161 @@ mod tests {
             })
             .is_err());
         assert_eq!(store.snapshot(), before);
+    }
+
+    #[test]
+    fn stacked_previews_keep_identity_width_and_order_through_refresh_close_and_restart() {
+        let (_dir, path) = db_path();
+        let store = Store::open(&path).unwrap();
+        let tab = open_tab(&store, "owner", SessionKind::Shell);
+        let terminal = store.snapshot().window.tabs[0].pane.terminal_id();
+        let background = open_tab(&store, "active", SessionKind::Shell);
+        for path in ["/first.md", "/second.html"] {
+            store
+                .dispatch(Command::StackPreview {
+                    terminal,
+                    path: path.into(),
+                })
+                .unwrap();
+        }
+        let panes = store.snapshot().window.tabs[0].pane.previews().to_vec();
+        for (pane, width) in [(&panes[0], 480), (&panes[1], 220)] {
+            store
+                .dispatch(Command::ResizePreview {
+                    tab,
+                    pane: pane.id,
+                    width,
+                })
+                .unwrap();
+        }
+        store
+            .dispatch(Command::OpenPreview {
+                terminal,
+                path: panes[0].path.clone(),
+            })
+            .unwrap();
+        let expected = store.snapshot();
+        assert_eq!(expected.window.active_tab, Some(background));
+        let previews = expected.window.tabs[0].pane.previews();
+        assert_eq!(previews.len(), 2);
+        assert_eq!(
+            (previews[0].id, previews[0].width, previews[0].revision),
+            (panes[0].id, 480, 1)
+        );
+        assert_eq!((previews[1].id, previews[1].width), (panes[1].id, 220));
+        for width in [
+            0,
+            crate::MIN_PREVIEW_WIDTH - 1,
+            crate::MAX_PREVIEW_WIDTH + 1,
+            u32::MAX,
+        ] {
+            assert!(store
+                .dispatch(Command::ResizePreview {
+                    tab,
+                    pane: panes[0].id,
+                    width
+                })
+                .is_err());
+            assert_eq!(store.snapshot(), expected);
+        }
+        assert!(store
+            .dispatch(Command::ResizePreview {
+                tab,
+                pane: u64::MAX,
+                width: 300
+            })
+            .is_err());
+        assert!(store
+            .dispatch(Command::StackPreview {
+                terminal: u64::MAX,
+                path: "/bad.md".into()
+            })
+            .is_err());
+        assert_eq!(store.snapshot(), expected);
+        drop(store);
+        let store = Store::open(&path).unwrap();
+        assert_eq!(store.snapshot(), expected);
+        assert!(store
+            .dispatch(Command::ResizePreview {
+                tab,
+                pane: panes[0].id,
+                width: 480
+            })
+            .unwrap()
+            .is_empty());
+        store
+            .dispatch(Command::ClosePreview {
+                tab,
+                pane: panes[0].id,
+            })
+            .unwrap();
+        store
+            .dispatch(Command::StackPreview {
+                terminal,
+                path: panes[1].path.clone(),
+            })
+            .unwrap();
+        let snapshot = store.snapshot();
+        let remaining = snapshot.window.tabs[0].pane.previews();
+        assert_eq!(remaining.len(), 1);
+        assert_eq!(
+            (remaining[0].id, remaining[0].width, remaining[0].revision),
+            (panes[1].id, 220, 1)
+        );
+        store
+            .dispatch(Command::OpenPreview {
+                terminal,
+                path: "/replacement.md".into(),
+            })
+            .unwrap();
+        assert_eq!(
+            store.snapshot().window.tabs[0].pane.previews()[0].width,
+            crate::DEFAULT_PREVIEW_WIDTH
+        );
+    }
+
+    #[test]
+    fn version_three_previews_gain_default_widths_without_losing_identity() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("v3.db");
+        let conn = Connection::open(&path).unwrap();
+        for migration in &super::MIGRATIONS[..3] {
+            conn.execute_batch(migration).unwrap();
+        }
+        conn.pragma_update(None, "user_version", 3).unwrap();
+        conn.execute_batch(
+            "UPDATE meta SET next_id=3, active_tab=1;
+            INSERT INTO tabs(id,position,title,kind) VALUES(1,0,'owner','shell');
+            INSERT INTO panes(id,tab_id,kind) VALUES(2,1,'terminal');
+            INSERT INTO previews(id,tab_id,path,revision) VALUES(3,1,'/old.md',7);",
+        )
+        .unwrap();
+        drop(conn);
+        let store = Store::open(&path).unwrap();
+        let snapshot = store.snapshot();
+        let preview = &snapshot.window.tabs[0].pane.previews()[0];
+        assert_eq!(
+            (preview.id, preview.revision, preview.width),
+            (3, 7, crate::DEFAULT_PREVIEW_WIDTH)
+        );
+        assert_eq!(snapshot.window.tabs[0].pane.terminal_id(), 2);
+        store
+            .dispatch(Command::StackPreview {
+                terminal: 2,
+                path: "/new.md".into(),
+            })
+            .unwrap();
+        assert_eq!(store.snapshot().window.tabs[0].pane.previews()[1].id, 4);
+        drop(store);
+        let conn = Connection::open(&path).unwrap();
+        conn.pragma_update(None, "ignore_check_constraints", true)
+            .unwrap();
+        conn.execute("UPDATE previews SET width=199", []).unwrap();
+        drop(conn);
+        assert!(matches!(
+            Store::open(&path),
+            Err(StateError::Storage { .. })
+        ));
     }
 
     #[test]
