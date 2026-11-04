@@ -27,7 +27,6 @@ Status:
 
 | Scenario | Status | Sapphire coverage, or what's missing |
 |---|---|---|
-| clone-repo: Clone a repo into the active profile from the Command Palette | Gap | It was tagged in #258, before Sapphire had a Command Palette. Sapphire's palette now has "Clone Repo into Profile", so the tag can go once its steps exist. |
 | health-hub: Open the Health Hub from the Command Palette with a real health check | Gap | `@real-health` needs a real `debi health`; Sapphire's scenarios use the shared fixture. It can run against the bundled `debi` once M6 bundles it. |
 | session-management: Create a new session | Not applicable | It calls Ember's test API to create a session with a given title. Sapphire's shell tabs get their titles from workspaces and Repurpose, which `features/repurpose-session.feature` and `features/persistence.feature` cover. |
 | session-management: A backgrounded session is not squashed when the font size changes | Gap | It guards against xterm.js measuring a hidden terminal at zero width. Sapphire keeps every terminal in the view tree, but nothing checks a background terminal's columns after a font size change. |
