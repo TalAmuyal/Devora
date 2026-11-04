@@ -6,8 +6,6 @@ Feature: Clone a repo into a profile
   Background:
     Given Devora is running with no sessions open
 
-  # Sapphire has no Command Palette yet.
-  @ember-only
   Scenario: Clone a repo into the active profile from the Command Palette
     Given an origin-backed profile "Work" with repo "test-repo"
     And a bare repo "cloned-repo" available to clone
