@@ -34,6 +34,9 @@ Then('the Command Palette should show {int} command(s)', async function (this: S
 Then('the Command Palette should show at least {int} command(s)', async function (this: SapphireWorld, count: number) {
   await this.bridge.waitFor(`at least ${count} commands`, () => this.bridge.state(), (s) => (s.palette?.items.length ?? 0) >= count);
 });
+Then('the palette should include the command {string}', async function (this: SapphireWorld, title: string) {
+  await this.bridge.waitFor(`the ${title} command`, () => this.bridge.state(), (s) => s.palette?.items.some((item) => item.title === title) === true);
+});
 Then('the selected command should be {string}', async function (this: SapphireWorld, title: string) {
   await this.bridge.waitFor(`the ${title} command to be selected`, () => this.bridge.state(), (s) => s.palette?.selected === title);
 });

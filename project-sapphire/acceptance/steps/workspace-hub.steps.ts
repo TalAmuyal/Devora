@@ -42,11 +42,11 @@ Given('the Workspace Hub is open', async function (this: SapphireWorld) {
 });
 
 Then('the Workspace Hub should be visible', async function (this: SapphireWorld) {
-  assert.ok((await this.bridge.state()).windowLayers.includes(HUB));
+  await this.bridge.waitFor('the Workspace Hub to open', () => this.bridge.state(), (s) => s.windowLayers.includes(HUB));
 });
 
 Then('the Workspace Hub overlay should be present', async function (this: SapphireWorld) {
-  assert.ok((await this.bridge.state()).windowLayers.includes(HUB));
+  await this.bridge.waitFor('the Workspace Hub to open', () => this.bridge.state(), (s) => s.windowLayers.includes(HUB));
 });
 
 Then('the Workspace Hub should not be visible', async function (this: SapphireWorld) {
