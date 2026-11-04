@@ -6,7 +6,7 @@ Feature: Health Hub
   Background:
     Given Devora is running with no sessions open
 
-  @ember-only @real-health
+  @real-health @bundled-tools
   Scenario: Open the Health Hub from the Command Palette with a real health check
     Given a profile "Work" with 1 active workspaces
     And the Command Palette is open

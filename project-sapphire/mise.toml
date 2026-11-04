@@ -96,11 +96,12 @@ description = "Build the signed distribution with all shared resources"
 run = "../bundler/macos-sapphire/bundle-sapphire.sh"
 
 [tasks.test-bundle]
-description = "Package existing build/test-tools outputs, then smoke-test the distribution using the acceptance bridge"
+description = "Package once, run bundled-tools acceptance, then smoke-test the signed distribution"
 depends = ["build", "test-tools", "npm-install"]
 run = '''
 set -e
 time ../bundler/macos-sapphire/bundle-sapphire.sh --prebuilt
+node --import tsx ./node_modules/.bin/cucumber-js acceptance/features/ ../acceptance/features/ --tags '@bundled-tools and not @ember-only' --import 'acceptance/steps/*.ts' --import 'acceptance/support/*.ts' --format progress
 node --import tsx scripts/bundle-smoke.ts
 '''
 
@@ -136,9 +137,9 @@ cp ../project-core/target/release/debi build/test-tools/ccc
 '''
 
 [tasks.test-acceptance]
-description = "Run the Gherkin acceptance scenarios against the built app, through its test bridge; arguments go to cucumber-js"
+description = "Run development-app Gherkin scenarios (bundled-tools run in test-bundle); arguments go to cucumber-js"
 depends = ["build", "npm-install", "test-tools"]
-run = "node --import tsx ./node_modules/.bin/cucumber-js acceptance/features/ ../acceptance/features/ --tags 'not @ember-only' --import 'acceptance/steps/*.ts' --import 'acceptance/support/*.ts' --format progress"
+run = "node --import tsx ./node_modules/.bin/cucumber-js acceptance/features/ ../acceptance/features/ --tags 'not @ember-only and not @bundled-tools' --import 'acceptance/steps/*.ts' --import 'acceptance/support/*.ts' --format progress"
 
 [tasks.test-ui]
 description = "Run the XCUITests, which drive the app with real input; skipped, with the reason, where they can't run"
