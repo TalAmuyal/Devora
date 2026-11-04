@@ -69,6 +69,11 @@ mise mac-install
 
 This builds Devora.app and installs it to `/Applications`.
 
+To build and install the native Sapphire app, run `mise run sapphire-install`.
+Use `--path <directory>` to choose the destination, or `--suffix <name>` for a side-by-side install with separate app state.
+Untagged builds include their `-dev.` version in the app name.
+This uses an ad hoc signature for local use; Sapphire release downloads are not provided by this task.
+
 ## Components
 
 Devora builds upon the following tools:

@@ -8,6 +8,8 @@ export interface TabState {
   kind: 'shell' | 'workspace' | 'creatingWorkspace' | 'creationFailed';
   /** `none`, `starting`, `running` or `failed: <reason>`. */
   terminal: string;
+  /** The PATH supplied by the core, before login-shell startup files run. */
+  launchPath: string | null;
   /** Whether the tab's terminal is its window's first responder. */
   focused: boolean;
   /** The names of the layers on the tab's stack, bottom to top; `terminal` once its terminal runs. */
@@ -270,6 +272,10 @@ export class Bridge {
 
   state(): Promise<AppState> {
     return this.request('GET', '/test/state');
+  }
+
+  guide(): Promise<{ text: string; error: string | null }> {
+    return this.request('GET', '/test/guide');
   }
 
   /** Dispatches a store command and waits for it to finish; state changes reach `state()` on the next frame. */

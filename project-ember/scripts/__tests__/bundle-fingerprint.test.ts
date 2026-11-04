@@ -158,6 +158,13 @@ describe('bundle-fingerprint.sh default mode (real repo)', () => {
     expect(first).toMatch(/^[0-9a-f]{64}$/);
     expect(second).toBe(first);
   });
+
+  it('fingerprints Sapphire independently from Ember app sources', () => {
+    const first = execFileSync(FINGERPRINT_SCRIPT, ['--app', 'sapphire'], { encoding: 'utf8' }).trim();
+    expect(first).toMatch(/^[0-9a-f]{64}$/);
+    expect(execFileSync(FINGERPRINT_SCRIPT, ['--app', 'sapphire'], { encoding: 'utf8' }).trim()).toBe(first);
+    expect(execFileSync(FINGERPRINT_SCRIPT, { encoding: 'utf8' }).trim()).not.toBe(first);
+  });
 });
 
 describe('populate-app-resources.sh --list-sources', () => {
@@ -182,5 +189,10 @@ describe('populate-app-resources.sh --list-sources', () => {
 
   it('is stable across invocations', () => {
     expect(listSources()).toEqual(listSources());
+  });
+
+  it('uses the same resource-source manifest for Sapphire', () => {
+    const sapphire = execFileSync(POPULATE_SCRIPT, ['--app', 'sapphire', '--list-sources'], { encoding: 'utf8' }).trim().split('\n');
+    expect(sapphire).toEqual(listSources());
   });
 });

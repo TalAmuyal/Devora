@@ -43,7 +43,7 @@ mise run -C project-judgess lint
 description = "Check Swift indentation and Rust formatting/clippy (core, judgess; Ember has ember-lint)"
 
 [tasks.lint-shell]
-run = "shellcheck install.sh bundler/macos-ember/populate-app-resources.sh bundler/macos-ember/install-completions.sh"
+run = "shellcheck install.sh bundler/macos-ember/populate-app-resources.sh bundler/macos-ember/install-completions.sh bundler/macos-ember/bundle-fingerprint.sh bundler/macos-ember/effective-version.sh bundler/macos-sapphire/*.sh"
 description = "Lint shell scripts with shellcheck"
 
 [tasks.release]
@@ -93,6 +93,24 @@ run = "mise run -C project-ember lint-rust"
 [tasks.ember-bundle]
 description = "Build the complete Devora Ember.app bundle with all resources"
 run = "./bundler/macos-ember/bundle-ember.sh"
+
+[tasks.sapphire-bundle]
+description = "Build and ad hoc sign Devora Sapphire.app with its bundled tools and resources"
+run = "./bundler/macos-sapphire/bundle-sapphire.sh"
+
+[tasks.sapphire-install]
+description = "Build and install Sapphire (--path directory, --suffix name); untagged builds include the dev version in the app name"
+usage = '''
+flag "-p --path <path>" default="/Applications" help="Directory to install Sapphire into"
+flag "-s --suffix <suffix>" help="Side-by-side install suffix, including separate app state"
+'''
+run = '''
+if [[ -n "${usage_suffix:-}" ]]; then
+	exec ./bundler/macos-sapphire/install-sapphire.sh --path "${usage_path:-/Applications}" --suffix "$usage_suffix"
+else
+	exec ./bundler/macos-sapphire/install-sapphire.sh --path "${usage_path:-/Applications}"
+fi
+'''
 
 [tasks.mac-install]
 description = "Build and install Devora.app to /Applications (or --path), plus zsh completion (close Devora first). Untagged source builds install as Devora-<version>.app; --suffix <s> installs as Devora-<s>.app and shows the suffix in the window title and app name."

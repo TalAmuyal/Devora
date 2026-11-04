@@ -33,7 +33,7 @@ final class HealthHubModel {
 		do {
 			let run = try store.newHealthRun()
 			running = run
-			// TODO(#230): Sapphire's M6 bundle will provide bundled-apps/debi under Resources.
+			// The core prefers bundled-apps/debi; plain dev builds retain the PATH fallback.
 			let resources = Bundle.main.resourcePath
 			let profile = store.selectedProfilePath
 			task = Task { [weak self] in

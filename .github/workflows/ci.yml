@@ -211,7 +211,7 @@ jobs:
           mise exec -C project-sapphire -- npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
           mise exec -C project-sapphire -- claude --version
 
-      # Unit tests, the acceptance scenarios over the test bridge, and the XCUITests where they can run.
+      # Unit, acceptance, XCUITests where available, then packaging/smoke reusing the built app and test-tools.
       - name: Tests
         run: mise run -C project-sapphire test
 

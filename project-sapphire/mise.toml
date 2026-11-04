@@ -91,9 +91,22 @@ echo "Built $SAPPHIRE_APP"
 description = "Run the app through LaunchServices; arguments are --flag value pairs (e.g. --snapshot <out.png>)"
 run = 'open -n -W "$SAPPHIRE_APP" --args'
 
+[tasks.bundle]
+description = "Build the signed distribution with all shared resources"
+run = "../bundler/macos-sapphire/bundle-sapphire.sh"
+
+[tasks.test-bundle]
+description = "Package existing build/test-tools outputs, then smoke-test the distribution using the acceptance bridge"
+depends = ["build", "test-tools", "npm-install"]
+run = '''
+set -e
+time ../bundler/macos-sapphire/bundle-sapphire.sh --prebuilt
+node --import tsx scripts/bundle-smoke.ts
+'''
+
 [tasks.test]
-description = "Run every test: the Swift unit tests, the acceptance scenarios over the test bridge, and the XCUITests (skipped where they can't run)"
-run = [{ task = "test-unit" }, { task = "test-acceptance" }, { task = "test-ui" }]
+description = "Run unit, acceptance, real-input UI (where available) and signed bundle smoke tests"
+run = [{ task = "test-unit" }, { task = "test-acceptance" }, { task = "test-ui" }, { task = "test-bundle" }]
 
 [tasks.test-unit]
 description = "Run the Swift tests against the real core"

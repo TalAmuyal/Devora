@@ -1,4 +1,5 @@
 import { World, setWorldConstructor, setDefaultTimeout } from '@cucumber/cucumber';
+import { claudeEnvironment } from './claude';
 import type { ChildProcess } from 'node:child_process';
 import { launch, type LaunchedApp } from './app';
 import type { AppState, Bridge, TabState } from './bridge';
@@ -47,7 +48,7 @@ export class SapphireWorld extends World {
 
   /** Launches the app on the scenario's config and state; it becomes the app the steps drive. */
   async launch(): Promise<void> {
-    const { app, bridge } = await launch(this.testConfigPath, this.stateDir);
+    const { app, bridge } = await launch(this.testConfigPath, this.stateDir, { environment: claudeEnvironment() });
     this.app = app;
     this.bridge = bridge;
   }

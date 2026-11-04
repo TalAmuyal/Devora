@@ -3,10 +3,9 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import * as path from 'node:path';
 import { Bridge, type AppState } from './bridge';
-import { claudeEnvironment } from './claude';
 
 const PROJECT_DIR = path.resolve(import.meta.dirname, '../..');
-export const APP_BINARY = path.join(PROJECT_DIR, process.env.SAPPHIRE_APP!, 'Contents/MacOS/Devora Sapphire');
+export const APP_BINARY = path.join(path.resolve(PROJECT_DIR, process.env.SAPPHIRE_APP!), 'Contents/MacOS/Devora Sapphire');
 
 /** The app's stderr, per process, for failure captures. */
 export const stderrOf = new WeakMap<ChildProcess, string[]>();
@@ -21,7 +20,7 @@ export interface LaunchedApp {
  *
  * The bridge comes up once the launch is done, or early when the app state couldn't be opened, so that the scenario can answer the startup problem.
  */
-export async function launch(configPath: string, stateDir: string): Promise<LaunchedApp> {
+export async function launch(configPath: string, stateDir: string | undefined, options: { binary?: string; home?: string; environment?: Record<string, string> } = {}): Promise<LaunchedApp> {
   // Only what a login session would provide, so the developer's environment (and a Devora app around the test run) doesn't leak into the app's terminals.
   const env: Record<string, string> = {};
   for (const key of ['HOME', 'SHELL', 'TMPDIR', 'USER', 'LANG']) {
@@ -31,10 +30,11 @@ export async function launch(configPath: string, stateDir: string): Promise<Laun
     .split(':')
     .filter((p) => !p.includes('.app/Contents') && !p.includes('/Devora/'))
     .join(':');
+  if (options.home) env.HOME = options.home;
 
   // Launched directly rather than through `open`, so the harness owns the process and its stderr; Sapphire takes no bare arguments, so a window opens.
-  const app = spawn(APP_BINARY, [], {
-    env: { ...env, ...claudeEnvironment(), DEVORA_TEST_MODE: '1', DEVORA_TEST_HEALTH_FIXTURE: path.join(path.dirname(configPath), 'health-report.json'), DEVORA_CONFIG_PATH: configPath, DEVORA_STATE_DIR: stateDir },
+  const app = spawn(options.binary ?? APP_BINARY, [], {
+    env: { ...env, ...options.environment, DEVORA_TEST_MODE: '1', DEVORA_TEST_HEALTH_FIXTURE: path.join(path.dirname(configPath), 'health-report.json'), DEVORA_CONFIG_PATH: configPath, ...(stateDir ? { DEVORA_STATE_DIR: stateDir } : {}) },
     stdio: ['ignore', 'ignore', 'pipe'],
   });
   const stderr: string[] = [];

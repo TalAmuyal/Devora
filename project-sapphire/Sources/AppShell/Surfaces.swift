@@ -28,6 +28,8 @@ final class Surfaces {
 	@ObservationIgnored private(set) var settings: SettingsHubModel?
 	/// The open Health Hub; nil while it is closed.
 	@ObservationIgnored private(set) var health: HealthHubModel?
+	/// The open guide's rendering model; observed by the test bridge.
+	@ObservationIgnored private(set) var userGuide: UserGuideModel?
 	/// The open Command Palette; nil while it is closed.
 	@ObservationIgnored private(set) var palette: CommandPaletteModel?
 	/// The open Repurpose dialog; nil while none is.
@@ -424,8 +426,10 @@ final class Surfaces {
 	private func openUserGuide() {
 		guard windowStack.find(UserGuideModel.layerName) == nil else { return }
 		let model = UserGuideModel(store: store)
+		userGuide = model
 		var spec = pageLayer(LayerSpec(name: UserGuideModel.layerName) { UserGuideView(model: model) })
 		spec.onKey = model.handleKey
+		spec.onCleanup = { [unowned self] in userGuide = nil }
 		windowStack.push(spec)
 	}
 

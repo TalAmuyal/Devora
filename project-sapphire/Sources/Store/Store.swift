@@ -725,7 +725,7 @@ public final class Store {
 	/// Resolve the guide and theme through the shared core.
 	public func userGuideContent(resourceDir: String) throws -> (String, [String: String]) {
 		guard let core else { throw CoreError.Failed(message: "the core isn't running") }
-		// TODO(#230): the Sapphire distribution will bundle USER_GUIDE.md.
+		// The core prefers bundled USER_GUIDE.md; plain dev builds retain its checkout fallback.
 		let guide = try core.userGuidePath(resourceDir: resourceDir)
 		let themePath = try core.bundledThemePath(resourceDir: resourceDir)
 		return (try String(contentsOfFile: guide, encoding: .utf8), try core.loadTheme(path: themePath))

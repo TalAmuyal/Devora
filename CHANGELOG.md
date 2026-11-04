@@ -16,6 +16,7 @@ Types of changes:
 
 ### Added
 
+- Devora Sapphire can be built and installed from source with bundled tools, plugins, themes and User Guide through `mise run sapphire-install`, including separate suffixed installs
 - Devora Sapphire supports stacked file previews and draggable dividers, with sizes restored after restart and minimum widths preserved in narrow windows
 - Devora Sapphire previews static HTML in isolated panes, with scripts, external resources and navigation blocked
 - Devora Sapphire opens durable Markdown/Mermaid preview panes through `debi preview`, with refresh, close and restore after restart
