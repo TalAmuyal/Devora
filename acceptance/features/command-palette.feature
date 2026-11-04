@@ -111,3 +111,17 @@ Feature: Command Palette
     When the user presses Ctrl+S
     Then the Workspace Hub overlay should not be present
     And the Command Palette should be visible
+
+  Scenario: Command palette offers profile commands
+    Given a profile "Work" with 1 active workspace with worktrees
+    And a profile "Personal" with 1 active workspace with worktrees
+    And the Command Palette is open
+    When the user filters commands by "profile"
+    Then the palette should include the command "New Profile"
+    And the palette should include the command "Settings / Manage Profiles"
+    And the palette should include the command "Switch Profile: Personal"
+    When the user filters commands by "Switch Profile: Personal"
+    And the user presses "Enter"
+    Then the Workspace Hub overlay should be present
+    And the profile dropdown should be labeled "Personal"
+    And the Workspace Hub should show 1 workspace items
