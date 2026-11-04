@@ -170,7 +170,8 @@ The app reads the global config from `DEVORA_CONFIG_PATH` when set, as Ember doe
 
 The shared `claude-hook-integration.feature` runs the real recorded Claude Code CLI in both apps. Sapphire's `acceptance/support/claude.ts` reuses Ember's fake server, cassette files and interactive CLI protocol through a typed terminal adapter; its teardown waits for `/exit` and verified process exit before ending PTYs or deleting workspaces. The background ownership scenario holds the PostToolUse hook on a fixture barrier until the second tab is active. Both desktop suites share the isolated CLI test config and must run sequentially on one machine. `test-tools` builds the real Rust CCC launcher as well as Go Debi; CI installs the same exact Claude version for both apps.
 
-Acceptance tests follow Ember's (ADR-001): Gherkin scenarios run by Cucumber.js against the real, built app, which they drive through a test bridge.
+Acceptance tests follow Ember's (ADR-001): Gherkin scenarios run by Cucumber.js against the real, built app, which they drive through a test bridge (ADR-011).
+`acceptance/PARITY.md` maps each Ember scenario Sapphire doesn't run to its Sapphire coverage, or lists it as a gap.
 Real input (key events, focus, the IME, libghostty's key path) is what the bridge can't drive, and what SwiftUI draws is what it can't see; XCUITests cover both.
 
 - The bridge (`Sources/AppShell/TestBridge.swift`) is a loopback HTTP server that starts only when `DEVORA_TEST_MODE=1`, once the launch is done, and prints `Devora test harness on port <port>` to stderr, as Ember's does.
