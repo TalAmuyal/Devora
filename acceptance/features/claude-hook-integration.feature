@@ -1,6 +1,6 @@
 @real-claude
 Feature: Claude Code hook integration
-  Claude Code runs inside an Devora terminal session. When it performs
+  Claude Code runs inside a Devora terminal session. When it performs
   tool use, configured hooks fire and can interact with the Devora UI
   through the IPC HTTP server.
 

@@ -23,7 +23,9 @@ Given('the {word} session has a workspace with a {word} Claude Code hook', async
   await workspace(this, (await this.bridge.state()).tabs[0].id, hook);
   this.hookRelease = path.join(this.workspacePath!, '.claude/release-hook');
   const script = path.join(this.workspacePath!, '.claude/bdd-test-hook.sh');
-  const content = fs.readFileSync(script, 'utf8').replace('if [ -n "$DEVORA_IPC_PORT" ]', `while [ ! -f '${this.hookRelease}' ]; do sleep 0.05; done\nif [ -n "$DEVORA_IPC_PORT" ]`);
+  const original = fs.readFileSync(script, 'utf8');
+  const content = original.replace('if [ -n "$DEVORA_IPC_PORT" ]', `while [ ! -f '${this.hookRelease}' ]; do sleep 0.05; done\nif [ -n "$DEVORA_IPC_PORT" ]`);
+  assert.notEqual(content, original, 'The hook barrier must be inserted before testing background ownership');
   fs.writeFileSync(script, content);
 });
 When('Claude Code runs and triggers a tool use', { timeout: 120_000 }, async function (this: SapphireWorld) {
