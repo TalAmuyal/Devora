@@ -1,18 +1,20 @@
 #!/bin/bash
 
 # One-line installer for Devora.
-# Downloads the latest release DMG from GitHub, mounts it, copies the .app to /Applications, clears the quarantine attribute (since the bundle is unsigned), and installs the zsh completion for `debi`.
+# Downloads the latest release DMG from GitHub, mounts it, copies the .app to /Applications, clears the quarantine attribute (the bundles are not notarized), and installs the zsh completion for `debi`.
 
 set -euo pipefail
 
 REPO="TalAmuyal/Devora"
-APPLICATIONS_DIR="/Applications"
-
-# Devora ships as a single DMG installed to /Applications/Devora.app.
-APP_NAME="Devora.app"
-DMG_NAME="Devora.dmg"
-DISPLAY_NAME="Devora"
-APP_PATH="$APPLICATIONS_DIR/$APP_NAME"
+# Override only for isolated installer tests or an explicitly chosen destination.
+APPLICATIONS_DIR="${DEVORA_APPLICATIONS_DIR:-/Applications}"
+APP="ember"
+APP_NAME=""
+DMG_NAME=""
+DISPLAY_NAME=""
+APP_PATH=""
+LEGACY_ASSET=false
+STAGING_DIR=""
 
 # Populated by main / mount_dmg
 TEMP_DIR=""
@@ -20,12 +22,12 @@ DMG_MOUNT_POINT=""
 
 usage() {
 	cat <<EOF
-Usage: install.sh [--nightly]
+Usage: install.sh [--app ember|sapphire] [--nightly]
 
   --nightly   Install the latest nightly build (rolling alias 'nightly-latest').
               Without this flag, the latest stable release is installed.
-  --ember     Deprecated no-op, accepted for backward compatibility.
-              Devora is now the Ember build, so this flag has no effect.
+  --app       Choose ember (default) or sapphire (nightly-only).
+  --ember     Deprecated alias for --app ember.
   --help, -h  Show this help message and exit.
 EOF
 }
@@ -39,6 +41,9 @@ err() {
 }
 
 cleanup() {
+	if [ -n "$STAGING_DIR" ] && [ -d "$STAGING_DIR" ]; then
+		rm -rf "$STAGING_DIR"
+	fi
 	if [ -n "$DMG_MOUNT_POINT" ] && [ -d "$DMG_MOUNT_POINT" ]; then
 		hdiutil detach "$DMG_MOUNT_POINT" -quiet 2>/dev/null || true
 	fi
@@ -91,7 +96,7 @@ require_applications_writable() {
 # while it's running, but the user ends up with a half-replaced app.
 require_devora_not_running() {
 	# pgrep returns 1 when nothing matches; only treat 0 as "running".
-	if pgrep -f "$APP_PATH" >/dev/null 2>&1; then
+	if pgrep -f "$APP_PATH" >/dev/null 2>&1 || { [ "$APP" = ember ] && pgrep -f "$APPLICATIONS_DIR/Devora.app" >/dev/null 2>&1; }; then
 		err "$DISPLAY_NAME appears to be running. Quit it and re-run the installer."
 		exit 1
 	fi
@@ -101,18 +106,25 @@ download_dmg() {
 	local channel="$1"
 	local dest="$2"
 
-	local dmg_url
+	local release_url dmg_url
 	if [ "$channel" = "nightly" ]; then
-		dmg_url="https://github.com/$REPO/releases/download/nightly-latest/$DMG_NAME"
+		release_url="https://github.com/$REPO/releases/download/nightly-latest"
 	else
-		dmg_url="https://github.com/$REPO/releases/latest/download/$DMG_NAME"
+		release_url="https://github.com/$REPO/releases/latest/download"
 	fi
-
+	dmg_url="$release_url/$DMG_NAME"
 	log "Downloading $DMG_NAME ($channel)..."
-	if ! curl -fSL -o "$dest" "$dmg_url"; then
-		err "Failed to download DMG from $dmg_url"
-		exit 1
+	if curl -fSL -o "$dest" "$dmg_url"; then
+		return
 	fi
+	# Remove this fallback after the first stable release shipping Devora-Ember.dmg.
+	# Master's installer must also work with the preceding stable release.
+	if [ "$APP" = ember ] && curl -fSL -o "$dest" "$release_url/Devora.dmg"; then
+		LEGACY_ASSET=true
+		return
+	fi
+	err "Failed to download $DMG_NAME ($channel)."
+	exit 1
 }
 
 mount_dmg() {
@@ -124,24 +136,29 @@ mount_dmg() {
 }
 
 install_app() {
-	# create-dmg stages Devora.app at the volume root, so it sits directly under the mount point.
 	local src="$DMG_MOUNT_POINT/$APP_NAME"
+	if [ "$LEGACY_ASSET" = true ]; then
+		src="$DMG_MOUNT_POINT/Devora.app"
+	fi
 	if [ ! -d "$src" ]; then
-		err "Expected $APP_NAME inside DMG at $src but it was not found"
+		err "Expected app inside DMG at $src but it was not found"
 		exit 1
 	fi
 
+	# Finish copying and clearing quarantine before replacing any installed app.
+	STAGING_DIR="$(mktemp -d "$APPLICATIONS_DIR/.devora-install.XXXXXX")"
+	log "Copying $APP_NAME to $APPLICATIONS_DIR..."
+	cp -R "$src" "$STAGING_DIR/$APP_NAME"
+	xattr -dr com.apple.quarantine "$STAGING_DIR/$APP_NAME"
 	if [ -e "$APP_PATH" ]; then
-		log "Removing existing $APP_PATH..."
 		rm -rf "$APP_PATH"
 	fi
-
-	log "Copying $APP_NAME to $APPLICATIONS_DIR..."
-	# cp -R (capital R) preserves symlinks; the DMG is read-only so mv won't work.
-	cp -R "$src" "$APPLICATIONS_DIR/"
-
-	log "Clearing quarantine attribute..."
-	xattr -dr com.apple.quarantine "$APP_PATH"
+	mv "$STAGING_DIR/$APP_NAME" "$APP_PATH"
+	# Only this exact legacy release path; source installs such as Devora-*.app stay.
+	if [ "$APP" = ember ] && [ -e "$APPLICATIONS_DIR/Devora.app" ]; then
+		log "Removing legacy $APPLICATIONS_DIR/Devora.app..."
+		rm -rf "$APPLICATIONS_DIR/Devora.app"
+	fi
 }
 
 # Mirrors bundler/macos-ember/install-completions.sh: generate the zsh completion
@@ -156,7 +173,7 @@ install_completions() {
 		echo "Notice: Skipping zsh completion install because the installer is running under sudo."
 		echo "        Re-run as your own user to install completions, or run manually:"
 		echo "          mkdir -p ~/.zsh/completions"
-		echo "          $APP_PATH/Contents/Resources/bundled-apps/debi completion zsh > ~/.zsh/completions/_debi"
+		echo "          \"$APP_PATH/Contents/Resources/bundled-apps/debi\" completion zsh > ~/.zsh/completions/_debi"
 		return 0
 	fi
 
@@ -226,9 +243,13 @@ main() {
 	local channel="stable"
 	while [ $# -gt 0 ]; do
 		case "$1" in
+			--app)
+				APP="${2:-}"
+				case "$APP" in ember|sapphire) ;; *) err "--app requires ember or sapphire"; exit 1 ;; esac
+				shift 2
+				;;
 			--ember)
-				# Deprecated no-op: Devora is now the Ember build. Accepted so old install commands keep working.
-				log "Note: --ember is deprecated and has no effect; Devora is now the Ember build."
+				APP="ember"
 				shift
 				;;
 			--nightly)
@@ -248,10 +269,22 @@ main() {
 		esac
 	done
 
-	# Rebuild the flags the user passed so the sudo re-run hint matches them (e.g. " -s -- --nightly").
-	local flags_hint=""
-	if [ "$channel" = "nightly" ]; then
-		flags_hint=" -s -- --nightly"
+	if [ "$APP" = sapphire ] && [ "$channel" != nightly ]; then
+		err "Sapphire is nightly-only for now; use --app sapphire --nightly."
+		exit 1
+	fi
+	if [ "$APP" = sapphire ]; then
+		DISPLAY_NAME="Devora Sapphire"
+		DMG_NAME="Devora-Sapphire.dmg"
+	else
+		DISPLAY_NAME="Devora Ember"
+		DMG_NAME="Devora-Ember.dmg"
+	fi
+	APP_NAME="$DISPLAY_NAME.app"
+	APP_PATH="$APPLICATIONS_DIR/$APP_NAME"
+	local flags_hint=" -s -- --app $APP"
+	if [ "$channel" = nightly ]; then
+		flags_hint="$flags_hint --nightly"
 	fi
 
 	# Trap before mktemp so a failing mktemp still triggers cleanup; the cleanup function guards against empty TEMP_DIR / DMG_MOUNT_POINT.

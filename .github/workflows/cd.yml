@@ -16,12 +16,25 @@ concurrency:
 permissions:
   contents: write
 
+# Daily-use gate: flip only after Tal approves stable Sapphire releases.
+env:
+  SAPPHIRE_STABLE_ENABLED: "false"
+
 jobs:
   check-changes:
     runs-on: ubuntu-latest
     outputs:
       should-build: ${{ steps.check.outputs.should-build }}
+      sapphire: ${{ steps.channel.outputs.sapphire }}
     steps:
+      - id: channel
+        run: |
+          if [[ "$GITHUB_REF" != refs/tags/v* ]] || [[ "$SAPPHIRE_STABLE_ENABLED" == true ]]; then
+            echo "sapphire=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "sapphire=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - id: check
         run: |
           set -euo pipefail
@@ -140,7 +153,7 @@ jobs:
 
       - name: Smoke test
         run: |
-          EMBER_APP="project-ember/src-tauri/target/release/bundle/macos/Devora-Ember.app"
+          EMBER_APP="project-ember/src-tauri/target/release/bundle/macos/Devora Ember.app"
           echo "Ember app: $EMBER_APP"
 
           # Verify the Ember .app exists and has the expected binary
@@ -163,14 +176,116 @@ jobs:
           # Verify the brand app icon was generated into the bundle
           test -f "$EMBER_APP/Contents/Resources/app.icns"
 
-          # Verify the Devora DMG was created
-          test -f "project-ember/src-tauri/target/release/bundle/macos/Devora.dmg"
+          # Verify the Ember display name, stable bundle id and DMG
+          test "$(plutil -extract CFBundleDisplayName raw "$EMBER_APP/Contents/Info.plist")" = "Devora Ember"
+          test "$(plutil -extract CFBundleIdentifier raw "$EMBER_APP/Contents/Info.plist")" = "com.devora-org.devora"
+
+          # Verify the Devora Ember DMG was created
+          test -f "project-ember/src-tauri/target/release/bundle/macos/Devora-Ember.dmg"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ember-dmg
+          path: project-ember/src-tauri/target/release/bundle/macos/Devora-Ember.dmg
+          if-no-files-found: error
+
+  build-sapphire:
+    needs: [check-changes, test]
+    if: needs.check-changes.outputs.should-build == 'true' && needs.check-changes.outputs.sapphire == 'true'
+    runs-on: xcode-27
+    timeout-minutes: 60
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_27.1.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: jdx/mise-action@v4
+        with:
+          experimental: true
+
+      - name: Resolve the GhosttyKit cache key
+        id: ghostty-key
+        run: echo "key=$(mise run -C project-sapphire ghostty-cache-key)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache GhosttyKit.xcframework
+        id: cache-ghostty
+        uses: actions/cache@v5
+        with:
+          path: project-sapphire/build/GhosttyKit.xcframework
+          key: ${{ steps.ghostty-key.outputs.key }}
+
+      - name: Cache Rust build artifacts
+        uses: actions/cache@v5
+        with:
+          path: project-core/target
+          key: sapphire-rust-${{ hashFiles('project-core/Cargo.lock', 'mise.toml') }}
+          restore-keys: sapphire-rust-
+
+      # Building libghostty is slow and needs the Metal Toolchain (missing from the image, actions/runner-images#14548), so it only happens on a cache miss.
+      - name: Install GhosttyKit prerequisites
+        if: steps.cache-ghostty.outputs.cache-hit != 'true'
+        run: mise run -C project-sapphire ghostty-prereqs
+
+      - name: Build GhosttyKit.xcframework
+        if: steps.cache-ghostty.outputs.cache-hit != 'true'
+        run: mise run -C project-sapphire ghostty-build
+
+      - name: Bundle Sapphire
+        run: mise run sapphire-bundle
+
+      - name: Install bundle smoke dependencies
+        run: mise run -C project-sapphire npm-install
+
+      - name: Smoke test the signed bundle
+        run: mise exec -C project-sapphire -- node --import tsx scripts/bundle-smoke.ts
+
+      - name: Create Sapphire DMG
+        run: mise run sapphire-create-dmg
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: sapphire-dmg
+          path: project-sapphire/build/bundle/Devora-Sapphire.dmg
+          if-no-files-found: error
+
+  publish:
+    runs-on: ubuntu-latest
+    needs: [check-changes, build-and-release, build-sapphire]
+    # Publish Ember on either channel even if Sapphire failed or was skipped.
+    if: always() && !cancelled() && needs.build-and-release.result == 'success'
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: ember-dmg
+          path: release
+
+      - uses: actions/download-artifact@v8
+        if: needs.check-changes.outputs.sapphire == 'true' && needs.build-sapphire.result == 'success'
+        with:
+          name: sapphire-dmg
+          path: release
+
+      - name: Report Sapphire failure
+        if: needs.check-changes.outputs.sapphire == 'true' && needs.build-sapphire.result != 'success'
+        run: |
+          echo "::warning::Sapphire did not succeed; publishing Ember only. See build-sapphire."
+          echo "Sapphire failed or was skipped. Ember is published independently; see build-sapphire for details." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
+          SAPPHIRE_ENABLED: ${{ needs.check-changes.outputs.sapphire }}
+          SAPPHIRE_RESULT: ${{ needs.build-sapphire.result }}
         run: |
-          EMBER_DMG_FILE="project-ember/src-tauri/target/release/bundle/macos/Devora.dmg"
+          ASSETS=(release/*.dmg)
+          SAPPHIRE_NOTE=""
+          if [[ "$SAPPHIRE_ENABLED" == true && "$SAPPHIRE_RESULT" != success ]]; then
+            SAPPHIRE_NOTE="Sapphire is unavailable in this release: its build failed or was skipped. See $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID."
+          fi
 
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             # Stable release
@@ -185,9 +300,9 @@ jobs:
               NOTES="Release ${VERSION}"
             fi
 
-            gh release create "$TAG" "$EMBER_DMG_FILE" \
+            gh release create "$TAG" "${ASSETS[@]}" \
               --title "Devora $VERSION" \
-              --notes "$NOTES"
+              --notes "$NOTES${SAPPHIRE_NOTE:+$'\n\n'$SAPPHIRE_NOTE}"
           else
             # Nightly release
             DATE=$(date -u +%Y-%m-%d)
@@ -200,6 +315,8 @@ jobs:
           **Commit:** ${SHORT_SHA}
           **Date:** ${DATE}
 
+          ${SAPPHIRE_NOTE}
+
           > This is a pre-release build and may be unstable.
           EOF
             )
@@ -208,7 +325,7 @@ jobs:
             # Delete if it already exists (e.g., re-run on same day)
             gh release delete "$NIGHTLY_TAG" --cleanup-tag --yes 2>/dev/null || true
 
-            gh release create "$NIGHTLY_TAG" "$EMBER_DMG_FILE" \
+            gh release create "$NIGHTLY_TAG" "${ASSETS[@]}" \
               --prerelease \
               --title "Nightly Build ($DATE)" \
               --target "$GITHUB_SHA" \
@@ -221,6 +338,8 @@ jobs:
           **Commit:** ${SHORT_SHA}
           **Date:** ${DATE}
 
+          ${SAPPHIRE_NOTE}
+
           > This is a pre-release build and may be unstable.
           EOF
             )
@@ -228,7 +347,7 @@ jobs:
             # Update rolling nightly-latest alias
             gh release delete nightly-latest --cleanup-tag --yes 2>/dev/null || true
 
-            gh release create nightly-latest "$EMBER_DMG_FILE" \
+            gh release create nightly-latest "${ASSETS[@]}" \
               --prerelease \
               --title "Nightly Build (Latest)" \
               --target "$GITHUB_SHA" \
@@ -237,6 +356,9 @@ jobs:
 
             # Advance the marker tag used by check-changes to detect whether
             # master has moved since the last successful nightly publish.
-            git tag -f nightly-last-built "$GITHUB_SHA"
-            git push -f origin nightly-last-built
+            # Retry an incomplete Sapphire nightly next schedule, even at the same SHA.
+            if [[ "$SAPPHIRE_ENABLED" != true || "$SAPPHIRE_RESULT" == success ]]; then
+              git tag -f nightly-last-built "$GITHUB_SHA"
+              git push -f origin nightly-last-built
+            fi
           fi

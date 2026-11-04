@@ -65,7 +65,7 @@ describe('findAppBundle', () => {
 
   it('returns the bundle paths when a valid .app is present', () => {
     const bundleDir = makeTempDir();
-    const { appDir, resourcesDir } = makeApp(bundleDir, 'Devora-Ember.app');
+    const { appDir, resourcesDir } = makeApp(bundleDir, 'Devora Ember.app');
 
     const bundle = findAppBundle(bundleDir);
     expect(bundle).not.toBeNull();
@@ -76,7 +76,7 @@ describe('findAppBundle', () => {
 
   it('returns null when the .app lacks the devora-ember binary', () => {
     const bundleDir = makeTempDir();
-    makeApp(bundleDir, 'Devora-Ember.app', { binary: false });
+    makeApp(bundleDir, 'Devora Ember.app', { binary: false });
     expect(findAppBundle(bundleDir)).toBeNull();
   });
 
@@ -117,13 +117,13 @@ describe('findRawBinary', () => {
 
 describe('readBundleFingerprint', () => {
   it('returns the fingerprint when the resource exists', () => {
-    const { resourcesDir } = makeApp(makeTempDir(), 'Devora-Ember.app');
+    const { resourcesDir } = makeApp(makeTempDir(), 'Devora Ember.app');
     fs.writeFileSync(path.join(resourcesDir, 'BUILD_FINGERPRINT'), 'abc123');
     expect(readBundleFingerprint(resourcesDir)).toBe('abc123');
   });
 
   it('returns null when the resource is absent', () => {
-    const { resourcesDir } = makeApp(makeTempDir(), 'Devora-Ember.app');
+    const { resourcesDir } = makeApp(makeTempDir(), 'Devora Ember.app');
     expect(readBundleFingerprint(resourcesDir)).toBeNull();
   });
 });
@@ -138,13 +138,13 @@ describe('computeCurrentFingerprint', () => {
 
 describe('assertBundleComplete', () => {
   it('passes when all required bundled apps are present', () => {
-    const { resourcesDir } = makeApp(makeTempDir(), 'Devora-Ember.app');
+    const { resourcesDir } = makeApp(makeTempDir(), 'Devora Ember.app');
     makeCompleteBundledApps(resourcesDir);
     expect(() => assertBundleComplete(resourcesDir)).not.toThrow();
   });
 
   it('throws naming every missing bundled app', () => {
-    const { resourcesDir } = makeApp(makeTempDir(), 'Devora-Ember.app');
+    const { resourcesDir } = makeApp(makeTempDir(), 'Devora Ember.app');
     makeCompleteBundledApps(resourcesDir);
     fs.rmSync(path.join(resourcesDir, 'bundled-apps', 'ccc'));
     fs.rmSync(path.join(resourcesDir, 'bundled-apps', 'debi'));
@@ -154,7 +154,7 @@ describe('assertBundleComplete', () => {
   });
 
   it('throws when bundled-apps/ is missing entirely', () => {
-    const { resourcesDir } = makeApp(makeTempDir(), 'Devora-Ember.app');
+    const { resourcesDir } = makeApp(makeTempDir(), 'Devora Ember.app');
     expect(() => assertBundleComplete(resourcesDir)).toThrow(/ccc/);
   });
 });

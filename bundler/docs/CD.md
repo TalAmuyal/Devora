@@ -3,7 +3,7 @@
 ## Overview
 
 The CD pipeline (`.github/workflows/cd.yml`) automates building and publishing Devora releases.
-It produces a macOS DMG containing the full app bundle and publishes it as a GitHub Release.
+It publishes `Devora-Ember.dmg` containing `Devora Ember.app`; nightly releases also attach `Devora-Sapphire.dmg` containing `Devora Sapphire.app` under the same tag.
 
 There are two release types: **nightly** builds that run daily, and **stable** releases triggered by version tags.
 
@@ -18,24 +18,33 @@ There are two release types: **nightly** builds that run daily, and **stable** r
 
 ## Build process
 
-The pipeline has two jobs:
+`check-changes` gates unchanged scheduled nightlies and decides whether Sapphire is enabled for this channel.
+`test` runs the shared suites on Linux; `test-ember` checks Ember on macOS 15.
+`build-and-release` builds Ember on macOS 15 after both test jobs, then uploads its DMG artifact.
+`build-sapphire` runs independently on `xcode-27`, with the same pinned Xcode 27.1 and GhosttyKit/Rust caches as CI.
+It bundles through the shared resource script, smoke-tests the signed bundle via the acceptance bridge, creates a DMG with `hdiutil-create-retry.sh`, then uploads it.
+`publish` downloads the enabled artifacts and attaches them to the same release.
+With Sapphire disabled for stable, publishing Ember works even when the Sapphire job is skipped or unsuccessful.
+Ember publishes on both channels even if Sapphire fails; the failed job stays visible, a warning is recorded in the run summary/release notes, and Sapphire is attached only on success.
+After an incomplete Sapphire nightly, the marker stays unchanged so the next scheduled run retries that SHA.
 
-1. **test** -- runs on `ubuntu-latest`. Identical to the CI workflow: checks out the repo, sets up mise, and runs `mise run test`.
-2. **build-and-release** -- runs on `macos-15`, gated on the test job passing.
+**Stable Sapphire gate:** `SAPPHIRE_STABLE_ENABLED` at the top of the workflow is the single switch, currently `false` until Tal approves after the week-long daily-use gate.
+Enabling that switch later also requires lifting `install.sh`'s explicit nightly-only Sapphire validation.
+Do not dispatch CD to test changes without coordinating with Bravo; it publishes real releases.
 
 ### Build steps (build-and-release)
 
 1. **Checkout** with `fetch-depth: 0` (full history, needed for version computation).
 2. **Set up mise** for Go, Python, and other tool versions.
 3. **Restore build caches** for the Ember Rust build artifacts (keyed on `Cargo.lock`) and npm modules (keyed on `package-lock.json`).
-4. **Build the app bundle** via `mise run ember-bundle`, then **create the DMG** via `mise run ember-create-dmg`. This compiles Debi and Status-line, builds the Tauri (Ember) app into `Devora-Ember.app`, bundles all resources, and produces a compressed `Devora.dmg` (the "Devora" name is applied only at the DMG/install boundary).
+4. **Build the app bundle** via `mise run ember-bundle`, then **create the DMG** via `mise run ember-create-dmg`. This compiles Debi and Status-line, builds the Tauri (Ember) app into `Devora Ember.app`, bundles all resources, and produces a compressed `Devora-Ember.dmg`.
 5. **Smoke test** -- verifies that:
    - The built `.app` exists and contains the `devora-ember` binary
    - Bundled resources (`debi`) were copied in
    - The version in `Info.plist` was patched (not the placeholder `0.1.0`)
    - The app icon (`app.icns`) was generated
-   - `Devora.dmg` was created
-6. **Publish release** (see [Release types](#release-types)).
+   - `Devora-Ember.dmg` was created
+6. **Upload the artifact for the publish job** (see [Release types](#release-types)).
 
 ## Release types
 
@@ -102,6 +111,17 @@ After the script completes:
 3. The CD pipeline builds the DMG and publishes the GitHub Release
 
 If the auto-tag workflow fails, run `./cut-release.sh --tag-only` to manually create and push the tag (reads the version from the `VERSION` file).
+
+## Installer transition and tests
+
+One `install.sh` selects `--app ember|sapphire`, defaulting to Ember; Sapphire currently requires `--nightly`.
+New Ember installs use `Devora Ember.app`, retaining `com.devora-org.devora` for macOS TCC continuity.
+The installer tries `Devora-Ember.dmg` first, with a temporary fallback to the old `Devora.dmg` stable asset (remove after the first renamed stable release).
+A legacy DMG's `Devora.app` is copied under the new directory name; its old display name remains until upgrading to a renamed release.
+It removes only the exact legacy `/Applications/Devora.app` after the new app is copied and quarantine is cleared; source `Devora-*.app` installs remain.
+Completion generation uses the selected installed app.
+`bash scripts/test-install.sh` runs in the root test command, with stubbed downloads/mounts and `DEVORA_APPLICATIONS_DIR` pointing at a temporary directory; it needs neither the network nor access to real installed apps.
+It checks new/legacy assets, app/channel selection, completion source, copy/quarantine/download failures, running-app rejection and legacy/source preservation.
 
 ## Cost considerations
 

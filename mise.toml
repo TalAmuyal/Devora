@@ -26,6 +26,7 @@ description = "Clean build artifacts"
 [tasks.test]
 run = """
 set -e
+bash scripts/test-install.sh
 mise run -C project-core test
 mise run -C project-debi test
 mise run -C project-judgess test
@@ -43,7 +44,7 @@ mise run -C project-judgess lint
 description = "Check Swift indentation and Rust formatting/clippy (core, judgess; Ember has ember-lint)"
 
 [tasks.lint-shell]
-run = "shellcheck install.sh bundler/macos-ember/populate-app-resources.sh bundler/macos-ember/install-completions.sh bundler/macos-ember/bundle-fingerprint.sh bundler/macos-ember/effective-version.sh bundler/macos-sapphire/*.sh"
+run = "shellcheck install.sh scripts/test-install.sh bundler/macos-ember/populate-app-resources.sh bundler/macos-ember/install-completions.sh bundler/macos-ember/bundle-fingerprint.sh bundler/macos-ember/effective-version.sh bundler/macos-sapphire/*.sh"
 description = "Lint shell scripts with shellcheck"
 
 [tasks.release]
@@ -98,6 +99,10 @@ run = "./bundler/macos-ember/bundle-ember.sh"
 description = "Build and ad hoc sign Devora Sapphire.app with its bundled tools and resources"
 run = "./bundler/macos-sapphire/bundle-sapphire.sh"
 
+[tasks.sapphire-create-dmg]
+description = "Create a DMG from the signed Sapphire bundle"
+run = "./bundler/macos-sapphire/create-dmg.sh"
+
 [tasks.sapphire-install]
 description = "Build and install Sapphire (--path directory, --suffix name); untagged builds include the dev version in the app name"
 usage = '''
@@ -113,10 +118,10 @@ fi
 '''
 
 [tasks.mac-install]
-description = "Build and install Devora.app to /Applications (or --path), plus zsh completion (close Devora first). Untagged source builds install as Devora-<version>.app; --suffix <s> installs as Devora-<s>.app and shows the suffix in the window title and app name."
+description = "Build and install Devora Ember.app to /Applications (or --path), plus zsh completion (close Devora first). Untagged source builds install as Devora Ember-<version>.app; --suffix <s> installs as Devora Ember-<s>.app and shows the suffix in the window title and app name."
 usage = '''
 flag "-p --path <path>" default="/Applications" help="Directory to install the app into"
-flag "-s --suffix <suffix>" help="Install as Devora-<suffix>.app, with the suffix shown in the window title and app name"
+flag "-s --suffix <suffix>" help="Install as Devora Ember-<suffix>.app, with the suffix shown in the window title and app name"
 '''
 run = """
 set -e
@@ -131,20 +136,20 @@ fi
 
 ./bundler/macos-ember/bundle-ember.sh
 
-# The Tauri build emits Devora-Ember.app; the "Devora" name is applied here, at the install boundary.
-APP_SRC="project-ember/src-tauri/target/release/bundle/macos/Devora-Ember.app"
+# The Tauri bundle already has the release name; source installs add a suffix or dev version.
+APP_SRC="project-ember/src-tauri/target/release/bundle/macos/Devora Ember.app"
 VERSION=$(cat "$APP_SRC/Contents/Resources/VERSION")
 if [[ -n "$SUFFIX" ]]; then
-	APP_NAME="Devora-${SUFFIX}"
+	APP_NAME="Devora Ember-${SUFFIX}"
 	# Read by Ember for the window title; the plist names drive the menu bar, Dock, and Cmd+Tab.
 	printf "%s" "$SUFFIX" > "$APP_SRC/Contents/Resources/INSTALL_SUFFIX"
-	plutil -replace CFBundleName -string "$APP_NAME" "$APP_SRC/Contents/Info.plist"
-	plutil -replace CFBundleDisplayName -string "$APP_NAME" "$APP_SRC/Contents/Info.plist"
 elif [[ "$VERSION" == *-dev.* ]]; then
-	APP_NAME="Devora-${VERSION}"
+	APP_NAME="Devora Ember-${VERSION}"
 else
-	APP_NAME="Devora"
+	APP_NAME="Devora Ember"
 fi
+plutil -replace CFBundleName -string "$APP_NAME" "$APP_SRC/Contents/Info.plist"
+plutil -replace CFBundleDisplayName -string "$APP_NAME" "$APP_SRC/Contents/Info.plist"
 APP_DEST="${INSTALL_DIR%/}/${APP_NAME}.app"
 rm -rf "$APP_DEST"
 mv "$APP_SRC" "$APP_DEST"

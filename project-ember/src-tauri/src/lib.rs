@@ -45,7 +45,7 @@ pub fn run() {
 
             WebviewWindowBuilder::from_config(&handle, &window_config)
                 .expect("failed to create WebviewWindowBuilder from config")
-                .title(version.window_title())
+                .title(version.window_title("Devora Ember"))
                 .build()
                 .expect("failed to build main window");
 

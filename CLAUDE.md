@@ -5,7 +5,7 @@ You can read `./USER_GUIDE.md` for high-level understanding of the project.
 ## Language
 
 **Devora**: The name of the application we develop. The published product is the Ember build (see below)
-**Devora-Ember** / **Ember**: The Tauri + xterm.js build, which is published as "Devora"
+**Devora-Ember** / **Ember**: The Tauri + xterm.js build, which is published as "Devora Ember"
 	- It keeps the "Ember" name internally (the `project-ember/` directory, the `devora-ember` binary, some `ember-*` mise tasks)
 **Devora Sapphire** / **Sapphire**: The native macOS build in progress (SwiftUI + libghostty over the shared Rust core, `project-sapphire/`); not published yet
 
