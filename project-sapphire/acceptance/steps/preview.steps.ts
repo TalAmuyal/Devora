@@ -14,13 +14,24 @@ function file(world: SapphireWorld, contents: string, extension = ".md"): string
   world.previewFiles.push(name);
   return name;
 }
+/** Runs real Debi in the tab's terminal; unless the session is unknown, it returns once the pane for `name` (new, or refreshed to a later revision) has folded into the state. */
 async function preview(world: SapphireWorld, name: string, unknown = false, tab?: number, stack = false): Promise<void> {
-  await world.bridge.waitFor('a running terminal', () => world.bridge.state(), s => s.tabs.some(t => t.id === (tab ?? s.activeTab) && t.terminal === 'running'));
+  const ready = await world.bridge.waitFor('a running terminal', () => world.bridge.state(), s => s.tabs.some(t => t.id === (tab ?? s.activeTab) && t.terminal === 'running'));
+  const target = tab ?? ready.activeTab;
+  // Debi sends the canonical path (macOS's /var is /private/var).
+  const canonical = fs.existsSync(name) ? fs.realpathSync(name) : name;
+  const before = ready.tabs.find(t => t.id === target)!.previews.find(p => p.path === canonical)?.revision;
   const token = Date.now();
   const marker = `PREVIEW_SENT_${token}`;
   // The complete marker must occur only in output, never in the echoed command.
   await world.bridge.typeLine(`${unknown ? 'DEVORA_PTY_ID=999999 ' : ''}${quote(debi)} preview ${stack ? '--stack ' : ''}${quote(name)} && printf '\\nPREVIEW_SENT_%s\\n' ${token}`, tab);
   await world.bridge.waitFor('debi preview to succeed', () => world.bridge.terminalText(tab), text => text.includes(marker + '\n') || text.includes(marker + '\r'));
+  if (unknown) return;
+  // The IPC request returns once the core commits the command; its PanesChanged folds on a later frame.
+  await world.bridge.waitFor(`the preview of ${name} to fold`, () => world.bridge.state(), s => {
+    const pane = s.tabs.find(t => t.id === target)?.previews.find(p => p.path === canonical);
+    return pane !== undefined && (before === undefined || pane.revision > before);
+  });
 }
 async function active(world: SapphireWorld) {
   const state = await world.bridge.state();
