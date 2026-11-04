@@ -21,7 +21,6 @@ Types of changes:
 ### Added
 
 - Nightly releases include a signed Devora Sapphire app in `Devora-Sapphire.dmg`, alongside `Devora-Ember.dmg`; the shared installer selects Sapphire with `--app sapphire --nightly` and defaults to Ember
-
 - Devora Sapphire can be built and installed from source with bundled tools, plugins, themes and User Guide through `mise run sapphire-install`, including separate suffixed installs
 - Devora Sapphire supports stacked file previews and draggable dividers, with sizes restored after restart and minimum widths preserved in narrow windows
 - Devora Sapphire previews static HTML in isolated panes, with scripts, external resources and navigation blocked
