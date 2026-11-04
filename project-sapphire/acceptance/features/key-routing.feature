@@ -25,6 +25,15 @@ Feature: Key routing through the layers
     And the second session should be active
     And no session should have the keyboard focus
 
+  Scenario: The font size changes while a dialog is open, and its focused field doesn't get the key
+    Given a profile "Work" with repos "repo-alpha"
+    And the Workspace Hub is open
+    And the user opens the New Task form
+    When the user presses Ctrl+1
+    Then the terminal font size should be 12
+    And the New Task form should still be visible
+    And the New Task form title should be ""
+
   # With a profile, since the first-run welcome can't be closed.
   Scenario: Closing the Workspace Hub gives the keyboard focus back to the active session's terminal
     Given a profile "Work" with 0 active workspaces

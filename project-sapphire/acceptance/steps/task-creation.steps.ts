@@ -121,6 +121,10 @@ Then('the New Task form should still be visible', async function (this: Sapphire
   assert.ok(state.newTask, `the New Task dialog closed; window layers: ${JSON.stringify(state.windowLayers)}`);
 });
 
+Then('the New Task form title should be {string}', async function (this: SapphireWorld, title: string) {
+  assert.strictEqual((await this.bridge.state()).newTask?.title, title);
+});
+
 Then('the keypress should not have been intercepted', function (this: SapphireWorld) {
   assert.strictEqual(this.lastKeyConsumed, false);
 });

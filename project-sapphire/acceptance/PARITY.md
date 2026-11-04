@@ -17,7 +17,7 @@ Status:
 | git-shortcuts: Git shortcuts work in a non-zsh sub-shell | Gap | As above. |
 | git-shortcuts: Git shortcuts can be disabled via config | Gap | Writing the setting is covered (`features/settings-hub.feature`), and the `PATH` without the shims is unit-tested (`devora-terminal`). Nothing checks a Sapphire terminal without them. |
 | global-shortcuts: Font size changes inside the Workspace Hub, whose own keys claim bare digits | Covered | `features/key-routing.feature`: "With the Workspace Hub open, session shortcuts reach nothing, and the font size still changes". |
-| global-shortcuts: Font size changes while a dialog is open | Gap | Nothing presses the font size shortcuts over a dialog. |
+| global-shortcuts: Font size changes while a dialog is open | Covered | `features/key-routing.feature`: "The font size changes while a dialog is open, and its focused field doesn't get the key". It checks the terminal font size, since Sapphire has no UI font size. |
 | profile-management: Hub profile dropdown items are clickable at their on-screen position | Covered | `UITests/WorkspaceOperationsUITests.swift` clicks the dropdown's rows with the real mouse. |
 | profile-management: Command palette offers profile commands | Gap | `Tests/AppShellTests/CommandPaletteTests.swift` checks that the commands are listed; nothing runs "Switch Profile" and checks the hub that follows. |
 | profile-management: Hub filter text survives a round-trip through Settings | Gap | The feature's own note says Ember's key steps leave the filter field first and Sapphire's don't, so the scenario isn't shared, and nothing in Sapphire replaces it. |
