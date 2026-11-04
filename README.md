@@ -47,16 +47,27 @@ Nightly:
 curl -fsSL https://raw.githubusercontent.com/TalAmuyal/Devora/master/install.sh | bash -s -- --nightly
 ```
 
-Both commands download the latest DMG, replace any existing `/Applications/Devora.app`, clear the macOS quarantine attribute (so Gatekeeper won't block first launch), and install the `debi` zsh completion.
+Both commands download the latest DMG, replace any existing `/Applications/Devora Ember.app`, clear the macOS quarantine attribute (so Gatekeeper won't block first launch), and install the `debi` zsh completion.
+
+Choose Sapphire on the nightly channel:
+
+```
+curl -fsSL https://raw.githubusercontent.com/TalAmuyal/Devora/master/install.sh | bash -s -- --app sapphire --nightly
+```
+
+`--app ember` is the default; Sapphire is nightly-only until its daily-use gate passes.
+Installing Ember removes the legacy `/Applications/Devora.app` after the new app is in place, preserving suffixed source installs.
+During the transition, the installer also accepts the previous stable `Devora.dmg` asset and installs its legacy app under the new directory name.
+Sapphire installs alongside Ember as `/Applications/Devora Sapphire.app`.
 
 #### Manual install
 
-Download the latest `.dmg` from the [GitHub Releases](https://github.com/TalAmuyal/Devora/releases) page and drag Devora.app to `/Applications`.
+Download the latest `.dmg` from the [GitHub Releases](https://github.com/TalAmuyal/Devora/releases) page and drag `Devora Ember.app` to `/Applications`.
 
 If Gatekeeper blocks the app on first launch, clear the quarantine attribute manually:
 
 ```
-xattr -dr com.apple.quarantine /Applications/Devora.app
+xattr -dr com.apple.quarantine "/Applications/Devora Ember.app"
 ```
 
 ### Build from source
@@ -67,12 +78,13 @@ With mise installed:
 mise mac-install
 ```
 
-This builds Devora.app and installs it to `/Applications`.
+This builds `Devora Ember.app` and installs it to `/Applications`.
 
 To build and install the native Sapphire app, run `mise run sapphire-install`.
 Use `--path <directory>` to choose the destination, or `--suffix <name>` for a side-by-side install with separate app state.
 Untagged builds include their `-dev.` version in the app name.
-This uses an ad hoc signature for local use; Sapphire release downloads are not provided by this task.
+This uses an ad hoc signature for local use.
+Nightly Sapphire downloads use the installer above.
 
 ## Components
 

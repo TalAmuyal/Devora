@@ -24,10 +24,10 @@ impl AppVersion {
         }
     }
 
-    pub fn window_title(&self) -> String {
+    pub fn window_title(&self, app_name: &str) -> String {
         match &self.install_suffix {
-            Some(suffix) => format!("Devora {} [{suffix}]", self.version),
-            None => format!("Devora {}", self.version),
+            Some(suffix) => format!("{app_name} {} [{suffix}]", self.version),
+            None => format!("{app_name} {}", self.version),
         }
     }
 }
@@ -74,7 +74,10 @@ mod tests {
 
         let version = AppVersion::read(Some(resources.path()), "0.1.0");
 
-        assert_eq!(version.window_title(), "Devora 1.2.3 [wip]");
+        assert_eq!(
+            version.window_title("Devora Ember"),
+            "Devora Ember 1.2.3 [wip]"
+        );
     }
 
     #[test]
@@ -82,12 +85,12 @@ mod tests {
         let resources = tempfile::tempdir().unwrap();
 
         assert_eq!(
-            AppVersion::read(Some(resources.path()), "0.1.0").window_title(),
-            "Devora 0.1.0"
+            AppVersion::read(Some(resources.path()), "0.1.0").window_title("Devora Ember"),
+            "Devora Ember 0.1.0"
         );
         assert_eq!(
-            AppVersion::read(None, "0.1.0").window_title(),
-            "Devora 0.1.0"
+            AppVersion::read(None, "0.1.0").window_title("Devora Ember"),
+            "Devora Ember 0.1.0"
         );
     }
 

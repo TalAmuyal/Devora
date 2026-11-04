@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Source distribution only: release assets and DMGs are handled separately.
+# Build the signed app used by source installs and release DMGs.
 set -euo pipefail
 repo_root="$(cd "$(dirname "$0")/../.." && pwd)"
 suffix=""
