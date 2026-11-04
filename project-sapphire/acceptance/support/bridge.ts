@@ -307,6 +307,8 @@ export class Bridge {
   }
   async previewAction(pane: number, action: string): Promise<void> { await this.request('POST', '/test/preview/action', { pane, action }); }
   async closePreview(pane: number): Promise<void> { await this.request('POST', '/test/preview/close', { pane }); }
+  /** Captures the app's window to a PNG at `path`; a capture that fails is only logged, so check that the file exists. */
+  async snapshot(path: string): Promise<void> { await this.request('POST', '/test/snapshot', { path }); }
 
   async press(key: string, modifiers: Modifier[] = []): Promise<boolean> {
     return (await this.request('POST', '/test/key', { key, modifiers })).consumed;
