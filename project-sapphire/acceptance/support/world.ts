@@ -2,6 +2,7 @@ import { World, setWorldConstructor, setDefaultTimeout } from '@cucumber/cucumbe
 import type { ChildProcess } from 'node:child_process';
 import { launch, type LaunchedApp } from './app';
 import type { AppState, Bridge, TabState } from './bridge';
+import type { FailureCapture } from './failure-capture';
 
 /** What a restart must keep: the tabs' ids, titles and kinds, and the active tab. */
 export interface RestartedTabs {
@@ -25,6 +26,7 @@ export class SapphireWorld extends World {
   /** The tabs, as the persistence steps compare them, before the app was restarted. */
   tabsBeforeRestart?: RestartedTabs;
   previewFiles: string[] = [];
+  failureCapture?: FailureCapture;
   workspacePath?: string;
   hookLogPath?: string;
   hookRelease?: string;

@@ -13,7 +13,6 @@ Status:
 
 | Scenario | Status | Sapphire coverage, or what's missing |
 |---|---|---|
-| failure-capture: A failure capture saves a screenshot and the terminal text | Gap | A failed scenario saves the state, the terminal text and stderr (`support/hooks.ts`), but no screenshot, although the bridge has `POST /test/snapshot`. |
 | git-shortcuts: Git shortcuts are available as bare commands | Gap | The core's `PATH` order is unit-tested (`devora-terminal`), and the M6 bundle smoke test will resolve the bundled tools. Nothing runs a shim in a Sapphire terminal yet. |
 | git-shortcuts: Git shortcuts work in a non-zsh sub-shell | Gap | As above. |
 | git-shortcuts: Git shortcuts can be disabled via config | Gap | Writing the setting is covered (`features/settings-hub.feature`), and the `PATH` without the shims is unit-tested (`devora-terminal`). Nothing checks a Sapphire terminal without them. |

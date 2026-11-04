@@ -3,7 +3,7 @@ Feature: Failure capture
 
   @screen-capture
   Scenario: A failure capture saves a screenshot and the terminal text
-    Given Ember is running
+    Given Devora is running with no sessions open
     And a session exists
     When "echo failure-capture-probe" is typed in the terminal
     Then the terminal should contain "failure-capture-probe"
