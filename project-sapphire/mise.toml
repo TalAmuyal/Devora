@@ -97,7 +97,7 @@ run = "../bundler/macos-sapphire/bundle-sapphire.sh"
 
 [tasks.test-bundle]
 description = "Package existing build/test-tools outputs, then smoke-test the distribution using the acceptance bridge"
-depends = ["npm-install"]
+depends = ["build", "test-tools", "npm-install"]
 run = '''
 set -e
 time ../bundler/macos-sapphire/bundle-sapphire.sh --prebuilt
