@@ -19,7 +19,7 @@ Status:
 | global-shortcuts: Font size changes inside the Workspace Hub, whose own keys claim bare digits | Covered | `features/key-routing.feature`: "With the Workspace Hub open, session shortcuts reach nothing, and the font size still changes". |
 | global-shortcuts: Font size changes while a dialog is open | Covered | `features/key-routing.feature`: "The font size changes while a dialog is open, and its focused field doesn't get the key". It checks the terminal font size, since Sapphire has no UI font size. |
 | profile-management: Hub profile dropdown items are clickable at their on-screen position | Covered | `UITests/WorkspaceOperationsUITests.swift` clicks the dropdown's rows with the real mouse. |
-| profile-management: Hub filter text survives a round-trip through Settings | Gap | The feature's own note says Ember's key steps leave the filter field first and Sapphire's don't, so the scenario isn't shared, and nothing in Sapphire replaces it. |
+| profile-management: Hub filter text survives a round-trip through Settings | Covered | `features/workspace-hub-filter.feature` leaves the filter field with Escape before pressing `P`, since Sapphire's key steps keep the field's focus where Ember's leave it. |
 | theme-loading: Theme CSS properties are applied on startup | Covered | Sapphire's native views use the system's colors; the bundled theme reaches the web content, whose themed Mermaid fill `features/preview.feature` checks. |
 | workspace-hub: Header profile dropdown and burger menu are vertically aligned | Not applicable | It measures DOM boxes. The XCUITests attach screenshots of the hub instead. |
 

@@ -82,6 +82,11 @@ When('the user filters workspaces by {string}', async function (this: SapphireWo
   await waitForHub(this, `the filter to read "${text}"`, (hub) => hub.filter === text);
 });
 
+When("the user leaves the hub's filter field", async function (this: SapphireWorld) {
+  await this.bridge.press('Escape');
+  await waitForHub(this, 'the filter to lose the focus', (hub) => !hub.filterFocused);
+});
+
 /** Types into the focused field as key-downs, so the text goes through the field editor as a user's typing does; letters, digits and spaces only. */
 export async function typeText(world: SapphireWorld, text: string): Promise<void> {
   for (const char of text) {
