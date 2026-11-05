@@ -18,6 +18,8 @@ Below are terms that have a specific meaning in the context of Devora:
 - **Profile**: A named, isolated configuration scope with its own root directory, registered repos, and workspaces
 - **Worktree**: A git worktree checkout inside a workspace; each registered repo gets its own worktree directory
 - **Prepare Command**: A user-configured shell command that runs after worktree creation (config key: `prepare-command`)
+- **Agent Space**: A directory under a profile's `agent-spaces/` owned by one persistent agent (with a name, a role and one Claude session), holding its worktrees, its `memory/` and its own database (ADR-012). Not a Workspace: it has no task. A Sapphire feature
+- **Agent Hub**: The Sapphire UI for listing, creating and deleting Agent Spaces
 - **Workspace Hub**: The UI for listing, filtering, creating, and managing workspaces; a tab-covering overlay
 - **Settings Hub**: The Devora-Ember tab-covering overlay for managing profiles and editing settings — User Defaults, per-profile Claude models/effort, and registered repos. Reached from the Workspace Hub via `P`, the profile dropdown's "Manage Profiles…", or the burger menu's "Settings"
 - **Terminal Pane** (Ember): An xterm.js terminal instance within a session
@@ -59,6 +61,7 @@ Reference those homes rather than restating them.
 - [ADR-009: Agent Runtime](docs/adrs/ADR-009-agent-runtime.md) — one persistent `claude -p` stream-json process per agent session, driven over the control protocol, with Judgess linked in-process as a `PreToolUse` hook callback
 - [ADR-010: Sapphire UI Stack and Build](docs/adrs/ADR-010-sapphire-ui-stack.md) — SwiftUI on macOS 27 over UniFFI, libghostty terminal, natively drawn `nvim --embed` prompt editor, `WKWebView` panes, SwiftPM modules plus a generated app target
 - [ADR-011: Sapphire Testing](docs/adrs/ADR-011-sapphire-testing.md) — unit tests against the real core, Gherkin over a test bridge shared with Ember, and XCUITests for real input and drawing, all under one `mise run test`; `project-sapphire/acceptance/PARITY.md` tracks what Sapphire doesn't share
+- [ADR-012: Agent Spaces](docs/adrs/ADR-012-agent-spaces.md) — a persistent agent per `<profile>/agent-spaces/<name>/`, with its own `memory/` and SQLite database; opened from the Agent Hub as a tab with a chat panel; closing the tab pauses the agent and reopening resumes it
 
 ## Vision
 
