@@ -1,9 +1,13 @@
 [package]
 name = "devora-agent"
-description = "How Devora launches Claude Code: the launch spec shared by `ccc`, Ember and (later) Sapphire's agent sessions."
+description = "Claude Code launch specs and typed stream-json/control protocol for Devora."
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

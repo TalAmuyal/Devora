@@ -1,7 +1,12 @@
-//! How Devora launches Claude Code (ADR-007, ADR-009).
+//! Claude Code launch specifications and stream-json/control messages (ADR-007, ADR-009).
 //!
 //! [`ccc`] turns a `ccc` command line into what to run: Claude Code with Devora's plugins, the effort and permission mode Devora resolved for the session, and Devora's telemetry defaults.
 //! Today the session's settings arrive as `DEVORA_CCC_*` environment variables, injected into Ember's terminals from the user and profile config.
+
+/// Typed wire messages and forward-compatible parsing, verified against recorded CLI fixtures.
+pub mod protocol;
+/// The shared minimum CLI version check for future runtime and Rust health consumers.
+pub mod version;
 
 use std::ffi::OsString;
 use std::path::Path;
