@@ -26,4 +26,3 @@ Status:
 |---|---|---|
 | session-management: Create a new session | Not applicable | It calls Ember's test API to create a session with a given title. Sapphire's shell tabs get their titles from workspaces and Repurpose, which `features/repurpose-session.feature` and `features/persistence.feature` cover. |
 | session-management: A backgrounded session is not squashed when the font size changes | Covered | `features/key-routing.feature`: "A smaller font refits every terminal, the background ones included". Ember's font shortcut scales the UI and must leave a hidden xterm.js terminal's columns alone; Sapphire's changes the terminals' font, so its scenario checks with `stty size` that the background terminal's PTY is refit to the same, wider size as the active one. |
-| workspace-hub: Hub shell renders immediately on load | Gap | Nothing checks that the hub's header, legend and search bar show while its workspaces are still loading. |
