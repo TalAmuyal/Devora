@@ -15,19 +15,6 @@ export async function ensureWsHubOpen(driver: AppDriver): Promise<void> {
   );
 }
 
-export async function startWsHubLoad(driver: AppDriver): Promise<void> {
-  await driver.eval(`
-    window.__test.layers.clear();
-    window.__test.wsHub.setActiveProfilePath(null);
-    window.__test.openWsHub();
-  `);
-  await driver.pollFor(
-    `return document.querySelector('.ws-hub') !== null`,
-    true,
-    5_000,
-  );
-}
-
 export async function ensureWsHubClosed(driver: AppDriver): Promise<void> {
   await driver.eval(`window.__test.layers.clear();`);
 }

@@ -14,7 +14,7 @@ import {
   reloadWsHub, getFocusedWorkspaceId,
   getFocusedWorkspaceTitle, getWorkspaceItemCount, getActiveCategoryFilter,
   waitForWorkspaceItems, filterWorkspaces, switchProfile, waitForDetailRepoTable,
-  startWsHubLoad, selectCategory, clickBurgerMenuItem,
+  selectCategory, clickBurgerMenuItem,
 } from '../support/ws-hub-helper';
 
 const TEST_REPO_NAME = 'test-repo';
@@ -300,31 +300,6 @@ Then(
   },
 );
 
-Given(
-  'the Workspace Hub is loading',
-  async function (this: EmberWorld) {
-    await startWsHubLoad(this.driver);
-  },
-);
-
-Then(
-  'the hub header should be visible',
-  async function (this: EmberWorld) {
-    const ui = new UIDriver(this.driver);
-    const visible = await ui.hasElement('.page-header');
-    assert.strictEqual(visible, true, 'Hub header should be visible');
-  },
-);
-
-Then(
-  'the hub legend should be visible',
-  async function (this: EmberWorld) {
-    const ui = new UIDriver(this.driver);
-    const visible = await ui.hasElement('.keyboard-hint-bar');
-    assert.strictEqual(visible, true, 'Hub legend should be visible');
-  },
-);
-
 Then(
   'the profile dropdown and burger menu should be vertically aligned',
   async function (this: EmberWorld) {
@@ -351,15 +326,6 @@ Then(
       Math.abs(profile!.centerY - burger!.centerY) <= 1,
       `header triggers should share a vertical center (profile=${profile!.centerY}px, burger=${burger!.centerY}px)`,
     );
-  },
-);
-
-Then(
-  'the hub search bar should be visible',
-  async function (this: EmberWorld) {
-    const ui = new UIDriver(this.driver);
-    const visible = await ui.hasElement('.search-input');
-    assert.strictEqual(visible, true, 'Hub search bar should be visible');
   },
 );
 

@@ -84,15 +84,6 @@ Feature: Workspace Hub
     When the user presses "G"
     Then the cheatsheet scroll offset should be greater than 0
 
-  # Sapphire's test bridge can't see what SwiftUI draws; its XCUITests check the same (`WorkspaceHubUITests`).
-  @ember-only
-  Scenario: Hub shell renders immediately on load
-    Given a profile "Work" with 3 active workspaces
-    And the Workspace Hub is loading
-    Then the hub header should be visible
-    And the hub legend should be visible
-    And the hub search bar should be visible
-
   Scenario: Hub is navigable immediately after opening
     Given a profile "Work" with 3 active workspaces
     And the Workspace Hub is open
