@@ -29,15 +29,18 @@ This ADR decides what an agent is in Devora, where it lives, and how the user wo
 		The history uses ADR-008's events model, but lives with the space instead of in an app-wide `conversations.db`, so it moves, backs up and is deleted with the space.
 	- Agent Spaces are a Sapphire feature; Ember may adopt them later.
 - **The agent's instructions are rendered from a reusable template when the space is created**
-	- The template is filled from the launch spec, the profile config and the creation form's values, which can override the other two.
+	- The template is not a plain Markdown file: it has placeholders, filled from the launch spec, the profile config and the creation form's values, which can override the other two.
 		It covers the agent's name and role, the user, the space and its repos, memory, an optional knowledge-base repo, version control and the working relationship, plus custom sections from the profile config.
 	- The template can be customized per user and per agent.
 		The rendered instructions are stored in the space's database and stay the agent's own: later changes to the profile or the template don't affect existing agents.
 	- The launch spec and the profile's agent defaults are editable in Sapphire's Settings Hub, as `ccc`'s settings are, as well as in the creation form.
-- **The space's configuration alone sets up Claude**
-	- The instructions, the model, the effort level, the settings and the environment all come from the space's configuration, never from the user's shell environment or `~/.claude/settings.json`.
+- **Devora configures Claude itself, without relying on the user's configuration**
+	- Everything a session needs (the instructions, the model, the effort level, the permission mode, the auto-compaction switch, the plugins and the environment) comes from the space's configuration.
+		Devora doesn't rely on the user's shell environment, `~/.claude/settings.json` or `~/.claude/CLAUDE.md`.
+	- Claude's own setting sources still load, so the user may add their own configuration, such as permission rules.
+		For the keys Devora sets, Devora's values take precedence; this is verified against the pinned CLI.
 	- Nothing is written into the space for Claude to read: no output style and no `CLAUDE.md`.
-		The instructions and settings are passed on Claude's command line, for example as `--system-prompt` or `--append-system-prompt` text (depending on whether Claude Code's own coding instructions are kept), `--agents` JSON with `--agent`, `--settings` JSON and `--setting-sources`, plus `--model` and `--effort`.
+		The instructions and settings are passed on Claude's command line, for example as `--system-prompt` or `--append-system-prompt` text (depending on whether Claude Code's own coding instructions are kept), `--agents` JSON with `--agent`, and `--settings` JSON, plus `--model` and `--effort`.
 		The exact flags are chosen by testing them against the pinned CLI.
 		`--bare` is not an option: it accepts only an API key, so it would break Claude subscriptions.
 - **An Agent Space's agent lives as a tab**
@@ -60,7 +63,7 @@ This ADR decides what an agent is in Devora, where it lives, and how the user wo
 		- Defer ("ask") escalates to the user directly: it forces the CLI to ask, even in auto mode.
 		- An abstention escalates to auto mode, whose classifier decides without asking the user.
 	- Judgess's verdicts show as non-actionable badges on tool calls.
-	- A question the CLI asks (`can_use_tool`, from a Judgess Defer or from the space's own `ask` rules) shows as an inline card in the chat, answered from the keyboard (allow, deny, always allow with the CLI's suggested rule).
+	- A question the CLI asks (`can_use_tool`, from a Judgess Defer, or from an `ask` rule in the space's or the user's settings) shows as an inline card in the chat, answered from the keyboard (allow, deny, always allow with the CLI's suggested rule).
 		A question the CLI withdraws (`control_cancel_request`) disappears.
 - **Devora owns compaction, and saves memory before it**
 	- Devora watches the context usage the CLI reports.
