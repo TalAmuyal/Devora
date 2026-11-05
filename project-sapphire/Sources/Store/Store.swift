@@ -523,15 +523,20 @@ public final class Store {
 		return (try? call("dispatch") { try core.dispatch(command: command) }) != nil
 	}
 
+	/// Resolve the weak store only on the main actor. Retaining it across the hop delays teardown and keeps its database locked.
 	private func pullStateEvents(from subscription: StateSubscription) -> Task<Void, Never> {
 		let inbox = inbox
 		return Task.detached { [weak self] in
 			do {
 				for try await batch in Batches(subscription) {
-					if inbox.append(batch) { await self?.eventsArrived() }
+					if inbox.append(batch) {
+						await MainActor.run { [weak self] in self?.eventsArrived() }
+					}
 				}
 			} catch {
-				await self?.showError("the app state's events stopped: \(Self.describe(error))")
+				await MainActor.run { [weak self] in
+					self?.showError("the app state's events stopped: \(Self.describe(error))")
+				}
 			}
 		}
 	}
@@ -546,10 +551,12 @@ public final class Store {
 		return Task.detached { [weak self] in
 			do {
 				for try await batch in Batches(subscription) {
-					await self?.bannerAll(batch)
+					await MainActor.run { [weak self] in self?.bannerAll(batch) }
 				}
 			} catch {
-				await self?.showError("the core's error reports stopped: \(Self.describe(error))")
+				await MainActor.run { [weak self] in
+					self?.showError("the core's error reports stopped: \(Self.describe(error))")
+				}
 			}
 		}
 	}

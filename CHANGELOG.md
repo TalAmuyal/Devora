@@ -76,6 +76,8 @@ Types of changes:
 
 ### Fixed
 
+- Sapphire releases its state database when its store is dropped, even with event delivery queued on the main actor
+
 - Config updates replace files atomically, so readers do not see partially written JSON
 
 - Sapphire recovers interrupted workspace creations on restart, removing incomplete fresh workspaces and releasing reused workspaces while preserving completed or re-claimed workspaces

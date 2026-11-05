@@ -6,6 +6,34 @@ import Testing
 /// The store on an app state kept in a file: what a launch restores, and the problems it can meet opening it.
 @MainActor
 struct PersistenceTests {
+	@Test func droppingAStoreWithPendingEventsReleasesItsDatabase() throws {
+		let fixture = try Fixture()
+		let statePath = fixture.root.appending(path: "state.db").path
+		var store: Store? = Store(configPath: fixture.configPath, state: .file(path: statePath), log: try fixture.log())
+		store!.dispatch(.openShell)
+		weak let released = store
+
+		store = nil
+
+		#expect(released == nil, "queued event delivery must not own the store before its main-actor hop")
+		let replacement = Store(configPath: fixture.configPath, state: .file(path: statePath), log: try fixture.log())
+		#expect(replacement.startupProblem == nil)
+		#expect(!replacement.hasNoTabs())
+	}
+
+	@Test func aStateSubscriptionDoesNotKeepTheDatabaseLocked() throws {
+		let fixture = try Fixture()
+		let statePath = fixture.root.appending(path: "state.db").path
+		var core: DevoraCore? = try DevoraCore(configPath: fixture.configPath, statePath: statePath, log: fixture.log())
+		let subscription = try core!.subscribe()
+		defer { try? subscription.close() }
+
+		core = nil
+
+		let replacement = try DevoraCore(configPath: fixture.configPath, statePath: statePath, log: fixture.log())
+		#expect(try replacement.snapshot().window.tabs.isEmpty)
+	}
+
 	@Test func aLaunchRestoresTheTabs() async throws {
 		let fixture = try Fixture()
 		let statePath = fixture.root.appending(path: "state/state.db").path
