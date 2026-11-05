@@ -21,6 +21,7 @@ Closing the window quits the app.
 	Until the problem is answered, the store has no core and `StartupProblemView` fills the window.
 - The launch (`RootView`) runs once the state is open: the profiles and the selected profile's workspaces, then the Workspace Hub if the core has no tabs (`Store.hasNoTabs`, read from the core since the restored tabs fold on a later frame); restored tabs get fresh terminals from their specs (a terminal's contents aren't restored), and a workspace creation the app stopped in the middle of comes back as failed ("interrupted").
 - The store pulls the core's events through `Batches`, the `AsyncSequence` over a core subscription.
+	Long-lived state/error consumers resolve their weak store inside the main-actor hop, so queued delivery cannot keep a released store and its database alive. Cancelling the consumer closes its subscription through `Batches`.
 	Events wait in an off-main inbox until `FrameDriver`'s display link folds them into `Store.app`, once per frame and only while events are pending.
 	Without a display link (tests), they fold on the main actor's next turn.
 - `Terminals` (in `AppShell`) holds the live terminals, keyed by the terminal id of each tab's pane: it makes one when a tab appears and drops it when the tab leaves the state, which frees the libghostty surface and ends its process.
