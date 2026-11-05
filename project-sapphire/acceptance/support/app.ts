@@ -6,6 +6,7 @@ import { Bridge, type AppState } from './bridge';
 
 const PROJECT_DIR = path.resolve(import.meta.dirname, '../..');
 export const APP_BINARY = path.join(path.resolve(PROJECT_DIR, process.env.SAPPHIRE_APP!), 'Contents/MacOS/Devora Sapphire');
+export const BUNDLED_APP_BINARY = path.join(PROJECT_DIR, 'build/bundle/Devora Sapphire.app/Contents/MacOS/Devora Sapphire');
 
 /** The app's stderr, per process, for failure captures. */
 export const stderrOf = new WeakMap<ChildProcess, string[]>();

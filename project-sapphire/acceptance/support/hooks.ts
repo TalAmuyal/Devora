@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { cleanupFixtures, writeTestConfig } from '../../../project-ember/tests/support/fixture-helper';
-import { APP_BINARY, hasExited, stop, waitUntilReady } from './app';
+import { APP_BINARY, BUNDLED_APP_BINARY, hasExited, stop, waitUntilReady } from './app';
 import { SapphireWorld } from './world';
 import { stopTestClaude } from './claude';
 import { captureFailure, FAILURE_CAPTURE_DIR } from './failure-capture';
@@ -16,12 +16,25 @@ BeforeAll(function () {
 });
 
 /** Every scenario gets a fresh app, on a config and an app state of its own: nothing a scenario does can leak into the next. */
-Before(async function (this: SapphireWorld) {
+Before(async function (this: SapphireWorld, { pickle }) {
   this.scenarioDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sapphire-scenario-'));
   this.testConfigPath = path.join(this.scenarioDir, 'config.json');
   this.stateDir = path.join(this.scenarioDir, 'state');
   writeTestConfig(this.testConfigPath, []);
-  fs.copyFileSync(path.resolve(import.meta.dirname, '../../../acceptance/fixtures/health-report.json'), path.join(this.scenarioDir, 'health-report.json'));
+  this.bundledTools = pickle.tags.some(tag => tag.name === '@bundled-tools');
+  if (this.bundledTools) {
+    // No injected PATH: devora-terminal must discover the real bundle Resources.
+    const resources = path.resolve(path.dirname(BUNDLED_APP_BINARY), '../Resources');
+    for (const tool of ['bundled-apps/debi', 'bundled-apps/debi-go', 'git-shortcuts/gcl']) {
+      fs.accessSync(path.join(resources, tool), fs.constants.X_OK);
+    }
+    this.home = path.join(this.scenarioDir, 'home');
+    fs.mkdirSync(this.home);
+  }
+  // As in Ember, no fixture file selects the real core runner for @real-health.
+  if (!pickle.tags.some(tag => tag.name === '@real-health')) {
+    fs.copyFileSync(path.resolve(import.meta.dirname, '../../../acceptance/fixtures/health-report.json'), path.join(this.scenarioDir, 'health-report.json'));
+  }
   await this.launch();
   // A fresh state restores no tabs, so the launch opens the Workspace Hub.
   await waitUntilReady(this.bridge);

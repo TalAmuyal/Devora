@@ -44,8 +44,9 @@ try {
     const quote = (s: string) => "'" + s.replaceAll("'", "'\"'\"'") + "'";
     await launched.bridge.typeLine(`{ command -v debi; command -v ccc; command -v debi-go; command -v gcl; } > ${quote(report)}`);
     const lines = await launched.bridge.waitFor('bundled command resolution', async () => fs.existsSync(report) ? fs.readFileSync(report, 'utf8').trimEnd().split('\n') : [], value => value.length === 4);
-    // #277 tracks path_helper reordering after launch, shared with Ember. Check core
-    // prefix ordering here, and actual command resolution in the login shell above.
+    // Login shells' path_helper may put system directories first, which is accepted
+    // (#277). Check core launch-spec prefixes and real-shell command resolution,
+    // without asserting the login shell's PATH order.
     const prefixes = (state.tabs[0].launchPath ?? '').split(':');
     assert.deepEqual(lines, [...['debi', 'ccc', 'debi-go'].map(tool => path.join(resources, 'bundled-apps', tool)), path.join(resources, 'git-shortcuts/gcl')]);
     await launched.bridge.press('F1');

@@ -1,7 +1,7 @@
 import { World, setWorldConstructor, setDefaultTimeout } from '@cucumber/cucumber';
 import { claudeEnvironment } from './claude';
 import type { ChildProcess } from 'node:child_process';
-import { launch, type LaunchedApp } from './app';
+import { launch, BUNDLED_APP_BINARY, type LaunchedApp } from './app';
 import type { AppState, Bridge, TabState } from './bridge';
 import type { FailureCapture } from './failure-capture';
 
@@ -15,6 +15,9 @@ setDefaultTimeout(30_000);
 
 export class SapphireWorld extends World {
   app!: ChildProcess;
+  /** Bundled-tools scenarios use the signed distribution and an isolated login HOME. */
+  bundledTools = false;
+  home?: string;
   bridge!: Bridge;
   /** The scenario's own directory, holding its config and its app state. */
   scenarioDir!: string;
@@ -50,7 +53,7 @@ export class SapphireWorld extends World {
 
   /** Launches the app on the scenario's config and state; it becomes the app the steps drive. */
   async launch(): Promise<void> {
-    const { app, bridge } = await launch(this.testConfigPath, this.stateDir, { environment: claudeEnvironment() });
+    const { app, bridge } = await launch(this.testConfigPath, this.stateDir, { binary: this.bundledTools ? BUNDLED_APP_BINARY : undefined, home: this.home, environment: claudeEnvironment() });
     this.app = app;
     this.bridge = bridge;
   }
