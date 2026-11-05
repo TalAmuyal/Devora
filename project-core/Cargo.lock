@@ -445,6 +445,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "devora-agent-space"
+version = "0.1.0"
+dependencies = [
+ "devora-agent",
+ "devora-app",
+ "devora-config",
+ "devora-workspace",
+ "fs2",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
 name = "devora-app"
 version = "0.1.0"
 dependencies = [

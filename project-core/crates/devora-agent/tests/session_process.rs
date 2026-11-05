@@ -536,7 +536,7 @@ async fn an_unresponsive_process_is_reaped_after_the_pause_grace_period() {
 }
 
 #[tokio::test]
-async fn an_unused_session_recovers_with_the_same_id_without_resuming() {
+async fn an_unused_session_recovers_with_a_fresh_id_without_resuming() {
     let fixture = Fixture::new();
     let mut options = fixture.options();
     options.environment.insert(
@@ -570,12 +570,17 @@ async fn an_unused_session_recovers_with_the_same_id_without_resuming() {
         .filter(|row| row["kind"] == "start")
         .collect();
     assert_eq!(starts.len(), 2);
-    for start in starts {
-        let args = start["args"].as_array().unwrap();
-        assert!(!args.contains(&json!("--resume")));
-        let index = args.iter().position(|arg| arg == "--session-id").unwrap();
-        assert_eq!(args[index + 1], session.session_id());
-    }
+    let ids: Vec<_> = starts
+        .iter()
+        .map(|start| {
+            let args = start["args"].as_array().unwrap();
+            assert!(!args.contains(&json!("--resume")));
+            let index = args.iter().position(|arg| arg == "--session-id").unwrap();
+            args[index + 1].as_str().unwrap().to_owned()
+        })
+        .collect();
+    assert_ne!(ids[0], ids[1]);
+    assert_eq!(session.session_id(), ids[1]);
     assert!(!session.pause().await.unwrap().has_conversation);
 }
 
@@ -629,4 +634,38 @@ async fn a_control_timeout_uses_the_same_bounded_recovery_as_a_crash() {
             .count(),
         2
     );
+}
+
+#[tokio::test]
+async fn a_first_turn_crash_before_result_starts_fresh_even_after_assistant_output() {
+    let fixture = Fixture::new();
+    let mut session = Session::start(fixture.options(), fixture.log())
+        .await
+        .unwrap();
+    session
+        .handle()
+        .send_turn("assistant-then-crash".into())
+        .await
+        .unwrap();
+    event(&mut session, |event| {
+        matches!(
+            event,
+            SessionEvent::Message(Message::Known(KnownMessage::Assistant { .. }))
+        )
+    })
+    .await;
+    event(&mut session, |event| {
+        matches!(event, SessionEvent::Ready { resumed: false, .. })
+    })
+    .await;
+    assert!(!session.pause().await.unwrap().has_conversation);
+    let starts: Vec<_> = fixture
+        .reports()
+        .into_iter()
+        .filter(|r| r["kind"] == "start")
+        .collect();
+    assert!(starts[1]["args"]
+        .as_array()
+        .unwrap()
+        .contains(&json!("--session-id")));
 }

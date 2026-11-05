@@ -11,7 +11,9 @@
 //! Unexpected exit or control timeout gets one automatic restart. A successful turn re-arms
 //! that recovery budget. Failed initialization and repeated crashes surface a
 //! Failed event. Idle sessions have no timer. Before a conversation exists, a
-//! restart reuses --session-id. After a result or successful resume, it uses --resume.
+//! restart selects a fresh UUID with --session-id. After a result or successful
+//! resume, it uses the saved ID with --resume. An unfinished first turn is lost
+//! when its process must be replaced.
 //!
 //! The caller's event loop owns history and context policy. Usage and compaction
 //! boundaries are delivered directly from the CLI. Space-specific state stays
@@ -28,7 +30,7 @@ use devora_app::log::Log;
 pub use launch::{Instructions, Plugin, Resume, SessionOptions};
 use serde_json::{Map, Value};
 use std::sync::Arc;
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::{mpsc, oneshot, watch};
 use tokio::task::JoinHandle;
 
 /// Which CLI message supplied a token-usage update.
@@ -85,7 +87,7 @@ pub enum SessionEvent {
 pub struct StopInfo {
     pub session_id: String,
     /// True after a result or successful resume. Persist alongside the ID so
-    /// an unused session can reopen with --session-id.
+    /// an unfinished first session can reopen with a fresh UUID.
     pub has_conversation: bool,
     pub graceful: bool,
 }
@@ -195,7 +197,7 @@ pub struct Session {
     handle: SessionHandle,
     events: mpsc::UnboundedReceiver<SessionEvent>,
     worker: Option<JoinHandle<()>>,
-    session_id: String,
+    identity: watch::Receiver<String>,
 }
 
 impl Session {
@@ -204,21 +206,27 @@ impl Session {
         let session_id = options
             .resume
             .as_ref()
+            .filter(|resume| resume.has_conversation)
             .map(|resume| resume.session_id.clone())
             .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
         worker::check_version(&options).await?;
         let (commands, received) = mpsc::unbounded_channel();
         let (events, event_stream) = mpsc::unbounded_channel();
         let (ready, initialized) = oneshot::channel();
-        let worker_id = session_id.clone();
+        let (identity_sender, identity) = watch::channel(session_id);
         let worker = tokio::spawn(worker::run(
-            options, worker_id, log, received, events, ready,
+            options,
+            identity_sender,
+            log,
+            received,
+            events,
+            ready,
         ));
         let session = Self {
             handle: SessionHandle { commands },
             events: event_stream,
             worker: Some(worker),
-            session_id,
+            identity,
         };
         initialized
             .await
@@ -230,8 +238,9 @@ impl Session {
         self.handle.clone()
     }
 
-    pub fn session_id(&self) -> &str {
-        &self.session_id
+    /// The current CLI identity, including a fresh ID selected during recovery.
+    pub fn session_id(&self) -> String {
+        self.identity.borrow().clone()
     }
 
     pub async fn next_event(&mut self) -> Option<SessionEvent> {

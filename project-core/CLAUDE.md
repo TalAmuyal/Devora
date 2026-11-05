@@ -7,6 +7,7 @@ It is being extracted from Ember's `src-tauri/` area by area (TalAmuyal/Devora#2
 
 - `crates/debi`: the Rust `debi` CLI. It runs `ccc` (also as a `ccc` symlink) and hands every other command to the Go `debi-go` until each command group is ported (ADR-007).
 - `crates/devora-agent`: Claude Code launch specs, the stream-json/control protocol and the UI-agnostic persistent session process (ADR-009, ADR-012). SessionOptions owns the settings/transport environment contract. Recorded contract fixtures and re-recording instructions live in `crates/devora-agent/tests/fixtures/README.md`. `devora_agent::version` owns the public minimum-version check for runtime and future Rust health consumers.
+- `crates/devora-agent-space`: Agent Space directories, their versioned per-space SQLite database and immutable creation-time instructions. Space owns the OS lock, and RunningSpace persists lifecycle state before forwarding session events. Worktrees use the shared creation/deletion stages in devora-workspace.
 - `crates/devora-app`: the app process around the core: its per-app log file, error reporting (with a listener the UI surfaces errors through) and panic hook, and what its bundle ships (version, install suffix, user guide).
 - `crates/devora-config`: the global and per-profile config files (replaced atomically on write), registered profiles, and the settings resolved from them (Claude settings, config fields, the prepare-command, git shortcuts).
 - `crates/devora-core`: the facade. A UI depends on this crate alone, never on the crates behind it.

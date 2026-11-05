@@ -21,7 +21,8 @@ pub struct Plugin {
 }
 
 /// The caller's saved session identity and transcript state. A session paused
-/// before its first result reuses its ID with --session-id instead of --resume.
+/// before its first result gets a fresh UUID instead of resuming a possibly
+/// partial transcript. A completed conversation keeps its ID with --resume.
 #[derive(Clone, Debug)]
 pub struct Resume {
     pub session_id: String,

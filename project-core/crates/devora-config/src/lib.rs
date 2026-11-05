@@ -2,3 +2,6 @@
 
 pub mod config;
 pub mod profile;
+
+/// Profile-scoped Agent Space creation defaults.
+pub mod agent;

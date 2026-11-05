@@ -718,6 +718,7 @@ async fn pinned_cli_can_reopen_an_unused_session() {
     let mut reopened = Session::start(reopened_options, fixture.log())
         .await
         .unwrap();
+    assert_ne!(reopened.session_id(), paused.session_id);
     reopened
         .handle()
         .send_turn("First turn after reopening.".into())
@@ -806,5 +807,151 @@ async fn pinned_cli_hook_ask_forces_a_question_in_auto_mode() {
     assert!(snapshot
         .to_string()
         .contains("User denied the deferred command"));
+    backend.stop().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires CI-pinned Claude CLI, Node and Sapphire npm dependencies"]
+async fn pinned_cli_reopens_after_a_forced_stop_in_the_first_turn() {
+    check_pin().await;
+    first_turn_stop_roundtrip(false).await;
+    first_turn_stop_roundtrip(true).await;
+}
+
+// A permission barrier exposes an existing transcript without a result, and a
+// held partial stream also exercises the asynchronous transcript-write boundary.
+async fn first_turn_stop_roundtrip(partial_stream: bool) {
+    use std::os::unix::fs::PermissionsExt;
+    check_pin().await;
+    let fixture = Fixture::new();
+    let mut backend = Backend::start(fixture.root.path()).await;
+    backend
+        .command(if partial_stream {
+            json!({"action":"configure", "holdStream":true})
+        } else {
+            json!({"action":"configure", "toolCommand":"git status"})
+        })
+        .await;
+    let pid_file = fixture.root.path().join("cli.pid");
+    let wrapper = fixture.root.path().join("owned-cli");
+    std::fs::write(
+        &wrapper,
+        format!(
+            "#!/bin/sh\necho $$ > '{}'\nexec '{}' \"$@\"\n",
+            pid_file.display(),
+            pinned_cli().display()
+        ),
+    )
+    .unwrap();
+    std::fs::set_permissions(&wrapper, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let mut options = fixture.options(
+        backend.port,
+        Instructions::Append("First-turn stop probe".into()),
+    );
+    options.program = wrapper;
+    options.settings["permissions"] = json!({"ask":["Bash"]});
+    let mut first = Session::start(options.clone(), fixture.log())
+        .await
+        .unwrap();
+    first
+        .handle()
+        .send_turn("Remember FIRST_TURN_MARKER.".into())
+        .await
+        .unwrap();
+    tokio::time::timeout(Duration::from_secs(20), async {
+        loop {
+            let event = first.next_event().await.unwrap();
+            match event {
+                SessionEvent::PermissionRequested { .. } => break,
+                SessionEvent::Message(Message::Known(KnownMessage::StreamEvent {
+                    event:
+                        devora_agent::protocol::Extensible::Known(
+                            devora_agent::protocol::StreamEvent::ContentBlockDelta {
+                                delta:
+                                    devora_agent::protocol::Extensible::Known(
+                                        devora_agent::protocol::ContentDelta::TextDelta { .. },
+                                    ),
+                                ..
+                            },
+                        ),
+                    ..
+                })) if partial_stream => break,
+                SessionEvent::Message(Message::Known(KnownMessage::Result(_))) => {
+                    panic!("unexpected result before permission barrier")
+                }
+                SessionEvent::Failed(error) => panic!("{error}"),
+                _ => {}
+            }
+        }
+    })
+    .await
+    .expect("first-turn permission barrier");
+    let transcript = std::fs::read_dir(fixture.home.join(".claude/projects"))
+        .unwrap()
+        .filter_map(Result::ok)
+        .map(|dir| dir.path().join(format!("{}.jsonl", first.session_id())))
+        .find(|path| path.exists());
+    if !partial_stream {
+        assert!(transcript.is_some());
+    }
+    if let Some(file) = &transcript {
+        assert!(std::fs::read_to_string(file)
+            .unwrap()
+            .contains("FIRST_TURN_MARKER"));
+    }
+    let pid = std::fs::read_to_string(&pid_file).unwrap();
+    assert!(Command::new("/bin/kill")
+        .args(["-STOP", pid.trim()])
+        .status()
+        .await
+        .unwrap()
+        .success());
+    let stopped = first.pause().await.unwrap();
+    assert!(!stopped.graceful);
+    assert!(!stopped.has_conversation);
+    while let Some(event) = first.next_event().await {
+        assert!(!matches!(
+            &event,
+            SessionEvent::Message(Message::Known(KnownMessage::Result(_)))
+        ));
+    }
+    backend.command(json!({"action":"configure"})).await;
+    if !partial_stream {
+        // Independent flag probe. Production never tries a flag and falls back.
+        let output = tokio::time::timeout(
+            Duration::from_secs(30),
+            Command::new(pinned_cli())
+                .args([
+                    "-p",
+                    "Counterfactual first turn.",
+                    "--session-id",
+                    &stopped.session_id,
+                ])
+                .current_dir(&options.working_directory)
+                .env_clear()
+                .envs(&options.environment)
+                .output(),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert!(!output.status.success());
+        assert!(String::from_utf8_lossy(&output.stderr).contains(&stopped.session_id));
+    }
+    options.resume = Some(Resume {
+        session_id: stopped.session_id.clone(),
+        has_conversation: false,
+    });
+    let mut reopened = Session::start(options, fixture.log()).await.unwrap();
+    assert_ne!(reopened.session_id(), stopped.session_id);
+    reopened
+        .handle()
+        .send_turn("Recall the first turn.".into())
+        .await
+        .unwrap();
+    result(&mut reopened).await;
+    reopened.pause().await.unwrap();
+    let snapshot = backend.command(json!({"action":"snapshot"})).await;
+    assert!(!snapshot.to_string().contains("FIRST_TURN_MARKER"));
     backend.stop().await;
 }

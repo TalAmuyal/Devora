@@ -688,9 +688,13 @@ pub fn repurpose_task(workspace_path: &str, new_title: &str) -> Result<(), Strin
 }
 
 pub fn delete_workspace(workspace_path: &str) -> Result<(), String> {
-    let ws_dir = Path::new(workspace_path);
-    let repo_names = list_repo_subdirs(ws_dir);
+    let path = Path::new(workspace_path);
+    remove_worktree_directory(path, list_repo_subdirs(path))
+}
 
+/// Deregister all child worktrees before removing their containing directory.
+/// Shared by workspace and Agent Space deletion and failure cleanup.
+pub fn remove_worktree_directory(ws_dir: &Path, repo_names: Vec<String>) -> Result<(), String> {
     let handles: Vec<_> = repo_names
         .into_iter()
         .map(|repo_name| {

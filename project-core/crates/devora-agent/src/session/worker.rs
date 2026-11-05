@@ -10,7 +10,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, Lines};
 use tokio::process::{Child, ChildStderr, ChildStdin, ChildStdout};
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::{mpsc, oneshot, watch};
 use tokio::time::{timeout, Instant};
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
@@ -118,6 +118,7 @@ struct Stopping {
 struct Worker {
     options: SessionOptions,
     id: String,
+    identity: watch::Sender<String>,
     log: Arc<Log>,
     events: mpsc::UnboundedSender<SessionEvent>,
     ready: Option<oneshot::Sender<Result<(), String>>>,
@@ -155,7 +156,7 @@ enum End {
 
 pub(super) async fn run(
     options: SessionOptions,
-    id: String,
+    identity: watch::Sender<String>,
     log: Arc<Log>,
     mut commands: mpsc::UnboundedReceiver<Command>,
     events: mpsc::UnboundedSender<SessionEvent>,
@@ -169,7 +170,8 @@ pub(super) async fn run(
             .as_ref()
             .is_some_and(|resume| resume.has_conversation),
         options,
-        id,
+        id: identity.borrow().clone(),
+        identity: identity.clone(),
         log,
         events,
         ready: Some(ready),
@@ -249,6 +251,10 @@ pub(super) async fn run(
                 worker.crash_restarts += 1;
                 worker.initialized = false;
                 worker.active_turn = false;
+                if !worker.has_conversation {
+                    worker.id = uuid::Uuid::new_v4().to_string();
+                    worker.identity.send_replace(worker.id.clone());
+                }
             }
             Err(error) => {
                 process.kill().await;
