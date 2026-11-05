@@ -51,6 +51,7 @@ Types of changes:
 
 ### Changed
 
+- Devora Sapphire's minimum macOS is temporarily 26.6, so it can run on Macs that can't upgrade to macOS 27 yet; it is still built and tested only on macOS 27
 - App log timestamps are formatted in-process instead of spawning `date` for every line, preserving the local time and existing line and file-name formats
 - ADR-010 (Sapphire UI stack and build) is accepted, recording the libghostty terminal decision: Ghostty's internal embedding API, pinned and isolated, with upgrades reviewed in #221
 - ADR-010 records the embedded Neovim spike's findings: Sapphire's prompt editor runs a Neovim config vendored in Sapphire rather than the user's own

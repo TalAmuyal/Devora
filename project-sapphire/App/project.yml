@@ -3,7 +3,7 @@ name: DevoraSapphire
 options:
   bundleIdPrefix: dev.devora
   deploymentTarget:
-    macOS: "27.0"
+    macOS: "26.6"
 packages:
   DevoraSapphire:
     path: ..
