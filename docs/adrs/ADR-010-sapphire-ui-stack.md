@@ -29,6 +29,9 @@ All of it sits over the shared core (ADR-007) and its state model (ADR-008).
 	- AppKit is used through `NSViewRepresentable` where SwiftUI falls short (Metal surfaces, precise key handling, the text grid).
 	- Observation and Swift concurrency are used throughout.
 	- There are no back-deploy shims.
+	- Amended on 2026-11-05: the deployment target is temporarily macOS 26.6, so that the maintainer can run Sapphire on a Mac that can't upgrade yet.
+		macOS 27 stays the supported and tested platform: CI builds and tests only on macOS 27, and nothing runs on 26.6 except the maintainer's own local builds.
+		The code used no API newer than 26.6 when this was done; a later one needs an availability check, or the target goes back to 27.
 - **The core is bound through UniFFI, under three facade rules**
 	- **Every exported function returns `Result`.**
 		A Rust panic in a `Result`-returning export becomes a thrown Swift error, but in an infallible export it is a `try!` failure that kills the app, even with `panic = "unwind"`.

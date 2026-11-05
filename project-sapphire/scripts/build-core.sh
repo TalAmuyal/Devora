@@ -7,6 +7,8 @@ CORE_DIR="$(cd "$SAPPHIRE_DIR/../project-core" && pwd)"
 BUILD_DIR="$SAPPHIRE_DIR/build"
 TARGET=aarch64-apple-darwin
 LIB=devora_ffi
+# The C code the crates compile (the bundled SQLite) otherwise targets the SDK's macOS; keep it at the app's deployment target (Package.swift).
+export MACOSX_DEPLOYMENT_TARGET=26.6
 
 (cd "$CORE_DIR" && cargo build --release --target "$TARGET" -p devora-ffi --lib)
 LIB_DIR="$CORE_DIR/target/$TARGET/release"

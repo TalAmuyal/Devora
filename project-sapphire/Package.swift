@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
 	name: "DevoraSapphire",
-	platforms: [.macOS("27.0")],
+	platforms: [.macOS("26.6")],
 	products: [
 		.library(name: "AppShell", targets: ["AppShell"]),
 	],
