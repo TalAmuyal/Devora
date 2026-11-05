@@ -20,6 +20,14 @@ pub struct Plugin {
     pub directory: PathBuf,
 }
 
+/// The caller's saved session identity and transcript state. A session paused
+/// before its first result reuses its ID with --session-id instead of --resume.
+#[derive(Clone, Debug)]
+pub struct Resume {
+    pub session_id: String,
+    pub has_conversation: bool,
+}
+
 /// Everything needed to start or resume a session. The runtime reads no process
 /// environment. Claude also loads its normal settings and memory sources.
 ///
@@ -42,7 +50,7 @@ pub struct SessionOptions {
     pub settings: Value,
     /// Scrubbed platform/auth/proxy transport env, deliberately kept out of argv.
     pub environment: BTreeMap<String, String>,
-    pub resume: Option<String>,
+    pub resume: Option<Resume>,
 }
 
 impl SessionOptions {

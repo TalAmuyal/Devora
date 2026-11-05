@@ -337,7 +337,10 @@ async fn pause_interrupts_before_eof_and_reopening_resumes_the_same_id() {
         .unwrap();
     assert!(interrupt < eof);
     let mut options = fixture.options();
-    options.resume = Some(stopped.session_id.clone());
+    options.resume = Some(Resume {
+        session_id: stopped.session_id.clone(),
+        has_conversation: stopped.has_conversation,
+    });
     let mut reopened = Session::start(options, fixture.log()).await.unwrap();
     assert_eq!(reopened.session_id(), stopped.session_id);
     event(&mut reopened, |event| {
@@ -357,6 +360,11 @@ async fn crash_recovery_preserves_id_model_and_mode_and_bounds_crash_loops() {
     handle.set_model("sonnet".into()).await.unwrap();
     handle.set_permission_mode("plan".into()).await.unwrap();
     let id = session.session_id().to_owned();
+    handle
+        .send_turn("establish conversation".into())
+        .await
+        .unwrap();
+    turn_ended(&mut session).await;
     handle.send_turn("crash".into()).await.unwrap();
     event(&mut session, |event| {
         matches!(event, SessionEvent::Ready { resumed: true, .. })
@@ -525,4 +533,100 @@ async fn an_unresponsive_process_is_reaped_after_the_pause_grace_period() {
     assert!(!stopped.graceful);
     let reports = fixture.reports();
     assert!(reports.iter().any(|report| report["kind"] == "interrupt"));
+}
+
+#[tokio::test]
+async fn an_unused_session_recovers_with_the_same_id_without_resuming() {
+    let fixture = Fixture::new();
+    let mut options = fixture.options();
+    options.environment.insert(
+        "DEVORA_FAKE_CRASH_UNUSED".into(),
+        fixture
+            .root
+            .path()
+            .join("crashed-once")
+            .to_str()
+            .unwrap()
+            .into(),
+    );
+    let mut session = Session::start(options, fixture.log()).await.unwrap();
+    event(&mut session, |event| {
+        matches!(
+            event,
+            SessionEvent::Exited {
+                restarting: true,
+                ..
+            }
+        )
+    })
+    .await;
+    event(&mut session, |event| {
+        matches!(event, SessionEvent::Ready { resumed: false, .. })
+    })
+    .await;
+    let starts: Vec<_> = fixture
+        .reports()
+        .into_iter()
+        .filter(|row| row["kind"] == "start")
+        .collect();
+    assert_eq!(starts.len(), 2);
+    for start in starts {
+        let args = start["args"].as_array().unwrap();
+        assert!(!args.contains(&json!("--resume")));
+        let index = args.iter().position(|arg| arg == "--session-id").unwrap();
+        assert_eq!(args[index + 1], session.session_id());
+    }
+    assert!(!session.pause().await.unwrap().has_conversation);
+}
+
+#[tokio::test]
+async fn a_control_timeout_uses_the_same_bounded_recovery_as_a_crash() {
+    let fixture = Fixture::new();
+    let mut session = Session::start(fixture.options(), fixture.log())
+        .await
+        .unwrap();
+    let handle = session.handle();
+    handle
+        .send_turn("establish conversation".into())
+        .await
+        .unwrap();
+    turn_ended(&mut session).await;
+    for attempt in 0..2 {
+        let control = handle.clone();
+        let reply = tokio::spawn(async move { control.set_model("hang".into()).await });
+        event(&mut session, |event| matches!(event,
+            SessionEvent::Message(Message::Raw(value)) if value["type"] == "fake_control_waiting"
+        )).await;
+        // Advance only after the child confirms it received the request. Real
+        // subprocess I/O remains on the running clock during restart.
+        tokio::time::pause();
+        tokio::time::advance(Duration::from_secs(30)).await;
+        tokio::time::resume();
+        assert!(reply.await.unwrap().is_err());
+        event(&mut session, |event| {
+            matches!(event,
+                SessionEvent::Exited { restarting, .. } if *restarting == (attempt == 0)
+            )
+        })
+        .await;
+        if attempt == 0 {
+            event(&mut session, |event| {
+                matches!(event, SessionEvent::Ready { resumed: true, .. })
+            })
+            .await;
+        } else {
+            event(&mut session, |event| {
+                matches!(event, SessionEvent::Failed(_))
+            })
+            .await;
+        }
+    }
+    assert_eq!(
+        fixture
+            .reports()
+            .iter()
+            .filter(|row| row["kind"] == "start")
+            .count(),
+        2
+    );
 }

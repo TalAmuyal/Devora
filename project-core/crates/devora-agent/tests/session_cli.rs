@@ -130,7 +130,7 @@ impl Fixture {
             self.root.path().join("precedence").display()
         );
         SessionOptions {
-            program: PathBuf::from("claude"),
+            program: pinned_cli(),
             working_directory: self.work.clone(),
             instructions,
             model: "haiku".into(),
@@ -195,6 +195,12 @@ async fn result_with_status(session: &mut Session, allow_error: bool) -> Value {
     .expect("offline CLI turn deadline")
 }
 
+fn pinned_cli() -> PathBuf {
+    std::env::var_os("DEVORA_TEST_CLAUDE_PROGRAM")
+        .map(PathBuf::from)
+        .expect("run through Sapphire test-agent-cli to provision the pinned CLI")
+}
+
 async fn check_pin() {
     let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
     let workflow = std::fs::read_to_string(repo.join(".github/workflows/ci.yml")).unwrap();
@@ -204,7 +210,7 @@ async fn check_pin() {
         .unwrap()
         .trim()
         .trim_matches('"');
-    let version = Command::new("claude")
+    let version = Command::new(pinned_cli())
         .arg("--version")
         .output()
         .await
@@ -605,7 +611,10 @@ async fn pinned_cli_pause_and_resume_retains_the_conversation() {
     let paused = first.pause().await.unwrap();
     assert!(paused.graceful);
     let mut resumed_options = options;
-    resumed_options.resume = Some(paused.session_id.clone());
+    resumed_options.resume = Some(Resume {
+        session_id: paused.session_id.clone(),
+        has_conversation: paused.has_conversation,
+    });
     let mut resumed = Session::start(resumed_options, fixture.log())
         .await
         .unwrap();
@@ -683,4 +692,119 @@ async fn pinned_cli_user_settings_can_override_transport_auth() {
         }
         backend.stop().await;
     }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires CI-pinned Claude CLI, Node and Sapphire npm dependencies"]
+async fn pinned_cli_can_reopen_an_unused_session() {
+    check_pin().await;
+    let fixture = Fixture::new();
+    let backend = Backend::start(fixture.root.path()).await;
+    let options = fixture.options(
+        backend.port,
+        Instructions::Append("Empty-session probe".into()),
+    );
+    let mut first = Session::start(options.clone(), fixture.log())
+        .await
+        .unwrap();
+    let paused = first.pause().await.unwrap();
+    assert!(paused.graceful);
+    assert!(!paused.has_conversation);
+    let mut reopened_options = options;
+    reopened_options.resume = Some(Resume {
+        session_id: paused.session_id.clone(),
+        has_conversation: paused.has_conversation,
+    });
+    let mut reopened = Session::start(reopened_options, fixture.log())
+        .await
+        .unwrap();
+    reopened
+        .handle()
+        .send_turn("First turn after reopening.".into())
+        .await
+        .unwrap();
+    result(&mut reopened).await;
+    reopened.pause().await.unwrap();
+    backend.stop().await;
+}
+
+// No current Judgess rule emits Defer. Its mapper has a separate unit contract.
+// This controlled command hook supplies that same ask payload to the real CLI,
+// while the runtime's real Judgess callback abstains on the rm command.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires CI-pinned Claude CLI, Node and Sapphire npm dependencies"]
+async fn pinned_cli_hook_ask_forces_a_question_in_auto_mode() {
+    check_pin().await;
+    let fixture = Fixture::new();
+    let mut backend = Backend::start(fixture.root.path()).await;
+    let marker = fixture.work.join("must-remain");
+    std::fs::write(&marker, "protected by the permission answer").unwrap();
+    backend
+        .command(json!({"action":"configure", "toolCommand":format!("rm {}", marker.display())}))
+        .await;
+    let mut options = fixture.options(
+        backend.port,
+        Instructions::Append("Controlled Defer probe".into()),
+    );
+    let output = json!({"hookSpecificOutput": {
+        "hookEventName":"PreToolUse", "permissionDecision":"ask",
+        "permissionDecisionReason":"Judgess defers this to the user (irreversible-rm)"
+    }});
+    options.settings["hooks"]["PreToolUse"] = json!([{
+        "matcher":"Bash", "hooks":[{"type":"command", "command":format!("printf '%s' '{}'", output)}]
+    }]);
+    assert_eq!(options.permission_mode, "auto");
+    let mut session = Session::start(options, fixture.log()).await.unwrap();
+    let handle = session.handle();
+    handle
+        .send_turn("Perform the tool call.".into())
+        .await
+        .unwrap();
+    let mut asked = false;
+    let mut abstained = false;
+    tokio::time::timeout(Duration::from_secs(45), async {
+        while let Some(event) = session.next_event().await {
+            match event {
+                SessionEvent::ToolJudged { verdict, .. } => {
+                    assert!(matches!(verdict, judgess::Verdict::Abstain(_)));
+                    abstained = true;
+                }
+                SessionEvent::PermissionRequested {
+                    request_id,
+                    question,
+                } => {
+                    assert_eq!(question.tool_name, "Bash");
+                    asked = true;
+                    handle
+                        .answer_permission(
+                            request_id,
+                            PermissionAnswer::Deny {
+                                message: "User denied the deferred command".into(),
+                            },
+                        )
+                        .await
+                        .unwrap();
+                }
+                SessionEvent::Message(Message::Known(KnownMessage::Result(result))) => {
+                    assert!(!result.is_error, "{result:?}");
+                    break;
+                }
+                SessionEvent::Failed(error) => panic!("{error}"),
+                _ => {}
+            }
+        }
+    })
+    .await
+    .expect("hook ask turn deadline");
+    assert!(asked && abstained);
+    assert!(
+        marker.exists(),
+        "a denied deferred command must not execute"
+    );
+    session.pause().await.unwrap();
+    let snapshot = backend.command(json!({"action":"snapshot"})).await;
+    assert!(snapshot
+        .to_string()
+        .contains("User denied the deferred command"));
+    backend.stop().await;
 }

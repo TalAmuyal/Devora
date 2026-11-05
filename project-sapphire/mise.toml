@@ -112,7 +112,7 @@ run = [{ task = "test-unit" }, { task = "test-agent-cli" }, { task = "test-accep
 [tasks.test-agent-cli]
 description = "Verify the CI-pinned Claude CLI against the offline agent backend"
 depends = ["npm-install"]
-run = "cargo test --manifest-path ../project-core/Cargo.toml -p devora-agent --test session_cli -- --ignored --test-threads=1"
+run = "node --import tsx scripts/test-agent-cli.ts"
 
 [tasks.test-unit]
 description = "Run the Swift tests against the real core"

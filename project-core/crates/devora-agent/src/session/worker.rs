@@ -124,6 +124,7 @@ struct Worker {
     initialized: bool,
     ever_ready: bool,
     active_turn: bool,
+    has_conversation: bool,
     model: String,
     mode: String,
     sequence: u64,
@@ -149,6 +150,7 @@ fn next_deadline(
 enum End {
     Eof(Option<i32>, bool),
     ForcedStop,
+    Unresponsive,
 }
 
 pub(super) async fn run(
@@ -162,6 +164,10 @@ pub(super) async fn run(
     let mut worker = Worker {
         model: options.model.clone(),
         mode: options.permission_mode.clone(),
+        has_conversation: options
+            .resume
+            .as_ref()
+            .is_some_and(|resume| resume.has_conversation),
         options,
         id,
         log,
@@ -178,8 +184,8 @@ pub(super) async fn run(
         stopping: None,
         crash_restarts: 0,
     };
-    let mut resume = worker.options.resume.is_some();
     loop {
+        let resume = worker.has_conversation;
         let mut process = match Process::spawn(
             &worker.options,
             &worker.id,
@@ -207,6 +213,13 @@ pub(super) async fn run(
         let result = match worker.control(&mut process, initialize, None).await {
             Ok(()) => worker.serve(&mut process, &mut commands, resume).await,
             Err(error) => Err(error),
+        };
+        let result = if matches!(result, Ok(End::Unresponsive)) {
+            worker.warn("Claude control request timed out; terminating it".into());
+            process.kill().await;
+            Ok(End::Eof(None, false))
+        } else {
+            result
         };
         match result {
             Ok(End::ForcedStop) => {
@@ -236,13 +249,13 @@ pub(super) async fn run(
                 worker.crash_restarts += 1;
                 worker.initialized = false;
                 worker.active_turn = false;
-                resume = true;
             }
             Err(error) => {
                 process.kill().await;
                 worker.fail(error);
                 return;
             }
+            Ok(End::Unresponsive) => unreachable!("converted to an exit above"),
         }
     }
 }
@@ -291,6 +304,7 @@ impl Worker {
         }
         let info = StopInfo {
             session_id: self.id.clone(),
+            has_conversation: self.has_conversation,
             graceful,
         };
         if let Some(stopping) = self.stopping.take() {
@@ -384,7 +398,7 @@ impl Worker {
                         self.warn("Claude did not stop within the grace period; terminating it".into());
                         return Ok(End::ForcedStop);
                     }
-                    return Err("Claude control request timed out".into());
+                    return Ok(End::Unresponsive);
                 }
             }
             self.close_if_stopped(process);
@@ -548,6 +562,7 @@ impl Worker {
                         .map_err(|error| format!("invalid initialize response: {error}"))?;
                     self.initialized = true;
                     self.ever_ready = true;
+                    self.has_conversation |= resumed;
                     self.emit(SessionEvent::Ready {
                         session_id: self.id.clone(),
                         resumed,
@@ -703,6 +718,7 @@ impl Worker {
             })) => self.emit(SessionEvent::Compacted(compact_metadata.clone())),
             Message::Known(KnownMessage::Result(result)) => {
                 self.active_turn = false;
+                self.has_conversation = true;
                 if !result.is_error {
                     self.crash_restarts = 0;
                 }

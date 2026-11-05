@@ -54,6 +54,9 @@ for line in sys.stdin:
         report({"kind":subtype})
         if subtype == "interrupt" and ignore_interrupt:
             continue
+        if subtype == "set_model" and request.get("model") == "hang":
+            emit({"type":"fake_control_waiting"})
+            continue
         if subtype == "initialize":
             if os.environ.get("DEVORA_FAKE_INIT_ERROR"):
                 emit({"type":"control_response","response":{"subtype":"error","request_id":message["request_id"],"error":"initialize refused"}})
@@ -62,6 +65,11 @@ for line in sys.stdin:
             response["response"]["request_id"] = message["request_id"]
             emit(response)
             emit(recorded("system"))
+            if os.environ.get("DEVORA_FAKE_CRASH_UNUSED"):
+                marker = pathlib.Path(os.environ["DEVORA_FAKE_CRASH_UNUSED"])
+                if not marker.exists():
+                    marker.touch()
+                    os._exit(70)
         else:
             emit({"type":"control_response","response":{"subtype":"success","request_id":message["request_id"],
                 "response":{"subtype":subtype,"mode":request.get("mode"),"model":request.get("model")}}})

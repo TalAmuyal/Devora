@@ -8,9 +8,10 @@
 //! replies and stdin writes are bounded to 30 seconds. Pause gives an interrupted
 //! turn five seconds to finish before terminating and reaping the process.
 //!
-//! Unexpected exit gets one automatic resume attempt. A successful turn re-arms
+//! Unexpected exit or control timeout gets one automatic restart. A successful turn re-arms
 //! that recovery budget. Failed initialization and repeated crashes surface a
-//! Failed event. Idle sessions have no timer.
+//! Failed event. Idle sessions have no timer. Before a conversation exists, a
+//! restart reuses --session-id. After a result or successful resume, it uses --resume.
 //!
 //! The caller's event loop owns history and context policy. Usage and compaction
 //! boundaries are delivered directly from the CLI. Space-specific state stays
@@ -24,7 +25,7 @@ use crate::protocol::{
     CompactMetadata, ControlRequest, InitializeResponse, Message, PermissionRequest,
 };
 use devora_app::log::Log;
-pub use launch::{Instructions, Plugin, SessionOptions};
+pub use launch::{Instructions, Plugin, Resume, SessionOptions};
 use serde_json::{Map, Value};
 use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot};
@@ -83,6 +84,9 @@ pub enum SessionEvent {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StopInfo {
     pub session_id: String,
+    /// True after a result or successful resume. Persist alongside the ID so
+    /// an unused session can reopen with --session-id.
+    pub has_conversation: bool,
     pub graceful: bool,
 }
 
@@ -199,7 +203,8 @@ impl Session {
     pub async fn start(options: SessionOptions, log: Arc<Log>) -> Result<Self, String> {
         let session_id = options
             .resume
-            .clone()
+            .as_ref()
+            .map(|resume| resume.session_id.clone())
             .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
         worker::check_version(&options).await?;
         let (commands, received) = mpsc::unbounded_channel();
