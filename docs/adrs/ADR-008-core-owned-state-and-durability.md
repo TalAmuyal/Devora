@@ -2,7 +2,8 @@
 
 ## Status
 
-Accepted
+Accepted.
+ADR-012 keeps an Agent Space agent's conversation history in the space's own database instead of `conversations.db`.
 
 ## Date
 
