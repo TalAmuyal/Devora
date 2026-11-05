@@ -235,6 +235,23 @@ pub struct ClaudeSettingsResponse {
     pub resolved: serde_json::Map<String, Value>,
 }
 
+impl ClaudeSettingsResponse {
+    /// Resolved model aliases using the same key/environment metadata as CCC.
+    /// Explicit None values are omitted so the CLI can use its own alias.
+    pub fn model_alias_env(&self) -> HashMap<String, String> {
+        CLAUDE_SETTINGS
+            .iter()
+            .filter(|spec| spec.env_var.starts_with("ANTHROPIC_DEFAULT_"))
+            .filter_map(|spec| {
+                self.resolved
+                    .get(spec.key)?
+                    .as_str()
+                    .map(|value| (spec.env_var.to_owned(), value.to_owned()))
+            })
+            .collect()
+    }
+}
+
 /// Reads a config file, returning `Ok(None)` when it does not exist.
 fn read_config_opt(path: &Path) -> Result<Option<Value>, String> {
     if path.exists() {

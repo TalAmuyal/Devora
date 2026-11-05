@@ -695,6 +695,14 @@ pub fn delete_workspace(workspace_path: &str) -> Result<(), String> {
 /// Deregister all child worktrees before removing their containing directory.
 /// Shared by workspace and Agent Space deletion and failure cleanup.
 pub fn remove_worktree_directory(ws_dir: &Path, repo_names: Vec<String>) -> Result<(), String> {
+    remove_worktrees(ws_dir, repo_names)?;
+    fs::remove_dir_all(ws_dir).map_err(|e| format!("failed to remove workspace directory: {e}"))?;
+    Ok(())
+}
+
+/// Deregister linked worktrees, leaving their containing directory to its owner.
+/// This lets Agent Spaces hold their catalogue lock only for the final removal.
+pub fn remove_worktrees(ws_dir: &Path, repo_names: Vec<String>) -> Result<(), String> {
     let handles: Vec<_> = repo_names
         .into_iter()
         .map(|repo_name| {
@@ -728,8 +736,6 @@ pub fn remove_worktree_directory(ws_dir: &Path, repo_names: Vec<String>) -> Resu
             Err(_) => return Err("thread panicked during worktree removal".to_string()),
         }
     }
-
-    fs::remove_dir_all(ws_dir).map_err(|e| format!("failed to remove workspace directory: {e}"))?;
 
     Ok(())
 }

@@ -451,3 +451,114 @@ async fn dropping_after_a_cancelled_pause_persists_before_releasing_ownership() 
     .unwrap();
     assert!(reopened.saved_session().has_conversation);
 }
+
+#[test]
+fn a_held_creation_keeps_the_catalogue_available_for_other_spaces() {
+    use devora_workspace::creation::CreationEvent;
+    use std::sync::{mpsc, Mutex};
+    let fixture = Fixture::new();
+    assert!(Space::list(&fixture.profile).unwrap().is_empty());
+    assert!(
+        !fixture.profile.join("agent-spaces").exists(),
+        "listing is read-only"
+    );
+    drop(fixture.create(fixture.form("existing")).unwrap());
+    drop(fixture.create(fixture.form("deletable")).unwrap());
+    let source = fixture.repo("repo");
+    let mut form = fixture.form("creating");
+    form.repos.push(source.display().to_string());
+    let (entered, waiting) = mpsc::channel();
+    let (release, released) = mpsc::channel();
+    let released = Mutex::new(released);
+    let events: EventSink = Arc::new(move |event| {
+        if matches!(event,CreationEvent::Step{label} if label == "Fetching repo") {
+            entered.send(()).unwrap();
+            released
+                .lock()
+                .unwrap()
+                .recv_timeout(Duration::from_secs(20))
+                .unwrap();
+        }
+    });
+    let profile = fixture.profile.clone();
+    let global = fixture.global.clone();
+    let worker = std::thread::spawn(move || {
+        Space::create(
+            &profile,
+            form,
+            BTreeMap::new(),
+            &global,
+            &CreationHandle::new(),
+            &events,
+            &mut vec![],
+        )
+    });
+    waiting.recv_timeout(Duration::from_secs(10)).unwrap();
+    // Listing must also complete while a short catalogue mutation owns the lock.
+    let catalogue = std::fs::OpenOptions::new()
+        .write(true)
+        .open(fixture.profile.join("agent-spaces/.lock"))
+        .unwrap();
+    fs2::FileExt::lock_exclusive(&catalogue).unwrap();
+    let profile = fixture.profile.clone();
+    let (listed, listing) = mpsc::channel();
+    let reader = std::thread::spawn(move || {
+        listed.send(Space::list(&profile)).unwrap();
+    });
+    let result = listing.recv_timeout(Duration::from_secs(5));
+    fs2::FileExt::unlock(&catalogue).unwrap();
+    reader.join().unwrap();
+    let entries = result
+        .expect("listing must not wait for the catalogue lock")
+        .unwrap();
+    assert!(entries
+        .iter()
+        .find(|entry| entry.name == "creating")
+        .unwrap()
+        .error
+        .as_ref()
+        .unwrap()
+        .contains("incomplete"));
+    drop(Space::open(&fixture.profile, "existing").unwrap());
+    Space::delete(&fixture.profile, "deletable").unwrap();
+    release.send(()).unwrap();
+    let completed = worker.join().unwrap().unwrap();
+    assert_eq!(completed.identity().name, "creating");
+}
+
+#[test]
+fn profile_model_aliases_reach_inline_settings_and_explicit_host_values_win() {
+    let fixture = Fixture::new();
+    std::fs::write(
+        &fixture.global,
+        json!({"claude":{
+            "opus-model":"global-opus","sonnet-model":"global-sonnet","haiku-model":"global-haiku"
+        }})
+        .to_string(),
+    )
+    .unwrap();
+    std::fs::write(fixture.profile.join("config.json"),json!({"claude":{
+        "opus-model":"profile-opus","sonnet-model":"profile-sonnet","haiku-model":null,"permission-mode":"plan"
+    }}).to_string()).unwrap();
+    let space = fixture.create(fixture.form("Delta")).unwrap();
+    let mut context = fixture.context();
+    context.settings = json!({"env":{"ANTHROPIC_DEFAULT_OPUS_MODEL":"host-opus","HOST_ONLY":"keep"},"host_setting":true});
+    let options = space.session_options(&context).unwrap();
+    assert_eq!(
+        options.settings["env"]["ANTHROPIC_DEFAULT_OPUS_MODEL"],
+        "host-opus"
+    );
+    assert_eq!(
+        options.settings["env"]["ANTHROPIC_DEFAULT_SONNET_MODEL"],
+        "profile-sonnet"
+    );
+    assert!(options.settings["env"]
+        .get("ANTHROPIC_DEFAULT_HAIKU_MODEL")
+        .is_none());
+    assert_eq!(options.settings["env"]["HOST_ONLY"], "keep");
+    assert_eq!(options.settings["host_setting"], true);
+    assert!(options.settings["env"]
+        .get("DEVORA_CCC_PERMISSION_MODE")
+        .is_none());
+    assert_eq!(options.permission_mode, "auto");
+}

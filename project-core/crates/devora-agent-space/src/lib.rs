@@ -2,6 +2,8 @@
 //! Each open space holds a plain OS lock until its session has stopped. Incomplete
 //! creations remain visible as invalid entries after a process crash. Ordinary
 //! failures synchronously deregister worktrees and clean up the reserved path.
+//! The blocking catalogue lock covers short reservation/removal sections. Listing
+//! is read-only, and each space retains its own fail-fast ownership lock while creating or open.
 mod db;
 mod running;
 pub mod template;
@@ -41,7 +43,7 @@ pub struct CreationForm {
 
 /// Host-owned executable, selected plugins, behavioral settings and scrubbed
 /// transport environment. Configured tool env belongs in settings.env. Credentials
-/// stay in environment. The containing profile supplies model and effort values.
+/// stay in environment. The containing profile supplies model, effort and alias values.
 #[derive(Clone)]
 pub struct LaunchContext {
     pub global_config: PathBuf,
@@ -93,27 +95,53 @@ impl Drop for Lock {
     }
 }
 
-fn lock(path: &Path) -> Result<Lock, String> {
+fn open_lock_file(path: &Path) -> Result<File, String> {
     if fs::symlink_metadata(path).is_ok_and(|m| m.file_type().is_symlink()) {
         return Err(format!("lock cannot be a symlink: {}", path.display()));
     }
-    let file = OpenOptions::new()
+    OpenOptions::new()
         .create(true)
         .truncate(false)
         .write(true)
         .open(path)
-        .map_err(storage)?;
+        .map_err(storage)
+}
+
+fn lock(path: &Path) -> Result<Lock, String> {
+    let file = open_lock_file(path)?;
     file.try_lock_exclusive()
         .map_err(|e| format!("agent space is in use: {e}"))?;
     Ok(Lock(file))
 }
 
-fn catalogue(profile: &Path) -> Result<(PathBuf, Lock), String> {
-    let root = profile.join("agent-spaces");
-    fs::create_dir_all(&root).map_err(storage)?;
-    let root = fs::canonicalize(root).map_err(storage)?;
-    let guard = lock(&root.join(".lock"))?;
-    Ok((root, guard))
+fn catalogue(profile: &Path) -> Result<PathBuf, String> {
+    fs::canonicalize(profile.join("agent-spaces")).map_err(storage)
+}
+
+fn catalogue_lock(root: &Path) -> Result<Lock, String> {
+    let file = open_lock_file(&root.join(".lock"))?;
+    file.lock_exclusive().map_err(storage)?;
+    Ok(Lock(file))
+}
+
+fn reserve(root: &Path, path: &Path, name: &str) -> Result<Lock, String> {
+    let _catalogue = catalogue_lock(root)?;
+    match fs::create_dir(path) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+            return Err(format!("agent space '{name}' already exists"));
+        }
+        Err(error) => return Err(storage(error)),
+    }
+    match lock(&path.join(".agent-space.lock")) {
+        Ok(ownership) => Ok(ownership),
+        Err(error) => {
+            if let Err(cleanup) = fs::remove_dir_all(path) {
+                return Err(format!("{error}; cleanup failed: {cleanup}"));
+            }
+            Err(error)
+        }
+    }
 }
 
 fn checked_path(root: &Path, name: &str) -> Result<PathBuf, String> {
@@ -126,14 +154,16 @@ fn checked_path(root: &Path, name: &str) -> Result<PathBuf, String> {
     Ok(path)
 }
 
-fn remove_directory(path: &Path) -> Result<(), String> {
+fn remove_directory(root: &Path, path: &Path) -> Result<(), String> {
     // Spaces also contain memory and other agent-owned directories. Only linked
     // worktrees need Git deregistration before the whole space is removed.
     let repos = workspace::list_repo_subdirs(path)
         .into_iter()
         .filter(|name| path.join(name).join(".git").is_file())
         .collect();
-    workspace::remove_worktree_directory(path, repos)
+    workspace::remove_worktrees(path, repos)?;
+    let _catalogue = catalogue_lock(root)?;
+    fs::remove_dir_all(path).map_err(storage)
 }
 
 impl Space {
@@ -150,10 +180,14 @@ impl Space {
     ) -> Result<Self, String> {
         validate_name(&form.name)?;
         let profile = fs::canonicalize(profile).map_err(storage)?;
-        let (root, _catalogue) = catalogue(&profile)?;
+        fs::create_dir_all(profile.join("agent-spaces")).map_err(storage)?;
+        let root = catalogue(&profile)?;
         let path = root.join(&form.name);
-        if fs::symlink_metadata(&path).is_ok() {
-            return Err(format!("agent space '{}' already exists", form.name));
+        {
+            let _catalogue = catalogue_lock(&root)?;
+            if fs::symlink_metadata(&path).is_ok() {
+                return Err(format!("agent space '{}' already exists", form.name));
+            }
         }
         let registered =
             workspace::get_registered_repos(profile.to_str().ok_or("profile path is not UTF-8")?)?;
@@ -223,15 +257,8 @@ impl Space {
             name: form.name.clone(),
             role,
         };
-        match fs::create_dir(&path) {
-            Ok(()) => {}
-            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
-                return Err(format!("agent space '{}' already exists", form.name))
-            }
-            Err(e) => return Err(storage(e)),
-        }
+        let ownership = reserve(&root, &path, &form.name)?;
         let result = (|| {
-            let ownership = lock(&path.join(".agent-space.lock"))?;
             let mut db = Db::create(&path.join(DATABASE), &identity, &form, &instructions)?;
             fs::create_dir(path.join("memory")).map_err(storage)?;
             creation::create_worktrees(
@@ -244,8 +271,11 @@ impl Space {
             )?;
             db.finish_creation()?;
             let (_, _, _, resume) = db.load()?;
-            Ok(Self {
-                path: path.clone(),
+            Ok((db, resume))
+        })();
+        match result {
+            Ok((db, resume)) => Ok(Self {
+                path,
                 profile,
                 db,
                 _ownership: ownership,
@@ -253,11 +283,8 @@ impl Space {
                 form,
                 instructions,
                 resume,
-            })
-        })();
-        match result {
-            Ok(space) => Ok(space),
-            Err(error) => match remove_directory(&path) {
+            }),
+            Err(error) => match remove_directory(&root, &path) {
                 Ok(()) => Err(error),
                 Err(cleanup) => Err(format!("{error}; cleanup failed: {cleanup}")),
             },
@@ -266,9 +293,13 @@ impl Space {
 
     pub fn open(profile: &Path, name: &str) -> Result<Self, String> {
         let profile = fs::canonicalize(profile).map_err(storage)?;
-        let (root, _catalogue) = catalogue(&profile)?;
-        let path = checked_path(&root, name)?;
-        let ownership = lock(&path.join(".agent-space.lock"))?;
+        let root = catalogue(&profile)?;
+        let (path, ownership) = {
+            let _catalogue = catalogue_lock(&root)?;
+            let path = checked_path(&root, name)?;
+            let ownership = lock(&path.join(".agent-space.lock"))?;
+            (path, ownership)
+        };
         let db = Db::open(&path.join(DATABASE), false)?;
         let (identity, form, instructions, resume) = db.load()?;
         if identity.name != name {
@@ -287,9 +318,13 @@ impl Space {
     }
 
     pub fn list(profile: &Path) -> Result<Vec<Entry>, String> {
-        let (root, _catalogue) = catalogue(profile)?;
+        let directory = match fs::read_dir(profile.join("agent-spaces")) {
+            Ok(directory) => directory,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(vec![]),
+            Err(error) => return Err(storage(error)),
+        };
         let mut entries = vec![];
-        for item in fs::read_dir(root).map_err(storage)? {
+        for item in directory {
             let item = item.map_err(storage)?;
             let name = item.file_name().to_string_lossy().into_owned();
             if name.starts_with('.') {
@@ -321,10 +356,14 @@ impl Space {
     }
 
     pub fn delete(profile: &Path, name: &str) -> Result<(), String> {
-        let (root, _catalogue) = catalogue(profile)?;
-        let path = checked_path(&root, name)?;
-        let _ownership = lock(&path.join(".agent-space.lock"))?;
-        remove_directory(&path)
+        let root = catalogue(profile)?;
+        let (path, _ownership) = {
+            let _catalogue = catalogue_lock(&root)?;
+            let path = checked_path(&root, name)?;
+            let ownership = lock(&path.join(".agent-space.lock"))?;
+            (path, ownership)
+        };
+        remove_directory(&root, &path)
     }
 
     pub fn identity(&self) -> &Identity {
@@ -358,6 +397,17 @@ impl Space {
                 .map(str::to_owned)
                 .ok_or_else(|| format!("agent session requires explicit {key}"))
         };
+        let mut behavior = context.settings.clone();
+        let env = behavior
+            .as_object_mut()
+            .ok_or("settings must be a JSON object")?
+            .entry("env")
+            .or_insert_with(|| serde_json::json!({}))
+            .as_object_mut()
+            .ok_or("settings.env must be a JSON object")?;
+        for (key, value) in settings.model_alias_env() {
+            env.entry(key).or_insert(Value::String(value));
+        }
         Ok(SessionOptions {
             program: context.program.clone(),
             working_directory: self.path.clone(),
@@ -366,7 +416,7 @@ impl Space {
             effort: required("effort")?,
             permission_mode: "auto".into(),
             plugins: context.plugins.clone(),
-            settings: context.settings.clone(),
+            settings: behavior,
             environment: context.environment.clone(),
             resume: Some(self.resume.clone()),
         })
