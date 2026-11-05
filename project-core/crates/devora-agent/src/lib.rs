@@ -5,6 +5,8 @@
 
 /// Typed wire messages and forward-compatible parsing, verified against recorded CLI fixtures.
 pub mod protocol;
+/// Persistent process lifecycle, interactive control and in-process Judgess.
+pub mod session;
 /// The shared minimum CLI version check for future runtime and Rust health consumers.
 pub mod version;
 

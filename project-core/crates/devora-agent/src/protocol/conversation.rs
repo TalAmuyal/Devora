@@ -123,6 +123,15 @@ pub struct Usage {
     pub extra: Map<String, Value>,
 }
 
+/// A streaming usage update. Input/cache counters are optional on the wire and
+/// remain in extra when present, while output_tokens is always supplied.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PartialUsage {
+    pub output_tokens: u64,
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
+}
+
 /// Partial conversation events. Token deltas are protocol events, independent of
 /// any UI-facing state or durable history representation.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -152,7 +161,7 @@ pub enum StreamEvent {
     },
     MessageDelta {
         delta: MessageDelta,
-        usage: Usage,
+        usage: PartialUsage,
         #[serde(flatten)]
         extra: Map<String, Value>,
     },
