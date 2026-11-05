@@ -1,4 +1,6 @@
 import assert from 'node:assert';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { Given, When, Then } from '@cucumber/cucumber';
 import type { Modifier } from '../support/bridge';
 import { SapphireWorld } from '../support/world';
@@ -51,4 +53,32 @@ Then('the terminal font size should be {int}', async function (this: SapphireWor
 Then('no session should have the keyboard focus', async function (this: SapphireWorld) {
   const { tabs } = await this.bridge.state();
   assert.deepStrictEqual(tabs.filter((tab) => tab.focused).map((tab) => tab.id), []);
+});
+
+/** The PTY size a program in the tab's shell sees, as `stty size` reports it. */
+async function ptySize(world: SapphireWorld, tab: number): Promise<{ rows: number; cols: number }> {
+  const report = path.join(world.scenarioDir, `stty-${tab}-${Date.now()}`);
+  await world.bridge.typeLine(`stty size > '${report}'`, tab);
+  const text = await world.bridge.waitFor(`tab ${tab}'s stty size`, async () => fs.existsSync(report) ? fs.readFileSync(report, 'utf8').trim() : '', (value) => /^\d+ \d+$/.test(value));
+  const [rows, cols] = text.split(' ').map(Number);
+  return { rows, cols };
+}
+
+Given('every session\'s terminal size is recorded', async function (this: SapphireWorld) {
+  const { tabs } = await this.bridge.state();
+  this.recordedSizes = await Promise.all(tabs.map((tab) => ptySize(this, tab.id)));
+});
+
+// A smaller font fits more columns: every terminal, the background ones included, must be refit to the same, wider size.
+Then('every session\'s terminal should be refit to the same, wider size', async function (this: SapphireWorld) {
+  const { tabs } = await this.bridge.state();
+  const before = this.recordedSizes!;
+  const deadline = Date.now() + 10_000;
+  let sizes: { rows: number; cols: number }[] = [];
+  while (Date.now() < deadline) {
+    sizes = await Promise.all(tabs.map((tab) => ptySize(this, tab.id)));
+    if (sizes.every((size, i) => size.cols > before[i].cols && size.cols === sizes[0].cols && size.rows === sizes[0].rows)) return;
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  assert.fail(`terminal sizes before ${JSON.stringify(before)}, after ${JSON.stringify(sizes)}`);
 });
