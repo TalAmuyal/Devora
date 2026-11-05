@@ -20,7 +20,6 @@ Types of changes:
 
 ### Added
 
-- Shared agent core has typed Claude Code conversation and control messages, with recorded protocol contracts and a reusable minimum-version check
 - Nightly releases include a signed Devora Sapphire app in `Devora-Sapphire.dmg`, alongside `Devora-Ember.dmg`; the shared installer selects Sapphire with `--app sapphire --nightly` and defaults to Ember
 - Devora Sapphire can be built and installed from source with bundled tools, plugins, themes and User Guide through `mise run sapphire-install`, including separate suffixed installs
 - Devora Sapphire supports stacked file previews and draggable dividers, with sizes restored after restart and minimum widths preserved in narrow windows
