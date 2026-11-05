@@ -361,3 +361,14 @@ fn permission_and_hook_answers_use_their_distinct_response_payloads() {
         json!({})
     );
 }
+
+#[test]
+fn streaming_usage_can_report_only_output_tokens() {
+    let value = json!({"type":"stream_event","event":{"type":"message_delta",
+        "delta":{"stop_reason":"tool_use"},"usage":{"output_tokens":7}}});
+    let message = decode(value.clone());
+    assert!(matches!(&message,Message::Known(KnownMessage::StreamEvent {
+        event:Extensible::Known(StreamEvent::MessageDelta { usage,.. }),..
+    }) if usage.output_tokens==7));
+    assert_eq!(serde_json::to_value(message).unwrap(), value);
+}

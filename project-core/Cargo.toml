@@ -35,3 +35,6 @@ serde_json = "1"
 tempfile = "3"
 tokio = { version = "1", features = ["rt", "net"] }
 uuid = { version = "1", features = ["v4"] }
+
+[profile.release]
+panic = "unwind"

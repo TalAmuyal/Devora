@@ -106,8 +106,13 @@ node --import tsx scripts/bundle-smoke.ts
 '''
 
 [tasks.test]
-description = "Run unit, acceptance, real-input UI (where available) and signed bundle smoke tests"
-run = [{ task = "test-unit" }, { task = "test-acceptance" }, { task = "test-ui" }, { task = "test-bundle" }]
+description = "Run unit tests, pinned Claude contracts, acceptance, real-input UI and signed bundle smoke"
+run = [{ task = "test-unit" }, { task = "test-agent-cli" }, { task = "test-acceptance" }, { task = "test-ui" }, { task = "test-bundle" }]
+
+[tasks.test-agent-cli]
+description = "Verify the CI-pinned Claude CLI against the offline agent backend"
+depends = ["npm-install"]
+run = "cargo test --manifest-path ../project-core/Cargo.toml -p devora-agent --test session_cli -- --ignored --test-threads=1"
 
 [tasks.test-unit]
 description = "Run the Swift tests against the real core"
