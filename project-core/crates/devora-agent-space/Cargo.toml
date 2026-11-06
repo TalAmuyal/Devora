@@ -1,0 +1,21 @@
+[package]
+name = "devora-agent-space"
+description = "Persistent Agent Spaces, creation-time instructions and space-bound sessions."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+devora-agent.workspace = true
+devora-app.workspace = true
+devora-config.workspace = true
+devora-workspace.workspace = true
+fs2.workspace = true
+rusqlite.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio = { workspace = true, features = ["sync", "rt", "macros"] }
+uuid.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

@@ -187,27 +187,7 @@ pub fn create_with_claim(
     fs::create_dir_all(&workspaces_dir)
         .map_err(|e| format!("failed to create workspaces dir: {e}"))?;
 
-    // Resolve each repo to a worktree spec with its checkout target decided up front: the source workspace's current commit when duplicating a repo it already has, otherwise the latest default branch.
-    let mut repos: Vec<RepoSpec> = Vec::new();
-    for repo_path in repo_paths {
-        let expanded = config::expand_tilde(repo_path)?;
-        let name = Path::new(&expanded)
-            .file_name()
-            .map(|n| n.to_string_lossy().into_owned())
-            .ok_or_else(|| format!("invalid repo path: {expanded}"))?;
-        let pinned = source_workspace_path
-            .and_then(|src| resolve_pinned_commit(Path::new(src), &name, Path::new(&expanded)));
-        let (target_ref, fetch_first) = match pinned {
-            Some(sha) => (sha, false),
-            None => (determine_default_branch(Path::new(&expanded)), true),
-        };
-        repos.push(RepoSpec {
-            source: expanded,
-            name,
-            target_ref,
-            fetch_first,
-        });
-    }
+    let repos = resolve_repos(repo_paths, source_workspace_path)?;
     let repo_names: Vec<String> = repos.iter().map(|r| r.name.clone()).collect();
 
     on_event(CreationEvent::Step {
@@ -257,6 +237,60 @@ pub fn create_with_claim(
             }
         }
     }
+}
+
+fn resolve_repos(
+    repo_paths: &[String],
+    source_workspace_path: Option<&str>,
+) -> Result<Vec<RepoSpec>, String> {
+    let mut repos: Vec<RepoSpec> = Vec::new();
+    for repo_path in repo_paths {
+        let expanded = config::expand_tilde(repo_path)?;
+        let name = Path::new(&expanded)
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .ok_or_else(|| format!("invalid repo path: {expanded}"))?;
+        let pinned = source_workspace_path
+            .and_then(|src| resolve_pinned_commit(Path::new(src), &name, Path::new(&expanded)));
+        let (target_ref, fetch_first) = match pinned {
+            Some(sha) => (sha, false),
+            None => (determine_default_branch(Path::new(&expanded)), true),
+        };
+        repos.push(RepoSpec {
+            source: expanded,
+            name,
+            target_ref,
+            fetch_first,
+        });
+    }
+    Ok(repos)
+}
+
+/// Materialize the selected repos in an already reserved directory, using the
+/// same checkout, trust and prepare stages as workspace creation. The caller
+/// owns directory reservation, finalization and rollback after failure/cancel.
+pub fn create_worktrees(
+    handle: &CreationHandle,
+    profile_path: &str,
+    directory: &Path,
+    repo_paths: &[String],
+    on_event: &EventSink,
+    warnings: &mut Vec<String>,
+) -> Result<(), String> {
+    let repos = resolve_repos(repo_paths, None)?;
+    run_body(
+        handle,
+        profile_path,
+        &repos,
+        directory,
+        &Mode::Fresh,
+        on_event,
+        warnings,
+    )?;
+    if handle.is_cancelled() {
+        return Err("agent space creation cancelled".into());
+    }
+    Ok(())
 }
 
 /// Adds a worktree of `source_repo_path` to the workspace as `worktree_dir_name`, then runs the prepare-command and ensures the workspace's `CLAUDE.md`.

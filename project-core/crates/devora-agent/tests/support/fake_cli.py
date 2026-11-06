@@ -99,6 +99,9 @@ for line in sys.stdin:
             ignore_interrupt = text == "ignore-interrupt"
             emit(recorded("stream_event"))
             emit({"type":"fake_stream_ready"})
+        elif text == "assistant-then-crash":
+            emit(recorded("assistant"))
+            os._exit(70)
         elif text == "crash":
             os._exit(70)
         elif text == "drift":

@@ -9,6 +9,7 @@ publish = false
 
 [workspace.dependencies]
 devora-agent = { path = "crates/devora-agent" }
+devora-agent-space = { path = "crates/devora-agent-space" }
 devora-app = { path = "crates/devora-app" }
 devora-config = { path = "crates/devora-config" }
 devora-core = { path = "crates/devora-core" }

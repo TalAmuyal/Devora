@@ -10,6 +10,7 @@ const originalInteraction = structuredClone(peer.cassette.interactions[0]);
 let inputTokens: number | undefined;
 let toolCommand: string | undefined;
 let errorAt: number | undefined;
+let holdStream = false;
 let sequence = 0;
 let requests: unknown[] = [];
 
@@ -21,10 +22,11 @@ function interaction() {
     const line = wire.split('\n').find((line: string) => line.startsWith('data: '));
     if (!line) continue;
     const message = JSON.parse(line.slice(6));
-    if (message.type === 'content_block_start' && message.content_block.type === 'tool_use') {
+    if (message.type === 'content_block_start' && (message.content_block.type === 'tool_use' || (holdStream && message.content_block.type === 'thinking'))) {
       dropped.add(message.index);
     }
     if (dropped.has(message.index)) continue;
+    if (holdStream && message.index !== undefined) message.index = 0;
     if (message.type === 'message_start') {
       message.message.id += '_' + id;
       if (inputTokens !== undefined) {
@@ -104,6 +106,20 @@ peer.handleRequest = (request: any, response: any) => {
       settingsOAuth: request.headers.authorization === 'Bearer settings-oauth-token',
     }));
   }
+  if (holdStream && request.url?.startsWith('/v1/messages')) {
+    // Send a partial text response in one batch, without the cassette driver's
+    // inter-event pacing. The native stream stays open until the CLI is stopped.
+    request.on('end', () => {
+      response.writeHead(200, { 'content-type': 'text/event-stream' });
+      const events = interaction().response.sse_events;
+      for (const wire of events) {
+        response.write(wire);
+        if (wire.includes('"type":"text_delta"')) break;
+      }
+    });
+    request.resume();
+    return;
+  }
   handle(request, response);
 };
 await server.start();
@@ -115,6 +131,7 @@ for await (const line of lines) {
     inputTokens = command.inputTokens;
     toolCommand = command.toolCommand;
     errorAt = command.errorAt;
+    holdStream = command.holdStream ?? false;
     reset();
     process.stdout.write(JSON.stringify({ type: 'configured' }) + '\n');
   } else if (command.action === 'snapshot') {
