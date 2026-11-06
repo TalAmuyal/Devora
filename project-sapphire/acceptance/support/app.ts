@@ -7,6 +7,9 @@ import { Bridge, type AppState } from './bridge';
 const PROJECT_DIR = path.resolve(import.meta.dirname, '../..');
 export const APP_BINARY = path.join(path.resolve(PROJECT_DIR, process.env.SAPPHIRE_APP!), 'Contents/MacOS/Devora Sapphire');
 export const BUNDLED_APP_BINARY = path.join(PROJECT_DIR, 'build/bundle/Devora Sapphire.app/Contents/MacOS/Devora Sapphire');
+/** The core's deterministic fake Claude CLI, which agents run instead of Claude (`devora-core`'s `agents/launch.rs`). */
+const FAKE_CLAUDE = path.resolve(PROJECT_DIR, '../project-core/crates/devora-agent/tests/support/fake_cli.py');
+const FAKE_CLAUDE_FIXTURES = path.resolve(PROJECT_DIR, '../project-core/crates/devora-agent/tests/fixtures/claude-2.1.312');
 
 /** The app's stderr, per process, for failure captures. */
 export const stderrOf = new WeakMap<ChildProcess, string[]>();
@@ -35,7 +38,13 @@ export async function launch(configPath: string, stateDir: string | undefined, o
 
   // Launched directly rather than through `open`, so the harness owns the process and its stderr; Sapphire takes no bare arguments, so a window opens.
   const app = spawn(options.binary ?? APP_BINARY, [], {
-    env: { ...env, ...options.environment, DEVORA_TEST_MODE: '1', DEVORA_TEST_HEALTH_FIXTURE: path.join(path.dirname(configPath), 'health-report.json'), DEVORA_CONFIG_PATH: configPath, ...(stateDir ? { DEVORA_STATE_DIR: stateDir } : {}) },
+    env: {
+      ...env,
+      DEVORA_TEST_CLAUDE_PROGRAM: FAKE_CLAUDE,
+      DEVORA_FAKE_FIXTURES: FAKE_CLAUDE_FIXTURES,
+      DEVORA_FAKE_REPORT: path.join(path.dirname(configPath), 'fake-claude.jsonl'),
+      ...options.environment,
+      DEVORA_TEST_MODE: '1', DEVORA_TEST_HEALTH_FIXTURE: path.join(path.dirname(configPath), 'health-report.json'), DEVORA_CONFIG_PATH: configPath, ...(stateDir ? { DEVORA_STATE_DIR: stateDir } : {}) },
     stdio: ['ignore', 'ignore', 'pipe'],
   });
   const stderr: string[] = [];

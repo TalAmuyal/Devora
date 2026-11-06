@@ -25,4 +25,5 @@ Status:
 | Scenario | Status | Sapphire coverage, or what's missing |
 |---|---|---|
 | session-management: Create a new session | Not applicable | It calls Ember's test API to create a session with a given title. Sapphire's shell tabs get their titles from workspaces and Repurpose, which `features/repurpose-session.feature` and `features/persistence.feature` cover. |
+| workspace-hub: Ctrl+S opens the Workspace Hub but never closes it | Covered | `features/agent-hub.feature`: "Ctrl+S opens the Agent Hub, and switches between the hubs inside one". Sapphire's `Ctrl+S` opens the Agent Hub, and inside either hub switches to the other (ADR-012), so the Workspace Hub only gives way to the Agent Hub. |
 | session-management: A backgrounded session is not squashed when the font size changes | Covered | `features/key-routing.feature`: "A smaller font refits every terminal, the background ones included". Ember's font shortcut scales the UI and must leave a hidden xterm.js terminal's columns alone; Sapphire's changes the terminals' font, so its scenario checks with `stty size` that the background terminal's PTY is refit to the same, wider size as the active one. |

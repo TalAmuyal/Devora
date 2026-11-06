@@ -47,6 +47,8 @@ final class WorkspaceHubModel {
 	@ObservationIgnored var openSettings: (SettingsHubModel.Opening) -> Void = { _ in }
 	/// Opens the Health Hub.
 	@ObservationIgnored var openHealth: () -> Void = {}
+	/// Switches to the Agent Hub, as `Ctrl+S` does.
+	@ObservationIgnored var switchHub: () -> Void = {}
 	/// Opens the Add Repo dialog for an active workspace.
 	@ObservationIgnored var addRepo: (Workspace) -> Void = { _ in }
 	@ObservationIgnored private let isEditingText: () -> Bool

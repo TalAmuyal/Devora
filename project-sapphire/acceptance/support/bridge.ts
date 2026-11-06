@@ -5,7 +5,9 @@ export interface TabState {
   previews: { id: number; path: string; revision: number; width: number; error: string | null }[];
   id: number;
   title: string;
-  kind: 'shell' | 'workspace' | 'creatingWorkspace' | 'creationFailed';
+  kind: 'shell' | 'workspace' | 'creatingWorkspace' | 'creationFailed' | 'agentSpace';
+  /** An agent tab's status at a glance (`working`, `waiting`, `idle`, `pausing`, `failed`); null for other tabs and until its agent reports. */
+  agentStatus: string | null;
   /** `none`, `starting`, `running` or `failed: <reason>`. */
   terminal: string;
   /** The PATH supplied by the core, before login-shell startup files run. */
@@ -211,7 +213,34 @@ export interface HealthState {
   sections: { title: string; items: { name: string; message: string }[] }[];
 }
 
+export interface AgentHubState {
+  loaded: boolean;
+  focused: string | null;
+  items: { name: string; role: string | null; error: string | null }[];
+}
+
+export interface NewAgentState {
+  name: string;
+  focus: string;
+  canCreate: boolean;
+  /** The template's fields; `source` is null for a field only the form fills. */
+  fields: { key: string; value: string | null; source: string | null; saved: boolean }[];
+  repos: { name: string; selected: boolean }[];
+  progress: { steps: string[]; outcome: string | null } | null;
+}
+
+export type AgentHubAction = { action: 'newAgent' } | { action: 'open' | 'delete'; name: string };
+
+export type NewAgentAction =
+  | { action: 'setName'; value: string }
+  | { action: 'setField'; key: string; value: string }
+  | { action: 'toggleRepo'; name: string }
+  | { action: 'save'; key: string }
+  | { action: 'create' | 'cancel' };
+
 export interface AppState {
+  agentHub: AgentHubState | null;
+  newAgent: NewAgentState | null;
 	palette: { items: { id: string; title: string }[]; selected: string | null; filter: string; focused: boolean } | null;
 	repurpose: { title: string } | null;
   health: HealthState | null;
@@ -354,6 +383,16 @@ export class Bridge {
   }
 
   /** Clicks what the open New Task dialog draws. */
+  /** Clicks what the open Agent Hub draws. */
+  async agentHub(action: AgentHubAction): Promise<void> {
+    await this.request('POST', '/test/agent-hub', action);
+  }
+
+  /** Fills in or clicks the open New Agent dialog; a disabled Create is a 409. */
+  async newAgent(action: NewAgentAction): Promise<void> {
+    await this.request('POST', '/test/new-agent', action);
+  }
+
   async newTask(action: NewTaskAction): Promise<void> {
     await this.request('POST', '/test/new-task', action);
   }

@@ -5,6 +5,12 @@ import Store
 import SwiftUI
 import TerminalKit
 
+/// What the app does before it quits.
+public enum AppTermination {
+	/// Pauses every agent, waiting until each has stopped and saved its session; set on the main thread once the core runs, and run off the main actor.
+	nonisolated(unsafe) public static var pauseAgents: (@Sendable () async -> Void)?
+}
+
 /// The window's content: the active tab's terminal over the tab bar, under the window's surfaces (the Workspace Hub).
 public struct RootView: View {
 	@State private var store: Store
@@ -60,7 +66,10 @@ public struct RootView: View {
 
 	/// Runs once the app state is open: the restored tabs are already in the core, and the Workspace Hub opens when there are none, as Ember's launch always opens it.
 	private func launch() async {
+		AppTermination.pauseAgents = store.agentShutdown()
 		await store.dispatch(.load).value
+		// Restored agent tabs resume in the background, each showing its own failure.
+		Task { await store.restoreAgentSpaces() }
 		if let path = LaunchOptions.value("--open-workspace") {
 			if let workspace = store.workspaces.first(where: { $0.path == path }) {
 				store.dispatch(.openWorkspace(workspace))

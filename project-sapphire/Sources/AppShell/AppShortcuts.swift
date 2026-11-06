@@ -14,7 +14,7 @@ enum AppShortcut: Equatable {
 		}
 		func matches(_ key: KeyPress) -> Bool { key.keyCode == keyCode && key.modifiers == modifiers }
 	}
-	private static let workspaceHubChord = Chord(keyCode: KeyCode.s, modifiers: .control, keyLabel: "S")
+	private static let hubsChord = Chord(keyCode: KeyCode.s, modifiers: .control, keyLabel: "S")
 	private static let newShellChord = Chord(keyCode: KeyCode.s, modifiers: [.control, .shift], keyLabel: "S")
 	case setFontSize(Double)
 	case changeFontSize(by: Double)
@@ -23,7 +23,8 @@ enum AppShortcut: Equatable {
 	case moveTabBackward
 	case moveTabForward
 	case newShell
-	case openWorkspaceHub
+	/// Opens the Agent Hub, or switches between the two hubs inside one (ADR-012).
+	case hubs
 	case openUserGuide
 	case openCommandPalette
 
@@ -31,7 +32,7 @@ enum AppShortcut: Equatable {
 	/// Command and Option chords are never shortcuts, so they reach the menu and the terminal unchanged.
 	init?(_ key: KeyPress) {
 		if key.keyCode == KeyCode.f1 { self = .openUserGuide; return }
-		if Self.workspaceHubChord.matches(key) { self = .openWorkspaceHub; return }
+		if Self.hubsChord.matches(key) { self = .hubs; return }
 		if Self.newShellChord.matches(key) { self = .newShell; return }
 		guard key.modifiers.contains(.control), key.modifiers.isDisjoint(with: [.command, .option]) else { return nil }
 		let shift = key.modifiers.contains(.shift)
@@ -54,14 +55,16 @@ enum AppShortcut: Equatable {
 	var needsNoWindowSurface: Bool {
 		switch self {
 		case .setFontSize, .changeFontSize, .openUserGuide: false
-		case .previousTab, .nextTab, .moveTabBackward, .moveTabForward, .newShell, .openWorkspaceHub, .openCommandPalette: true
+		case .previousTab, .nextTab, .moveTabBackward, .moveTabForward, .newShell, .openCommandPalette: true
+		// A hub decides itself, since inside one it switches to the other.
+		case .hubs: false
 		}
 	}
 
 	/// The label shown alongside a palette command using this shortcut.
 	var paletteLabel: String? {
 		switch self {
-		case .openWorkspaceHub: Self.workspaceHubChord.label
+		case .hubs: Self.hubsChord.label
 		case .newShell: Self.newShellChord.label
 		default: nil
 		}
@@ -75,16 +78,17 @@ final class AppShortcuts {
 
 	let store: Store
 	let windowStack: LayerStack
-	let openWorkspaceHub: () -> Void
+	/// What `Ctrl+S` does, which depends on the window stack (`Surfaces.hubShortcut`).
+	let hubs: () -> Void
 	let openUserGuide: () -> Void
 	var openCommandPalette: () -> Void = {}
 	private var shiftTap = ShiftDoubleTap()
 	private var flagsMonitor: Any?
 
-	init(store: Store, windowStack: LayerStack, openWorkspaceHub: @escaping () -> Void, openUserGuide: @escaping () -> Void) {
+	init(store: Store, windowStack: LayerStack, hubs: @escaping () -> Void, openUserGuide: @escaping () -> Void) {
 		self.store = store
 		self.windowStack = windowStack
-		self.openWorkspaceHub = openWorkspaceHub
+		self.hubs = hubs
 		self.openUserGuide = openUserGuide
 	}
 
@@ -139,7 +143,7 @@ final class AppShortcuts {
 		case .moveTabBackward: store.dispatch(.moveActiveTabBackward)
 		case .moveTabForward: store.dispatch(.moveActiveTabForward)
 		case .newShell: store.dispatch(.openShell)
-		case .openWorkspaceHub: openWorkspaceHub()
+		case .hubs: hubs()
 		case .openUserGuide: openUserGuide()
 		case .openCommandPalette: openCommandPalette()
 		}

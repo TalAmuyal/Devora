@@ -34,7 +34,8 @@ A focused text field or text view (the window's first responder is an `NSTextVie
 |---|---|
 | User Guide: `F1` | Always |
 | Font size: `Ctrl+1/2/3` (12/15/26), `Ctrl+=` (15), `Ctrl+Shift+=`/`-` (±2, within 8–40) | Always |
-| `Ctrl+S` (open the Workspace Hub; never closes it), `Ctrl+Shift+S` (new shell) | When no opaque layer is in the window stack |
+| `Ctrl+S` (open the Agent Hub) | When no opaque layer is in the window stack; inside the Agent Hub or the Workspace Hub, it switches to the other one |
+| `Ctrl+Shift+S` (new shell) | When no opaque layer is in the window stack |
 | Shift-Shift (open the Command Palette) | When no opaque layer is in the window stack |
 | `Ctrl+←/→` (switch tab, wrapping), `Ctrl+Shift+←/→` (move the active tab, not wrapping) | When no opaque layer is in the window stack |
 

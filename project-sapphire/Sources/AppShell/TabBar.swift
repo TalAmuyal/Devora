@@ -11,7 +11,7 @@ struct TabBar: View {
 		HStack(spacing: 2) {
 			ForEach(window.tabs, id: \.id) { tab in
 				TabButton(
-					tab: tab, isActive: tab.id == window.activeTab,
+					tab: tab, isActive: tab.id == window.activeTab, agentStatus: store.agentStatuses[tab.id],
 					select: { store.dispatch(.activateTab(id: tab.id)) },
 					close: { store.dispatch(.closeTab(id: tab.id)) })
 			}
@@ -34,12 +34,17 @@ struct TabBar: View {
 private struct TabButton: View {
 	let tab: AppTab
 	let isActive: Bool
+	let agentStatus: AgentStatus?
 	let select: () -> Void
 	let close: () -> Void
 
 	var body: some View {
 		HStack(spacing: 6) {
-			Image(systemName: icon).imageScale(.small).foregroundStyle(.secondary)
+			if let agentStatus {
+				AgentStatusEmoji(status: agentStatus).font(.caption)
+			} else {
+				Image(systemName: icon).imageScale(.small).foregroundStyle(.secondary)
+			}
 			Text(tab.title).lineLimit(1)
 			Button(action: close) {
 				Image(systemName: "xmark").imageScale(.small)

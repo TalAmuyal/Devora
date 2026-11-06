@@ -28,11 +28,13 @@ export async function closeWindowSurfaces(world: SapphireWorld): Promise<void> {
 }
 
 /**
- * Opens the hub with Ctrl+S and waits for its workspaces to load.
+ * Opens the hub with Ctrl+S, which opens the Agent Hub, then Ctrl+S again, which switches to the Workspace Hub (ADR-012), and waits for its workspaces to load.
  * A hub already open (the launch's) is closed first, so that it loads the profiles the scenario has made since, as Ember's step reloads it.
  */
 export async function openWorkspaceHub(world: SapphireWorld): Promise<HubState> {
   if ((await world.bridge.state()).windowLayers.length > 0) await closeWindowSurfaces(world);
+  await world.bridge.press('s', ['control']);
+  await world.bridge.waitFor('the Agent Hub to open', () => world.bridge.state(), (s) => s.windowLayers.includes('agent-hub'));
   await world.bridge.press('s', ['control']);
   return waitForHub(world, 'the Workspace Hub to load', (hub) => !hub.loading);
 }

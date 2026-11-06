@@ -72,6 +72,10 @@ private struct HubHeader: View {
 		HStack {
 			Text("Devora").font(.title2.weight(.semibold))
 			Spacer()
+			if model.welcome == nil {
+				HubSwitcher(current: .workspaces, switchHub: model.switchHub)
+				Spacer()
+			}
 			if !store.profiles.isEmpty {
 				MenuTrigger(menu: .profiles, model: model) {
 					HStack(spacing: 6) {

@@ -134,6 +134,8 @@ Feature: Workspace Hub
     When the user presses "j"
     Then the focused workspace should be "ws-2"
 
+  # Sapphire's Ctrl+S opens the Agent Hub and switches hubs inside one (ADR-012).
+  @ember-only
   Scenario: Ctrl+S opens the Workspace Hub but never closes it
     Given a profile "Work" with 1 active workspaces
     And the Workspace Hub is open
