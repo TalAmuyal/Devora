@@ -72,7 +72,7 @@ pub struct Space {
     resume: Resume,
 }
 
-fn validate_name(name: &str) -> Result<(), String> {
+pub fn validate_name(name: &str) -> Result<(), String> {
     if name.is_empty()
         || name.trim() != name
         || name.starts_with('.')

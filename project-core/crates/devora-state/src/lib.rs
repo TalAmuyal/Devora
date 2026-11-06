@@ -11,12 +11,14 @@
 //!
 //! A tab keeps its terminal identity while file previews share its row. Preview paths, order, preferred widths and refresh revisions are durable; rendered contents are re-read by the UI.
 
+mod chat;
 mod command;
 mod feed;
 mod model;
 mod persist;
 mod store;
 
+pub use chat::{Chat, ChatCommand, ChatEvent, ChatItem, ChatPhase, ChatUpdate, PermissionQuestion};
 pub use command::{Command, Event, StateError};
 pub use feed::{feed, Feed, Subscription};
 pub use model::{

@@ -798,6 +798,7 @@ final class TestBridge {
 	private static func name(_ kind: SessionKind) -> String {
 		switch kind {
 		case .shell: "shell"
+		case .agentSpace: "agentSpace"
 		case .workspace: "workspace"
 		case .creatingWorkspace: "creatingWorkspace"
 		case .creationFailed: "creationFailed"

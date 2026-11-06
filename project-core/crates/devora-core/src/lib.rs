@@ -14,3 +14,6 @@ pub use devora_terminal as terminal;
 pub use devora_theme as theme;
 pub use devora_workspace::creation as workspace_creation;
 pub use devora_workspace::{repo_clone, workspace};
+
+/// Agent Space lifecycle and live chat orchestration behind the facade.
+pub mod agents;

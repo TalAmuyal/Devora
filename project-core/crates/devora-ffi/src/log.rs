@@ -20,7 +20,7 @@ pub enum Level {
 /// The app's log: the one place both sides write to, and the one way to report an error (`report_error`).
 #[derive(uniffi::Object)]
 pub struct AppLog {
-    log: Log,
+    log: Arc<Log>,
     path: String,
     errors: Arc<ErrorSubscription>,
 }
@@ -34,12 +34,16 @@ impl AppLog {
             feed.push(&[message.to_string()]);
         }));
         Ok(Arc::new(AppLog {
-            log,
+            log: Arc::new(log),
             path: path.to_string_lossy().into_owned(),
             errors: Arc::new(ErrorSubscription {
                 inner: subscription,
             }),
         }))
+    }
+
+    pub(crate) fn shared(&self) -> Arc<Log> {
+        self.log.clone()
     }
 
     /// Writes `message` as an error and reports it to the UI.

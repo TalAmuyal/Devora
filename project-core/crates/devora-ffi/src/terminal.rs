@@ -44,7 +44,9 @@ impl DevoraCore {
                 path: path.clone(),
                 repos: workspace::list_repo_subdirs(Path::new(path)),
             },
-            SessionKind::CreatingWorkspace | SessionKind::CreationFailed { .. } => {
+            SessionKind::AgentSpace { .. }
+            | SessionKind::CreatingWorkspace
+            | SessionKind::CreationFailed { .. } => {
                 return Err(format!("tab {} has no workspace to run a terminal in", tab.id).into())
             }
         };

@@ -387,6 +387,7 @@ fn write(conn: &mut Connection, state: &State) -> rusqlite::Result<()> {
 
 fn session_kind_row(kind: &SessionKind) -> (&'static str, Option<&str>) {
     match kind {
+        SessionKind::AgentSpace { name } => ("agent_space", Some(name)),
         SessionKind::Shell => ("shell", None),
         SessionKind::CreatingWorkspace => ("creating_workspace", None),
         SessionKind::CreationFailed { reason } => ("creation_failed", Some(reason)),
@@ -396,6 +397,7 @@ fn session_kind_row(kind: &SessionKind) -> (&'static str, Option<&str>) {
 
 fn session_kind(kind: &str, data: Option<String>) -> Option<SessionKind> {
     Some(match (kind, data) {
+        ("agent_space", Some(name)) => SessionKind::AgentSpace { name },
         ("shell", None) => SessionKind::Shell,
         ("creating_workspace", None) => SessionKind::CreatingWorkspace,
         ("creation_failed", Some(reason)) => SessionKind::CreationFailed { reason },

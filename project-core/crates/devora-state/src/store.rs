@@ -2,7 +2,7 @@
 
 use crate::feed::{feed, Feed, Subscription};
 use crate::persist::Db;
-use crate::{AppState, Command, Event, State, StateError};
+use crate::{AppState, Chat, ChatCommand, ChatEvent, Command, Event, State, StateError};
 use std::path::Path;
 use std::sync::{Mutex, MutexGuard};
 
@@ -18,6 +18,8 @@ struct Inner {
     subscribers: Vec<Feed<Event>>,
     /// Where every change is committed before it takes effect; `None` for an in-memory store.
     db: Option<Db>,
+    chats: Vec<Chat>,
+    chat_subscribers: Vec<Feed<ChatEvent>>,
 }
 
 impl Store {
@@ -38,6 +40,7 @@ impl Store {
                 state,
                 subscribers: Vec::new(),
                 db: Some(db),
+                ..Inner::default()
             }),
         })
     }
@@ -60,6 +63,31 @@ impl Store {
         inner.state = next;
         inner.subscribers.retain(|feed| feed.push(&events));
         Ok(events)
+    }
+
+    /// Live chat is deliberately transient. Token frames never rewrite app-state SQLite.
+    pub fn dispatch_chat(&self, command: ChatCommand) -> Result<(), StateError> {
+        let inner = &mut *lock(&self.inner);
+        let event = crate::chat::apply(&mut inner.chats, command)?;
+        inner
+            .chat_subscribers
+            .retain(|feed| feed.push(std::slice::from_ref(&event)));
+        Ok(())
+    }
+
+    pub fn chat_snapshot(&self) -> Vec<Chat> {
+        lock(&self.inner).chats.clone()
+    }
+
+    /// Snapshot and registration share the same lock as updates.
+    pub fn subscribe_chats(&self) -> Subscription<ChatEvent> {
+        let mut inner = lock(&self.inner);
+        let (feed, subscription) = feed();
+        feed.push(&[ChatEvent::Snapshot {
+            chats: inner.chats.clone(),
+        }]);
+        inner.chat_subscribers.push(feed);
+        subscription
     }
 
     /// Commits opaque recovery bookkeeping before the caller claims a workspace on disk.
@@ -318,5 +346,69 @@ mod tests {
         let events = open_shell(&store, "a");
         assert_eq!(events.len(), 2);
         assert_eq!(store.snapshot().window.tabs[0].title, "a");
+    }
+}
+
+#[cfg(test)]
+mod chat_tests {
+    use super::*;
+    use crate::{ChatItem, ChatUpdate};
+
+    #[test]
+    fn live_frames_have_atomic_snapshots_reject_old_generations_and_never_write_sqlite() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("state.db");
+        let store = Store::open(&path).unwrap();
+        let database = std::fs::read(&path).unwrap();
+        let wal_path = root.path().join("state.db-wal");
+        let wal = std::fs::read(&wal_path).unwrap_or_default();
+        store
+            .dispatch_chat(ChatCommand::Start {
+                tab: 1,
+                generation: 10,
+            })
+            .unwrap();
+        let events = store.subscribe_chats();
+        let item = ChatItem {
+            kind: "message".into(),
+            payload_json: "{\"type\":\"stream_event\"}".into(),
+        };
+        for _ in 0..100 {
+            store
+                .dispatch_chat(ChatCommand::Update {
+                    tab: 1,
+                    generation: 10,
+                    update: ChatUpdate::Item { item: item.clone() },
+                })
+                .unwrap();
+        }
+        let batch = events.try_next_batch(200);
+        assert!(
+            matches!(&batch[0], ChatEvent::Snapshot { chats } if chats.len() == 1 && chats[0].items.is_empty())
+        );
+        assert_eq!(batch.len(), 101);
+        assert_eq!(store.chat_snapshot()[0].items.len(), 100);
+        assert_eq!(std::fs::read(&path).unwrap(), database);
+        assert_eq!(std::fs::read(&wal_path).unwrap_or_default(), wal);
+        store
+            .dispatch_chat(ChatCommand::Update {
+                tab: 1,
+                generation: 10,
+                update: ChatUpdate::Generation { generation: 11 },
+            })
+            .unwrap();
+        assert!(store
+            .dispatch_chat(ChatCommand::Update {
+                tab: 1,
+                generation: 10,
+                update: ChatUpdate::Item { item }
+            })
+            .is_err());
+        assert_eq!(store.chat_snapshot()[0].items.len(), 100);
+        events.close();
+        store.dispatch_chat(ChatCommand::Close { tab: 1 }).unwrap();
+        assert!(store.chat_snapshot().is_empty());
+        drop(store);
+        assert!(Store::open(&path).unwrap().chat_snapshot().is_empty());
     }
 }

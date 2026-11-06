@@ -482,6 +482,8 @@ dependencies = [
 name = "devora-core"
 version = "0.1.0"
 dependencies = [
+ "devora-agent",
+ "devora-agent-space",
  "devora-app",
  "devora-config",
  "devora-health",
@@ -492,6 +494,8 @@ dependencies = [
  "devora-terminal",
  "devora-theme",
  "devora-workspace",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]

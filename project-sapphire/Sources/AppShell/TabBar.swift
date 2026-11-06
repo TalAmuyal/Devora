@@ -58,6 +58,7 @@ private struct TabButton: View {
 	private var icon: String {
 		switch tab.session.kind {
 		case .shell: "terminal"
+		case .agentSpace: "bubble.left"
 		case .workspace: "folder"
 		case .creatingWorkspace, .creationFailed: "hourglass"
 		}
