@@ -37,12 +37,13 @@ final class AgentHubModel {
 		store.profiles.first { $0.path == store.selectedProfilePath }?.name
 	}
 
-	/// Loads the profiles, as the Workspace Hub does, then lists the selected profile's spaces; a later listing wins over an earlier one.
+	/// Loads the profiles, then lists the selected profile's spaces; a later listing wins over an earlier one.
+	/// The workspaces are the Workspace Hub's to list, so passing through this hub on the way there lists them once.
 	func load() {
 		loadTask?.cancel()
 		loadTask = Task { [weak self] in
 			guard let self else { return }
-			_ = await store.load()
+			_ = await store.loadProfiles()
 			guard !Task.isCancelled else { return }
 			await store.listAgentSpaces()
 			guard !Task.isCancelled else { return }

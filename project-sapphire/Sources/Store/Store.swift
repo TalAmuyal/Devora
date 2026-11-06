@@ -588,6 +588,17 @@ public final class Store {
 		return await select(selected?.path, core: core, started: started, listProfiles: listProfiles)
 	}
 
+	/// The profiles and the selected one, as `load` makes them, without listing the workspaces: what the Agent Hub needs.
+	public func loadProfiles() async -> Bool {
+		guard let core, let profiles = try? await call("list_profiles", { try core.listProfiles() }) else { return false }
+		self.profiles = profiles
+		profilesListed = true
+		let active = try? await call("snapshot", { try core.snapshot().activeProfile })
+		let selected = (profiles.first { $0.path == active } ?? profiles.first)?.path
+		if selected != selectedProfilePath { setActiveProfile(selected) }
+		return true
+	}
+
 	@discardableResult
 	private func select(
 		_ path: String?, core: DevoraCore, started: ContinuousClock.Instant = .now,
