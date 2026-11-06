@@ -5,7 +5,8 @@ use devora_core::agents::{
     self, CreationForm, Field, LaunchContext, PermissionAnswer, Scope, Source,
 };
 use devora_core::state::{
-    Chat, ChatEvent, ChatItem, ChatPhase, ChatUpdate, PermissionQuestion, Subscription,
+    Chat, ChatEvent, ChatPhase, ChatUpdate, ItemState, PermissionQuestion, Subscription,
+    SystemKind, ToolResult, ToolVerdict, TranscriptChange, TranscriptContent, TranscriptItem,
 };
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -141,15 +142,94 @@ pub enum ChatPhase {
     Paused,
     Failed,
 }
+#[uniffi::remote(Enum)]
+pub enum ItemState {
+    Pending,
+    Streaming,
+    Complete,
+    Interrupted,
+    Failed,
+}
+#[uniffi::remote(Enum)]
+pub enum SystemKind {
+    Resume,
+    Compaction,
+    Interruption,
+    Exit,
+    Failure,
+    Warning,
+    PermissionRequested,
+    PermissionAnswer,
+    PermissionCancelled,
+    Judgement,
+    Result,
+    UnfinishedFirstPrompt,
+}
 #[uniffi::remote(Record)]
-pub struct ChatItem {
+pub struct ToolVerdict {
     pub kind: String,
-    pub payload_json: String,
+    pub rule: Option<String>,
+    pub detail: String,
+}
+#[uniffi::remote(Record)]
+pub struct ToolResult {
+    pub text: String,
+    pub content_json: String,
+    pub is_error: bool,
+}
+#[uniffi::remote(Enum)]
+pub enum TranscriptContent {
+    User {
+        text: String,
+        error: Option<String>,
+    },
+    Assistant {
+        text: String,
+    },
+    Thinking {
+        text: String,
+        signature: String,
+    },
+    Tool {
+        tool_use_id: String,
+        name: String,
+        input_json: String,
+        verdict: Option<ToolVerdict>,
+        result: Option<ToolResult>,
+    },
+    System {
+        kind: SystemKind,
+        text: String,
+        detail_json: String,
+    },
+    Unknown {
+        json: String,
+    },
+}
+#[uniffi::remote(Record)]
+pub struct TranscriptItem {
+    pub sequence: u64,
+    pub cli_session: String,
+    pub parent_tool_use_id: Option<String>,
+    pub state: ItemState,
+    pub content: TranscriptContent,
+}
+#[uniffi::remote(Enum)]
+pub enum TranscriptChange {
+    Upsert { item: Box<TranscriptItem> },
+    AppendText { sequence: u64, text: String },
+    AppendThinking { sequence: u64, text: String },
+    AppendSignature { sequence: u64, signature: String },
+    AppendToolInput { sequence: u64, json: String },
 }
 #[uniffi::remote(Record)]
 pub struct PermissionQuestion {
     pub request_id: String,
-    pub payload_json: String,
+    pub tool_name: String,
+    pub tool_use_id: String,
+    pub input_json: String,
+    pub decision_reason: Option<String>,
+    pub can_always_allow: bool,
 }
 #[uniffi::remote(Record)]
 pub struct Chat {
@@ -158,7 +238,8 @@ pub struct Chat {
     pub phase: ChatPhase,
     pub turn_running: bool,
     pub session_id: Option<String>,
-    pub items: Vec<ChatItem>,
+    pub items: Vec<TranscriptItem>,
+    pub error: Option<String>,
     pub questions: Vec<PermissionQuestion>,
     pub usage_json: Option<String>,
 }
@@ -168,7 +249,9 @@ pub enum ChatUpdate {
     Generation { generation: u64 },
     Phase { phase: ChatPhase },
     Ready { session_id: String },
-    Item { item: ChatItem },
+    Restore { items: Vec<TranscriptItem> },
+    Transcript { change: TranscriptChange },
+    Failure { message: String },
     PermissionRequested { question: PermissionQuestion },
     PermissionRemoved { request_id: String },
     Usage { payload_json: String },
@@ -361,6 +444,30 @@ impl DevoraCore {
             .answer_permission(tab, generation, request_id, answer)
             .await?;
         Ok(())
+    }
+    pub async fn agent_history(
+        &self,
+        profile_path: String,
+        name: String,
+        after: u64,
+        limit: u32,
+    ) -> Result<Vec<TranscriptItem>, CoreError> {
+        Ok(self
+            .agents
+            .history(Path::new(&profile_path), &name, after, limit)
+            .await?)
+    }
+    pub async fn agent_history_before(
+        &self,
+        profile_path: String,
+        name: String,
+        before: Option<u64>,
+        limit: u32,
+    ) -> Result<Vec<TranscriptItem>, CoreError> {
+        Ok(self
+            .agents
+            .history_before(Path::new(&profile_path), &name, before, limit)
+            .await?)
     }
     pub fn agent_chat_snapshot(&self) -> Result<Vec<Chat>, CoreError> {
         Ok(self.state.chat_snapshot())

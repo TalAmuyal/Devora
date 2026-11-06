@@ -625,3 +625,251 @@ fn creation_fields_list_form_only_then_prefilled_then_derived_with_their_sources
         )
     );
 }
+
+#[tokio::test]
+async fn an_intention_write_failure_prevents_transport_and_uncommitted_publication() {
+    let fixture = Fixture::new();
+    let context = fixture.context();
+    let space = fixture.create(fixture.form("Durable")).unwrap();
+    let path = space.path().join(".agent-space.db");
+    let log = Arc::new(Log::open(&fixture.root.path().join("failure.log")).unwrap());
+    let mut running = space.start(&context, log).await.unwrap();
+    assert!(matches!(
+        running.next_event().await,
+        Some(SessionEvent::Ready { .. })
+    ));
+    let connection = rusqlite::Connection::open(&path).unwrap();
+    connection.execute_batch("CREATE TRIGGER fail_user BEFORE INSERT ON events WHEN NEW.kind='user' BEGIN SELECT RAISE(ABORT,'injected intention failure'); END;").unwrap();
+    let error = running
+        .handle()
+        .send_turn("must never reach CLI".into())
+        .await
+        .unwrap_err();
+    assert!(error.contains("injected intention failure"), "{error}");
+    while let Some(event) = running.next_event().await {
+        if matches!(event, SessionEvent::Failed(_)) {
+            break;
+        }
+    }
+    let _ = running.pause().await;
+    let history = Space::read_history(&fixture.profile, "Durable", 0, 500).unwrap();
+    assert!(history.iter().any(|item| matches!(&item.content,
+        devora_agent::transcript::TranscriptContent::System { kind:devora_agent::transcript::SystemKind::Failure, text, .. }
+            if text.contains("injected intention failure")
+    )));
+    let report = std::fs::read_to_string(fixture.root.path().join("report.jsonl")).unwrap();
+    assert!(!report
+        .lines()
+        .any(|line| serde_json::from_str::<serde_json::Value>(line).unwrap()["kind"] == "user"));
+    assert_eq!(
+        connection
+            .query_row("SELECT count(*) FROM events WHERE kind='user'", [], |row| {
+                row.get::<_, u64>(0)
+            })
+            .unwrap(),
+        0
+    );
+}
+
+fn legacy_space(fixture: &Fixture, name: &str) -> (PathBuf, String) {
+    let path = fixture.profile.join("agent-spaces").join(name);
+    std::fs::create_dir_all(path.join("memory")).unwrap();
+    let database = path.join(".agent-space.db");
+    let connection = rusqlite::Connection::open(&database).unwrap();
+    connection
+        .execute_batch(include_str!("fixtures/space-v1.sql"))
+        .unwrap();
+    let id = uuid::Uuid::new_v4().to_string();
+    connection
+        .execute(
+            "INSERT INTO space VALUES(0,?1,'Legacy role',?2,'Frozen legacy instructions',?3,0,1)",
+            rusqlite::params![
+                name,
+                serde_json::to_string(&fixture.form(name)).unwrap(),
+                id
+            ],
+        )
+        .unwrap();
+    (database, id)
+}
+
+#[tokio::test]
+async fn a_real_v1_shape_lists_without_migration_then_upgrades_and_reopens_with_history() {
+    let fixture = Fixture::new();
+    let (database, previous_id) = legacy_space(&fixture, "Legacy");
+    let connection = rusqlite::Connection::open(&database).unwrap();
+    let version = || {
+        connection
+            .pragma_query_value::<u32, _>(None, "user_version", |row| row.get(0))
+            .unwrap()
+    };
+    let listing = Space::list(&fixture.profile).unwrap();
+    assert_eq!(listing.len(), 1);
+    assert!(listing[0].error.is_none());
+    assert!(Space::read_history(&fixture.profile, "Legacy", 0, 50)
+        .unwrap()
+        .is_empty());
+    assert_eq!(version(), 1);
+    let space = Space::open(&fixture.profile, "Legacy").unwrap();
+    assert_eq!(version(), 2);
+    assert_eq!(space.instructions(), "Frozen legacy instructions");
+    assert_eq!(space.identity().role, "Legacy role");
+    assert_eq!(space.saved_session().session_id, previous_id);
+    assert_eq!(
+        connection
+            .query_row(
+                "SELECT session_id FROM cli_sessions ORDER BY position LIMIT 1",
+                [],
+                |row| row.get::<_, String>(0)
+            )
+            .unwrap(),
+        previous_id
+    );
+    let log = Arc::new(Log::open(&fixture.root.path().join("legacy.log")).unwrap());
+    let mut running = space.start(&fixture.context(), log).await.unwrap();
+    assert!(matches!(
+        running.next_event().await,
+        Some(SessionEvent::Ready { .. })
+    ));
+    running
+        .handle()
+        .send_turn("Legacy prompt".into())
+        .await
+        .unwrap();
+    while let Some(event) = running.next_event().await {
+        if matches!(
+            event,
+            SessionEvent::Message(Message::Known(KnownMessage::Result(_)))
+        ) {
+            break;
+        }
+    }
+    running.pause().await.unwrap();
+    let reopened = Space::open(&fixture.profile, "Legacy").unwrap();
+    assert_eq!(version(), 2);
+    assert!(reopened.history().unwrap().iter().any(|item| matches!(&item.content, devora_agent::transcript::TranscriptContent::User { text, .. } if text == "Legacy prompt")));
+    assert_eq!(reopened.instructions(), "Frozen legacy instructions");
+}
+
+#[test]
+fn a_failed_v1_migration_rolls_back_its_tables_and_version() {
+    let fixture = Fixture::new();
+    let (database, id) = legacy_space(&fixture, "Blocked");
+    let connection = rusqlite::Connection::open(&database).unwrap();
+    connection
+        .execute_batch(
+            "CREATE TABLE events (keep_me TEXT); INSERT INTO events VALUES('preserved');",
+        )
+        .unwrap();
+    assert!(Space::open(&fixture.profile, "Blocked").is_err());
+    assert_eq!(
+        connection
+            .pragma_query_value::<u32, _>(None, "user_version", |row| row.get(0))
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        connection
+            .query_row(
+                "SELECT count(*) FROM sqlite_master WHERE name='cli_sessions'",
+                [],
+                |row| row.get::<_, u64>(0)
+            )
+            .unwrap(),
+        0
+    );
+    assert_eq!(
+        connection
+            .query_row("SELECT keep_me FROM events", [], |row| row
+                .get::<_, String>(0))
+            .unwrap(),
+        "preserved"
+    );
+    assert_eq!(
+        connection
+            .query_row("SELECT session_id FROM space", [], |row| row
+                .get::<_, String>(0))
+            .unwrap(),
+        id
+    );
+}
+
+#[tokio::test]
+async fn large_history_reopens_with_only_the_tail_and_pages_back_in_order() {
+    use devora_agent::transcript::{ItemState, TranscriptContent, TranscriptItem};
+    use devora_agent_space::SpaceEvent;
+    let fixture = Fixture::new();
+    let space = fixture.create(fixture.form("History")).unwrap();
+    let session = space.saved_session().session_id.clone();
+    let mut db = rusqlite::Connection::open(space.path().join(".agent-space.db")).unwrap();
+    let tx = db.transaction().unwrap();
+    tx.execute(
+        "INSERT INTO cli_sessions(session_id,position) VALUES(?1,1)",
+        [&session],
+    )
+    .unwrap();
+    for sequence in 1..=650 {
+        let item = TranscriptItem {
+            sequence,
+            cli_session: session.clone(),
+            parent_tool_use_id: None,
+            state: ItemState::Complete,
+            content: TranscriptContent::Assistant {
+                text: format!("item {sequence}"),
+            },
+        };
+        tx.execute(
+            "INSERT INTO events(sequence,cli_session,kind,payload) VALUES(?1,?2,'assistant',?3)",
+            rusqlite::params![sequence, session, serde_json::to_string(&item).unwrap()],
+        )
+        .unwrap();
+    }
+    tx.commit().unwrap();
+    drop(db);
+    drop(space);
+    let reopened = Space::open(&fixture.profile, "History").unwrap();
+    let tail = reopened.history().unwrap();
+    assert_eq!(tail.len(), 200);
+    assert_eq!(tail.first().unwrap().sequence, 451);
+    assert_eq!(tail.last().unwrap().sequence, 650);
+    let mut all = tail.clone();
+    loop {
+        let page =
+            Space::history_before(&fixture.profile, "History", Some(all[0].sequence), 137).unwrap();
+        if page.is_empty() {
+            break;
+        }
+        all.splice(..0, page);
+    }
+    assert_eq!(
+        all.iter().map(|item| item.sequence).collect::<Vec<_>>(),
+        (1..=650).collect::<Vec<_>>()
+    );
+    assert_eq!(
+        Space::history_before(&fixture.profile, "History", None, 0)
+            .unwrap()
+            .len(),
+        1
+    );
+    assert_eq!(
+        Space::history_before(&fixture.profile, "History", None, u32::MAX)
+            .unwrap()
+            .len(),
+        500
+    );
+    let log = Arc::new(Log::open(&fixture.root.path().join("history.log")).unwrap());
+    let mut running = reopened.start(&fixture.context(), log).await.unwrap();
+    let Some(SpaceEvent::Restored(restored)) = running.next_update().await else {
+        panic!("expected restored tail")
+    };
+    assert_eq!(restored, tail);
+    while let Some(update) = running.next_update().await {
+        if let SpaceEvent::Transcript(devora_agent::transcript::TranscriptChange::Upsert { item }) =
+            update
+        {
+            assert_eq!(item.sequence, 651, "sequence must include evicted history");
+            break;
+        }
+    }
+    running.pause().await.unwrap();
+}

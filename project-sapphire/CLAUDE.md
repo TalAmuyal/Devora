@@ -207,6 +207,7 @@ Real input (key events, focus, the IME, libghostty's key path) is what the bridg
 	Failed steps save a window screenshot (the bridge's `POST /test/snapshot`), the state, the active terminal's text and the app's stderr to `test-results/failures/` (`acceptance/support/failure-capture.ts`); the shared `failure-capture.feature` checks the screenshot and the terminal text.
 	As in Ember, a scenario fails if an error was shown that no step scraped ("the recorded errors should include").
 	Relaunches within a scenario (`persistence.feature`) keep its state directory.
+	Teardown uses the bridge's normal Quit and waits for owned fake agent children before removing fixtures. A bounded shutdown falls back to signals, retains shutdown failures and preserves fixtures if shutdown fails. Child matching includes the CLI session command to guard against PID reuse.
 	Agents run the core's deterministic fake CLI (`project-core/crates/devora-agent/tests/support/fake_cli.py`, through `DEVORA_TEST_CLAUDE_PROGRAM`), never Claude.
 - Scenarios shared with Ember live in `../acceptance/features/` (see `../acceptance/CLAUDE.md`); Sapphire's steps use the same phrases as Ember's, and reuse Ember's fixture helpers (`project-ember/tests/support/fixture-helper.ts`).
 - The XCUITests launch the app themselves, each on a state directory of its own; `scripts/test-ui.sh` skips them, saying why, when the screen is locked or `SAPPHIRE_SKIP_UI_TESTS=1`.

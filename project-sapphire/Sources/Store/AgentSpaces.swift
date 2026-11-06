@@ -218,7 +218,11 @@ extension Store {
 								chat.questions = []
 							case .permissionRequested(let question): chat.questions.insert(question.requestId)
 							case .permissionRemoved(let id): chat.questions.remove(id)
-							case .item, .usage: continue
+							case .failure:
+								chat.phase = .failed
+								chat.turn = false
+								chat.questions = []
+							case .restore, .transcript, .usage: continue
 							}
 							chats[tab] = chat
 						}

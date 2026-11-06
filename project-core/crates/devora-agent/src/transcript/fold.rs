@@ -1,0 +1,699 @@
+use super::*;
+use crate::protocol::{
+    Content, ContentBlock, ContentDelta, Extensible, KnownMessage, Message, StreamEvent, Turn,
+};
+use crate::session::SessionEvent;
+use serde_json::{json, Value};
+use std::collections::{BTreeMap, BTreeSet};
+
+#[derive(Default)]
+struct StreamingMessage {
+    id: String,
+    active: bool,
+    blocks: BTreeMap<u64, u64>,
+}
+
+/// Mutable working items for the current CLI identity. Durable history and the
+/// bounded UI tail are owned separately. Release settled items after persistence.
+pub struct Transcript {
+    items: Vec<TranscriptItem>,
+    session: String,
+    next_sequence: u64,
+    streams: BTreeMap<Option<String>, StreamingMessage>,
+    pending_commands: BTreeSet<u64>,
+    has_prompt: bool,
+    marked_first_prompt: bool,
+}
+
+impl Transcript {
+    pub fn new(items: Vec<TranscriptItem>, session: String) -> Self {
+        let next_sequence = items.last().map_or(1, |item| item.sequence + 1);
+        let has_prompt = items.iter().any(|item| {
+            item.cli_session == session && matches!(item.content, TranscriptContent::User { .. })
+        });
+        let marked_first_prompt = items.iter().any(|item| {
+            item.cli_session == session
+                && matches!(
+                    item.content,
+                    TranscriptContent::System {
+                        kind: SystemKind::UnfinishedFirstPrompt,
+                        ..
+                    }
+                )
+        });
+        Self::restore(
+            items,
+            session,
+            next_sequence,
+            has_prompt,
+            marked_first_prompt,
+        )
+    }
+
+    pub fn restore(
+        items: Vec<TranscriptItem>,
+        session: String,
+        next_sequence: u64,
+        has_prompt: bool,
+        marked_first_prompt: bool,
+    ) -> Self {
+        Self {
+            items,
+            session,
+            next_sequence,
+            streams: BTreeMap::new(),
+            pending_commands: BTreeSet::new(),
+            has_prompt,
+            marked_first_prompt,
+        }
+    }
+
+    /// Call only after whole-item changes have committed. In-flight command
+    /// outcomes can still settle after interruption, so retain those explicitly.
+    pub fn release_completed(&mut self) {
+        self.items.retain(|item| {
+            self.pending_commands.contains(&item.sequence)
+                || matches!(item.state, ItemState::Pending | ItemState::Streaming)
+                || matches!(
+                    (&item.state, &item.content),
+                    (
+                        ItemState::Complete,
+                        TranscriptContent::Tool { result: None, .. }
+                    )
+                )
+        });
+        let items = &self.items;
+        self.streams.retain(|_, stream| {
+            stream.blocks.retain(|_, sequence| {
+                items
+                    .binary_search_by_key(sequence, |item| item.sequence)
+                    .is_ok()
+            });
+            stream.active || !stream.blocks.is_empty()
+        });
+    }
+
+    pub fn items(&self) -> &[TranscriptItem] {
+        &self.items
+    }
+    fn item_mut(&mut self, sequence: u64) -> Option<&mut TranscriptItem> {
+        let index = self
+            .items
+            .binary_search_by_key(&sequence, |item| item.sequence)
+            .ok()?;
+        self.items.get_mut(index)
+    }
+    fn item(&self, sequence: u64) -> Option<&TranscriptItem> {
+        let index = self
+            .items
+            .binary_search_by_key(&sequence, |item| item.sequence)
+            .ok()?;
+        self.items.get(index)
+    }
+
+    fn tool_mut(&mut self, expected: &str) -> Option<&mut TranscriptItem> {
+        let session = self.session.as_str();
+        self.items.iter_mut().rev().find(|item| {
+            item.cli_session == session
+                && match &item.content {
+                    TranscriptContent::Tool {
+                        tool_use_id,
+                        result: None,
+                        ..
+                    } => tool_use_id == expected,
+                    _ => false,
+                }
+        })
+    }
+    pub fn set_session(&mut self, session: String) {
+        if self.session != session {
+            self.has_prompt = false;
+            self.marked_first_prompt = false;
+            self.items
+                .retain(|item| self.pending_commands.contains(&item.sequence));
+        }
+        self.session = session;
+        self.streams.clear();
+    }
+
+    fn insert(
+        &mut self,
+        content: TranscriptContent,
+        state: ItemState,
+        parent: Option<String>,
+    ) -> TranscriptChange {
+        self.has_prompt |= matches!(content, TranscriptContent::User { .. });
+        self.marked_first_prompt |= matches!(
+            content,
+            TranscriptContent::System {
+                kind: SystemKind::UnfinishedFirstPrompt,
+                ..
+            }
+        );
+        let item = TranscriptItem {
+            sequence: self.next_sequence,
+            cli_session: self.session.clone(),
+            parent_tool_use_id: parent,
+            state,
+            content,
+        };
+        self.next_sequence += 1;
+        self.items.push(item.clone());
+        TranscriptChange::upsert(item)
+    }
+
+    pub fn system(
+        &mut self,
+        kind: SystemKind,
+        text: impl Into<String>,
+        detail: Value,
+    ) -> TranscriptChange {
+        self.insert(
+            TranscriptContent::System {
+                kind,
+                text: text.into(),
+                detail_json: detail.to_string(),
+            },
+            ItemState::Complete,
+            None,
+        )
+    }
+
+    pub fn submit(&mut self, text: String) -> TranscriptChange {
+        self.pending_commands.insert(self.next_sequence);
+        self.insert(
+            TranscriptContent::User { text, error: None },
+            ItemState::Pending,
+            None,
+        )
+    }
+
+    pub fn intention(&mut self, kind: SystemKind, text: String, detail: Value) -> TranscriptChange {
+        self.pending_commands.insert(self.next_sequence);
+        self.insert(
+            TranscriptContent::System {
+                kind,
+                text,
+                detail_json: detail.to_string(),
+            },
+            ItemState::Pending,
+            None,
+        )
+    }
+
+    pub fn settle(&mut self, sequence: u64, error: Option<String>) -> Option<TranscriptChange> {
+        self.pending_commands.remove(&sequence);
+        let item = self.item_mut(sequence)?;
+        item.state = if error.is_some() {
+            ItemState::Failed
+        } else {
+            ItemState::Complete
+        };
+        match &mut item.content {
+            TranscriptContent::User { error: current, .. } => *current = error,
+            TranscriptContent::System { detail_json, .. } => {
+                let mut detail: Value =
+                    serde_json::from_str(detail_json).unwrap_or_else(|_| json!({}));
+                detail["error"] = json!(error);
+                *detail_json = detail.to_string();
+            }
+            _ => {}
+        }
+        Some(TranscriptChange::upsert(item.clone()))
+    }
+
+    /// Seal unfinished UI items on pause/crash. A fresh first conversation also
+    /// gets an explicit marker identifying the prompt absent from the new CLI.
+    pub fn interrupt(&mut self, fresh_first: bool) -> Vec<TranscriptChange> {
+        let mut changes = vec![];
+        for item in &mut self.items {
+            if item.cli_session == self.session
+                && (matches!(item.state, ItemState::Pending | ItemState::Streaming)
+                    || matches!(item.content, TranscriptContent::Tool { result: None, .. }))
+            {
+                item.state = ItemState::Interrupted;
+                changes.push(TranscriptChange::upsert(item.clone()));
+            }
+        }
+        if fresh_first && self.has_prompt && !self.marked_first_prompt {
+            changes.push(self.system(SystemKind::UnfinishedFirstPrompt, "The unfinished first turn is retained here. Its prompt is absent from the replacement CLI conversation.", json!({})));
+        }
+        self.streams.clear();
+        changes
+    }
+
+    pub fn event(&mut self, event: &SessionEvent) -> Vec<TranscriptChange> {
+        match event {
+            SessionEvent::Message(message) => self.message(message),
+            SessionEvent::Ready {
+                session_id,
+                resumed,
+                ..
+            } => {
+                self.set_session(session_id.clone());
+                vec![self.system(
+                    SystemKind::Resume,
+                    if *resumed {
+                        "Conversation resumed"
+                    } else {
+                        "Conversation started"
+                    },
+                    json!({"session_id":session_id,"resumed":resumed}),
+                )]
+            }
+            SessionEvent::ToolJudged {
+                tool_use_id,
+                verdict,
+            } => {
+                let value = ToolVerdict {
+                    kind: verdict.kind().as_str().into(),
+                    rule: verdict.rule().map(|r| r.as_str().into()),
+                    detail: format!("{verdict:?}"),
+                };
+                if let Some(item) = tool_use_id.as_deref().and_then(|id| self.tool_mut(id)) {
+                    if let TranscriptContent::Tool { verdict, .. } = &mut item.content {
+                        *verdict = Some(value);
+                    }
+                    vec![TranscriptChange::upsert(item.clone())]
+                } else {
+                    vec![self.system(
+                        SystemKind::Judgement,
+                        "Tool judgement",
+                        json!({"tool_use_id":tool_use_id,"verdict":value}),
+                    )]
+                }
+            }
+            SessionEvent::PermissionRequested {
+                request_id,
+                question,
+            } => vec![self.system(
+                SystemKind::PermissionRequested,
+                format!("Permission requested for {}", question.tool_name),
+                json!({"request_id":request_id,"question":question}),
+            )],
+            SessionEvent::PermissionCancelled { request_id } => vec![self.system(
+                SystemKind::PermissionCancelled,
+                "Permission question withdrawn",
+                json!({"request_id":request_id}),
+            )],
+            SessionEvent::Compacted(metadata) => vec![self.system(
+                SystemKind::Compaction,
+                "Conversation compacted",
+                json!(metadata),
+            )],
+            SessionEvent::Warning(text) => vec![self.system(SystemKind::Warning, text, json!({}))],
+            SessionEvent::Exited { code, restarting } => vec![self.system(
+                SystemKind::Exit,
+                "Agent process exited",
+                json!({"code":code,"restarting":restarting}),
+            )],
+            SessionEvent::Failed(text) => vec![self.system(SystemKind::Failure, text, json!({}))],
+            SessionEvent::Stopped(info) => vec![self.system(
+                SystemKind::Interruption,
+                "Agent paused",
+                json!({"graceful":info.graceful}),
+            )],
+            SessionEvent::McpRequested {
+                request_id,
+                server_name,
+                message,
+            } => vec![self.unknown(
+                json!({"request_id":request_id,"server_name":server_name,"message":message}),
+                None,
+            )],
+            SessionEvent::Usage { .. } => vec![],
+        }
+    }
+
+    fn unknown(&mut self, value: Value, parent: Option<String>) -> TranscriptChange {
+        self.insert(
+            TranscriptContent::Unknown {
+                json: value.to_string(),
+            },
+            ItemState::Complete,
+            parent,
+        )
+    }
+
+    fn message(&mut self, message: &Message) -> Vec<TranscriptChange> {
+        match message {
+            Message::Known(KnownMessage::Assistant { message, extra }) => {
+                let parent = extra
+                    .get("parent_tool_use_id")
+                    .and_then(Value::as_str)
+                    .map(str::to_owned);
+                self.whole(message, parent, false)
+            }
+            Message::Known(KnownMessage::User { message, extra }) => {
+                let parent = extra
+                    .get("parent_tool_use_id")
+                    .and_then(Value::as_str)
+                    .map(str::to_owned);
+                self.whole(message, parent, true)
+            }
+            Message::Known(KnownMessage::StreamEvent {
+                event: Extensible::Known(event),
+                extra,
+            }) => {
+                let parent = extra
+                    .get("parent_tool_use_id")
+                    .and_then(Value::as_str)
+                    .map(str::to_owned);
+                self.stream(event, parent)
+            }
+            Message::Known(KnownMessage::Result(result)) => vec![self.system(
+                SystemKind::Result,
+                if result.is_error {
+                    "Turn ended with an error"
+                } else {
+                    "Turn completed"
+                },
+                json!(result),
+            )],
+            Message::Known(KnownMessage::System(_))
+            | Message::Known(KnownMessage::ControlRequest { .. })
+            | Message::Known(KnownMessage::ControlResponse { .. })
+            | Message::Known(KnownMessage::ControlCancelRequest { .. }) => vec![],
+            _ => vec![self.unknown(json!(message), None)],
+        }
+    }
+
+    fn whole(&mut self, turn: &Turn, parent: Option<String>, user: bool) -> Vec<TranscriptChange> {
+        if !user {
+            let id = turn.extra.get("id").and_then(Value::as_str);
+            let matches_stream = self.streams.get(&parent).is_some_and(|stream| match id {
+                Some(id) => stream.id == id,
+                None => stream.blocks.values().any(|sequence| {
+                    self.item(*sequence)
+                        .is_some_and(|item| item.state == ItemState::Streaming)
+                }),
+            });
+            if !matches_stream {
+                self.streams.insert(
+                    parent.clone(),
+                    StreamingMessage {
+                        id: id.unwrap_or("").into(),
+                        active: false,
+                        blocks: BTreeMap::new(),
+                    },
+                );
+            }
+        }
+        match &turn.content {
+            Content::Text(text) if user => vec![self.insert(
+                TranscriptContent::User {
+                    text: text.clone(),
+                    error: None,
+                },
+                ItemState::Complete,
+                parent,
+            )],
+            Content::Text(text) => vec![self.complete_block(
+                0,
+                TranscriptContent::Assistant { text: text.clone() },
+                parent,
+                true,
+            )],
+            Content::Blocks(blocks) => {
+                let mut changes = vec![];
+                for (index, block) in blocks.iter().enumerate() {
+                    match block {
+                        Extensible::Known(ContentBlock::ToolResult {
+                            tool_use_id,
+                            content,
+                            extra,
+                        }) => {
+                            let result = ToolResult {
+                                text: content_text(content),
+                                content_json: json!(content).to_string(),
+                                is_error: extra
+                                    .get("is_error")
+                                    .and_then(Value::as_bool)
+                                    .unwrap_or(false),
+                            };
+                            if let Some(item) = self.tool_mut(tool_use_id) {
+                                if let TranscriptContent::Tool {
+                                    result: current, ..
+                                } = &mut item.content
+                                {
+                                    *current = Some(result);
+                                }
+                                changes.push(TranscriptChange::upsert(item.clone()));
+                            } else {
+                                changes.push(self.unknown(json!(block), parent.clone()));
+                            }
+                        }
+                        Extensible::Known(ContentBlock::Text { text, .. }) if user => {
+                            changes.push(self.insert(
+                                TranscriptContent::User {
+                                    text: text.clone(),
+                                    error: None,
+                                },
+                                ItemState::Complete,
+                                parent.clone(),
+                            ))
+                        }
+                        _ => {
+                            let content = block_content(block);
+                            changes.push(self.complete_block(
+                                index as u64,
+                                content,
+                                parent.clone(),
+                                blocks.len() == 1,
+                            ));
+                        }
+                    }
+                }
+                changes
+            }
+            Content::Raw(value) => vec![self.unknown(value.clone(), parent)],
+        }
+    }
+
+    fn complete_block(
+        &mut self,
+        index: u64,
+        content: TranscriptContent,
+        parent: Option<String>,
+        single_block: bool,
+    ) -> TranscriptChange {
+        let streamed_index = self.streams.get(&parent).and_then(|stream| {
+            stream
+                .blocks
+                .iter()
+                .find(|(_, sequence)| {
+                    self.item(**sequence).is_some_and(|item| {
+                        item.state == ItemState::Streaming && same_block(&item.content, &content)
+                    })
+                })
+                .map(|(index, _)| *index)
+        });
+        let index = if single_block {
+            streamed_index.unwrap_or(index)
+        } else {
+            index
+        };
+        self.block(index, content, parent, ItemState::Complete)
+    }
+
+    fn block(
+        &mut self,
+        index: u64,
+        content: TranscriptContent,
+        parent: Option<String>,
+        state: ItemState,
+    ) -> TranscriptChange {
+        let existing = self
+            .streams
+            .get(&parent)
+            .and_then(|s| s.blocks.get(&index))
+            .copied();
+        if let Some(sequence) = existing {
+            if let Some(item) = self.item_mut(sequence) {
+                // Preserve tool annotations when the final message replaces its streamed input.
+                let content = match (content, &item.content) {
+                    (
+                        TranscriptContent::Tool {
+                            tool_use_id,
+                            name,
+                            input_json,
+                            ..
+                        },
+                        TranscriptContent::Tool {
+                            verdict, result, ..
+                        },
+                    ) => TranscriptContent::Tool {
+                        tool_use_id,
+                        name,
+                        input_json,
+                        verdict: verdict.clone(),
+                        result: result.clone(),
+                    },
+                    (content, _) => content,
+                };
+                item.content = content;
+                item.state = state;
+                return TranscriptChange::upsert(item.clone());
+            }
+        }
+        let change = self.insert(content, state, parent.clone());
+        if let TranscriptChange::Upsert { item } = &change {
+            self.streams
+                .entry(parent)
+                .or_default()
+                .blocks
+                .insert(index, item.sequence);
+        }
+        change
+    }
+
+    fn stream(&mut self, event: &StreamEvent, parent: Option<String>) -> Vec<TranscriptChange> {
+        match event {
+            StreamEvent::MessageStart { message, .. } => {
+                self.streams.insert(
+                    parent,
+                    StreamingMessage {
+                        id: message
+                            .extra
+                            .get("id")
+                            .and_then(Value::as_str)
+                            .unwrap_or("")
+                            .into(),
+                        active: true,
+                        blocks: BTreeMap::new(),
+                    },
+                );
+                vec![]
+            }
+            StreamEvent::ContentBlockStart {
+                index,
+                content_block,
+                ..
+            } => vec![self.block(
+                *index,
+                block_content(content_block),
+                parent,
+                ItemState::Streaming,
+            )],
+            StreamEvent::ContentBlockDelta { index, delta, .. } => {
+                let Some(sequence) = self
+                    .streams
+                    .get(&parent)
+                    .and_then(|s| s.blocks.get(index))
+                    .copied()
+                else {
+                    return vec![self.unknown(json!(event), parent)];
+                };
+                let change = match delta {
+                    Extensible::Known(ContentDelta::TextDelta { text, .. }) => {
+                        TranscriptChange::AppendText {
+                            sequence,
+                            text: text.clone(),
+                        }
+                    }
+                    Extensible::Known(ContentDelta::ThinkingDelta { thinking, .. }) => {
+                        TranscriptChange::AppendThinking {
+                            sequence,
+                            text: thinking.clone(),
+                        }
+                    }
+                    Extensible::Known(ContentDelta::SignatureDelta { signature, .. }) => {
+                        TranscriptChange::AppendSignature {
+                            sequence,
+                            signature: signature.clone(),
+                        }
+                    }
+                    Extensible::Known(ContentDelta::InputJsonDelta { partial_json, .. }) => {
+                        TranscriptChange::AppendToolInput {
+                            sequence,
+                            json: partial_json.clone(),
+                        }
+                    }
+                    Extensible::Raw(value) => return vec![self.unknown(value.clone(), parent)],
+                };
+                if !self
+                    .item_mut(sequence)
+                    .is_some_and(|item| item.apply(&change))
+                {
+                    return vec![self.unknown(json!(event), parent)];
+                }
+                vec![change]
+            }
+            StreamEvent::ContentBlockStop { index, .. } => self
+                .streams
+                .get(&parent)
+                .and_then(|s| s.blocks.get(index))
+                .and_then(|sequence| self.item(*sequence))
+                .map(|item| vec![TranscriptChange::upsert(item.clone())])
+                .unwrap_or_default(),
+            StreamEvent::MessageStop { .. } => {
+                if let Some(stream) = self.streams.get_mut(&parent) {
+                    stream.active = false;
+                }
+                vec![]
+            }
+            StreamEvent::MessageDelta { .. } => vec![],
+        }
+    }
+}
+
+fn block_content(block: &Extensible<ContentBlock>) -> TranscriptContent {
+    match block {
+        Extensible::Known(ContentBlock::Text { text, .. }) => {
+            TranscriptContent::Assistant { text: text.clone() }
+        }
+        Extensible::Known(ContentBlock::Thinking { thinking, extra }) => {
+            TranscriptContent::Thinking {
+                text: thinking.clone(),
+                signature: extra
+                    .get("signature")
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .into(),
+            }
+        }
+        Extensible::Known(ContentBlock::ToolUse {
+            id, name, input, ..
+        }) => TranscriptContent::Tool {
+            tool_use_id: id.clone(),
+            name: name.clone(),
+            input_json: input.to_string(),
+            verdict: None,
+            result: None,
+        },
+        _ => TranscriptContent::Unknown {
+            json: json!(block).to_string(),
+        },
+    }
+}
+
+fn content_text(content: &Content) -> String {
+    match content {
+        Content::Text(text) => text.clone(),
+        Content::Blocks(blocks) => blocks
+            .iter()
+            .filter_map(|b| match b {
+                Extensible::Known(ContentBlock::Text { text, .. }) => Some(text.as_str()),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+            .join("\n"),
+        Content::Raw(_) => String::new(),
+    }
+}
+
+fn same_block(left: &TranscriptContent, right: &TranscriptContent) -> bool {
+    match (left, right) {
+        (TranscriptContent::Assistant { .. }, TranscriptContent::Assistant { .. })
+        | (TranscriptContent::Thinking { .. }, TranscriptContent::Thinking { .. }) => true,
+        (
+            TranscriptContent::Tool {
+                tool_use_id: left, ..
+            },
+            TranscriptContent::Tool {
+                tool_use_id: right, ..
+            },
+        ) => left == right,
+        _ => false,
+    }
+}

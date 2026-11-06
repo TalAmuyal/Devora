@@ -65,7 +65,7 @@ impl Store {
         Ok(events)
     }
 
-    /// Live chat is deliberately transient. Token frames never rewrite app-state SQLite.
+    /// The live projection is held in memory. Token patches never rewrite app-state SQLite.
     pub fn dispatch_chat(&self, command: ChatCommand) -> Result<(), StateError> {
         let inner = &mut *lock(&self.inner);
         let event = crate::chat::apply(&mut inner.chats, command)?;
@@ -352,7 +352,57 @@ mod tests {
 #[cfg(test)]
 mod chat_tests {
     use super::*;
-    use crate::{ChatItem, ChatUpdate};
+    use crate::ChatUpdate;
+
+    #[test]
+    fn chat_restores_and_keeps_only_the_latest_window_for_snapshots_and_subscribers() {
+        let store = Store::new();
+        store
+            .dispatch_chat(ChatCommand::Start {
+                tab: 1,
+                generation: 1,
+            })
+            .unwrap();
+        let item = |sequence| crate::TranscriptItem {
+            sequence,
+            cli_session: "session".into(),
+            parent_tool_use_id: None,
+            state: crate::ItemState::Complete,
+            content: crate::TranscriptContent::Assistant {
+                text: sequence.to_string(),
+            },
+        };
+        store
+            .dispatch_chat(ChatCommand::Update {
+                tab: 1,
+                generation: 1,
+                update: ChatUpdate::Restore {
+                    items: (1..=650).map(item).collect(),
+                },
+            })
+            .unwrap();
+        assert_eq!(store.chat_snapshot()[0].items[0].sequence, 451);
+        for sequence in 651..=1000 {
+            store
+                .dispatch_chat(ChatCommand::Update {
+                    tab: 1,
+                    generation: 1,
+                    update: ChatUpdate::Transcript {
+                        change: crate::TranscriptChange::upsert(item(sequence)),
+                    },
+                })
+                .unwrap();
+        }
+        let snapshot = store.chat_snapshot();
+        assert_eq!(snapshot[0].items.len(), 200);
+        assert_eq!(snapshot[0].items.first().unwrap().sequence, 801);
+        assert_eq!(snapshot[0].items.last().unwrap().sequence, 1000);
+        let events = store.subscribe_chats();
+        assert_eq!(
+            events.try_next_batch(1),
+            vec![crate::ChatEvent::Snapshot { chats: snapshot }]
+        );
+    }
 
     #[test]
     fn live_frames_have_atomic_snapshots_reject_old_generations_and_never_write_sqlite() {
@@ -369,16 +419,35 @@ mod chat_tests {
             })
             .unwrap();
         let events = store.subscribe_chats();
-        let item = ChatItem {
-            kind: "message".into(),
-            payload_json: "{\"type\":\"stream_event\"}".into(),
+        let item = crate::TranscriptItem {
+            sequence: 1,
+            cli_session: "session".into(),
+            parent_tool_use_id: None,
+            state: crate::ItemState::Streaming,
+            content: crate::TranscriptContent::Assistant {
+                text: String::new(),
+            },
         };
+        store
+            .dispatch_chat(ChatCommand::Update {
+                tab: 1,
+                generation: 10,
+                update: ChatUpdate::Transcript {
+                    change: crate::TranscriptChange::upsert(item),
+                },
+            })
+            .unwrap();
         for _ in 0..100 {
             store
                 .dispatch_chat(ChatCommand::Update {
                     tab: 1,
                     generation: 10,
-                    update: ChatUpdate::Item { item: item.clone() },
+                    update: ChatUpdate::Transcript {
+                        change: crate::TranscriptChange::AppendText {
+                            sequence: 1,
+                            text: "x".into(),
+                        },
+                    },
                 })
                 .unwrap();
         }
@@ -386,8 +455,11 @@ mod chat_tests {
         assert!(
             matches!(&batch[0], ChatEvent::Snapshot { chats } if chats.len() == 1 && chats[0].items.is_empty())
         );
-        assert_eq!(batch.len(), 101);
-        assert_eq!(store.chat_snapshot()[0].items.len(), 100);
+        assert_eq!(batch.len(), 102);
+        assert_eq!(store.chat_snapshot()[0].items.len(), 1);
+        assert!(
+            matches!(&store.chat_snapshot()[0].items[0].content, crate::TranscriptContent::Assistant { text } if text.len() == 100)
+        );
         assert_eq!(std::fs::read(&path).unwrap(), database);
         assert_eq!(std::fs::read(&wal_path).unwrap_or_default(), wal);
         store
@@ -401,10 +473,18 @@ mod chat_tests {
             .dispatch_chat(ChatCommand::Update {
                 tab: 1,
                 generation: 10,
-                update: ChatUpdate::Item { item }
+                update: ChatUpdate::Transcript {
+                    change: crate::TranscriptChange::AppendText {
+                        sequence: 1,
+                        text: "stale".into()
+                    }
+                }
             })
             .is_err());
-        assert_eq!(store.chat_snapshot()[0].items.len(), 100);
+        assert_eq!(store.chat_snapshot()[0].items.len(), 1);
+        assert!(
+            matches!(&store.chat_snapshot()[0].items[0].content, crate::TranscriptContent::Assistant { text } if text.len() == 100)
+        );
         events.close();
         store.dispatch_chat(ChatCommand::Close { tab: 1 }).unwrap();
         assert!(store.chat_snapshot().is_empty());

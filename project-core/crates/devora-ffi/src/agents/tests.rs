@@ -163,10 +163,16 @@ impl Fixture {
 }
 
 fn has_message(chat: &Chat, kind: &str) -> bool {
-    chat.items.iter().any(|item| {
-        item.kind == "message"
-            && serde_json::from_str::<serde_json::Value>(&item.payload_json).unwrap()["type"]
-                == kind
+    chat.items.iter().any(|item| match &item.content {
+        TranscriptContent::System {
+            kind: SystemKind::Result,
+            ..
+        } => kind == "result",
+        TranscriptContent::Assistant { .. } => kind == "assistant",
+        TranscriptContent::Unknown { json } => {
+            serde_json::from_str::<serde_json::Value>(json).unwrap()["type"] == kind
+        }
+        _ => false,
     })
 }
 
@@ -215,6 +221,49 @@ fn live_facade_owns_session_without_subscribers_and_closes_before_pause_finishes
     let next = f.wait(&events, |c| {
         c.tab == next_tab && c.phase == ChatPhase::Running
     });
+    assert!(next.items.iter().any(|item| matches!(&item.content, TranscriptContent::User { text, .. } if text == "ignore-interrupt")));
+    assert!(next.items.iter().any(|item| matches!(
+        item.content,
+        TranscriptContent::System {
+            kind: SystemKind::UnfinishedFirstPrompt,
+            ..
+        }
+    )));
+    let saved = block_on(
+        f.core
+            .agent_history(f.profile.path_string(), "Delta".into(), 0, 500),
+    )
+    .unwrap();
+    assert_eq!(saved, next.items);
+    let tail =
+        block_on(
+            f.core
+                .agent_history_before(f.profile.path_string(), "Delta".into(), None, 2),
+        )
+        .unwrap();
+    assert_eq!(tail, saved[saved.len() - 2..]);
+    let older = block_on(f.core.agent_history_before(
+        f.profile.path_string(),
+        "Delta".into(),
+        Some(tail[0].sequence),
+        500,
+    ))
+    .unwrap();
+    assert_eq!(older, saved[..saved.len() - 2]);
+
+    let first_page = block_on(
+        f.core
+            .agent_history(f.profile.path_string(), "Delta".into(), 0, 2),
+    )
+    .unwrap();
+    let second_page = block_on(f.core.agent_history(
+        f.profile.path_string(),
+        "Delta".into(),
+        first_page.last().unwrap().sequence,
+        2,
+    ))
+    .unwrap();
+    assert!(second_page[0].sequence > first_page.last().unwrap().sequence);
     assert_ne!(next.session_id, chat.session_id);
     assert_ne!(next.generation, chat.generation);
     assert!(block_on(
@@ -300,7 +349,16 @@ fn permissions_interrupt_recovery_and_owning_profile_are_projected() {
     f.wait(&events, |c| has_message(c, "fake_stream_ready"));
     block_on(f.core.interrupt_agent(tab, chat.generation)).unwrap();
     f.wait(&events, |c| {
-        !c.turn_running && c.items.iter().any(|i| i.kind == "interruption")
+        !c.turn_running
+            && c.items.iter().any(|i| {
+                matches!(
+                    i.content,
+                    TranscriptContent::System {
+                        kind: SystemKind::Interruption,
+                        ..
+                    }
+                )
+            })
     });
     block_on(f.core.send_agent_turn(tab, chat.generation, "crash".into())).unwrap();
     let recovered = f.wait(&events, |c| {
@@ -347,7 +405,7 @@ fn permissions_interrupt_recovery_and_owning_profile_are_projected() {
 }
 
 #[test]
-fn persisted_tabs_restore_without_live_transcript_and_missing_spaces_fail_on_their_tab() {
+fn persisted_tabs_restore_the_typed_transcript_and_missing_spaces_fail_on_their_tab() {
     let mut f = Fixture::new(true);
     f.create("Restored");
     let tab = f.open("Restored");
@@ -382,7 +440,7 @@ fn persisted_tabs_restore_without_live_transcript_and_missing_spaces_fail_on_the
     let events = f.core.subscribe_agent_chats().unwrap();
     let restored = f.wait(&events, |c| c.phase == ChatPhase::Running);
     assert_eq!(restored.session_id, chat.session_id);
-    assert!(!has_message(&restored, "assistant"));
+    assert!(has_message(&restored, "assistant"));
     let failed = f.open("Missing");
     f.wait(&events, |c| c.tab == failed && c.phase == ChatPhase::Failed);
     assert!(f

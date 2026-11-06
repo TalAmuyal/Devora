@@ -216,3 +216,6 @@ mod tests {
         assert_eq!(spec.args, expected);
     }
 }
+
+/// Typed live and durable transcript projection.
+pub mod transcript;

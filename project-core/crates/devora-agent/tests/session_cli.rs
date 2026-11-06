@@ -592,6 +592,27 @@ async fn pinned_cli_executes_the_in_process_judgess_callback_before_permission_f
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[ignore = "requires CI-pinned Claude CLI, Node and Sapphire npm dependencies"]
 async fn pinned_cli_pause_and_resume_retains_the_conversation() {
+    async fn collect_turn(session: &mut Session) -> Vec<Value> {
+        tokio::time::timeout(Duration::from_secs(45), async {
+            let mut messages = vec![];
+            while let Some(event) = session.next_event().await {
+                match event {
+                    SessionEvent::Message(message) => {
+                        let done = matches!(&message, Message::Known(KnownMessage::Result(_)));
+                        messages.push(serde_json::to_value(message).unwrap());
+                        if done {
+                            return messages;
+                        }
+                    }
+                    SessionEvent::Failed(error) => panic!("{error}"),
+                    _ => {}
+                }
+            }
+            panic!("session ended before result");
+        })
+        .await
+        .expect("resume probe deadline")
+    }
     check_pin().await;
     let fixture = Fixture::new();
     let mut backend = Backend::start(fixture.root.path()).await;
@@ -607,7 +628,41 @@ async fn pinned_cli_pause_and_resume_retains_the_conversation() {
         .send_turn("Remember the word AMBER.".into())
         .await
         .unwrap();
-    result(&mut first).await;
+    let first_messages = collect_turn(&mut first).await;
+    let mut folded = devora_agent::transcript::Transcript::new(vec![], first.session_id());
+    for value in &first_messages {
+        folded.event(&SessionEvent::Message(
+            Message::parse(&value.to_string()).unwrap(),
+        ));
+    }
+    for block_type in ["text", "thinking"] {
+        let expected = first_messages
+            .iter()
+            .filter(|value| value["type"] == "assistant")
+            .flat_map(|value| value["message"]["content"].as_array().into_iter().flatten())
+            .filter(|block| block["type"] == block_type)
+            .count();
+        let actual = folded
+            .items()
+            .iter()
+            .filter(|item| {
+                matches!(
+                    (&item.content, block_type),
+                    (
+                        devora_agent::transcript::TranscriptContent::Assistant { .. },
+                        "text"
+                    ) | (
+                        devora_agent::transcript::TranscriptContent::Thinking { .. },
+                        "thinking"
+                    )
+                )
+            })
+            .count();
+        assert_eq!(
+            actual, expected,
+            "streamed {block_type} must be replaced by whole native blocks"
+        );
+    }
     let paused = first.pause().await.unwrap();
     assert!(paused.graceful);
     let mut resumed_options = options;
@@ -624,7 +679,33 @@ async fn pinned_cli_pause_and_resume_retains_the_conversation() {
         .send_turn("Recall the earlier word.".into())
         .await
         .unwrap();
-    result(&mut resumed).await;
+    let resumed_messages = collect_turn(&mut resumed).await;
+    let first_ids: Vec<_> = first_messages
+        .iter()
+        .filter_map(|v| v["message"]["id"].as_str())
+        .collect();
+    assert!(!first_ids.is_empty());
+    let replayed = resumed_messages
+        .iter()
+        .filter(|v| {
+            v["message"]["id"]
+                .as_str()
+                .is_some_and(|id| first_ids.contains(&id))
+                || (v["type"] == "user" && v["message"]["content"] == "Remember the word AMBER.")
+                || v["event"]["message"]["id"]
+                    .as_str()
+                    .is_some_and(|id| first_ids.contains(&id))
+        })
+        .count();
+    eprintln!(
+        "pinned resume replay probe: first={} resumed={} prior_message_replays={replayed}",
+        first_messages.len(),
+        resumed_messages.len()
+    );
+    assert_eq!(
+        replayed, 0,
+        "resume unexpectedly replays previous transcript messages"
+    );
     assert!(resumed.pause().await.unwrap().graceful);
     let snapshot = backend.command(json!({"action":"snapshot"})).await;
     let requests = snapshot["requests"].as_array().unwrap();

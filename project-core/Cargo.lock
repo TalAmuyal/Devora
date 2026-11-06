@@ -550,6 +550,7 @@ dependencies = [
 name = "devora-state"
 version = "0.1.0"
 dependencies = [
+ "devora-agent",
  "event-listener",
  "futures-lite",
  "rusqlite",

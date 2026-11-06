@@ -5,10 +5,11 @@ mod events;
 mod launch;
 mod operations;
 
+use devora_agent::session::SessionEvent;
 pub use devora_agent::session::{PermissionAnswer, Plugin};
-use devora_agent::session::{SessionEvent, SessionHandle};
 use devora_agent_space::Space;
 pub use devora_agent_space::{CreationForm, Entry as SpaceEntry, Field, LaunchContext, Source};
+use devora_agent_space::{SpaceEvent, SpaceHandle};
 use devora_app::log::Log;
 pub use devora_config::agent::Scope;
 use devora_state::{ChatCommand, ChatPhase, ChatUpdate, Command, Event, SessionKind, Store};
@@ -40,7 +41,7 @@ struct Owner {
     run_id: u64,
     tab: Option<u64>,
     generation: u64,
-    handle: Option<SessionHandle>,
+    handle: Option<SpaceHandle>,
     pause: watch::Sender<bool>,
     done: watch::Sender<bool>,
 }
@@ -198,12 +199,13 @@ impl Agents {
                             generation,
                         })
                         .map_err(|e| e.to_string())?;
-                    events::item(
+                    events::update(
                         &self.state,
                         tab.id,
                         generation,
-                        "failure",
-                        serde_json::json!({"message":error}),
+                        ChatUpdate::Failure {
+                            message: error.clone(),
+                        },
                     );
                     events::update(
                         &self.state,
@@ -301,6 +303,38 @@ impl Agents {
         shutdown(&self.inner, &self.state).await;
     }
 
+    pub async fn history(
+        &self,
+        profile: &Path,
+        name: &str,
+        after: u64,
+        limit: u32,
+    ) -> Result<Vec<devora_agent::transcript::TranscriptItem>, String> {
+        let profile = profile.to_path_buf();
+        let name = name.to_owned();
+        let (sent, received) = oneshot::channel();
+        self.runtime.spawn_blocking(move || {
+            let _ = sent.send(Space::read_history(&profile, &name, after, limit));
+        });
+        received.await.map_err(|e| e.to_string())?
+    }
+
+    pub async fn history_before(
+        &self,
+        profile: &Path,
+        name: &str,
+        before: Option<u64>,
+        limit: u32,
+    ) -> Result<Vec<devora_agent::transcript::TranscriptItem>, String> {
+        let profile = profile.to_path_buf();
+        let name = name.to_owned();
+        let (sent, received) = oneshot::channel();
+        self.runtime.spawn_blocking(move || {
+            let _ = sent.send(Space::history_before(&profile, &name, before, limit));
+        });
+        received.await.map_err(|e| e.to_string())?
+    }
+
     pub fn list(&self, profile: &Path) -> Result<Vec<SpaceEntry>, String> {
         Space::list(profile)
     }
@@ -381,7 +415,7 @@ impl Agents {
         received.await.map_err(|e| e.to_string())?
     }
 
-    fn handle(&self, tab: u64, generation: u64) -> Result<SessionHandle, String> {
+    fn handle(&self, tab: u64, generation: u64) -> Result<SpaceHandle, String> {
         let inner = lock(&self.inner);
         let owner = inner
             .owners
@@ -426,13 +460,7 @@ impl Agents {
             );
             handle
         };
-        events::item(
-            &self.state,
-            tab,
-            generation,
-            "user_submitted",
-            serde_json::json!({"text": text}),
-        );
+
         let state = self.state.clone();
         let (reply, received) = oneshot::channel();
         self.runtime.spawn(async move {
@@ -440,13 +468,7 @@ impl Agents {
             if result.is_err() {
                 events::update(&state, tab, generation, ChatUpdate::Turn { running: false });
             }
-            events::item(
-                &state,
-                tab,
-                generation,
-                "user_submission",
-                serde_json::json!({"error":result.as_ref().err()}),
-            );
+
             let _ = reply.send(result);
         });
         received.await.map_err(|e| e.to_string())?
@@ -454,20 +476,9 @@ impl Agents {
 
     pub async fn interrupt(&self, tab: u64, generation: u64) -> Result<(), String> {
         let handle = self.handle(tab, generation)?;
-        let state = self.state.clone();
         let (reply, received) = oneshot::channel();
         self.runtime.spawn(async move {
-            let result = handle.interrupt().await.map(|_| ());
-            if result.is_ok() {
-                events::item(
-                    &state,
-                    tab,
-                    generation,
-                    "interruption",
-                    serde_json::json!({}),
-                );
-            }
-            let _ = reply.send(result);
+            let _ = reply.send(handle.interrupt().await.map(|_| ()));
         });
         received.await.map_err(|e| e.to_string())?
     }
@@ -480,15 +491,6 @@ impl Agents {
         answer: PermissionAnswer,
     ) -> Result<(), String> {
         let handle = self.handle(tab, generation)?;
-        let record = match &answer {
-            PermissionAnswer::Allow => serde_json::json!({"kind":"allow"}),
-            PermissionAnswer::Deny { message } => {
-                serde_json::json!({"kind":"deny","message":message})
-            }
-            PermissionAnswer::AllowWithSuggestedRule => {
-                serde_json::json!({"kind":"allow_with_suggested_rule"})
-            }
-        };
         let state = self.state.clone();
         let (reply, received) = oneshot::channel();
         self.runtime.spawn(async move {
@@ -498,16 +500,7 @@ impl Agents {
                     &state,
                     tab,
                     generation,
-                    ChatUpdate::PermissionRemoved {
-                        request_id: request_id.clone(),
-                    },
-                );
-                events::item(
-                    &state,
-                    tab,
-                    generation,
-                    "permission_answer",
-                    serde_json::json!({"request_id":request_id,"answer":record}),
+                    ChatUpdate::PermissionRemoved { request_id },
                 );
             }
             let _ = reply.send(result);
@@ -581,12 +574,13 @@ async fn run(
     if let Err(error) = outcome {
         log.report_error(&error);
         if let Some(tab) = owner.tab {
-            events::item(
+            events::update(
                 &state,
                 tab,
                 owner.generation,
-                "failure",
-                serde_json::json!({"message":error}),
+                ChatUpdate::Failure {
+                    message: error.clone(),
+                },
             );
         }
         phase(&state, owner, ChatPhase::Failed);
@@ -608,13 +602,32 @@ async fn run_session(
 ) -> Result<(), String> {
     let path = key.profile.clone();
     let name = key.name.clone();
-    let space = tokio::task::spawn_blocking(move || Space::open(&path, &name))
-        .await
-        .map_err(|e| e.to_string())??;
+    let (space, history) = tokio::task::spawn_blocking(move || {
+        let space = Space::open(&path, &name)?;
+        let history = space.history()?;
+        Ok::<_, String>((space, history))
+    })
+    .await
+    .map_err(|e| e.to_string())??;
     if *pause.borrow() {
         return Ok(());
     }
-    let mut running = space.start(&context, log.clone()).await?;
+    publish(inner, state, key, generation, SpaceEvent::Restored(history));
+    let mut running = match space.start(&context, log.clone()).await {
+        Ok(running) => running,
+        Err(error) => {
+            let profile = key.profile.clone();
+            let name = key.name.clone();
+            let restored = tokio::task::spawn_blocking(move || {
+                Space::history_before(&profile, &name, None, 200)
+            })
+            .await;
+            if let Ok(Ok(items)) = restored {
+                publish(inner, state, key, generation, SpaceEvent::Restored(items));
+            }
+            return Err(error);
+        }
+    };
     {
         let mut inner = lock(inner);
         let owner = inner.owners.get_mut(key).ok_or("agent owner disappeared")?;
@@ -623,7 +636,7 @@ async fn run_session(
     loop {
         if *pause.borrow() {
             let result = running.pause().await;
-            while let Some(event) = running.next_event().await {
+            while let Some(event) = running.next_update().await {
                 publish(inner, state, key, generation, event);
             }
             return result.map(|_| ());
@@ -631,9 +644,9 @@ async fn run_session(
         tokio::select! {
             biased;
             _ = pause.changed() => {},
-            event = running.next_event() => {
+            event = running.next_update() => {
                 let Some(event) = event else { let _ = running.pause().await; return Ok(()); };
-                let failed = match &event { SessionEvent::Failed(message) => Some(message.clone()), _ => None };
+                let failed = match &event { SpaceEvent::Session(SessionEvent::Failed(message)) => Some(message.clone()), _ => None };
                 if let Some(error) = failed {
                     let _ = running.pause().await;
                     return Err(error);
@@ -644,9 +657,9 @@ async fn run_session(
     }
 }
 
-fn publish(inner: &Mutex<Inner>, state: &Store, key: &Key, run_id: u64, event: SessionEvent) {
+fn publish(inner: &Mutex<Inner>, state: &Store, key: &Key, run_id: u64, event: SpaceEvent) {
     let mut inner = lock(inner);
-    if matches!(event, SessionEvent::Exited { .. }) {
+    if matches!(event, SpaceEvent::Session(SessionEvent::Exited { .. })) {
         inner.generation += 1;
         let generation = inner.generation;
         if let Some(owner) = inner.owners.get_mut(key).filter(|o| o.run_id == run_id) {
