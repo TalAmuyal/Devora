@@ -17,7 +17,7 @@ use std::path::Path;
 pub const CLAUDE: &str = "claude";
 
 /// Environment defaults applied when the variable is unset or empty.
-const ENV_DEFAULTS: [(&str, &str); 3] = [
+pub const ENV_DEFAULTS: [(&str, &str); 3] = [
     ("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "1"),
     ("CLAUDE_CODE_ENABLE_TELEMETRY", "0"),
     ("CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS", "1"),
@@ -94,7 +94,7 @@ fn is_flag(arg: &str, flag: &str) -> bool {
 }
 
 /// The plugin directories under `plugins_dir`, sorted by name; non-directories are skipped and a missing directory yields none.
-fn plugin_dirs(plugins_dir: Option<&Path>) -> Vec<OsString> {
+pub fn plugin_dirs(plugins_dir: Option<&Path>) -> Vec<OsString> {
     let Some(entries) = plugins_dir.and_then(|dir| std::fs::read_dir(dir).ok()) else {
         return Vec::new();
     };

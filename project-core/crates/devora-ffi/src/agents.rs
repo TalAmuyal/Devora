@@ -1,7 +1,9 @@
 //! Agent Space exports. Every async operation runs on the facade-owned agent
 //! loop. Subscriptions are observations and never own the running process.
 use crate::{CoreError, DevoraCore};
-use devora_core::agents::{self, CreationForm, LaunchContext, PermissionAnswer};
+use devora_core::agents::{
+    self, CreationForm, Field, LaunchContext, PermissionAnswer, Scope, Source,
+};
 use devora_core::state::{
     Chat, ChatEvent, ChatItem, ChatPhase, ChatUpdate, PermissionQuestion, Subscription,
 };
@@ -33,6 +35,17 @@ pub struct AgentLaunch {
     pub environment: HashMap<String, String>,
 }
 
+impl AgentCreationForm {
+    fn core(self) -> CreationForm {
+        CreationForm {
+            name: self.name,
+            role: self.role,
+            repos: self.repos,
+            inputs: self.inputs.into_iter().collect(),
+        }
+    }
+}
+
 impl AgentLaunch {
     fn context(self, global_config: PathBuf) -> Result<LaunchContext, CoreError> {
         let settings = serde_json::from_str(&self.settings_json)
@@ -52,6 +65,32 @@ impl AgentLaunch {
             environment: self.environment.into_iter().collect(),
         })
     }
+}
+
+#[uniffi::remote(Enum)]
+#[uniffi(name = "AgentFieldSource")]
+pub enum Source {
+    Launch,
+    Default,
+    Global,
+    Profile,
+    Derived,
+}
+
+/// One placeholder of the agent template, for the creation form.
+#[uniffi::remote(Record)]
+#[uniffi(name = "AgentField")]
+pub struct Field {
+    pub key: String,
+    pub value: Option<String>,
+    pub source: Option<Source>,
+}
+
+#[uniffi::remote(Enum)]
+#[uniffi(name = "AgentConfigScope")]
+pub enum Scope {
+    Global,
+    Profile,
 }
 
 #[derive(uniffi::Record)]
@@ -183,12 +222,7 @@ impl DevoraCore {
     ) -> Result<AgentCreation, CoreError> {
         let creation = self.agents.create(
             profile_path.into(),
-            CreationForm {
-                name: form.name,
-                role: form.role,
-                repos: form.repos,
-                inputs: form.inputs.into_iter().collect(),
-            },
+            form.core(),
             launch_inputs.into_iter().collect(),
             self.config_path.clone(),
         )?;
@@ -203,6 +237,38 @@ impl DevoraCore {
         self.agents.cancel_creation(id);
         Ok(())
     }
+    /// The template's fields as `form` would render them: the ones only the form
+    /// fills first, then the pre-filled ones, then the derived ones.
+    pub fn agent_creation_fields(
+        &self,
+        profile_path: String,
+        form: AgentCreationForm,
+        launch_inputs: HashMap<String, String>,
+    ) -> Result<Vec<Field>, CoreError> {
+        Ok(self.agents.creation_fields(
+            Path::new(&profile_path),
+            &self.config_path,
+            launch_inputs.into_iter().collect(),
+            &form.core(),
+        )?)
+    }
+    /// Saves a creation-form value to its config, as the Settings Hub would.
+    pub fn save_agent_field(
+        &self,
+        profile_path: String,
+        scope: Scope,
+        key: String,
+        value: String,
+    ) -> Result<(), CoreError> {
+        self.agents.save_field(
+            Path::new(&profile_path),
+            &self.config_path,
+            scope,
+            &key,
+            &value,
+        )?;
+        Ok(())
+    }
     pub fn list_agent_spaces(&self, profile_path: String) -> Result<Vec<AgentSpace>, CoreError> {
         Ok(self
             .agents
@@ -215,6 +281,30 @@ impl DevoraCore {
                 error: e.error,
             })
             .collect())
+    }
+    /// The launch Devora resolves itself: Claude and the environment from the
+    /// user's login shell, with `resources_dir`'s tools and plugins.
+    pub async fn resolve_agent_launch(
+        &self,
+        resources_dir: Option<String>,
+    ) -> Result<AgentLaunch, CoreError> {
+        let context = self
+            .agents
+            .resolve_launch(self.config_path.clone(), resources_dir.map(PathBuf::from))
+            .await?;
+        Ok(AgentLaunch {
+            program: context.program.to_string_lossy().into_owned(),
+            plugins: context
+                .plugins
+                .into_iter()
+                .map(|p| AgentPlugin {
+                    name: p.name,
+                    directory: p.directory.to_string_lossy().into_owned(),
+                })
+                .collect(),
+            settings_json: context.settings.to_string(),
+            environment: context.environment.into_iter().collect(),
+        })
     }
     pub async fn open_agent_space(
         &self,

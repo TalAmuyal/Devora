@@ -495,6 +495,7 @@ dependencies = [
  "devora-theme",
  "devora-workspace",
  "serde_json",
+ "tempfile",
  "tokio",
 ]
 

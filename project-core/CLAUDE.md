@@ -36,7 +36,9 @@ It is being extracted from Ember's `src-tauri/` area by area (TalAmuyal/Devora#2
 
 ## Agent Space facade
 
-Agent Space tabs carry their own profile and name in `SessionKind::AgentSpace`. The current tab record reserves its pane ID for the later chat UI. It has no terminal launch spec. The host supplies explicit launch inputs to `open_agent_space` and calls `restore_agent_spaces` with those inputs on relaunch. The owning profile resolves model, effort and model aliases.
+Agent Space tabs carry their own profile and name in `SessionKind::AgentSpace`. The current tab record reserves its pane ID for the later chat UI. It has no terminal launch spec. The host supplies explicit launch inputs to `open_agent_space` and calls `restore_agent_spaces` with those inputs on relaunch; `resolve_agent_launch` builds them from the user's login shell and the app bundle (`agents/launch.rs`). The owning profile resolves model, effort and model aliases.
+
+The creation form lists the template's placeholders with their values and sources (`agent_creation_fields`, from `devora-agent-space`'s `inputs`), and `save_agent_field` writes one back to the global or profile `agent` config section.
 
 The registry serializes ownership by canonical profile and space name. Closing removes the tab immediately, while a pausing owner remains reserved until the CLI is reaped and StopInfo is committed. Reopen waits for that barrier. Delete rejects an open or pausing owner. `shutdown_agents` awaits all active pauses and cancels/awaits creation operations. Dropping the facade uses the same shutdown path.
 

@@ -9,6 +9,7 @@ publish.workspace = true
 devora-agent.workspace = true
 devora-agent-space.workspace = true
 serde_json.workspace = true
+tempfile.workspace = true
 tokio = { workspace = true, features = ["sync", "time", "process", "io-util", "macros"] }
 devora-app.workspace = true
 devora-config.workspace = true

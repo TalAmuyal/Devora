@@ -30,8 +30,10 @@ It recorded protocol fixtures that seed the contract tests.
 			- CLI to host: `can_use_tool`, `hook_callback`, `mcp_message` and `control_cancel_request`.
 	- Compaction, caching, hooks and plugins stay inside the CLI.
 		`/compact` is a user turn and is marked by a `compact_boundary` message. Mode changes, interrupts and `--resume` after a kill were all verified.
-	- Claude is spawned with a scrubbed environment (auth and proxy only).
+	- Claude is spawned with the user's login-shell environment, less the variables of other sessions: another Claude session's (such as `CLAUDECODE` and `CLAUDE_CODE_SESSION_ID`), Neovim's and a parent terminal's Devora variables.
 		Otherwise a launcher running inside a Claude Code session leaks that session's identity, and the child reuses its session id.
+		The rest stays, because the agent's tools run in the same environment and need what they need in a terminal, such as `SSH_AUTH_SOCK` for `git push` and the user's tokens.
+		(Amended: the first decision kept only auth and proxy variables, which left an agent's tools without the user's environment.)
 - **Judgess is linked in-process as a `PreToolUse` hook callback**
 	- Sapphire registers it in `initialize`; the plugin is left out of Sapphire's sessions, so nothing is judged twice.
 	- Approve maps to `allow`, Deny to `deny` with the redirect message, and Defer to `ask` (which forces a prompt even in auto mode). An abstention returns nothing, so the CLI's own flow decides.
@@ -55,6 +57,7 @@ It recorded protocol fixtures that seed the contract tests.
 - **The Messages API directly.** Rejected: it would reimplement tools, hooks, plugins, compaction, caching and auto mode.
 - **Judgess as the plugin's `PermissionRequest` hook, or as an in-process `PermissionRequest` callback.** Rejected: that hook fires only when a prompt is raised, so it races the prompt in manual mode and never fires in auto mode. TalAmuyal/Devora#213 tracks moving the plugin itself to `PreToolUse`.
 - **Judgess answering `can_use_tool`.** Rejected: `can_use_tool` is never sent in auto mode.
+- **A scrubbed environment (auth and proxy only), or one with extra variables listed per profile.** Rejected: the agent's tools would fail where they work in the user's terminal, starting with `git push` over SSH, and a list would grow one failure at a time.
 - **Long-lived agents in a daemon, detachable from the UI.** Rejected for now: it is simpler to tie agents to the UI. A detach project can host the same in-process crates later.
 
 ## Consequences

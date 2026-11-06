@@ -188,7 +188,7 @@ pub fn build(
 }
 
 /// The bundle directories that go first on `PATH`, in order, skipping any that don't exist.
-fn bundle_paths(resources: &Path, git_shortcuts: bool) -> Vec<String> {
+pub fn bundle_paths(resources: &Path, git_shortcuts: bool) -> Vec<String> {
     let mut paths = Vec::new();
     let mut push = |dir: PathBuf| paths.push(dir.to_string_lossy().into_owned());
 
