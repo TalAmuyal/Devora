@@ -255,7 +255,7 @@ pub struct ChatContext {
 }
 #[uniffi::remote(Enum)]
 pub enum ChatUpdate {
-    PauseRequested,
+    PauseRequested { requested: bool },
     Turn { running: bool },
     Generation { generation: u64 },
     Phase { phase: ChatPhase },

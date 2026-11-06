@@ -49,7 +49,7 @@ pub struct Chat {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ChatUpdate {
-    PauseRequested,
+    PauseRequested { requested: bool },
     Turn { running: bool },
     Generation { generation: u64 },
     Phase { phase: ChatPhase },
@@ -132,7 +132,7 @@ pub(crate) fn apply(chats: &mut Vec<Chat>, command: ChatCommand) -> Result<ChatE
                 .find(|c| c.tab == tab && c.generation == generation)
                 .ok_or(StateError::UnknownTab { tab })?;
             match &update {
-                ChatUpdate::PauseRequested => chat.pause_requested = true,
+                ChatUpdate::PauseRequested { requested } => chat.pause_requested = *requested,
                 ChatUpdate::Turn { running } => chat.turn_running = *running,
                 ChatUpdate::Generation { generation } => {
                     chat.generation = *generation;
@@ -140,7 +140,7 @@ pub(crate) fn apply(chats: &mut Vec<Chat>, command: ChatCommand) -> Result<ChatE
                 }
                 ChatUpdate::Phase { phase } => {
                     chat.phase = phase.clone();
-                    if *phase != ChatPhase::Running {
+                    if matches!(phase, ChatPhase::Paused | ChatPhase::Failed) {
                         chat.pause_requested = false;
                     }
                     if *phase != ChatPhase::Running {
@@ -151,7 +151,6 @@ pub(crate) fn apply(chats: &mut Vec<Chat>, command: ChatCommand) -> Result<ChatE
                 ChatUpdate::Ready { session_id } => {
                     chat.phase = ChatPhase::Running;
                     chat.error = None;
-                    chat.pause_requested = false;
                     chat.turn_running = false;
                     chat.session_id = Some(session_id.clone());
                     chat.questions.clear();

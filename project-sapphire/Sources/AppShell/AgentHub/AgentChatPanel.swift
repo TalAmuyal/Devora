@@ -163,10 +163,7 @@ struct AgentChatPanel: View {
 				ProgressView("Opening agent…").frame(maxWidth: .infinity, maxHeight: .infinity)
 			}
 			Divider()
-			// Bravo's context state supplies the context window and threshold after integration.
-			Text("Context usage pending").font(.caption).foregroundStyle(.secondary).frame(
-				maxWidth: .infinity, alignment: .leading
-			).padding(.horizontal, 12).padding(.vertical, 6)
+			AgentContextBar(context: model.chat.chat?.context)
 			Divider()
 			AgentPrompt(
 				text: Binding(get: { model.chat.draft }, set: { model.chat.draft = $0 }),
@@ -258,5 +255,65 @@ final class PromptTextView: NSTextView {
 
 	override func keyDown(with event: NSEvent) {
 		if !send(Layers.KeyPress(event)) { super.keyDown(with: event) }
+	}
+}
+
+/// Context metrics and the compaction threshold come from the space actor.
+struct AgentContextBar: View {
+	let context: ChatContext?
+
+	var fraction: Double {
+		guard let context, context.windowTokens > 0 else { return 0 }
+		return min(1, Double(context.usedTokens) / Double(context.windowTokens))
+	}
+
+	var summary: String {
+		guard let context else { return "Waiting for context usage" }
+		guard context.windowTokens > 0 else {
+			return "\(context.usedTokens.formatted()) tokens · window pending"
+		}
+		return "\(context.usedTokens.formatted()) / \(context.windowTokens.formatted()) tokens"
+	}
+
+	var thresholdLabel: String {
+		context.map { "Compaction at \($0.thresholdPercent)%" } ?? "Waiting for compaction threshold"
+	}
+
+	var body: some View {
+		VStack(alignment: .leading, spacing: 4) {
+			HStack {
+				Text("Context")
+				Spacer()
+				Text(summary).monospacedDigit()
+			}
+			GeometryReader { geometry in
+				ZStack(alignment: .leading) {
+					Capsule().fill(.quaternary)
+					Capsule().fill(.tint).frame(width: geometry.size.width * fraction)
+					if let context {
+						Rectangle().fill(.orange).frame(width: 2)
+							.offset(
+								x: max(
+									0,
+									min(
+										geometry.size.width - 2,
+										geometry.size.width
+											* Double(
+												context.thresholdPercent
+											) / 100 - 1)))
+					}
+				}
+			}
+			.frame(height: 6)
+			.accessibilityHidden(true)
+			Text(thresholdLabel).foregroundStyle(.secondary)
+		}
+		.font(.caption)
+		.padding(.horizontal, 12)
+		.padding(.vertical, 6)
+		.accessibilityElement(children: .combine)
+		.accessibilityLabel("Agent context")
+		.accessibilityValue(summary + ", " + thresholdLabel)
+		.accessibilityIdentifier("agent-context")
 	}
 }

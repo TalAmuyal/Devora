@@ -37,19 +37,13 @@ impl Key {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Pause {
-    None,
-    AfterTurn,
-    Immediate,
-}
-
 struct Owner {
     run_id: u64,
     tab: Option<u64>,
     generation: u64,
     handle: Option<SpaceHandle>,
-    pause: watch::Sender<Pause>,
+    pause: watch::Sender<bool>,
+    pause_requested: bool,
     done: watch::Sender<bool>,
 }
 
@@ -142,7 +136,7 @@ impl Agents {
                 }
                 let waiting = inner.owners.get(&key).filter(|owner| !*owner.done.borrow());
                 if let Some(owner) = waiting {
-                    if *owner.pause.borrow() == Pause::None {
+                    if !*owner.pause.borrow() && !owner.pause_requested {
                         let tab = owner.tab.ok_or("agent has no tab")?;
                         self.state
                             .dispatch(Command::ActivateTab { tab })
@@ -154,7 +148,7 @@ impl Agents {
                     let tab = self.open_tab(&inner, &key)?;
                     inner.generation += 1;
                     let generation = inner.generation;
-                    let (pause, paused) = watch::channel(Pause::None);
+                    let (pause, paused) = watch::channel(false);
                     let (done, _) = watch::channel(false);
                     inner.owners.insert(
                         key.clone(),
@@ -164,6 +158,7 @@ impl Agents {
                             generation,
                             handle: None,
                             pause,
+                            pause_requested: false,
                             done,
                         },
                     );
@@ -280,7 +275,7 @@ impl Agents {
             .map_err(|e| e.to_string())?;
         if let Some(owner) = inner.owners.values_mut().find(|o| o.tab == Some(tab)) {
             owner.tab = None;
-            owner.pause.send_replace(Pause::Immediate);
+            owner.pause.send_replace(true);
         }
         Ok(())
     }
@@ -297,7 +292,7 @@ impl Agents {
                 return Ok(());
             }
             phase(&self.state, owner, ChatPhase::Pausing);
-            owner.pause.send_replace(Pause::Immediate);
+            owner.pause.send_replace(true);
             owner.done.subscribe()
         };
         done.wait_for(|done| *done)
@@ -309,21 +304,66 @@ impl Agents {
     /// Reserve a pause without interrupting the active turn. Permission answers
     /// and Stop remain available, while further sends are rejected immediately.
     pub fn pause_after_turn(&self, tab: u64, generation: u64) -> Result<(), String> {
-        let inner = lock(&self.inner);
+        let mut inner = lock(&self.inner);
+        if inner.closing {
+            return Err("agents are shutting down".into());
+        }
         let owner = inner
             .owners
-            .values()
+            .values_mut()
             .find(|o| o.tab == Some(tab))
             .ok_or("agent is not open")?;
-        if inner.closing
-            || owner.generation != generation
-            || *owner.pause.borrow() == Pause::Immediate
-            || *owner.done.borrow()
-        {
+        if owner.generation != generation || *owner.pause.borrow() || *owner.done.borrow() {
             return Err("agent generation is stale or pausing".into());
         }
-        events::update(&self.state, tab, generation, ChatUpdate::PauseRequested);
-        owner.pause.send_replace(Pause::AfterTurn);
+        if owner.pause_requested {
+            return Ok(());
+        }
+        let completion = owner
+            .handle
+            .as_ref()
+            .ok_or("agent is not ready")?
+            .pause_after_turn();
+        owner.pause_requested = true;
+        let run_id = owner.run_id;
+        events::update(
+            &self.state,
+            tab,
+            generation,
+            ChatUpdate::PauseRequested { requested: true },
+        );
+        drop(inner);
+
+        let inner = self.inner.clone();
+        let state = self.state.clone();
+        let log = self.log.clone();
+        self.runtime.spawn(async move {
+            if let Err(error) = completion.await {
+                let report = {
+                    let mut inner = lock(&inner);
+                    if let Some(owner) = inner.owners.values_mut().find(|o| {
+                        o.tab == Some(tab)
+                            && o.run_id == run_id
+                            && !*o.done.borrow()
+                            && !*o.pause.borrow()
+                    }) {
+                        owner.pause_requested = false;
+                        events::update(
+                            &state,
+                            tab,
+                            owner.generation,
+                            ChatUpdate::PauseRequested { requested: false },
+                        );
+                        true
+                    } else {
+                        false
+                    }
+                };
+                if report {
+                    log.report_error(&format!("pause after turn failed: {error}"));
+                }
+            }
+        });
         Ok(())
     }
 
@@ -459,10 +499,7 @@ impl Agents {
             .values()
             .find(|o| o.tab == Some(tab))
             .ok_or("agent is not open")?;
-        if inner.closing
-            || owner.generation != generation
-            || *owner.pause.borrow() == Pause::Immediate
-        {
+        if inner.closing || owner.generation != generation || *owner.pause.borrow() {
             return Err("agent generation is stale or pausing".into());
         }
         owner
@@ -481,7 +518,7 @@ impl Agents {
                 .ok_or("agent is not open")?;
             if inner.closing
                 || owner.generation != generation
-                || *owner.pause.borrow() != Pause::None
+                || (*owner.pause.borrow() || owner.pause_requested)
             {
                 return Err("agent generation is stale or pausing".into());
             }
@@ -597,7 +634,7 @@ async fn shutdown(inner: &Mutex<Inner>, state: &Store) {
         waits.extend(inner.owners.values().map(|owner| {
             if !*owner.done.borrow() {
                 phase(state, owner, ChatPhase::Pausing);
-                owner.pause.send_replace(Pause::Immediate);
+                owner.pause.send_replace(true);
             }
             owner.done.subscribe()
         }));
@@ -614,7 +651,7 @@ async fn run(
     log: Arc<Log>,
     key: Key,
     generation: u64,
-    mut pause: watch::Receiver<Pause>,
+    mut pause: watch::Receiver<bool>,
     context: LaunchContext,
 ) {
     let outcome = run_session(&inner, &state, &log, &key, generation, &mut pause, context).await;
@@ -652,7 +689,7 @@ async fn run_session(
     log: &Arc<Log>,
     key: &Key,
     generation: u64,
-    pause: &mut watch::Receiver<Pause>,
+    pause: &mut watch::Receiver<bool>,
     context: LaunchContext,
 ) -> Result<(), String> {
     let path = key.profile.clone();
@@ -664,7 +701,7 @@ async fn run_session(
     })
     .await
     .map_err(|e| e.to_string())??;
-    if *pause.borrow() == Pause::Immediate {
+    if *pause.borrow() {
         return Ok(());
     }
     publish(inner, state, key, generation, SpaceEvent::Restored(history));
@@ -689,18 +726,7 @@ async fn run_session(
         owner.handle = Some(running.handle());
     }
     loop {
-        let should_pause = match *pause.borrow() {
-            Pause::None => false,
-            Pause::Immediate => true,
-            Pause::AfterTurn => {
-                let tab = lock(inner).owners.get(key).and_then(|o| o.tab);
-                !state
-                    .chat_snapshot()
-                    .iter()
-                    .any(|chat| Some(chat.tab) == tab && chat.turn_running)
-            }
-        };
-        if should_pause {
+        if *pause.borrow() {
             let result = running.pause().await;
             while let Some(event) = running.next_update().await {
                 publish(inner, state, key, generation, event);

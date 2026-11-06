@@ -151,6 +151,7 @@ final class TestBridge {
 					""")
 				var observation: [String: Any] = ["dom": dom ?? [:], "draft": panel.chat.draft, "canSend": panel.chat.canSend]
 				observation["phase"] = panel.chat.chat.map { String(describing: $0.phase) } ?? "opening"
+				observation["context"] = panel.chat.chat?.context.map { ["used": String($0.usedTokens), "window": String($0.windowTokens), "threshold": $0.thresholdPercent] as [String: Any] } ?? NSNull()
 				observation["enterSends"] = panel.chat.enterSends
 				observation["running"] = panel.chat.chat?.turnRunning ?? false
 				observation["anchor"] = panel.chat.anchor.map { String($0.sequence) as Any } ?? NSNull()

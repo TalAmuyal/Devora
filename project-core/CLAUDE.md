@@ -53,3 +53,7 @@ SetAgentDraft and SetAgentScroll write through the state transaction and publish
 ClearAgentView removes that presentation state after space deletion.
 The app-state migration adds the agent_views table without changing existing tabs or panes.
 Permission questions expose the CLI's suggested updates as JSON for the UI to show the rule and destination.
+
+The pause-after-turn facade request reserves its owner and queues the actor command before returning.
+The actor owns pause-versus-compaction ordering, while the facade awaits completion independently of the UI caller and observes the ordinary stop events.
+Repeated requests reuse the pending reservation, and permission answers and interrupt remain available until the actor stops.

@@ -91,3 +91,7 @@ Feature: Agent chat panel
     Then the agent turn is still running
     When the user stops the agent turn
     Then the agent "Echo" should be idle
+
+  Scenario: The context bar uses the actor's usage and profile threshold
+    When the user sends the agent prompt "Context metrics"
+    Then the agent context bar has a known window and threshold 80

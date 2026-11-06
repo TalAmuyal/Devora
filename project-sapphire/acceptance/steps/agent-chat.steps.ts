@@ -123,3 +123,7 @@ Then('the agent turn is still running', async function (this: SapphireWorld) {
   assert.equal((await this.bridge.agentChat()).running, true);
 });
 When('the user stops the agent turn', async function (this: SapphireWorld) { await this.bridge.chatAction('stop'); });
+
+Then('the agent context bar has a known window and threshold {int}', async function (this: SapphireWorld, threshold: number) {
+  await this.bridge.waitFor('typed context metrics', () => this.bridge.agentChat(), s => s.context !== null && BigInt(s.context.window) > 0n && BigInt(s.context.used) > 0n && s.context.threshold === threshold);
+});

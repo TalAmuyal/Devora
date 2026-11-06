@@ -97,6 +97,8 @@ A failed flush cancels close or Quit and surfaces the storage error.
 Drafts and sequence/offset anchors use the canonical profile and space name, so closing and reopening the tab keeps them.
 Stop interrupts with no keyboard binding.
 Pause reserves a stop after the running turn, rejects new sends while pending, and leaves permission answers available.
+The facade queues `SpaceHandle::pause_after_turn` before returning, and the space actor makes the pause-versus-compaction decision.
+`AgentContextBar` uses the actor's typed context usage, window and threshold, showing the threshold marker and keeping an unknown window explicit.
 Retry and Resume reopen the existing tab against its owning profile.
 
 

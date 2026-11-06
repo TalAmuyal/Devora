@@ -525,6 +525,11 @@ fn creation_progress_cancel_failure_and_invalid_listing_use_the_facade() {
 #[test]
 fn deferred_pause_finishes_the_turn_keeps_permissions_and_rejects_new_sends() {
     let f = Fixture::new(false);
+    let config = f.profile.path.join("config.json");
+    let mut profile: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&config).unwrap()).unwrap();
+    profile["agent"] = serde_json::json!({"compact-threshold": 1});
+    fs::write(config, profile.to_string()).unwrap();
     f.create("Pause");
     let tab = f.open("Pause");
     let events = f.core.subscribe_agent_chats().unwrap();
@@ -545,6 +550,8 @@ fn deferred_pause_finishes_the_turn_keeps_permissions_and_rejects_new_sends() {
         .unwrap()
         .contains("destination"));
     f.core.pause_agent_after_turn(tab, chat.generation).unwrap();
+    // Repeated clicks must not replace the actor's pending completion sender.
+    f.core.pause_agent_after_turn(tab, chat.generation).unwrap();
     let pending = f.core.agent_chat_snapshot().unwrap().remove(0);
     assert!(pending.pause_requested && pending.turn_running);
     assert_eq!(pending.questions.len(), 1);
@@ -559,6 +566,25 @@ fn deferred_pause_finishes_the_turn_keeps_permissions_and_rejects_new_sends() {
     let paused = f.wait(&events, |c| c.phase == ChatPhase::Paused);
     assert!(has_message(&paused, "result"));
     assert!(!paused.pause_requested);
+    assert_eq!(paused.context.unwrap().threshold_percent, 1);
+    assert!(!paused.items.iter().any(|item| matches!(
+        item.content,
+        TranscriptContent::System {
+            kind: SystemKind::Compaction,
+            ..
+        }
+    )));
+    let report = fs::read_to_string(f.profile.root.path().join("report.jsonl")).unwrap();
+    let prompts: Vec<serde_json::Value> = report
+        .lines()
+        .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
+        .filter(|record| record["kind"] == "user")
+        .collect();
+    assert_eq!(
+        prompts.len(),
+        1,
+        "a pending Pause must win over compaction: {prompts:?}"
+    );
     assert_eq!(f.open("Pause"), tab);
     let resumed = f.wait(&events, |c| c.phase == ChatPhase::Running);
     assert_eq!(resumed.session_id, paused.session_id);

@@ -42,7 +42,9 @@ public final class AgentChat {
 			do {
 				for try await batch in Batches(subscription) {
 					guard let self else { break }
-					for event in batch { self.apply(event) }
+					var changed = false
+					for event in batch { if self.apply(event) { changed = true } }
+					guard changed else { continue }
 					if self.anchor == nil && self.items.count > 200 {
 						self.items.removeFirst(self.items.count - 200)
 						self.hasOlder = true
@@ -69,15 +71,17 @@ public final class AgentChat {
 			&& !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
 	}
 
-	func apply(_ event: ChatEvent) {
+	@discardableResult
+	func apply(_ event: ChatEvent) -> Bool {
 		switch event {
 		case .snapshot(let chats):
-			if let value = chats.first(where: { $0.tab == tab }) { restore(value) }
+			guard let value = chats.first(where: { $0.tab == tab }) else { return false }
+			restore(value)
 		case .started(let value) where value.tab == tab: restore(value)
 		case .updated(let id, let generation, let update) where id == tab:
-			guard var value = chat, value.generation == generation else { return }
+			guard var value = chat, value.generation == generation else { return false }
 			switch update {
-			case .pauseRequested: value.pauseRequested = true
+			case .pauseRequested(let requested): value.pauseRequested = requested
 			case .generation(let next):
 				value.generation = next
 				value.questions = []
@@ -87,14 +91,13 @@ public final class AgentChat {
 				if phase != .running {
 					value.questions = []
 					value.turnRunning = false
-					value.pauseRequested = false
 				}
+				if phase == .paused || phase == .failed { value.pauseRequested = false }
 			case .ready(let session):
 				value.phase = .running
 				value.sessionId = session
 				value.error = nil
 				value.turnRunning = false
-				value.pauseRequested = false
 				value.questions = []
 			case .failure(let message):
 				value.phase = .failed
@@ -109,10 +112,12 @@ public final class AgentChat {
 				value.questions.append(question)
 			case .permissionRemoved(let id): value.questions.removeAll { $0.requestId == id }
 			case .usage(let json): value.usageJson = json
+			case .context(let context): value.context = context
 			}
 			chat = value
-		default: break
+		default: return false
 		}
+		return true
 	}
 
 	private func restore(_ value: Chat) {

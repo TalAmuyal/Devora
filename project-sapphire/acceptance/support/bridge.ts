@@ -1,6 +1,7 @@
 /** A client for the app's test bridge (`Sources/AppShell/TestBridge.swift`). */
 
 export interface AgentChatState {
+  context: { used: string; window: string; threshold: number } | null;
   dom: {
     text: string;
     rows: { sequence: string; kind: string; text: string; offset: number }[];

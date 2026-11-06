@@ -209,15 +209,14 @@ extension Store {
 							guard var chat = chats[tab] else { continue }
 							switch update {
 							case .turn(let running): chat.turn = running
-							case .pauseRequested: chat.pause = true
+							case .pauseRequested(let requested): chat.pause = requested
 							case .generation: chat.questions = []
 							case .phase(let phase):
 								chat.phase = phase
-								if phase != .running { chat.pause = false }
+								if phase == .paused || phase == .failed { chat.pause = false }
 								if phase != .running { chat.questions = []; chat.turn = false }
 							case .ready:
 								chat.phase = .running
-								chat.pause = false
 								chat.turn = false
 								chat.questions = []
 							case .permissionRequested(let question): chat.questions.insert(question.requestId)

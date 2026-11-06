@@ -34,7 +34,7 @@ struct AgentChatTests {
 		let model = try AgentChat(store: store, core: core, tab: tab, name: "Delta")
 		let chat = Chat(
 			tab: tab.id, generation: 7, phase: .running, turnRunning: false, pauseRequested: false,
-			sessionId: "cli", items: [], error: nil, questions: [], usageJson: nil)
+			sessionId: "cli", items: [], error: nil, questions: [], usageJson: nil, context: nil)
 		model.apply(.started(chat: chat))
 		let item = TranscriptItem(
 			sequence: 1, cliSession: "cli", parentToolUseId: nil, state: .streaming,
@@ -48,9 +48,12 @@ struct AgentChatTests {
 		#expect(model.items[0].content == .assistant(text: "Hello"))
 		model.apply(.updated(tab: tab.id, generation: 6, update: .failure(message: "stale")))
 		#expect(model.chat?.phase == .running)
+		let context = ChatContext(usedTokens: 2500, windowTokens: 200000, thresholdPercent: 75)
+		model.apply(.updated(tab: tab.id, generation: 7, update: .context(context: context)))
+		#expect(model.chat?.context == context)
 		model.draft = "new turn"
 		#expect(model.canSend)
-		model.apply(.updated(tab: tab.id, generation: 7, update: .pauseRequested))
+		model.apply(.updated(tab: tab.id, generation: 7, update: .pauseRequested(requested: true)))
 		#expect(!model.canSend)
 		model.apply(.updated(tab: tab.id, generation: 7, update: .failure(message: "failed")))
 		#expect(model.chat?.phase == .failed)
