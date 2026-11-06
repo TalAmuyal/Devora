@@ -47,6 +47,8 @@ import Testing
 	#expect(spaces.first?.error == nil)
 	let history = try await core.agentHistory(profilePath: profile, name: "Delta", after: 0, limit: 50)
 	#expect(history.isEmpty)
+	let tail = try await core.agentHistoryBefore(profilePath: profile, name: "Delta", before: nil, limit: 50)
+	#expect(tail.isEmpty)
 	try await core.deleteAgentSpace(profilePath: profile, name: "Delta")
 	#expect(try core.listAgentSpaces(profilePath: profile).isEmpty)
 	try await core.shutdownAgents()

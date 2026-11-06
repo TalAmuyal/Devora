@@ -157,8 +157,9 @@ fn interrupted_first_prompt_is_retained_and_marked_once_before_a_new_identity() 
     ));
     t.set_session("replacement".into());
     t.submit("New turn".into());
-    assert_eq!(t.items()[2].sequence, 3);
-    assert_eq!(t.items()[2].cli_session, "replacement");
+    assert_eq!(t.items().len(), 1);
+    assert_eq!(t.items()[0].sequence, 3);
+    assert_eq!(t.items()[0].cli_session, "replacement");
 }
 
 #[test]
@@ -208,4 +209,81 @@ fn initialization_and_control_metadata_stay_out_of_the_transcript() {
         &t.items()[0].content,
         TranscriptContent::Unknown { .. }
     ));
+}
+
+#[test]
+fn working_set_releases_history_but_keeps_open_tools_and_inflight_outcomes() {
+    let mut t = Transcript::restore(vec![], "cli".into(), 501, true, false);
+    for _ in 0..1000 {
+        let change = t.submit("prompt".into());
+        let TranscriptChange::Upsert { item } = change else {
+            panic!()
+        };
+        t.settle(item.sequence, None).unwrap();
+        t.release_completed();
+        assert!(t.items().is_empty());
+    }
+    message(
+        &mut t,
+        json!({"type":"assistant","message":{"id":"tool-message","role":"assistant","content":[{"type":"tool_use","id":"open-tool","name":"Bash","input":{}}]}}),
+    );
+    t.release_completed();
+    assert_eq!(t.items().len(), 1);
+    let tool_sequence = t.items()[0].sequence;
+    message(
+        &mut t,
+        json!({"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"open-tool","content":"done"}]}}),
+    );
+    assert_eq!(t.items()[0].sequence, tool_sequence);
+    t.release_completed();
+    assert!(t.items().is_empty());
+    let change = t.submit("in flight".into());
+    let TranscriptChange::Upsert { item } = change else {
+        panic!()
+    };
+    t.interrupt(true);
+    t.release_completed();
+    assert_eq!(t.items().len(), 1);
+    assert!(t
+        .settle(item.sequence, Some("interrupted".into()))
+        .is_some());
+    t.release_completed();
+    assert!(t.items().is_empty());
+    assert!(
+        t.interrupt(true).is_empty(),
+        "first-prompt marker must survive working-set eviction"
+    );
+}
+
+#[test]
+fn releasing_after_each_recorded_frame_preserves_the_projected_transcript() {
+    let mut baseline = Transcript::new(vec![], "cli".into());
+    let mut working = Transcript::new(vec![], "cli".into());
+    let mut projected = std::collections::BTreeMap::<u64, TranscriptItem>::new();
+    for line in include_str!("../../tests/fixtures/claude-2.1.312/basic.jsonl").lines() {
+        let row: Value = serde_json::from_str(line).unwrap();
+        if row["dir"] != "in" {
+            continue;
+        }
+        message(&mut baseline, row["msg"].clone());
+        for change in message(&mut working, row["msg"].clone()) {
+            match &change {
+                TranscriptChange::Upsert { item } => {
+                    projected.insert(item.sequence, item.as_ref().clone());
+                }
+                _ => {
+                    for item in projected.values_mut() {
+                        item.apply(&change);
+                    }
+                }
+            }
+        }
+        working.release_completed();
+        assert!(working.items().len() < 10);
+    }
+    assert_eq!(
+        projected.into_values().collect::<Vec<_>>(),
+        baseline.items()
+    );
+    assert!(working.items().is_empty());
 }

@@ -4,33 +4,95 @@ use crate::protocol::{
 };
 use crate::session::SessionEvent;
 use serde_json::{json, Value};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Default)]
 struct StreamingMessage {
     id: String,
+    active: bool,
     blocks: BTreeMap<u64, u64>,
 }
 
-/// One ordered conversation, including earlier CLI identities. Only the current
-/// message per parent retains stream bookkeeping. No completed frames are kept.
+/// Mutable working items for the current CLI identity. Durable history and the
+/// bounded UI tail are owned separately. Release settled items after persistence.
 pub struct Transcript {
     items: Vec<TranscriptItem>,
     session: String,
     next_sequence: u64,
     streams: BTreeMap<Option<String>, StreamingMessage>,
+    pending_commands: BTreeSet<u64>,
+    has_prompt: bool,
+    marked_first_prompt: bool,
 }
 
 impl Transcript {
     pub fn new(items: Vec<TranscriptItem>, session: String) -> Self {
         let next_sequence = items.last().map_or(1, |item| item.sequence + 1);
+        let has_prompt = items.iter().any(|item| {
+            item.cli_session == session && matches!(item.content, TranscriptContent::User { .. })
+        });
+        let marked_first_prompt = items.iter().any(|item| {
+            item.cli_session == session
+                && matches!(
+                    item.content,
+                    TranscriptContent::System {
+                        kind: SystemKind::UnfinishedFirstPrompt,
+                        ..
+                    }
+                )
+        });
+        Self::restore(
+            items,
+            session,
+            next_sequence,
+            has_prompt,
+            marked_first_prompt,
+        )
+    }
+
+    pub fn restore(
+        items: Vec<TranscriptItem>,
+        session: String,
+        next_sequence: u64,
+        has_prompt: bool,
+        marked_first_prompt: bool,
+    ) -> Self {
         Self {
             items,
             session,
             next_sequence,
             streams: BTreeMap::new(),
+            pending_commands: BTreeSet::new(),
+            has_prompt,
+            marked_first_prompt,
         }
     }
+
+    /// Call only after whole-item changes have committed. In-flight command
+    /// outcomes can still settle after interruption, so retain those explicitly.
+    pub fn release_completed(&mut self) {
+        self.items.retain(|item| {
+            self.pending_commands.contains(&item.sequence)
+                || matches!(item.state, ItemState::Pending | ItemState::Streaming)
+                || matches!(
+                    (&item.state, &item.content),
+                    (
+                        ItemState::Complete,
+                        TranscriptContent::Tool { result: None, .. }
+                    )
+                )
+        });
+        let items = &self.items;
+        self.streams.retain(|_, stream| {
+            stream.blocks.retain(|_, sequence| {
+                items
+                    .binary_search_by_key(sequence, |item| item.sequence)
+                    .is_ok()
+            });
+            stream.active || !stream.blocks.is_empty()
+        });
+    }
+
     pub fn items(&self) -> &[TranscriptItem] {
         &self.items
     }
@@ -54,12 +116,22 @@ impl Transcript {
         self.items.iter_mut().rev().find(|item| {
             item.cli_session == session
                 && match &item.content {
-                    TranscriptContent::Tool { tool_use_id, .. } => tool_use_id == expected,
+                    TranscriptContent::Tool {
+                        tool_use_id,
+                        result: None,
+                        ..
+                    } => tool_use_id == expected,
                     _ => false,
                 }
         })
     }
     pub fn set_session(&mut self, session: String) {
+        if self.session != session {
+            self.has_prompt = false;
+            self.marked_first_prompt = false;
+            self.items
+                .retain(|item| self.pending_commands.contains(&item.sequence));
+        }
         self.session = session;
         self.streams.clear();
     }
@@ -70,6 +142,14 @@ impl Transcript {
         state: ItemState,
         parent: Option<String>,
     ) -> TranscriptChange {
+        self.has_prompt |= matches!(content, TranscriptContent::User { .. });
+        self.marked_first_prompt |= matches!(
+            content,
+            TranscriptContent::System {
+                kind: SystemKind::UnfinishedFirstPrompt,
+                ..
+            }
+        );
         let item = TranscriptItem {
             sequence: self.next_sequence,
             cli_session: self.session.clone(),
@@ -100,6 +180,7 @@ impl Transcript {
     }
 
     pub fn submit(&mut self, text: String) -> TranscriptChange {
+        self.pending_commands.insert(self.next_sequence);
         self.insert(
             TranscriptContent::User { text, error: None },
             ItemState::Pending,
@@ -108,6 +189,7 @@ impl Transcript {
     }
 
     pub fn intention(&mut self, kind: SystemKind, text: String, detail: Value) -> TranscriptChange {
+        self.pending_commands.insert(self.next_sequence);
         self.insert(
             TranscriptContent::System {
                 kind,
@@ -120,6 +202,7 @@ impl Transcript {
     }
 
     pub fn settle(&mut self, sequence: u64, error: Option<String>) -> Option<TranscriptChange> {
+        self.pending_commands.remove(&sequence);
         let item = self.item_mut(sequence)?;
         item.state = if error.is_some() {
             ItemState::Failed
@@ -145,27 +228,14 @@ impl Transcript {
         let mut changes = vec![];
         for item in &mut self.items {
             if item.cli_session == self.session
-                && matches!(item.state, ItemState::Pending | ItemState::Streaming)
+                && (matches!(item.state, ItemState::Pending | ItemState::Streaming)
+                    || matches!(item.content, TranscriptContent::Tool { result: None, .. }))
             {
                 item.state = ItemState::Interrupted;
                 changes.push(TranscriptChange::upsert(item.clone()));
             }
         }
-        if fresh_first
-            && self.items.iter().any(|i| {
-                i.cli_session == self.session && matches!(i.content, TranscriptContent::User { .. })
-            })
-            && !self.items.iter().any(|i| {
-                i.cli_session == self.session
-                    && matches!(
-                        i.content,
-                        TranscriptContent::System {
-                            kind: SystemKind::UnfinishedFirstPrompt,
-                            ..
-                        }
-                    )
-            })
-        {
+        if fresh_first && self.has_prompt && !self.marked_first_prompt {
             changes.push(self.system(SystemKind::UnfinishedFirstPrompt, "The unfinished first turn is retained here. Its prompt is absent from the replacement CLI conversation.", json!({})));
         }
         self.streams.clear();
@@ -323,6 +393,7 @@ impl Transcript {
                     parent.clone(),
                     StreamingMessage {
                         id: id.unwrap_or("").into(),
+                        active: false,
                         blocks: BTreeMap::new(),
                     },
                 );
@@ -488,6 +559,7 @@ impl Transcript {
                             .and_then(Value::as_str)
                             .unwrap_or("")
                             .into(),
+                        active: true,
                         blocks: BTreeMap::new(),
                     },
                 );
@@ -554,7 +626,13 @@ impl Transcript {
                 .and_then(|sequence| self.item(*sequence))
                 .map(|item| vec![TranscriptChange::upsert(item.clone())])
                 .unwrap_or_default(),
-            StreamEvent::MessageDelta { .. } | StreamEvent::MessageStop { .. } => vec![],
+            StreamEvent::MessageStop { .. } => {
+                if let Some(stream) = self.streams.get_mut(&parent) {
+                    stream.active = false;
+                }
+                vec![]
+            }
+            StreamEvent::MessageDelta { .. } => vec![],
         }
     }
 }

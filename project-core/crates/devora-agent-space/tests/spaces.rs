@@ -793,3 +793,83 @@ fn a_failed_v1_migration_rolls_back_its_tables_and_version() {
         id
     );
 }
+
+#[tokio::test]
+async fn large_history_reopens_with_only_the_tail_and_pages_back_in_order() {
+    use devora_agent::transcript::{ItemState, TranscriptContent, TranscriptItem};
+    use devora_agent_space::SpaceEvent;
+    let fixture = Fixture::new();
+    let space = fixture.create(fixture.form("History")).unwrap();
+    let session = space.saved_session().session_id.clone();
+    let mut db = rusqlite::Connection::open(space.path().join(".agent-space.db")).unwrap();
+    let tx = db.transaction().unwrap();
+    tx.execute(
+        "INSERT INTO cli_sessions(session_id,position) VALUES(?1,1)",
+        [&session],
+    )
+    .unwrap();
+    for sequence in 1..=650 {
+        let item = TranscriptItem {
+            sequence,
+            cli_session: session.clone(),
+            parent_tool_use_id: None,
+            state: ItemState::Complete,
+            content: TranscriptContent::Assistant {
+                text: format!("item {sequence}"),
+            },
+        };
+        tx.execute(
+            "INSERT INTO events(sequence,cli_session,kind,payload) VALUES(?1,?2,'assistant',?3)",
+            rusqlite::params![sequence, session, serde_json::to_string(&item).unwrap()],
+        )
+        .unwrap();
+    }
+    tx.commit().unwrap();
+    drop(db);
+    drop(space);
+    let reopened = Space::open(&fixture.profile, "History").unwrap();
+    let tail = reopened.history().unwrap();
+    assert_eq!(tail.len(), 200);
+    assert_eq!(tail.first().unwrap().sequence, 451);
+    assert_eq!(tail.last().unwrap().sequence, 650);
+    let mut all = tail.clone();
+    loop {
+        let page =
+            Space::history_before(&fixture.profile, "History", Some(all[0].sequence), 137).unwrap();
+        if page.is_empty() {
+            break;
+        }
+        all.splice(..0, page);
+    }
+    assert_eq!(
+        all.iter().map(|item| item.sequence).collect::<Vec<_>>(),
+        (1..=650).collect::<Vec<_>>()
+    );
+    assert_eq!(
+        Space::history_before(&fixture.profile, "History", None, 0)
+            .unwrap()
+            .len(),
+        1
+    );
+    assert_eq!(
+        Space::history_before(&fixture.profile, "History", None, u32::MAX)
+            .unwrap()
+            .len(),
+        500
+    );
+    let log = Arc::new(Log::open(&fixture.root.path().join("history.log")).unwrap());
+    let mut running = reopened.start(&fixture.context(), log).await.unwrap();
+    let Some(SpaceEvent::Restored(restored)) = running.next_update().await else {
+        panic!("expected restored tail")
+    };
+    assert_eq!(restored, tail);
+    while let Some(update) = running.next_update().await {
+        if let SpaceEvent::Transcript(devora_agent::transcript::TranscriptChange::Upsert { item }) =
+            update
+        {
+            assert_eq!(item.sequence, 651, "sequence must include evicted history");
+            break;
+        }
+    }
+    running.pause().await.unwrap();
+}

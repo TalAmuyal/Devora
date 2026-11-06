@@ -457,6 +457,18 @@ impl DevoraCore {
             .history(Path::new(&profile_path), &name, after, limit)
             .await?)
     }
+    pub async fn agent_history_before(
+        &self,
+        profile_path: String,
+        name: String,
+        before: Option<u64>,
+        limit: u32,
+    ) -> Result<Vec<TranscriptItem>, CoreError> {
+        Ok(self
+            .agents
+            .history_before(Path::new(&profile_path), &name, before, limit)
+            .await?)
+    }
     pub fn agent_chat_snapshot(&self) -> Result<Vec<Chat>, CoreError> {
         Ok(self.state.chat_snapshot())
     }

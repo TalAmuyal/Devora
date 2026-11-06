@@ -319,6 +319,22 @@ impl Agents {
         received.await.map_err(|e| e.to_string())?
     }
 
+    pub async fn history_before(
+        &self,
+        profile: &Path,
+        name: &str,
+        before: Option<u64>,
+        limit: u32,
+    ) -> Result<Vec<devora_agent::transcript::TranscriptItem>, String> {
+        let profile = profile.to_path_buf();
+        let name = name.to_owned();
+        let (sent, received) = oneshot::channel();
+        self.runtime.spawn_blocking(move || {
+            let _ = sent.send(Space::history_before(&profile, &name, before, limit));
+        });
+        received.await.map_err(|e| e.to_string())?
+    }
+
     pub fn list(&self, profile: &Path) -> Result<Vec<SpaceEntry>, String> {
         Space::list(profile)
     }
@@ -603,20 +619,7 @@ async fn run_session(
             let profile = key.profile.clone();
             let name = key.name.clone();
             let restored = tokio::task::spawn_blocking(move || {
-                let mut items = vec![];
-                loop {
-                    let after = items
-                        .last()
-                        .map_or(0, |item: &devora_agent::transcript::TranscriptItem| {
-                            item.sequence
-                        });
-                    let page = Space::read_history(&profile, &name, after, 500)?;
-                    let finished = page.len() < 500;
-                    items.extend(page);
-                    if finished {
-                        return Ok::<_, String>(items);
-                    }
-                }
+                Space::history_before(&profile, &name, None, 200)
             })
             .await;
             if let Ok(Ok(items)) = restored {

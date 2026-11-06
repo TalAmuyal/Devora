@@ -354,8 +354,9 @@ impl Space {
         remove_directory(&root, &path)
     }
 
+    /// The bounded startup tail. Read older items with history_before.
     pub fn history(&self) -> Result<Vec<devora_agent::transcript::TranscriptItem>, String> {
-        self.db.all_history()
+        self.db.history_before(None, 200)
     }
 
     /// Read-only history also works while the process owner holds the space.
@@ -370,6 +371,20 @@ impl Space {
         let db = Db::open(&path.join(DATABASE), true)?;
         db.load()?;
         db.history(after, limit.clamp(1, 500))
+    }
+
+    /// Read an older page in chronological order. None selects the latest page.
+    pub fn history_before(
+        profile: &Path,
+        name: &str,
+        before: Option<u64>,
+        limit: u32,
+    ) -> Result<Vec<devora_agent::transcript::TranscriptItem>, String> {
+        let root = catalogue(profile)?;
+        let path = checked_path(&root, name)?;
+        let db = Db::open(&path.join(DATABASE), true)?;
+        db.load()?;
+        db.history_before(before, limit.clamp(1, 500))
     }
 
     pub fn identity(&self) -> &Identity {

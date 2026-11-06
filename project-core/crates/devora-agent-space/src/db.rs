@@ -220,6 +220,40 @@ impl Db {
     }
 
     pub fn history(&self, after: u64, limit: u32) -> Result<Vec<TranscriptItem>, String> {
+        self.history_query(
+            "SELECT sequence,cli_session,payload FROM events
+             WHERE sequence > ?1 ORDER BY sequence LIMIT ?2",
+            Some(after),
+            limit,
+        )
+    }
+
+    /// Exclusive backward cursor. None selects the newest page. Returned items
+    /// are chronological, so callers can prepend each page without reversing it.
+    pub fn history_before(
+        &self,
+        before: Option<u64>,
+        limit: u32,
+    ) -> Result<Vec<TranscriptItem>, String> {
+        let upper = before
+            .map(|sequence| sequence.saturating_sub(1))
+            .unwrap_or(i64::MAX as u64);
+        let mut items = self.history_query(
+            "SELECT sequence,cli_session,payload FROM events
+             WHERE sequence <= ?1 ORDER BY sequence DESC LIMIT ?2",
+            Some(upper),
+            limit,
+        )?;
+        items.reverse();
+        Ok(items)
+    }
+
+    fn history_query(
+        &self,
+        sql: &str,
+        cursor: Option<u64>,
+        limit: u32,
+    ) -> Result<Vec<TranscriptItem>, String> {
         let version: u32 = self
             .conn
             .pragma_query_value(None, "user_version", |row| row.get(0))
@@ -227,11 +261,9 @@ impl Db {
         if version == 1 {
             return Ok(vec![]);
         }
-        let mut query = self.conn.prepare(
-            "SELECT sequence,cli_session,payload FROM events WHERE sequence > ?1 ORDER BY sequence LIMIT ?2",
-        ).map_err(storage)?;
+        let mut query = self.conn.prepare(sql).map_err(storage)?;
         let rows = query
-            .query_map(params![after, limit], |row| {
+            .query_map(params![cursor, limit], |row| {
                 Ok((
                     row.get::<_, u64>(0)?,
                     row.get::<_, String>(1)?,
@@ -250,8 +282,63 @@ impl Db {
         .collect()
     }
 
-    pub fn all_history(&self) -> Result<Vec<TranscriptItem>, String> {
-        self.history(0, u32::MAX)
+    pub fn fold(&self, session: &str) -> Result<devora_agent::transcript::Transcript, String> {
+        let next = self
+            .conn
+            .query_row(
+                "SELECT COALESCE(MAX(sequence),0)+1 FROM events",
+                [],
+                |row| row.get::<_, u64>(0),
+            )
+            .map_err(storage)?;
+        let (has_prompt, marked) = self
+            .conn
+            .query_row(
+                "SELECT
+               EXISTS(SELECT 1 FROM events WHERE cli_session=?1 AND kind='user'),
+               EXISTS(SELECT 1 FROM events WHERE cli_session=?1
+                 AND json_extract(payload,'$.content.System.kind')='UnfinishedFirstPrompt')",
+                [session],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .map_err(storage)?;
+        let mut query = self
+            .conn
+            .prepare(
+                "SELECT sequence,cli_session,payload FROM events
+             WHERE cli_session=?1 AND (
+               json_extract(payload,'$.state') IN ('Pending','Streaming') OR (
+                 kind='tool' AND json_extract(payload,'$.state')='Complete'
+                 AND json_extract(payload,'$.content.Tool.result') IS NULL))
+             ORDER BY sequence",
+            )
+            .map_err(storage)?;
+        let rows = query
+            .query_map([session], |row| {
+                Ok((
+                    row.get::<_, u64>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                ))
+            })
+            .map_err(storage)?;
+        let items = rows
+            .map(|row| {
+                let (sequence, session, payload) = row.map_err(storage)?;
+                let item: TranscriptItem = serde_json::from_str(&payload).map_err(storage)?;
+                if item.sequence != sequence || item.cli_session != session {
+                    return Err("transcript payload identity disagrees with its row".into());
+                }
+                Ok(item)
+            })
+            .collect::<Result<Vec<_>, String>>()?;
+        Ok(devora_agent::transcript::Transcript::restore(
+            items,
+            session.into(),
+            next,
+            has_prompt,
+            marked,
+        ))
     }
 }
 
@@ -309,7 +396,7 @@ mod tests {
             .is_err());
         assert_eq!(db.load().unwrap().3.session_id, before.session_id);
         assert!(!db.load().unwrap().3.has_conversation);
-        assert!(db.all_history().unwrap().is_empty());
+        assert!(db.history(0, 500).unwrap().is_empty());
         assert_eq!(
             db.conn
                 .query_row("SELECT count(*) FROM cli_sessions", [], |row| row
@@ -320,7 +407,7 @@ mod tests {
         db.conn.execute_batch("DROP TRIGGER fail_events").unwrap();
         db.save_changes(Some(&resume), &[change]).unwrap();
         assert!(db.load().unwrap().3.has_conversation);
-        assert_eq!(db.all_history().unwrap(), [item]);
+        assert_eq!(db.history(0, 500).unwrap(), [item]);
         let writes = db.conn.total_changes();
         db.save_changes(
             None,
@@ -366,6 +453,20 @@ mod tests {
         assert!(db
             .save_changes(None, &[TranscriptChange::upsert(other)])
             .is_err());
-        assert_eq!(db.all_history().unwrap().len(), 4);
+        assert_eq!(db.history(0, 500).unwrap().len(), 4);
+        let mut fold = db.fold(&id).unwrap();
+        assert!(
+            fold.items().is_empty(),
+            "completed history must not seed the fold"
+        );
+        let change = fold.submit("pending".into());
+        let TranscriptChange::Upsert { item } = &change else {
+            panic!()
+        };
+        assert_eq!(item.sequence, 5);
+        db.save_changes(None, &[change]).unwrap();
+        let seeded = db.fold(&id).unwrap();
+        assert_eq!(seeded.items().len(), 1);
+        assert_eq!(seeded.items()[0].sequence, 5);
     }
 }

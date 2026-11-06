@@ -355,6 +355,56 @@ mod chat_tests {
     use crate::ChatUpdate;
 
     #[test]
+    fn chat_restores_and_keeps_only_the_latest_window_for_snapshots_and_subscribers() {
+        let store = Store::new();
+        store
+            .dispatch_chat(ChatCommand::Start {
+                tab: 1,
+                generation: 1,
+            })
+            .unwrap();
+        let item = |sequence| crate::TranscriptItem {
+            sequence,
+            cli_session: "session".into(),
+            parent_tool_use_id: None,
+            state: crate::ItemState::Complete,
+            content: crate::TranscriptContent::Assistant {
+                text: sequence.to_string(),
+            },
+        };
+        store
+            .dispatch_chat(ChatCommand::Update {
+                tab: 1,
+                generation: 1,
+                update: ChatUpdate::Restore {
+                    items: (1..=650).map(item).collect(),
+                },
+            })
+            .unwrap();
+        assert_eq!(store.chat_snapshot()[0].items[0].sequence, 451);
+        for sequence in 651..=1000 {
+            store
+                .dispatch_chat(ChatCommand::Update {
+                    tab: 1,
+                    generation: 1,
+                    update: ChatUpdate::Transcript {
+                        change: crate::TranscriptChange::upsert(item(sequence)),
+                    },
+                })
+                .unwrap();
+        }
+        let snapshot = store.chat_snapshot();
+        assert_eq!(snapshot[0].items.len(), 200);
+        assert_eq!(snapshot[0].items.first().unwrap().sequence, 801);
+        assert_eq!(snapshot[0].items.last().unwrap().sequence, 1000);
+        let events = store.subscribe_chats();
+        assert_eq!(
+            events.try_next_batch(1),
+            vec![crate::ChatEvent::Snapshot { chats: snapshot }]
+        );
+    }
+
+    #[test]
     fn live_frames_have_atomic_snapshots_reject_old_generations_and_never_write_sqlite() {
         let root = tempfile::tempdir().unwrap();
         let path = root.path().join("state.db");

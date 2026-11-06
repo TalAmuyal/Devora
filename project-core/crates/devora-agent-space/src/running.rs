@@ -114,12 +114,13 @@ pub(crate) async fn start(
     options: SessionOptions,
     log: Arc<Log>,
 ) -> Result<RunningSpace, String> {
-    let (mut space, mut transcript) = tokio::task::spawn_blocking(move || {
-        let mut transcript =
-            Transcript::new(space.db.all_history()?, space.resume.session_id.clone());
+    let (mut space, mut transcript, history) = tokio::task::spawn_blocking(move || {
+        let mut transcript = space.db.fold(&space.resume.session_id)?;
         let interrupted = transcript.interrupt(!space.resume.has_conversation);
         space.db.save_changes(None, &interrupted)?;
-        Ok::<_, String>((space, transcript))
+        transcript.release_completed();
+        let history = space.history()?;
+        Ok::<_, String>((space, transcript, history))
     })
     .await
     .map_err(|e| e.to_string())??;
@@ -132,7 +133,7 @@ pub(crate) async fn start(
         }
     };
     let (events, received) = mpsc::unbounded_channel();
-    let _ = events.send(SpaceEvent::Restored(transcript.items().to_vec()));
+    let _ = events.send(SpaceEvent::Restored(history));
     let (commands, received_commands) = mpsc::unbounded_channel();
     let handle = SpaceHandle {
         runtime: session.handle(),
@@ -215,6 +216,7 @@ fn persist(
     };
     changes.extend(transcript.event(event));
     space.db.save_changes(resume.as_ref(), &changes)?;
+    transcript.release_completed();
     if let Some(resume) = resume {
         space.resume = resume;
     }
@@ -355,6 +357,7 @@ fn finish(
             return Err(error);
         }
         let _ = events.send(SpaceEvent::Transcript(change));
+        transcript.release_completed();
     }
     let _ = completion.reply.send(completion.result);
     Ok(())

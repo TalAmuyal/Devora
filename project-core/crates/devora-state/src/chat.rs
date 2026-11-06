@@ -134,7 +134,10 @@ pub(crate) fn apply(chats: &mut Vec<Chat>, command: ChatCommand) -> Result<ChatE
                     chat.session_id = Some(session_id.clone());
                     chat.questions.clear();
                 }
-                ChatUpdate::Restore { items } => chat.items.clone_from(items),
+                ChatUpdate::Restore { items } => {
+                    chat.items = items.iter().rev().take(200).cloned().collect();
+                    chat.items.reverse();
+                }
                 ChatUpdate::Failure { message } => {
                     chat.error = Some(message.clone());
                     chat.phase = ChatPhase::Failed;
@@ -166,6 +169,7 @@ pub(crate) fn apply(chats: &mut Vec<Chat>, command: ChatCommand) -> Result<ChatE
                             }
                         }
                     }
+                    chat.items.drain(..chat.items.len().saturating_sub(200));
                 }
                 ChatUpdate::PermissionRequested { question } => {
                     chat.questions

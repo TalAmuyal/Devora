@@ -235,6 +235,22 @@ fn live_facade_owns_session_without_subscribers_and_closes_before_pause_finishes
     )
     .unwrap();
     assert_eq!(saved, next.items);
+    let tail =
+        block_on(
+            f.core
+                .agent_history_before(f.profile.path_string(), "Delta".into(), None, 2),
+        )
+        .unwrap();
+    assert_eq!(tail, saved[saved.len() - 2..]);
+    let older = block_on(f.core.agent_history_before(
+        f.profile.path_string(),
+        "Delta".into(),
+        Some(tail[0].sequence),
+        500,
+    ))
+    .unwrap();
+    assert_eq!(older, saved[..saved.len() - 2]);
+
     let first_page = block_on(
         f.core
             .agent_history(f.profile.path_string(), "Delta".into(), 0, 2),
