@@ -133,6 +133,7 @@ extension Store {
 			if let tab = app.window.tabs.first(where: {
 				$0.session.kind == .agentSpace(name: name) && $0.session.profilePath.map(canonical) == canonical(profile)
 			}) {
+				guard agentModels[tab.id]?.value?.flushDraft() != false else { return false }
 				try await core.pauseAgentSpace(tab: tab.id)
 				try core.closeAgentSpace(tab: tab.id)
 			}
@@ -190,7 +191,7 @@ extension Store {
 	/// Folds the chats' lifecycle into `agentStatuses` off the main actor, hopping to it only when a status changes, since the chats also carry every streamed token.
 	func pullAgentStatuses(from subscription: ChatSubscription) -> Task<Void, Never> {
 		Task.detached { [weak self] in
-			var chats: [UInt64: (phase: ChatPhase, turn: Bool, questions: Set<String>)] = [:]
+			var chats: [UInt64: (phase: ChatPhase, turn: Bool, questions: Set<String>, pause: Bool)] = [:]
 			var published: [UInt64: AgentStatus] = [:]
 			do {
 				for try await batch in Batches(subscription) {
@@ -198,28 +199,32 @@ extension Store {
 						switch event {
 						case .snapshot(let all):
 							chats = Dictionary(uniqueKeysWithValues: all.map {
-								($0.tab, ($0.phase, $0.turnRunning, Set($0.questions.map(\.requestId))))
+								($0.tab, ($0.phase, $0.turnRunning, Set($0.questions.map(\.requestId)), $0.pauseRequested))
 							})
 						case .started(let chat):
-							chats[chat.tab] = (chat.phase, chat.turnRunning, [])
+							chats[chat.tab] = (chat.phase, chat.turnRunning, [], chat.pauseRequested)
 						case .closed(let tab):
 							chats[tab] = nil
 						case .updated(let tab, _, let update):
 							guard var chat = chats[tab] else { continue }
 							switch update {
 							case .turn(let running): chat.turn = running
+							case .pauseRequested: chat.pause = true
 							case .generation: chat.questions = []
 							case .phase(let phase):
 								chat.phase = phase
+								if phase != .running { chat.pause = false }
 								if phase != .running { chat.questions = []; chat.turn = false }
 							case .ready:
 								chat.phase = .running
+								chat.pause = false
 								chat.turn = false
 								chat.questions = []
 							case .permissionRequested(let question): chat.questions.insert(question.requestId)
 							case .permissionRemoved(let id): chat.questions.remove(id)
 							case .failure:
 								chat.phase = .failed
+								chat.pause = false
 								chat.turn = false
 								chat.questions = []
 							case .restore, .transcript, .usage, .context: continue
@@ -227,7 +232,7 @@ extension Store {
 							chats[tab] = chat
 						}
 					}
-					let statuses = chats.mapValues { AgentStatus(phase: $0.phase, turnRunning: $0.turn, questions: $0.questions.count) }
+					let statuses = chats.mapValues { $0.pause ? .pausing : AgentStatus(phase: $0.phase, turnRunning: $0.turn, questions: $0.questions.count) }
 					guard statuses != published else { continue }
 					published = statuses
 					await MainActor.run { [weak self] in self?.agentStatuses = statuses }

@@ -36,7 +36,7 @@ It is being extracted from Ember's `src-tauri/` area by area (TalAmuyal/Devora#2
 
 ## Agent Space facade
 
-Agent Space tabs carry their own profile and name in `SessionKind::AgentSpace`. The current tab record reserves its pane ID for the later chat UI. It has no terminal launch spec. The host supplies explicit launch inputs to `open_agent_space` and calls `restore_agent_spaces` with those inputs on relaunch; `resolve_agent_launch` builds them from the user's login shell and the app bundle (`agents/launch.rs`). The owning profile resolves model, effort and model aliases.
+Agent Space tabs carry their own profile and name in `SessionKind::AgentSpace`. The tab record retains its pane ID while Sapphire renders its main chat panel. It has no terminal launch spec. The host supplies explicit launch inputs to `open_agent_space` and calls `restore_agent_spaces` with those inputs on relaunch; `resolve_agent_launch` builds them from the user's login shell and the app bundle (`agents/launch.rs`). The owning profile resolves model, effort and model aliases.
 
 The creation form lists the template's placeholders with their values and sources (`agent_creation_fields`, from `devora-agent-space`'s `inputs`), and `save_agent_field` writes one back to the global or profile `agent` config section.
 
@@ -47,3 +47,9 @@ Store's separate chat projection and batched subscription hold typed transcript 
 Devora owns compaction (ADR-012, `devora-agent-space`'s `compaction.rs`). The space actor tracks how full the context is, from each message's usage and the window that each result's `modelUsage` reports, and publishes it as the chat's `context`. After a turn ends over the threshold (`agent.compact-threshold`, a percentage, 80 by default, per global and profile config), it announces the step in the transcript and sends the agent a save-memory turn, then `/compact`. The tab shows these as running turns, so user turns wait. If the CLI compacts by itself, the agent is asked to refresh `memory/` once that turn ends. An interrupted or failed step abandons the compaction, and the next result over the threshold starts it again. `SpaceHandle::pause_after_turn` lets the running turn end (a result, a failed send or a crash), then pauses with no compaction step after it; an idle agent pauses at once.
 
 The version-2 space schema contains `cli_sessions` and `events` (ordered sequence, CLI identity, kind and JSON payload). Items keep their sequence when completed or annotated. History reads are sequence-paginated in both directions. `history_before` uses an exclusive optional cursor (None selects the latest page), returns chronological items and clamps limits to 1–500. Opening a version-1 space for writing adds these history tables and registers the existing CLI identity in one transaction. Read-only listing and history reads accept version 1 without migrating it, and newer versions are rejected. The pinned native resume contract verifies retained model context with no replayed earlier messages, so history has no replay-deduplication mechanism.
+
+Agent chat drafts and scroll anchors belong to app state, keyed by canonical owning profile and space name so tab closure retains them.
+SetAgentDraft and SetAgentScroll write through the state transaction and publish AgentViewChanged.
+ClearAgentView removes that presentation state after space deletion.
+The app-state migration adds the agent_views table without changing existing tabs or panes.
+Permission questions expose the CLI's suggested updates as JSON for the UI to show the rule and destination.

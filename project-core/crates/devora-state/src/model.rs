@@ -14,6 +14,8 @@ pub struct AppState {
     pub window: Window,
     /// The profile the Workspace Hub shows and creates workspaces in, as the profile's root path.
     pub active_profile: Option<String>,
+    #[serde(default)]
+    pub agent_views: Vec<AgentViewState>,
 }
 
 /// The app's one window.
@@ -119,4 +121,20 @@ impl Pane {
             Self::PreviewRow { previews, .. } => previews,
         }
     }
+}
+
+/// Durable chat presentation state, retained when its tab is closed.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AgentViewState {
+    pub profile_path: String,
+    pub name: String,
+    pub draft: String,
+    pub anchor: Option<ChatScrollAnchor>,
+}
+
+/// The top visible transcript item and its offset, or None for following output.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChatScrollAnchor {
+    pub sequence: u64,
+    pub offset: i32,
 }

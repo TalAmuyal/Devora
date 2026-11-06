@@ -24,8 +24,9 @@ pub use chat::{
 pub use command::{Command, Event, StateError};
 pub use feed::{feed, Feed, Subscription};
 pub use model::{
-    AppState, Pane, PaneId, PreviewPane, Session, SessionKind, Tab, TabId, Window,
-    DEFAULT_PREVIEW_WIDTH, MAX_PREVIEW_WIDTH, MIN_PREVIEW_WIDTH, MIN_TERMINAL_WIDTH,
+    AgentViewState, AppState, ChatScrollAnchor, Pane, PaneId, PreviewPane, Session, SessionKind,
+    Tab, TabId, Window, DEFAULT_PREVIEW_WIDTH, MAX_PREVIEW_WIDTH, MIN_PREVIEW_WIDTH,
+    MIN_TERMINAL_WIDTH,
 };
 pub use persist::set_aside;
 pub use store::Store;

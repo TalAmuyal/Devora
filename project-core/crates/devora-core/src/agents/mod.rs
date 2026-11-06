@@ -37,12 +37,19 @@ impl Key {
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Pause {
+    None,
+    AfterTurn,
+    Immediate,
+}
+
 struct Owner {
     run_id: u64,
     tab: Option<u64>,
     generation: u64,
     handle: Option<SpaceHandle>,
-    pause: watch::Sender<bool>,
+    pause: watch::Sender<Pause>,
     done: watch::Sender<bool>,
 }
 
@@ -135,7 +142,7 @@ impl Agents {
                 }
                 let waiting = inner.owners.get(&key).filter(|owner| !*owner.done.borrow());
                 if let Some(owner) = waiting {
-                    if !*owner.pause.borrow() {
+                    if *owner.pause.borrow() == Pause::None {
                         let tab = owner.tab.ok_or("agent has no tab")?;
                         self.state
                             .dispatch(Command::ActivateTab { tab })
@@ -147,7 +154,7 @@ impl Agents {
                     let tab = self.open_tab(&inner, &key)?;
                     inner.generation += 1;
                     let generation = inner.generation;
-                    let (pause, paused) = watch::channel(false);
+                    let (pause, paused) = watch::channel(Pause::None);
                     let (done, _) = watch::channel(false);
                     inner.owners.insert(
                         key.clone(),
@@ -273,7 +280,7 @@ impl Agents {
             .map_err(|e| e.to_string())?;
         if let Some(owner) = inner.owners.values_mut().find(|o| o.tab == Some(tab)) {
             owner.tab = None;
-            owner.pause.send_replace(true);
+            owner.pause.send_replace(Pause::Immediate);
         }
         Ok(())
     }
@@ -290,12 +297,33 @@ impl Agents {
                 return Ok(());
             }
             phase(&self.state, owner, ChatPhase::Pausing);
-            owner.pause.send_replace(true);
+            owner.pause.send_replace(Pause::Immediate);
             owner.done.subscribe()
         };
         done.wait_for(|done| *done)
             .await
             .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    /// Reserve a pause without interrupting the active turn. Permission answers
+    /// and Stop remain available, while further sends are rejected immediately.
+    pub fn pause_after_turn(&self, tab: u64, generation: u64) -> Result<(), String> {
+        let inner = lock(&self.inner);
+        let owner = inner
+            .owners
+            .values()
+            .find(|o| o.tab == Some(tab))
+            .ok_or("agent is not open")?;
+        if inner.closing
+            || owner.generation != generation
+            || *owner.pause.borrow() == Pause::Immediate
+            || *owner.done.borrow()
+        {
+            return Err("agent generation is stale or pausing".into());
+        }
+        events::update(&self.state, tab, generation, ChatUpdate::PauseRequested);
+        owner.pause.send_replace(Pause::AfterTurn);
         Ok(())
     }
 
@@ -399,9 +427,18 @@ impl Agents {
             inner.deletions.insert(key.clone(), done.clone());
         }
         let inner = self.inner.clone();
+        let state = self.state.clone();
         let (reply, received) = oneshot::channel();
         self.runtime.spawn_blocking(move || {
-            let result = Space::delete(&key.profile, &key.name);
+            let result = Space::delete(&key.profile, &key.name).and_then(|()| {
+                state
+                    .dispatch(Command::ClearAgentView {
+                        profile_path: key.profile.to_string_lossy().into_owned(),
+                        name: key.name.clone(),
+                    })
+                    .map(|_| ())
+                    .map_err(|e| e.to_string())
+            });
             {
                 let mut inner = lock(&inner);
                 inner.deletions.remove(&key);
@@ -422,7 +459,10 @@ impl Agents {
             .values()
             .find(|o| o.tab == Some(tab))
             .ok_or("agent is not open")?;
-        if inner.closing || owner.generation != generation || *owner.pause.borrow() {
+        if inner.closing
+            || owner.generation != generation
+            || *owner.pause.borrow() == Pause::Immediate
+        {
             return Err("agent generation is stale or pausing".into());
         }
         owner
@@ -432,14 +472,17 @@ impl Agents {
     }
 
     pub async fn send_turn(&self, tab: u64, generation: u64, text: String) -> Result<(), String> {
-        let handle = {
+        let (handle, key) = {
             let inner = lock(&self.inner);
-            let owner = inner
+            let (key, owner) = inner
                 .owners
-                .values()
-                .find(|o| o.tab == Some(tab))
+                .iter()
+                .find(|(_, o)| o.tab == Some(tab))
                 .ok_or("agent is not open")?;
-            if inner.closing || owner.generation != generation || *owner.pause.borrow() {
+            if inner.closing
+                || owner.generation != generation
+                || *owner.pause.borrow() != Pause::None
+            {
                 return Err("agent generation is stale or pausing".into());
             }
             let handle = owner.handle.clone().ok_or("agent is not ready")?;
@@ -458,17 +501,29 @@ impl Agents {
                 generation,
                 ChatUpdate::Turn { running: true },
             );
-            handle
+            (handle, key.clone())
         };
 
         let state = self.state.clone();
         let (reply, received) = oneshot::channel();
         self.runtime.spawn(async move {
-            let result = handle.send_turn(text).await;
+            let result = handle.send_turn(text.clone()).await;
             if result.is_err() {
                 events::update(&state, tab, generation, ChatUpdate::Turn { running: false });
             }
 
+            // Clear only the submitted draft, independently of the caller's
+            // lifetime. A newer draft in a reopened tab must remain untouched.
+            let result = result.and_then(|()| {
+                state
+                    .dispatch(Command::ClearAgentDraft {
+                        profile_path: key.profile.to_string_lossy().into_owned(),
+                        name: key.name,
+                        text,
+                    })
+                    .map(|_| ())
+                    .map_err(|e| e.to_string())
+            });
             let _ = reply.send(result);
         });
         received.await.map_err(|e| e.to_string())?
@@ -542,7 +597,7 @@ async fn shutdown(inner: &Mutex<Inner>, state: &Store) {
         waits.extend(inner.owners.values().map(|owner| {
             if !*owner.done.borrow() {
                 phase(state, owner, ChatPhase::Pausing);
-                owner.pause.send_replace(true);
+                owner.pause.send_replace(Pause::Immediate);
             }
             owner.done.subscribe()
         }));
@@ -559,7 +614,7 @@ async fn run(
     log: Arc<Log>,
     key: Key,
     generation: u64,
-    mut pause: watch::Receiver<bool>,
+    mut pause: watch::Receiver<Pause>,
     context: LaunchContext,
 ) {
     let outcome = run_session(&inner, &state, &log, &key, generation, &mut pause, context).await;
@@ -597,7 +652,7 @@ async fn run_session(
     log: &Arc<Log>,
     key: &Key,
     generation: u64,
-    pause: &mut watch::Receiver<bool>,
+    pause: &mut watch::Receiver<Pause>,
     context: LaunchContext,
 ) -> Result<(), String> {
     let path = key.profile.clone();
@@ -609,7 +664,7 @@ async fn run_session(
     })
     .await
     .map_err(|e| e.to_string())??;
-    if *pause.borrow() {
+    if *pause.borrow() == Pause::Immediate {
         return Ok(());
     }
     publish(inner, state, key, generation, SpaceEvent::Restored(history));
@@ -634,7 +689,18 @@ async fn run_session(
         owner.handle = Some(running.handle());
     }
     loop {
-        if *pause.borrow() {
+        let should_pause = match *pause.borrow() {
+            Pause::None => false,
+            Pause::Immediate => true,
+            Pause::AfterTurn => {
+                let tab = lock(inner).owners.get(key).and_then(|o| o.tab);
+                !state
+                    .chat_snapshot()
+                    .iter()
+                    .any(|chat| Some(chat.tab) == tab && chat.turn_running)
+            }
+        };
+        if should_pause {
             let result = running.pause().await;
             while let Some(event) = running.next_update().await {
                 publish(inner, state, key, generation, event);

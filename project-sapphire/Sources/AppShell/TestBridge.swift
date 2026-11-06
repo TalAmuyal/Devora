@@ -126,6 +126,53 @@ final class TestBridge {
 			case ("POST", "/test/hub"):
 				try hubAction(request.json())
 				return .init(status: 200, body: [:])
+			case ("GET", "/test/agent-chat"):
+				guard let tab = store.app.window.activeTab, let panel = surfaces.agentPanels[tab], let view = panel.webView else { throw BridgeError(status: 409, "agent chat is not ready") }
+				let dom = try await view.evaluateJavaScript("""
+					(() => {
+					  const content = document.getElementById('content');
+					  const rows = [...document.querySelectorAll('article[data-sequence]')];
+					  const visible = rows.find(row => row.offsetTop + row.offsetHeight > content.scrollTop);
+					  return {
+					    text: content.textContent,
+					    rows: rows.map(row => ({
+					      sequence: row.dataset.sequence, kind: row.className,
+					      text: row.textContent, offset: row.offsetTop - content.scrollTop
+					    })),
+					    cards: document.querySelectorAll('.chat-permission').length,
+					    thinkingOpen: document.querySelector('.chat-thinking details')?.open ?? false,
+					    toolOpen: document.querySelector('.chat-tool details')?.open ?? false,
+					    verdict: document.querySelector('.chat-verdict')?.textContent ?? '',
+					    scripts: document.querySelectorAll('article script').length,
+					    unsafe: document.querySelectorAll('article [onerror], article [onclick]').length,
+					    top: content.scrollTop, topSequence: visible?.dataset.sequence ?? null
+					  };
+					})()
+					""")
+				var observation: [String: Any] = ["dom": dom ?? [:], "draft": panel.chat.draft, "canSend": panel.chat.canSend]
+				observation["phase"] = panel.chat.chat.map { String(describing: $0.phase) } ?? "opening"
+				observation["enterSends"] = panel.chat.enterSends
+				observation["running"] = panel.chat.chat?.turnRunning ?? false
+				observation["anchor"] = panel.chat.anchor.map { String($0.sequence) as Any } ?? NSNull()
+				observation["questions"] = panel.chat.chat?.questions.count ?? 0
+				observation["error"] = (panel.chat.error ?? panel.rendererError).map { $0 as Any } ?? NSNull()
+				return .init(status: 200, body: observation)
+			case ("POST", "/test/agent-chat"):
+				guard let tab = store.app.window.activeTab, let panel = surfaces.agentPanels[tab] else { throw BridgeError(status: 409, "agent chat is not open") }
+				let body = try request.json()
+				switch body["action"] as? String {
+				case "draft": panel.chat.draft = body["text"] as? String ?? ""; panel.chat.flushDraft()
+				case "send": await panel.chat.send()
+				case "stop": await panel.chat.stop()
+				case "pause": panel.chat.pause()
+				case "retry": await panel.chat.retry()
+				case "older": await panel.chat.older()
+				case "toggleThinking": _ = try await panel.webView?.evaluateJavaScript("document.querySelector('.chat-thinking summary')?.click()")
+				case "toggleTool": _ = try await panel.webView?.evaluateJavaScript("document.querySelector('.chat-tool summary')?.click()")
+				case "scrollTop": _ = try await panel.webView?.evaluateJavaScript("document.getElementById('content').scrollTo({top:0})")
+				default: throw BridgeError(status: 400, "unknown chat action")
+				}
+				return .init(status: 200, body: [:])
 			case ("POST", "/test/agent-hub"):
 				try agentHubAction(request.json())
 				return .init(status: 200, body: [:])

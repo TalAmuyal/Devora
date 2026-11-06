@@ -9,7 +9,8 @@ use std::sync::Arc;
 
 use devora_core::bundle::AppVersion;
 use devora_core::state::{
-    self, AppState, Command, Event, Pane, PreviewPane, Session, SessionKind, Tab, Window,
+    self, AgentViewState, AppState, ChatScrollAnchor, Command, Event, Pane, PreviewPane, Session,
+    SessionKind, Tab, Window,
 };
 
 use crate::{CoreError, DevoraCore};
@@ -18,6 +19,20 @@ use crate::{CoreError, DevoraCore};
 pub struct AppState {
     pub window: Window,
     pub active_profile: Option<String>,
+    pub agent_views: Vec<AgentViewState>,
+}
+
+#[uniffi::remote(Record)]
+pub struct AgentViewState {
+    pub profile_path: String,
+    pub name: String,
+    pub draft: String,
+    pub anchor: Option<ChatScrollAnchor>,
+}
+#[uniffi::remote(Record)]
+pub struct ChatScrollAnchor {
+    pub sequence: u64,
+    pub offset: i32,
 }
 
 #[uniffi::remote(Record)]
@@ -74,6 +89,25 @@ pub struct PreviewPane {
 #[uniffi::remote(Enum)]
 #[uniffi(name = "StateCommand")]
 pub enum Command {
+    ClearAgentDraft {
+        profile_path: String,
+        name: String,
+        text: String,
+    },
+    SetAgentDraft {
+        profile_path: String,
+        name: String,
+        text: String,
+    },
+    SetAgentScroll {
+        profile_path: String,
+        name: String,
+        anchor: Option<ChatScrollAnchor>,
+    },
+    ClearAgentView {
+        profile_path: String,
+        name: String,
+    },
     OpenSession {
         title: String,
         kind: SessionKind,
@@ -130,15 +164,49 @@ pub enum Command {
 #[uniffi::remote(Enum)]
 #[uniffi(name = "StateEvent")]
 pub enum Event {
-    Snapshot { state: AppState },
-    SessionOpened { tab: Tab, index: u32 },
-    SessionClosed { tab: u64 },
-    TabActivated { tab: Option<u64> },
-    TabMoved { tab: u64, from: u32, to: u32 },
-    TitleChanged { tab: u64, title: String },
-    SessionChanged { tab: u64, session: Session },
-    PanesChanged { tab: u64, pane: Pane },
-    ActiveProfileChanged { profile_path: Option<String> },
+    AgentDraftCleared {
+        profile_path: String,
+        name: String,
+        text: String,
+    },
+    AgentViewChanged {
+        profile_path: String,
+        name: String,
+        view: Option<AgentViewState>,
+    },
+    Snapshot {
+        state: AppState,
+    },
+    SessionOpened {
+        tab: Tab,
+        index: u32,
+    },
+    SessionClosed {
+        tab: u64,
+    },
+    TabActivated {
+        tab: Option<u64>,
+    },
+    TabMoved {
+        tab: u64,
+        from: u32,
+        to: u32,
+    },
+    TitleChanged {
+        tab: u64,
+        title: String,
+    },
+    SessionChanged {
+        tab: u64,
+        session: Session,
+    },
+    PanesChanged {
+        tab: u64,
+        pane: Pane,
+    },
+    ActiveProfileChanged {
+        profile_path: Option<String>,
+    },
 }
 
 impl From<state::StateError> for CoreError {

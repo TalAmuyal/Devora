@@ -521,3 +521,116 @@ fn creation_progress_cancel_failure_and_invalid_listing_use_the_facade() {
     )
     .unwrap();
 }
+
+#[test]
+fn deferred_pause_finishes_the_turn_keeps_permissions_and_rejects_new_sends() {
+    let f = Fixture::new(false);
+    f.create("Pause");
+    let tab = f.open("Pause");
+    let events = f.core.subscribe_agent_chats().unwrap();
+    let chat = f.wait(&events, |c| c.phase == ChatPhase::Running);
+    assert!(f
+        .core
+        .pause_agent_after_turn(tab, chat.generation + 1)
+        .is_err());
+    block_on(
+        f.core
+            .send_agent_turn(tab, chat.generation, "permission".into()),
+    )
+    .unwrap();
+    let waiting = f.wait(&events, |c| !c.questions.is_empty());
+    assert!(waiting.questions[0]
+        .suggested_rules_json
+        .as_deref()
+        .unwrap()
+        .contains("destination"));
+    f.core.pause_agent_after_turn(tab, chat.generation).unwrap();
+    let pending = f.core.agent_chat_snapshot().unwrap().remove(0);
+    assert!(pending.pause_requested && pending.turn_running);
+    assert_eq!(pending.questions.len(), 1);
+    assert!(block_on(f.core.send_agent_turn(tab, chat.generation, "later".into())).is_err());
+    block_on(f.core.answer_agent_permission(
+        tab,
+        chat.generation,
+        "question".into(),
+        PermissionAnswer::Allow,
+    ))
+    .unwrap();
+    let paused = f.wait(&events, |c| c.phase == ChatPhase::Paused);
+    assert!(has_message(&paused, "result"));
+    assert!(!paused.pause_requested);
+    assert_eq!(f.open("Pause"), tab);
+    let resumed = f.wait(&events, |c| c.phase == ChatPhase::Running);
+    assert_eq!(resumed.session_id, paused.session_id);
+    f.core
+        .pause_agent_after_turn(tab, resumed.generation)
+        .unwrap();
+    f.wait(&events, |c| c.phase == ChatPhase::Paused);
+    block_on(f.core.shutdown_agents()).unwrap();
+}
+
+#[test]
+fn accepted_turn_clears_its_draft_even_when_the_callers_wait_is_cancelled() {
+    let f = Fixture::new(false);
+    f.create("Draft");
+    let tab = f.open("Draft");
+    let events = f.core.subscribe_agent_chats().unwrap();
+    let chat = f.wait(&events, |c| c.phase == ChatPhase::Running);
+    let profile = fs::canonicalize(&f.profile.path)
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    f.core
+        .dispatch(Command::SetAgentDraft {
+            profile_path: profile,
+            name: "Draft".into(),
+            text: "submitted".into(),
+        })
+        .unwrap();
+    {
+        let mut turn =
+            std::pin::pin!(f
+                .core
+                .send_agent_turn(tab, chat.generation, "submitted".into()));
+        let _ = block_on(poll_once(turn.as_mut()));
+    }
+    let deadline = std::time::Instant::now() + Duration::from_secs(12);
+    while !f.core.snapshot().unwrap().agent_views[0].draft.is_empty() {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "cancelled caller abandoned draft acknowledgement"
+        );
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    block_on(f.core.shutdown_agents()).unwrap();
+}
+
+#[test]
+fn deletion_retry_finishes_presentation_cleanup_after_the_directory_is_gone() {
+    let f = Fixture::new(false);
+    f.create("Deleted");
+    block_on(
+        f.core
+            .delete_agent_space(f.profile.path_string(), "Deleted".into()),
+    )
+    .unwrap();
+    // This is the state left if filesystem deletion succeeded but its following
+    // state transaction failed. Retrying must complete that remaining stage.
+    let profile = fs::canonicalize(&f.profile.path)
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    f.core
+        .dispatch(Command::SetAgentDraft {
+            profile_path: profile,
+            name: "Deleted".into(),
+            text: "old draft".into(),
+        })
+        .unwrap();
+    block_on(
+        f.core
+            .delete_agent_space(f.profile.path_string(), "Deleted".into()),
+    )
+    .unwrap();
+    assert!(f.core.snapshot().unwrap().agent_views.is_empty());
+}

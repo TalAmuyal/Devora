@@ -32,6 +32,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 	///
 	/// `terminate` may be called from a block on the main queue (the test bridge's quit), and AppKit then waits in a nested run loop inside that block, which can't drain the main queue, so neither the pause nor the reply may need it: the pause runs off the main actor, and the reply is a run-loop block.
 	func applicationShouldTerminate(_ app: NSApplication) -> NSApplication.TerminateReply {
+		if AppTermination.saveDrafts?() == false { return .terminateCancel }
 		guard let pauseAgents = AppTermination.pauseAgents else { return .terminateNow }
 		Task.detached {
 			await pauseAgents()

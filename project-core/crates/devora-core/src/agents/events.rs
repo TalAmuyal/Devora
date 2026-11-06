@@ -51,6 +51,9 @@ fn session(state: &Store, tab: u64, generation: u64, event: SessionEvent) {
             question,
         } => {
             let decision_reason = question.decision_reason().map(str::to_owned);
+            let suggested_rules_json = question
+                .permission_suggestions()
+                .map(|rules| serde_json::json!(rules).to_string());
             let can_always_allow = question
                 .permission_suggestions()
                 .is_some_and(|rules| !rules.is_empty());
@@ -66,6 +69,7 @@ fn session(state: &Store, tab: u64, generation: u64, event: SessionEvent) {
                         input_json: question.input.to_string(),
                         decision_reason,
                         can_always_allow,
+                        suggested_rules_json,
                     },
                 },
             );

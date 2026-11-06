@@ -45,6 +45,7 @@ const MIGRATIONS: &[&str] = &[
      ALTER TABLE previews ADD COLUMN position INTEGER NOT NULL DEFAULT 0 CHECK (position >= 0);
      UPDATE previews SET position = (SELECT COUNT(*) FROM previews AS earlier WHERE earlier.tab_id = previews.tab_id AND earlier.id < previews.id);
      CREATE UNIQUE INDEX preview_order ON previews(tab_id, position);",
+    "CREATE TABLE agent_views (profile_path TEXT NOT NULL, name TEXT NOT NULL, draft TEXT NOT NULL, anchor_sequence INTEGER, anchor_offset INTEGER, PRIMARY KEY(profile_path, name));",
 ];
 
 pub(crate) struct Db {
@@ -335,10 +336,31 @@ fn load(conn: &Connection) -> Result<State, Error> {
         )));
     }
 
+    let mut query = conn.prepare(
+        "SELECT profile_path, name, draft, anchor_sequence, anchor_offset
+         FROM agent_views ORDER BY profile_path, name",
+    )?;
+    let agent_views = query
+        .query_map([], |row| {
+            let sequence: Option<u64> = row.get(3)?;
+            let offset: Option<i32> = row.get(4)?;
+            Ok(crate::AgentViewState {
+                profile_path: row.get(0)?,
+                name: row.get(1)?,
+                draft: row.get(2)?,
+                anchor: sequence.map(|sequence| crate::ChatScrollAnchor {
+                    sequence,
+                    offset: offset.unwrap_or(0),
+                }),
+            })
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+
     Ok(State {
         app: AppState {
             window: Window { tabs, active_tab },
             active_profile,
+            agent_views,
         },
         next_id,
     })
@@ -346,6 +368,19 @@ fn load(conn: &Connection) -> Result<State, Error> {
 
 fn write(conn: &mut Connection, state: &State) -> rusqlite::Result<()> {
     let tx = conn.transaction()?;
+    tx.execute("DELETE FROM agent_views", [])?;
+    for view in &state.app.agent_views {
+        tx.execute(
+            "INSERT INTO agent_views VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![
+                view.profile_path,
+                view.name,
+                view.draft,
+                view.anchor.as_ref().map(|a| a.sequence),
+                view.anchor.as_ref().map(|a| a.offset)
+            ],
+        )?;
+    }
     tx.execute("DELETE FROM previews", [])?;
     tx.execute("DELETE FROM panes", [])?;
     tx.execute("DELETE FROM tabs", [])?;
@@ -1017,5 +1052,112 @@ mod tests {
                 expected.apply(scripted(i, expected.snapshot())).unwrap();
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod agent_view_tests {
+    use super::*;
+    use crate::{ChatScrollAnchor, Command, Store};
+
+    #[test]
+    fn drafts_and_scroll_survive_close_and_restart_and_can_be_cleared() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("state.db");
+        let store = Store::open(&path).unwrap();
+        store
+            .dispatch(Command::OpenSession {
+                title: "Chat".into(),
+                kind: SessionKind::AgentSpace {
+                    name: "Delta".into(),
+                },
+                profile_path: Some("/profile".into()),
+            })
+            .unwrap();
+        let tab = store.snapshot().window.active_tab.unwrap();
+        for (profile, name) in [
+            ("/z", "Bravo"),
+            ("/profile", "Delta"),
+            ("/profile", "Bravo"),
+        ] {
+            store
+                .dispatch(Command::SetAgentDraft {
+                    profile_path: profile.into(),
+                    name: name.into(),
+                    text: format!("draft {name}\nsecond line"),
+                })
+                .unwrap();
+        }
+        store
+            .dispatch(Command::SetAgentScroll {
+                profile_path: "/profile".into(),
+                name: "Delta".into(),
+                anchor: Some(ChatScrollAnchor {
+                    sequence: 12,
+                    offset: -7,
+                }),
+            })
+            .unwrap();
+        store.dispatch(Command::CloseSession { tab }).unwrap();
+        let before = store.snapshot();
+        assert_eq!(before.agent_views.len(), 3);
+        drop(store);
+        let store = Store::open(&path).unwrap();
+        assert_eq!(store.snapshot(), before);
+        store
+            .dispatch(Command::ClearAgentView {
+                profile_path: "/profile".into(),
+                name: "Delta".into(),
+            })
+            .unwrap();
+        assert_eq!(store.snapshot().agent_views.len(), 2);
+        drop(store);
+        assert_eq!(Store::open(&path).unwrap().snapshot().agent_views.len(), 2);
+    }
+
+    #[test]
+    fn clearing_an_accepted_prompt_preserves_a_newer_draft() {
+        let store = Store::new();
+        let set = |text: &str| Command::SetAgentDraft {
+            profile_path: "/profile".into(),
+            name: "Delta".into(),
+            text: text.into(),
+        };
+        let clear = |text: &str| Command::ClearAgentDraft {
+            profile_path: "/profile".into(),
+            name: "Delta".into(),
+            text: text.into(),
+        };
+        store.dispatch(set("submitted")).unwrap();
+        store.dispatch(set("newer")).unwrap();
+        assert!(store.dispatch(clear("submitted")).unwrap().is_empty());
+        assert_eq!(store.snapshot().agent_views[0].draft, "newer");
+        assert!(
+            matches!(&store.dispatch(clear("newer")).unwrap()[0], crate::Event::AgentDraftCleared { text, .. } if text == "newer")
+        );
+        assert!(store.snapshot().agent_views[0].draft.is_empty());
+    }
+
+    #[test]
+    fn previous_state_schema_upgrades_with_empty_agent_views() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("state.db");
+        let conn = Connection::open(&path).unwrap();
+        for migration in &MIGRATIONS[..MIGRATIONS.len() - 1] {
+            conn.execute_batch(migration).unwrap();
+        }
+        conn.pragma_update(None, "user_version", MIGRATIONS.len() - 1)
+            .unwrap();
+        drop(conn);
+        let store = Store::open(&path).unwrap();
+        assert!(store.snapshot().agent_views.is_empty());
+        drop(store);
+        assert_eq!(
+            Connection::open(path)
+                .unwrap()
+                .pragma_query_value(None, "user_version", |row| row.get::<_, usize>(0))
+                .unwrap(),
+            MIGRATIONS.len()
+        );
     }
 }

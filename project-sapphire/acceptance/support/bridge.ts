@@ -1,5 +1,28 @@
 /** A client for the app's test bridge (`Sources/AppShell/TestBridge.swift`). */
 
+export interface AgentChatState {
+  dom: {
+    text: string;
+    rows: { sequence: string; kind: string; text: string; offset: number }[];
+    cards: number;
+    thinkingOpen: boolean;
+    toolOpen: boolean;
+    verdict: string;
+    scripts: number;
+    unsafe: number;
+    top: number;
+    topSequence: string | null;
+  };
+  running: boolean;
+  enterSends: boolean;
+  anchor: string | null;
+  draft: string;
+  phase: string;
+  canSend: boolean;
+  questions: number;
+  error: string | null;
+}
+
 export interface TabState {
   terminalID: number;
   previews: { id: number; path: string; revision: number; width: number; error: string | null }[];
@@ -301,6 +324,14 @@ export class Bridge {
 
   state(): Promise<AppState> {
     return this.request('GET', '/test/state');
+  }
+
+  agentChat(): Promise<AgentChatState> {
+    return this.request('GET', '/test/agent-chat');
+  }
+
+  async chatAction(action: string, text?: string): Promise<void> {
+    await this.request('POST', '/test/agent-chat', { action, text });
   }
 
   guide(): Promise<{ text: string; error: string | null }> {
