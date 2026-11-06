@@ -50,12 +50,20 @@ This ADR decides what an agent is in Devora, where it lives, and how the user wo
 	- Quitting the app pauses every agent, and a relaunch restores the open tabs (ADR-008) and resumes their agents.
 	- Other kinds of agents, such as ones that run without a tab, may come later with their own lifecycle.
 - **The UI**
-	- The **Agent Hub** lists, creates and deletes Agent Spaces; creating one asks for the name, the role, the initial repos and any overrides of the profile's defaults.
+	- The **Agent Hub** lists, creates and deletes Agent Spaces.
+		It is a tab-covering overlay with the Workspace Hub's keyboard model.
+		In Sapphire, `Ctrl+S` opens the Agent Hub, and `Ctrl+S` inside either hub switches to the other, as does a toggle in the hub's header; Ember keeps `Ctrl+S` for the Workspace Hub.
+	- The **creation form** is built from the template's placeholders, so a custom template brings its own fields.
+		The fields only the form fills (such as the name, the role and the initial repos) come first, then the fields pre-filled from the profile config and the launch spec.
+		Editing a pre-filled field changes only this agent's rendering; a button beside the field can also save the value to its source, as editing it in the Settings Hub would.
+		Values Devora derives (such as the space's path and its `memory/` path) are shown read-only.
 	- An Agent Space's tab has a **chat panel** as its main panel.
 		Terminal, preview, and web panels can be opened beside it for work beyond the chat.
 	- The transcript renders through the shared web renderer that previews and the User Guide use, with a native renderer as the fallback if that proves better.
 	- The prompt editor starts as a plain multi-line text box.
 		An embedded Neovim editor (ADR-010) comes later as an alternative, and the plain editor remains a setting.
+	- In the prompt editor, `Enter` and `Shift+Enter` insert a newline, and `⌘Enter` and `Ctrl+Enter` send.
+		A setting makes plain `Enter` send as well, for users used to Claude Code.
 - **Permissions: Judgess decides when it can, then the user or auto mode**
 	- Agent Space sessions run in auto mode, with Judgess in-process in front of it (ADR-009).
 	- Judgess's verdicts:
