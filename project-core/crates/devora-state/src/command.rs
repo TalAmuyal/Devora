@@ -9,6 +9,25 @@ use std::fmt;
 /// The same commands back keybindings and, later, the `:` command line (ADR-008).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Command {
+    ClearAgentDraft {
+        profile_path: String,
+        name: String,
+        text: String,
+    },
+    SetAgentDraft {
+        profile_path: String,
+        name: String,
+        text: String,
+    },
+    SetAgentScroll {
+        profile_path: String,
+        name: String,
+        anchor: Option<crate::ChatScrollAnchor>,
+    },
+    ClearAgentView {
+        profile_path: String,
+        name: String,
+    },
     /// Opens a tab at the end of the tab bar and activates it.
     OpenSession {
         title: String,
@@ -76,6 +95,16 @@ pub enum Command {
 /// What a command changed, for the UIs to fold into what they render.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Event {
+    AgentDraftCleared {
+        profile_path: String,
+        name: String,
+        text: String,
+    },
+    AgentViewChanged {
+        profile_path: String,
+        name: String,
+        view: Option<crate::AgentViewState>,
+    },
     /// The whole state; always the first event of a [`crate::Subscription`], and never emitted by a command.
     Snapshot {
         state: AppState,
@@ -170,6 +199,30 @@ impl fmt::Display for StateError {
 
 impl std::error::Error for StateError {}
 
+fn agent_view<'a>(
+    app: &'a mut AppState,
+    profile: &str,
+    name: &str,
+) -> &'a mut crate::AgentViewState {
+    let index = app
+        .agent_views
+        .binary_search_by(|view| {
+            (view.profile_path.as_str(), view.name.as_str()).cmp(&(profile, name))
+        })
+        .unwrap_or_else(|index| {
+            app.agent_views.insert(
+                index,
+                crate::AgentViewState {
+                    profile_path: profile.into(),
+                    name: name.into(),
+                    ..Default::default()
+                },
+            );
+            index
+        });
+    &mut app.agent_views[index]
+}
+
 pub(crate) fn apply(
     app: &mut AppState,
     next_id: &mut u64,
@@ -177,6 +230,74 @@ pub(crate) fn apply(
 ) -> Result<Vec<Event>, StateError> {
     let window = &mut app.window;
     let events = match command {
+        Command::ClearAgentDraft {
+            profile_path,
+            name,
+            text,
+        } => {
+            let Some(view) = app
+                .agent_views
+                .iter_mut()
+                .find(|v| v.profile_path == profile_path && v.name == name && v.draft == text)
+            else {
+                return Ok(vec![]);
+            };
+            view.draft.clear();
+            vec![Event::AgentDraftCleared {
+                profile_path,
+                name,
+                text,
+            }]
+        }
+        Command::SetAgentDraft {
+            profile_path,
+            name,
+            text,
+        } => {
+            if app
+                .agent_views
+                .iter()
+                .any(|v| v.profile_path == profile_path && v.name == name && v.draft == text)
+            {
+                return Ok(vec![]);
+            }
+            let view = agent_view(app, &profile_path, &name);
+            view.draft = text;
+            vec![Event::AgentViewChanged {
+                profile_path,
+                name,
+                view: Some(view.clone()),
+            }]
+        }
+        Command::SetAgentScroll {
+            profile_path,
+            name,
+            anchor,
+        } => {
+            if app
+                .agent_views
+                .iter()
+                .any(|v| v.profile_path == profile_path && v.name == name && v.anchor == anchor)
+            {
+                return Ok(vec![]);
+            }
+            let view = agent_view(app, &profile_path, &name);
+            view.anchor = anchor;
+            vec![Event::AgentViewChanged {
+                profile_path,
+                name,
+                view: Some(view.clone()),
+            }]
+        }
+        Command::ClearAgentView { profile_path, name } => {
+            app.agent_views
+                .retain(|view| view.profile_path != profile_path || view.name != name);
+            vec![Event::AgentViewChanged {
+                profile_path,
+                name,
+                view: None,
+            }]
+        }
         Command::OpenSession {
             title,
             kind,

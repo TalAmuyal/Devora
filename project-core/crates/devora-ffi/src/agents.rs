@@ -231,6 +231,7 @@ pub struct PermissionQuestion {
     pub input_json: String,
     pub decision_reason: Option<String>,
     pub can_always_allow: bool,
+    pub suggested_rules_json: Option<String>,
 }
 #[uniffi::remote(Record)]
 pub struct Chat {
@@ -238,6 +239,7 @@ pub struct Chat {
     pub generation: u64,
     pub phase: ChatPhase,
     pub turn_running: bool,
+    pub pause_requested: bool,
     pub session_id: Option<String>,
     pub items: Vec<TranscriptItem>,
     pub error: Option<String>,
@@ -253,6 +255,7 @@ pub struct ChatContext {
 }
 #[uniffi::remote(Enum)]
 pub enum ChatUpdate {
+    PauseRequested { requested: bool },
     Turn { running: bool },
     Generation { generation: u64 },
     Phase { phase: ChatPhase },
@@ -412,6 +415,10 @@ impl DevoraCore {
                 launch.context(self.config_path.clone())?,
             )
             .await?)
+    }
+    pub fn pause_agent_after_turn(&self, tab: u64, generation: u64) -> Result<(), CoreError> {
+        self.agents.pause_after_turn(tab, generation)?;
+        Ok(())
     }
     pub async fn pause_agent_space(&self, tab: u64) -> Result<(), CoreError> {
         self.agents.pause(tab).await?;

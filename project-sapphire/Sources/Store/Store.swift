@@ -79,6 +79,7 @@ public final class Store {
 	public internal(set) var agentSpaces: [AgentSpace] = []
 	/// Each open agent's status at a glance, by its tab.
 	public internal(set) var agentStatuses: [UInt64: AgentStatus] = [:]
+	@ObservationIgnored var agentModels: [UInt64: WeakAgentChat] = [:]
 	@ObservationIgnored var agentChats: Task<Void, Never>?
 
 	/// Asks the window's display link to call `foldPending()` on its next frame; without one, events fold on the main actor's next turn.
@@ -176,7 +177,7 @@ public final class Store {
 		case .closePreview(let tab, let pane):
 			apply(.closePreview(tab: tab, pane: pane))
 		case .closeTab(let id):
-			apply(.closeSession(tab: id))
+			if agentModels[id]?.value?.flushDraft() != false { apply(.closeSession(tab: id)) }
 		case .setTabTitle(let id, let title):
 			apply(.setTitle(tab: id, title: title))
 		case .createTask(let title, let repoPaths, let source):
@@ -197,6 +198,11 @@ public final class Store {
 		for event in events {
 			followCreation(event, in: app)
 			app.apply(event)
+			if case .agentDraftCleared(let profile, let name, let text) = event {
+				for reference in agentModels.values {
+					if let model = reference.value, model.profile == profile, model.name == name { model.acceptedDraft(text) }
+				}
+			}
 		}
 		self.app = app
 	}

@@ -487,6 +487,11 @@ struct ConfigFieldSpec {
 
 const CONFIG_FIELDS: &[ConfigFieldSpec] = &[
     ConfigFieldSpec {
+        key: "agent.enter-sends",
+        kind: ConfigFieldKind::Bool,
+        builtin_default: BuiltinDefault::Bool(false),
+    },
+    ConfigFieldSpec {
         key: "terminal.default-app",
         kind: ConfigFieldKind::Text,
         builtin_default: BuiltinDefault::None, // unset = bare login shell

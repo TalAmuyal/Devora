@@ -80,7 +80,11 @@ struct ConfigCard {
 		asana(.text("task-tracker.asana.section-id", "Section ID", hint: "optional")),
 	])
 
-	static let all = [terminal, pullRequests, taskTracker]
+	static let agent = ConfigCard(title: "Agent Chat", fields: [
+		ConfigField(key: "agent.enter-sends", label: "Enter sends", hint: "Shift+Enter always inserts a newline", kind: .bool),
+	])
+
+	static let all = [agent, terminal, pullRequests, taskTracker]
 
 	private static func asana(_ field: ConfigField) -> ConfigField {
 		var field = field

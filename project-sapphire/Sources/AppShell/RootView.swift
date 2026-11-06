@@ -7,6 +7,7 @@ import TerminalKit
 
 /// What the app does before it quits.
 public enum AppTermination {
+	@MainActor public static var saveDrafts: (() -> Bool)?
 	/// Pauses every agent, waiting until each has stopped and saved its session; set on the main thread once the core runs, and run off the main actor.
 	nonisolated(unsafe) public static var pauseAgents: (@Sendable () async -> Void)?
 }
@@ -66,6 +67,7 @@ public struct RootView: View {
 
 	/// Runs once the app state is open: the restored tabs are already in the core, and the Workspace Hub opens when there are none, as Ember's launch always opens it.
 	private func launch() async {
+		AppTermination.saveDrafts = { [weak store] in store?.flushAgentDrafts() ?? true }
 		AppTermination.pauseAgents = store.agentShutdown()
 		await store.dispatch(.load).value
 		// Restored agent tabs resume in the background, each showing its own failure.

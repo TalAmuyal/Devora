@@ -13,6 +13,7 @@ import TerminalKit
 final class Surfaces {
 	@ObservationIgnored private(set) var router: LayerRouter!
 	@ObservationIgnored private(set) var shortcuts: AppShortcuts!
+	private(set) var agentPanels: [UInt64: AgentPanelModel] = [:]
 	private(set) var tabStacks: [UInt64: LayerStack] = [:]
 	/// Transient preview rendering models, keyed by the core-owned pane ID.
 	private(set) var previewModels: [UInt64: PreviewPaneModel] = [:]
@@ -164,17 +165,23 @@ final class Surfaces {
 		for (id, stack) in tabStacks where !live.contains(id) {
 			stack.clear()
 			tabStacks[id] = nil
+			agentPanels[id] = nil
 		}
 		for tab in tabs where tabStacks[tab.id] == nil {
 			let id = tab.id
 			tabStacks[id] = router.makeTabStack { [store] in store.app.window.activeTab == id }
 		}
 		for tab in tabs {
-			guard case .agentSpace(let name) = tab.session.kind, let stack = tabStacks[tab.id],
-			      stack.find(AgentTabPage.layerName) == nil else { continue }
-			let store = store, id = tab.id
-			var spec = pageLayer(LayerSpec(name: AgentTabPage.layerName) { AgentTabPage(store: store, tab: id, name: name) })
-			spec.onKey = { $0.isUnusedOnAPage }
+			guard case .agentSpace = tab.session.kind, let stack = tabStacks[tab.id],
+			      stack.find(AgentChatPanel.layerName) == nil else { continue }
+			guard let chat = store.agentChat(tab: tab.id) else { continue }
+			let model = AgentPanelModel(chat: chat, store: store)
+			agentPanels[tab.id] = model
+			model.onEditorReady = { [weak self] in self?.router.focusActiveTab() }
+			var spec = pageLayer(LayerSpec(name: AgentChatPanel.layerName) { AgentChatPanel(model: model) })
+			spec.onKey = model.handle
+			spec.focus = model.focus
+			spec.onCleanup = { [store] in chat.flushDraft(); store.forgetAgentChat(tab: chat.tab) }
 			// Closing the agent is closing its tab, which pauses it (ADR-012).
 			spec.onUserDismissRequest = { .veto }
 			stack.push(spec)

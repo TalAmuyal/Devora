@@ -44,6 +44,7 @@ def question():
             "behavior":"allow","destination":"localSettings"}]}})
 
 ignore_interrupt = False
+visual_tool = False
 report({"kind":"start","args":args,"environment":dict(os.environ),"cwd":os.getcwd()})
 for line in sys.stdin:
     message = json.loads(line)
@@ -76,6 +77,9 @@ for line in sys.stdin:
             if subtype == "interrupt":
                 result(True)
     elif kind == "control_response":
+        if visual_tool:
+            emit({"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"visual-tool","content":"Visual tool result"}]}})
+            visual_tool = False
         emit({"type":"fake_answer","answer":message["response"].get("response", {"error":message["response"].get("error")})})
         result()
     elif kind == "user":
@@ -87,6 +91,17 @@ for line in sys.stdin:
             question()
             emit({"type":"control_cancel_request","request_id":"question"})
             result()
+        elif text == "chat-fixture":
+            assistant = recorded("assistant")
+            assistant["message"]["content"] = [
+                {"type":"thinking","thinking":"A collapsed thought","signature":"test-signature"},
+                {"type":"text","text":"A visible answer"},
+                {"type":"tool_use","id":"visual-tool","name":"Bash","input":{"command":"pwd"}}]
+            emit(assistant)
+            visual_tool = True
+            emit({"type":"control_request","request_id":"visual-hook","request":{
+                "subtype":"hook_callback","callback_id":"devora-judgess","tool_use_id":"visual-tool",
+                "input":{"tool_name":"Bash","tool_input":{"command":"pwd"},"cwd":os.getcwd()}}})
         elif text.startswith("hook:"):
             emit({"type":"control_request","request_id":"hook","request":{
                 "subtype":"hook_callback","callback_id":"devora-judgess","tool_use_id":"tool-1",

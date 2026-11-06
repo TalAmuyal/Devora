@@ -75,7 +75,32 @@ The Agent Spaces of the selected profile (ADR-012, `Sources/AppShell/AgentHub/`)
 - Opening an agent (`Store.openAgentSpace`) asks the core for the launch (`resolve_agent_launch`, the user's login shell), then `open_agent_space`, which opens its tab or activates the one it has.
 	A launch resumes the agents of restored tabs in the background (`restore_agent_spaces`), and quitting pauses every agent first (`AppTermination.pauseAgents`, from `applicationShouldTerminate`).
 - An agent's tab shows its status emoji (`AgentStatusEmoji`: ⚙️ working, turning slowly unless Reduce Motion is on or the window inactive, ❓ waiting for the user, 💤 idle, ⏸️ pausing, ⚠️ failed), folded off the main actor from the core's chat events into `Store.agentStatuses`.
-	Until the chat panel lands, its tab's stack holds a placeholder page (`AgentTabPage`) with the name and status.
+	Its tab's stack holds `AgentChatPanel`, with the shared local web renderer above an AppKit plain multi-line editor.
+
+## Agent chat
+
+`Store.AgentChat` folds the typed chat subscription for one tab and loads earlier pages with `agent_history_before`.
+The initial projection is the core's 200-item tail.
+Reading older history preserves a sequence/offset anchor, while following the bottom trims automatic live growth to 200 items.
+The local web renderer keeps sequence-keyed rows, morphs sanitized Markdown during streaming, and retains expanded thinking/tool details.
+Kind dots distinguish user, assistant, tool, thinking and system items, and each row's hover title shows its sequence.
+Permission buttons are host-created DOM controls and send the observed generation and request ID through the restricted WKWebView bridge.
+The facade validates that generation and the question's continued existence.
+Command+Y, Command+N and Command+Shift+Y answer the first active question through the tab layer, from the editor or transcript.
+
+Enter and Shift+Enter insert newlines by default.
+Command+Enter and Control+Enter send, and `agent.enter-sends` in the Settings Hub additionally enables unmodified Enter.
+The setting resolves against the agent's owning profile and refreshes when its editor regains focus.
+Drafts write through named core commands after 250 ms, with explicit flushes before send, tab close, deletion and Quit.
+A failed send keeps the draft, and a successful send clears only the submitted text if it is still unchanged.
+A failed flush cancels close or Quit and surfaces the storage error.
+Drafts and sequence/offset anchors use the canonical profile and space name, so closing and reopening the tab keeps them.
+Stop interrupts with no keyboard binding.
+Pause reserves a stop after the running turn, rejects new sends while pending, and leaves permission answers available.
+The facade queues `SpaceHandle::pause_after_turn` before returning, and the space actor makes the pause-versus-compaction decision.
+`AgentContextBar` uses the actor's typed context usage, window and threshold, showing the threshold marker and keeping an unknown window explicit.
+Retry and Resume reopen the existing tab against its owning profile.
+
 
 ## Profiles and the first run
 

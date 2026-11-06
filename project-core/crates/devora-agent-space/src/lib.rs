@@ -349,6 +349,13 @@ impl Space {
         let root = catalogue(profile)?;
         let (path, _ownership) = {
             let _catalogue = catalogue_lock(&root)?;
+            validate_name(name)?;
+            // A retry may follow successful directory removal but a failed
+            // app-state cleanup. Keep deletion idempotent without following links.
+            if matches!(fs::symlink_metadata(root.join(name)), Err(error) if error.kind() == std::io::ErrorKind::NotFound)
+            {
+                return Ok(());
+            }
             let path = checked_path(&root, name)?;
             let ownership = lock(&path.join(".agent-space.lock"))?;
             (path, ownership)

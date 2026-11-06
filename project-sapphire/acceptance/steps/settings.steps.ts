@@ -100,6 +100,7 @@ When('the user sets {string} to {string}', async function (this: SapphireWorld, 
 
 When('the user switches {string} to {string}', async function (this: SapphireWorld, key: string, label: string) {
   await this.bridge.settings({ action: 'selectSegment', key, label });
+  await waitForSetting(this, key, `to select ${label}`, setting => setting?.segment === label);
 });
 
 Then('the setting {string} should show the hint {string}', async function (this: SapphireWorld, key: string, hint: string) {

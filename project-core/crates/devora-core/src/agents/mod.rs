@@ -43,6 +43,7 @@ struct Owner {
     generation: u64,
     handle: Option<SpaceHandle>,
     pause: watch::Sender<bool>,
+    pause_requested: bool,
     done: watch::Sender<bool>,
 }
 
@@ -135,7 +136,7 @@ impl Agents {
                 }
                 let waiting = inner.owners.get(&key).filter(|owner| !*owner.done.borrow());
                 if let Some(owner) = waiting {
-                    if !*owner.pause.borrow() {
+                    if !*owner.pause.borrow() && !owner.pause_requested {
                         let tab = owner.tab.ok_or("agent has no tab")?;
                         self.state
                             .dispatch(Command::ActivateTab { tab })
@@ -157,6 +158,7 @@ impl Agents {
                             generation,
                             handle: None,
                             pause,
+                            pause_requested: false,
                             done,
                         },
                     );
@@ -299,6 +301,72 @@ impl Agents {
         Ok(())
     }
 
+    /// Reserve a pause without interrupting the active turn. Permission answers
+    /// and Stop remain available, while further sends are rejected immediately.
+    pub fn pause_after_turn(&self, tab: u64, generation: u64) -> Result<(), String> {
+        let mut inner = lock(&self.inner);
+        if inner.closing {
+            return Err("agents are shutting down".into());
+        }
+        let owner = inner
+            .owners
+            .values_mut()
+            .find(|o| o.tab == Some(tab))
+            .ok_or("agent is not open")?;
+        if owner.generation != generation || *owner.pause.borrow() || *owner.done.borrow() {
+            return Err("agent generation is stale or pausing".into());
+        }
+        if owner.pause_requested {
+            return Ok(());
+        }
+        let completion = owner
+            .handle
+            .as_ref()
+            .ok_or("agent is not ready")?
+            .pause_after_turn();
+        owner.pause_requested = true;
+        let run_id = owner.run_id;
+        events::update(
+            &self.state,
+            tab,
+            generation,
+            ChatUpdate::PauseRequested { requested: true },
+        );
+        drop(inner);
+
+        let inner = self.inner.clone();
+        let state = self.state.clone();
+        let log = self.log.clone();
+        self.runtime.spawn(async move {
+            if let Err(error) = completion.await {
+                let report = {
+                    let mut inner = lock(&inner);
+                    if let Some(owner) = inner.owners.values_mut().find(|o| {
+                        o.tab == Some(tab)
+                            && o.run_id == run_id
+                            && !*o.done.borrow()
+                            && !*o.pause.borrow()
+                    }) {
+                        owner.pause_requested = false;
+                        events::update(
+                            &state,
+                            tab,
+                            owner.generation,
+                            ChatUpdate::PauseRequested { requested: false },
+                        );
+                        true
+                    } else {
+                        false
+                    }
+                };
+                if report {
+                    log.report_error(&format!("pause after turn failed: {error}"));
+                }
+            }
+        });
+        Ok(())
+    }
+
     pub async fn shutdown(&self) {
         shutdown(&self.inner, &self.state).await;
     }
@@ -399,9 +467,18 @@ impl Agents {
             inner.deletions.insert(key.clone(), done.clone());
         }
         let inner = self.inner.clone();
+        let state = self.state.clone();
         let (reply, received) = oneshot::channel();
         self.runtime.spawn_blocking(move || {
-            let result = Space::delete(&key.profile, &key.name);
+            let result = Space::delete(&key.profile, &key.name).and_then(|()| {
+                state
+                    .dispatch(Command::ClearAgentView {
+                        profile_path: key.profile.to_string_lossy().into_owned(),
+                        name: key.name.clone(),
+                    })
+                    .map(|_| ())
+                    .map_err(|e| e.to_string())
+            });
             {
                 let mut inner = lock(&inner);
                 inner.deletions.remove(&key);
@@ -432,14 +509,17 @@ impl Agents {
     }
 
     pub async fn send_turn(&self, tab: u64, generation: u64, text: String) -> Result<(), String> {
-        let handle = {
+        let (handle, key) = {
             let inner = lock(&self.inner);
-            let owner = inner
+            let (key, owner) = inner
                 .owners
-                .values()
-                .find(|o| o.tab == Some(tab))
+                .iter()
+                .find(|(_, o)| o.tab == Some(tab))
                 .ok_or("agent is not open")?;
-            if inner.closing || owner.generation != generation || *owner.pause.borrow() {
+            if inner.closing
+                || owner.generation != generation
+                || (*owner.pause.borrow() || owner.pause_requested)
+            {
                 return Err("agent generation is stale or pausing".into());
             }
             let handle = owner.handle.clone().ok_or("agent is not ready")?;
@@ -458,17 +538,29 @@ impl Agents {
                 generation,
                 ChatUpdate::Turn { running: true },
             );
-            handle
+            (handle, key.clone())
         };
 
         let state = self.state.clone();
         let (reply, received) = oneshot::channel();
         self.runtime.spawn(async move {
-            let result = handle.send_turn(text).await;
+            let result = handle.send_turn(text.clone()).await;
             if result.is_err() {
                 events::update(&state, tab, generation, ChatUpdate::Turn { running: false });
             }
 
+            // Clear only the submitted draft, independently of the caller's
+            // lifetime. A newer draft in a reopened tab must remain untouched.
+            let result = result.and_then(|()| {
+                state
+                    .dispatch(Command::ClearAgentDraft {
+                        profile_path: key.profile.to_string_lossy().into_owned(),
+                        name: key.name,
+                        text,
+                    })
+                    .map(|_| ())
+                    .map_err(|e| e.to_string())
+            });
             let _ = reply.send(result);
         });
         received.await.map_err(|e| e.to_string())?

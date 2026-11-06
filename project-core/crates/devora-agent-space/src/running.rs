@@ -84,9 +84,28 @@ impl SpaceHandle {
         self.runtime.pause().await
     }
     /// Lets the running turn finish, then pauses, with no compaction step after
-    /// it; with no turn running, pauses at once. Returns once the agent has paused.
-    pub async fn pause_after_turn(&self) -> Result<(), String> {
-        self.call(Action::PauseAfterTurn).await.map(|_| ())
+    /// it; with no turn running, pauses at once. Queues immediately, and the
+    /// returned future resolves once the agent has paused.
+    pub fn pause_after_turn(
+        &self,
+    ) -> impl std::future::Future<Output = Result<(), String>> + Send + 'static {
+        // Queue before returning so a following permission answer cannot overtake
+        // this request. The actor owns it even if the completion wait is dropped.
+        let (reply, received) = oneshot::channel();
+        let queued = self
+            .commands
+            .send(Command {
+                action: Action::PauseAfterTurn,
+                reply,
+            })
+            .map_err(|_| "agent space stopped".to_owned());
+        async move {
+            queued?;
+            received
+                .await
+                .map_err(|_| "agent space stopped before recording the outcome")?
+                .map(|_| ())
+        }
     }
 }
 
