@@ -17,6 +17,7 @@ final class Terminals {
 		let live = Set(tabs.map(\.terminalID))
 		sessions = sessions.filter { live.contains($0.key) }
 		for tab in tabs where sessions[tab.terminalID] == nil && !tab.session.kind.isCreation {
+			if case .agentSpace = tab.session.kind { continue }
 			let id = tab.terminalID
 			let session = TerminalSession()
 			sessions[id] = session

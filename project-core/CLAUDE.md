@@ -10,7 +10,7 @@ It is being extracted from Ember's `src-tauri/` area by area (TalAmuyal/Devora#2
 - `crates/devora-agent-space`: Agent Space directories, their versioned per-space SQLite database and immutable creation-time instructions. Space owns the OS lock, and RunningSpace persists lifecycle state before forwarding session events. Worktrees use the shared creation/deletion stages in devora-workspace.
 - `crates/devora-app`: the app process around the core: its per-app log file, error reporting (with a listener the UI surfaces errors through) and panic hook, and what its bundle ships (version, install suffix, user guide).
 - `crates/devora-config`: the global and per-profile config files (replaced atomically on write), registered profiles, and the settings resolved from them (Claude settings, config fields, the prepare-command, git shortcuts).
-- `crates/devora-core`: the facade. A UI depends on this crate alone, never on the crates behind it.
+- `crates/devora-core`: the facade. `agents` owns Agent Space creation, the subscriber-independent runtime registry, nonblocking tab close/pause barriers and generation-scoped controls. A UI depends on this crate alone, never on the crates behind it.
 - `crates/devora-ffi`: the facade's UniFFI side, the `DevoraCore` object Sapphire binds; the records Swift sees are mapped here, so the other crates stay UniFFI-free.
 - `crates/devora-health`: the cancellable in-app health check (runs `debi health --json` through a login shell and derives the typed report shared by both UIs).
 - `crates/devora-ipc`: the app's local IPC server, through which tools in its terminals (`debi preview`) reach the UI; it runs on its own thread and hands each request to a UI callback.
@@ -33,3 +33,11 @@ It is being extracted from Ember's `src-tauri/` area by area (TalAmuyal/Devora#2
 - `devora-platform::credentials::TokenStore` separates token operations from the system keychain; `DEVORA_TEST_MODE=1` selects process-shared in-memory credentials for either app's acceptance harness, while production retains the Debi-compatible keychain service and encoding.
 - Preview rows retain the terminal identity and ordered preview IDs, paths, revisions and preferred widths. OpenPreview replaces new paths, StackPreview appends them, and either refreshes an already-open path in place without removing siblings. ResizePreview validates the bounds exported to Sapphire; window-size constraints are a UI projection, not persisted writes.
 - Tests live with the code they test; run them with `mise run test` (and `mise run lint`).
+
+## Agent Space facade
+
+Agent Space tabs carry their own profile and name in `SessionKind::AgentSpace`. The current tab record reserves its pane ID for the later chat UI. It has no terminal launch spec. The host supplies explicit launch inputs to `open_agent_space` and calls `restore_agent_spaces` with those inputs on relaunch. The owning profile resolves model, effort and model aliases.
+
+The registry serializes ownership by canonical profile and space name. Closing removes the tab immediately, while a pausing owner remains reserved until the CLI is reaped and StopInfo is committed. Reopen waits for that barrier. Delete rejects an open or pausing owner. `shutdown_agents` awaits all active pauses and cancels/awaits creation operations. Dropping the facade uses the same shutdown path.
+
+Store's separate chat projection and batched subscription hold lifecycle, whole protocol payloads, streamed frames, usage, permission cards and user actions in memory. They never write the app-state database. Its `ChatCommand` reducer rejects stale generations. Runtime recovery advances the public generation before publishing replacement events. Control exports require the observed generation, and runtime validation also rejects withdrawn questions. Per-space durable history is a follow-up slice.

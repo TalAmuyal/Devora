@@ -45,6 +45,7 @@ pub struct Session {
 
 #[uniffi::remote(Enum)]
 pub enum SessionKind {
+    AgentSpace { name: String },
     Shell,
     CreatingWorkspace,
     CreationFailed { reason: String },
@@ -231,7 +232,18 @@ impl StateSubscription {
 impl DevoraCore {
     /// Applies a command to the app state; its events reach every subscription.
     pub fn dispatch(&self, command: Command) -> Result<(), CoreError> {
-        self.state.dispatch(command)?;
+        match command {
+            Command::CloseSession { tab } => self.agents.close_tab(tab)?,
+            Command::OpenSession {
+                kind: SessionKind::AgentSpace { .. },
+                ..
+            } => {
+                return Err("use open_agent_space to open an agent".to_string().into());
+            }
+            other => {
+                self.state.dispatch(other)?;
+            }
+        }
         Ok(())
     }
 

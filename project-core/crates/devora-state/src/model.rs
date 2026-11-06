@@ -66,6 +66,8 @@ impl Session {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SessionKind {
+    /// An Agent Space in its owning profile, with a live chat projection in Store.
+    AgentSpace { name: String },
     /// A plain shell, not tied to a workspace.
     Shell,
     /// A workspace is being created for this tab; it becomes [`SessionKind::Workspace`] or [`SessionKind::CreationFailed`].

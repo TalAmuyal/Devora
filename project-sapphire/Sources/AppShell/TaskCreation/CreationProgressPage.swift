@@ -128,7 +128,7 @@ extension SessionKind {
 	var isCreation: Bool {
 		switch self {
 		case .creatingWorkspace, .creationFailed: true
-		case .shell, .workspace: false
+		case .shell, .workspace, .agentSpace: false
 		}
 	}
 }

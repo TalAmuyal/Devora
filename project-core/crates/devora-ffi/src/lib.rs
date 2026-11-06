@@ -10,6 +10,7 @@ use std::sync::Arc;
 
 use devora_core::{config, state, theme, workspace};
 
+mod agents;
 mod app_state;
 mod asana_credentials;
 mod claude_settings;
@@ -147,7 +148,8 @@ pub struct WorkspaceStatus {
 pub struct DevoraCore {
     config_path: PathBuf,
     /// The app state (ADR-008).
-    state: state::Store,
+    state: Arc<state::Store>,
+    agents: devora_core::agents::Agents,
     ipc: std::sync::OnceLock<devora_core::ipc::IpcServer>,
     log: Arc<AppLog>,
     creations: creation::Creations,
@@ -172,9 +174,12 @@ impl DevoraCore {
         if let Err(error) = creation::recover_pending(&state, &log) {
             log.report(&format!("couldn't recover interrupted creations: {error}"));
         }
+        let state = Arc::new(state);
+        let agents = devora_core::agents::Agents::new(state.clone(), log.shared())?;
         let core = Arc::new(DevoraCore {
             config_path,
             state,
+            agents,
             ipc: Default::default(),
             log,
             creations: Default::default(),
