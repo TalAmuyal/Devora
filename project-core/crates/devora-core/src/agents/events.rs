@@ -20,6 +20,21 @@ pub(super) fn publish(state: &Store, tab: u64, generation: u64, event: SpaceEven
             update(state, tab, generation, ChatUpdate::Transcript { change })
         }
         SpaceEvent::Session(event) => session(state, tab, generation, event),
+        SpaceEvent::Context(context) => update(
+            state,
+            tab,
+            generation,
+            ChatUpdate::Context {
+                context: devora_state::ChatContext {
+                    used_tokens: context.used_tokens,
+                    window_tokens: context.window_tokens,
+                    threshold_percent: context.threshold_percent,
+                },
+            },
+        ),
+        SpaceEvent::TurnStarted => {
+            update(state, tab, generation, ChatUpdate::Turn { running: true })
+        }
     }
 }
 

@@ -4,10 +4,12 @@
 //! failures synchronously deregister worktrees and clean up the reserved path.
 //! The blocking catalogue lock covers short reservation/removal sections. Listing
 //! is read-only, and each space retains its own fail-fast ownership lock while creating or open.
+mod compaction;
 mod db;
 mod inputs;
 mod running;
 pub mod template;
+pub use compaction::{Context, DEFAULT_THRESHOLD as DEFAULT_COMPACT_THRESHOLD};
 pub use inputs::{fields, Field, Source};
 pub use running::{RunningSpace, SpaceEvent, SpaceHandle};
 
@@ -449,6 +451,9 @@ impl Space {
         log: Arc<Log>,
     ) -> Result<RunningSpace, String> {
         let options = self.session_options(context)?;
-        running::start(self, options, log).await
+        let threshold = devora_config::agent::read(&context.global_config, &self.profile)?
+            .compact_threshold
+            .unwrap_or(compaction::DEFAULT_THRESHOLD);
+        running::start(self, options, threshold, log).await
     }
 }

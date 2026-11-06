@@ -5,8 +5,9 @@ use devora_core::agents::{
     self, CreationForm, Field, LaunchContext, PermissionAnswer, Scope, Source,
 };
 use devora_core::state::{
-    Chat, ChatEvent, ChatPhase, ChatUpdate, ItemState, PermissionQuestion, Subscription,
-    SystemKind, ToolResult, ToolVerdict, TranscriptChange, TranscriptContent, TranscriptItem,
+    Chat, ChatContext, ChatEvent, ChatPhase, ChatUpdate, ItemState, PermissionQuestion,
+    Subscription, SystemKind, ToolResult, ToolVerdict, TranscriptChange, TranscriptContent,
+    TranscriptItem,
 };
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -242,6 +243,13 @@ pub struct Chat {
     pub error: Option<String>,
     pub questions: Vec<PermissionQuestion>,
     pub usage_json: Option<String>,
+    pub context: Option<ChatContext>,
+}
+#[uniffi::remote(Record)]
+pub struct ChatContext {
+    pub used_tokens: u64,
+    pub window_tokens: u64,
+    pub threshold_percent: u8,
 }
 #[uniffi::remote(Enum)]
 pub enum ChatUpdate {
@@ -255,6 +263,7 @@ pub enum ChatUpdate {
     PermissionRequested { question: PermissionQuestion },
     PermissionRemoved { request_id: String },
     Usage { payload_json: String },
+    Context { context: ChatContext },
 }
 #[uniffi::remote(Enum)]
 pub enum ChatEvent {

@@ -21,6 +21,16 @@ pub struct PermissionQuestion {
     pub can_always_allow: bool,
 }
 
+/// How full an agent's context is, for its context bar (ADR-012).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ChatContext {
+    pub used_tokens: u64,
+    /// Zero until the model's context window is known.
+    pub window_tokens: u64,
+    /// Where Devora saves the agent's memory and compacts.
+    pub threshold_percent: u8,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Chat {
     pub tab: u64,
@@ -32,6 +42,7 @@ pub struct Chat {
     pub error: Option<String>,
     pub questions: Vec<PermissionQuestion>,
     pub usage_json: Option<String>,
+    pub context: Option<ChatContext>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -46,6 +57,7 @@ pub enum ChatUpdate {
     PermissionRequested { question: PermissionQuestion },
     PermissionRemoved { request_id: String },
     Usage { payload_json: String },
+    Context { context: ChatContext },
 }
 
 /// Named mutations of the transient projection, serialized by Store.
@@ -96,6 +108,7 @@ pub(crate) fn apply(chats: &mut Vec<Chat>, command: ChatCommand) -> Result<ChatE
                 error: None,
                 questions: vec![],
                 usage_json: None,
+                context: None,
             };
             chats.retain(|c| c.tab != tab);
             chats.push(chat.clone());
@@ -180,6 +193,7 @@ pub(crate) fn apply(chats: &mut Vec<Chat>, command: ChatCommand) -> Result<ChatE
                     chat.questions.retain(|q| q.request_id != *request_id);
                 }
                 ChatUpdate::Usage { payload_json } => chat.usage_json = Some(payload_json.clone()),
+                ChatUpdate::Context { context } => chat.context = Some(*context),
             }
             Ok(ChatEvent::Updated {
                 tab,

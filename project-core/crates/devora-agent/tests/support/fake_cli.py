@@ -112,7 +112,7 @@ for line in sys.stdin:
             result()
         elif text == "malformed":
             print("{not JSON}",flush=True)
-        elif text == "compact":
+        elif text in ("compact", "/compact"):
             emit({"type":"system","subtype":"compact_boundary","session_id":session_id,
                 "compact_metadata":{"trigger":"manual","pre_tokens":20000,"post_tokens":2000}})
             result()

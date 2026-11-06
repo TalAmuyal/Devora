@@ -18,7 +18,9 @@ mod model;
 mod persist;
 mod store;
 
-pub use chat::{Chat, ChatCommand, ChatEvent, ChatPhase, ChatUpdate, PermissionQuestion};
+pub use chat::{
+    Chat, ChatCommand, ChatContext, ChatEvent, ChatPhase, ChatUpdate, PermissionQuestion,
+};
 pub use command::{Command, Event, StateError};
 pub use feed::{feed, Feed, Subscription};
 pub use model::{

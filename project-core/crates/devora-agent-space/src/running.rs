@@ -1,7 +1,9 @@
+use crate::compaction::{Compaction, Context};
 use crate::Space;
 use devora_agent::protocol::{KnownMessage, Message};
 use devora_agent::session::{
     PermissionAnswer, Resume, Session, SessionEvent, SessionHandle, SessionOptions, StopInfo,
+    UsageSource,
 };
 use devora_agent::transcript::{SystemKind, Transcript, TranscriptChange, TranscriptItem};
 use devora_app::log::Log;
@@ -15,12 +17,17 @@ pub enum SpaceEvent {
     Restored(Vec<TranscriptItem>),
     Transcript(TranscriptChange),
     Session(SessionEvent),
+    /// How full the context is, whenever that changes.
+    Context(Context),
+    /// A turn the space sent itself, compaction's.
+    TurnStarted,
 }
 
 enum Action {
     Turn(String),
     Interrupt,
     Permission(String, PermissionAnswer),
+    PauseAfterTurn,
 }
 struct Command {
     action: Action,
@@ -28,6 +35,8 @@ struct Command {
 }
 struct Completion {
     sequence: u64,
+    /// A turn that failed to send never runs, so it never ends with a result.
+    failed_turn: bool,
     result: Result<Value, String>,
     reply: oneshot::Sender<Result<Value, String>>,
 }
@@ -74,6 +83,11 @@ impl SpaceHandle {
     pub async fn pause(&self) -> Result<StopInfo, String> {
         self.runtime.pause().await
     }
+    /// Lets the running turn finish, then pauses, with no compaction step after
+    /// it; with no turn running, pauses at once. Returns once the agent has paused.
+    pub async fn pause_after_turn(&self) -> Result<(), String> {
+        self.call(Action::PauseAfterTurn).await.map(|_| ())
+    }
 }
 
 /// The actor owns the SQLite connection and OS lock through final persistence.
@@ -112,6 +126,7 @@ impl RunningSpace {
 pub(crate) async fn start(
     mut space: Space,
     options: SessionOptions,
+    compact_threshold: u8,
     log: Arc<Log>,
 ) -> Result<RunningSpace, String> {
     let (mut space, mut transcript, history) = tokio::task::spawn_blocking(move || {
@@ -144,6 +159,7 @@ pub(crate) async fn start(
             &mut space,
             &mut session,
             &mut transcript,
+            &mut Compaction::new(compact_threshold),
             &events,
             received_commands,
         )
@@ -241,6 +257,7 @@ fn begin(
             "Interrupt requested".into(),
             json!({}),
         ),
+        Action::PauseAfterTurn => return Err("pause after turn is not a transport action".into()),
         Action::Permission(id, answer) => {
             let (text, decision) = match answer {
                 PermissionAnswer::Allow => ("Permission allow requested", json!({"kind":"allow"})),
@@ -269,6 +286,7 @@ fn begin(
         return Err(error);
     }
     let _ = events.send(SpaceEvent::Transcript(change));
+    let turn = matches!(command.action, Action::Turn(_));
     tokio::spawn(async move {
         let result = match command.action {
             Action::Turn(text) => runtime.send_turn(text).await.map(|_| Value::Null),
@@ -277,9 +295,11 @@ fn begin(
                 .answer_permission(id, answer)
                 .await
                 .map(|_| Value::Null),
+            Action::PauseAfterTurn => unreachable!("handled by the pump"),
         };
         let _ = completions.send(Completion {
             sequence,
+            failed_turn: turn && result.is_err(),
             result,
             reply: command.reply,
         });
@@ -291,11 +311,17 @@ async fn pump(
     space: &mut Space,
     session: &mut Session,
     transcript: &mut Transcript,
+    compaction: &mut Compaction,
     events: &mpsc::UnboundedSender<SpaceEvent>,
     mut commands: mpsc::UnboundedReceiver<Command>,
 ) -> Result<(), String> {
     let (completed, mut completions) = mpsc::unbounded_channel::<Completion>();
     let mut pending = 0usize;
+    // Whether a turn runs, and a pause waiting for it to end.
+    let mut turn_running = false;
+    let mut pause_after_turn: Option<oneshot::Sender<Result<Value, String>>> = None;
+    // The threshold, before any usage arrives.
+    let _ = events.send(SpaceEvent::Context(compaction.context()));
     loop {
         tokio::select! {
             biased;
@@ -315,13 +341,43 @@ async fn pump(
                 return if stopped { Ok(()) } else { pause.map(|_|()) };
             }
             completion = completions.recv(), if pending > 0 => {
-                if let Some(completion) = completion { finish(space,transcript,events,completion)?; pending -= 1; }
+                if let Some(completion) = completion {
+                    if completion.failed_turn {
+                        turn_running = false;
+                        if let Some(reply) = pause_after_turn.take() { pause(session.handle(), reply); }
+                    }
+                    finish(space,transcript,events,completion)?;
+                    pending -= 1;
+                }
             }
             event = session.next_event() => {
                 let Some(event) = event else { return Ok(()); };
                 persist(space,transcript,&event,events)?;
                 let terminal = matches!(event,SessionEvent::Stopped(_) | SessionEvent::Failed(_));
+                let mut step = compact(compaction,&event,events);
+                // A crash ends the turn too; recovery resumes without it.
+                let ended = matches!(event,SessionEvent::Message(Message::Known(KnownMessage::Result(_))) | SessionEvent::Exited { .. });
+                if ended { turn_running = false; }
                 let _ = events.send(SpaceEvent::Session(event));
+                if ended {
+                    if let Some(reply) = pause_after_turn.take() {
+                        // A requested pause wins over the next compaction step.
+                        step = None;
+                        compaction.reset();
+                        pause(session.handle(), reply);
+                    }
+                }
+                if let Some(step) = step {
+                    let announcement = transcript.system(SystemKind::Compaction, step.announcement(&compaction.context()), json!({}));
+                    space.db.save_changes(None, std::slice::from_ref(&announcement))?;
+                    let _ = events.send(SpaceEvent::Transcript(announcement));
+                    // Nobody waits for the outcome; it is recorded like any turn's.
+                    let (reply, _) = oneshot::channel();
+                    begin(space,transcript,Command { action: Action::Turn(step.prompt()), reply },session.handle(),completed.clone(),events)?;
+                    pending += 1;
+                    turn_running = true;
+                    let _ = events.send(SpaceEvent::TurnStarted);
+                }
                 if terminal {
                     while pending > 0 {
                         if let Some(completion) = completions.recv().await {
@@ -333,13 +389,63 @@ async fn pump(
                 }
             }
             command = commands.recv() => {
-                if let Some(command) = command {
-                    begin(space,transcript,command,session.handle(),completed.clone(),events)?;
-                    pending += 1;
+                match command {
+                    Some(Command { action: Action::PauseAfterTurn, reply }) => {
+                        if turn_running { pause_after_turn = Some(reply); } else { pause(session.handle(), reply); }
+                    }
+                    Some(command) => {
+                        turn_running |= matches!(command.action, Action::Turn(_));
+                        begin(space,transcript,command,session.handle(),completed.clone(),events)?;
+                        pending += 1;
+                    }
+                    None => {}
                 }
             }
         }
     }
+}
+
+/// Pauses without waiting in the pump, which goes on draining the session's
+/// events until it stops; the caller hears once it has.
+fn pause(runtime: SessionHandle, reply: oneshot::Sender<Result<Value, String>>) {
+    tokio::spawn(async move {
+        let _ = reply.send(runtime.pause().await.map(|_| Value::Null));
+    });
+}
+
+/// Feeds compaction the session's usage, results and boundaries, publishing the
+/// context as it changes; returns the turn compaction asks for, if any.
+fn compact(
+    compaction: &mut Compaction,
+    event: &SessionEvent,
+    events: &mpsc::UnboundedSender<SpaceEvent>,
+) -> Option<crate::compaction::Step> {
+    let before = compaction.context();
+    let step = match event {
+        SessionEvent::Usage {
+            source: UsageSource::Assistant | UsageSource::MessageStart,
+            usage,
+        } => {
+            compaction.usage(usage);
+            None
+        }
+        SessionEvent::Message(Message::Known(KnownMessage::Result(result))) => {
+            compaction.result(result)
+        }
+        SessionEvent::Compacted(metadata) => {
+            compaction.compacted(metadata);
+            None
+        }
+        SessionEvent::Exited { .. } | SessionEvent::Stopped(_) | SessionEvent::Failed(_) => {
+            compaction.reset();
+            None
+        }
+        _ => None,
+    };
+    if compaction.context() != before {
+        let _ = events.send(SpaceEvent::Context(compaction.context()));
+    }
+    step
 }
 
 fn finish(
