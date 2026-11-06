@@ -75,13 +75,18 @@ public final class Store {
 	public private(set) var loadingLatencies: LoadingLatencies?
 	/// The progress of the workspace creations started in this run, by the tab each runs in, until the tab closes or has its workspace.
 	public private(set) var creations: [UInt64: CreationProgress] = [:]
+	/// The selected profile's Agent Spaces, as last listed (`AgentSpaces.swift`).
+	public internal(set) var agentSpaces: [AgentSpace] = []
+	/// Each open agent's status at a glance, by its tab.
+	public internal(set) var agentStatuses: [UInt64: AgentStatus] = [:]
+	@ObservationIgnored var agentChats: Task<Void, Never>?
 
 	/// Asks the window's display link to call `foldPending()` on its next frame; without one, events fold on the main actor's next turn.
 	@ObservationIgnored public var requestFrame: (@MainActor () -> Void)?
 
 	@ObservationIgnored public let log: AppLog
 	@ObservationIgnored private let configPath: String?
-	@ObservationIgnored private var core: DevoraCore?
+	@ObservationIgnored var core: DevoraCore?
 	@ObservationIgnored private let inbox = Inbox()
 	@ObservationIgnored private var stateEvents: Task<Void, Never>?
 	@ObservationIgnored private var reportedErrors: Task<Void, Never>?
@@ -119,6 +124,7 @@ public final class Store {
 			previewLayoutRules = try core.previewLayoutRules()
 			self.core = core
 			stateEvents = pullStateEvents(from: try core.subscribe())
+			agentChats = pullAgentStatuses(from: try core.subscribeAgentChats())
 		} catch CoreError.StateInUse(let path, _) {
 			startupProblem = .stateInUse(path: path)
 		} catch CoreError.StateUnreadable(let path, let message) {
@@ -131,6 +137,7 @@ public final class Store {
 	isolated deinit {
 		stateEvents?.cancel()
 		reportedErrors?.cancel()
+		agentChats?.cancel()
 	}
 
 	@discardableResult
@@ -581,6 +588,17 @@ public final class Store {
 		return await select(selected?.path, core: core, started: started, listProfiles: listProfiles)
 	}
 
+	/// The profiles and the selected one, as `load` makes them, without listing the workspaces: what the Agent Hub needs.
+	public func loadProfiles() async -> Bool {
+		guard let core, let profiles = try? await call("list_profiles", { try core.listProfiles() }) else { return false }
+		self.profiles = profiles
+		profilesListed = true
+		let active = try? await call("snapshot", { try core.snapshot().activeProfile })
+		let selected = (profiles.first { $0.path == active } ?? profiles.first)?.path
+		if selected != selectedProfilePath { setActiveProfile(selected) }
+		return true
+	}
+
 	@discardableResult
 	private func select(
 		_ path: String?, core: DevoraCore, started: ContinuousClock.Instant = .now,
@@ -694,7 +712,7 @@ public final class Store {
 	}
 
 	/// A core call, whose failure is shown as `<name> failed: <error>`, then rethrown for the caller's flow.
-	private func call<T>(_ name: String, _ body: () throws -> T) throws -> T {
+	func call<T>(_ name: String, _ body: () throws -> T) throws -> T {
 		do {
 			return try body()
 		} catch {
@@ -703,7 +721,7 @@ public final class Store {
 	}
 
 	/// Like the synchronous `call`, but off the main actor, since most core calls do file I/O.
-	private func call<T: Sendable>(_ name: String, _ body: @escaping @Sendable () throws -> T) async throws -> T {
+	func call<T: Sendable>(_ name: String, _ body: @escaping @Sendable () throws -> T) async throws -> T {
 		do {
 			return try await Task.detached(operation: body).value
 		} catch {
@@ -711,7 +729,7 @@ public final class Store {
 		}
 	}
 
-	private func shown(_ error: any Error, of call: String) -> any Error {
+	func shown(_ error: any Error, of call: String) -> any Error {
 		showError("\(call) failed: \(Self.describe(error))")
 		return error
 	}

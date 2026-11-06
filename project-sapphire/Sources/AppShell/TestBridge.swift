@@ -126,6 +126,12 @@ final class TestBridge {
 			case ("POST", "/test/hub"):
 				try hubAction(request.json())
 				return .init(status: 200, body: [:])
+			case ("POST", "/test/agent-hub"):
+				try agentHubAction(request.json())
+				return .init(status: 200, body: [:])
+			case ("POST", "/test/new-agent"):
+				try newAgentAction(request.json())
+				return .init(status: 200, body: [:])
 			case ("POST", "/test/dialog"):
 				try dialogButton(request.json())
 				return .init(status: 200, body: [:])
@@ -643,6 +649,76 @@ final class TestBridge {
 		CreationPageState(store: store, tab: id).closeOrCancel()
 	}
 
+	/// What the Agent Hub draws: its agents, the focused one, and whether the first listing is done.
+	private func agentHubState() -> Any {
+		guard let hub = surfaces.agentHub else { return NSNull() }
+		return [
+			"loaded": hub.loaded,
+			"focused": hub.focused?.name ?? NSNull(),
+			"items": hub.items.map { ["name": $0.name, "role": $0.role ?? NSNull(), "error": $0.error ?? NSNull()] as [String: Any] },
+		] as [String: Any]
+	}
+
+	/// Clicks what the Agent Hub draws: `newAgent`, or `open` and `delete` on the agent named `name` (which also focuses it).
+	private func agentHubAction(_ body: [String: Any]) throws {
+		guard let hub = surfaces.agentHub else { throw BridgeError(status: 409, "the Agent Hub isn't open") }
+		let action = body["action"] as? String
+		if action == "newAgent" {
+			hub.newAgent()
+			return
+		}
+		guard let space = hub.items.first(where: { $0.name == body["name"] as? String }) else { throw BridgeError(status: 404, "no such agent") }
+		hub.select(space)
+		switch action {
+		case "open": hub.openFocused()
+		case "delete": hub.delete(space)
+		default: throw BridgeError(status: 400, "unknown agent hub action \(String(describing: action))")
+		}
+	}
+
+	/// The New Agent dialog's form and its creation's progress.
+	private func newAgentState() -> Any {
+		guard let dialog = surfaces.newAgent else { return NSNull() }
+		return [
+			"name": dialog.name,
+			"focus": "\(dialog.focus)",
+			"canCreate": dialog.canCreate,
+			"fields": dialog.fields.map { field in
+				let value: Any = field.source == .derived ? field.value.map { $0 as Any } ?? NSNull() : dialog.value(of: field)
+				return [
+					"key": field.key, "value": value,
+					"source": field.source.map { "\($0)" } ?? NSNull(), "saved": dialog.saved.contains(field.key),
+				] as [String: Any]
+			},
+			"repos": dialog.visibleRepos.map { ["name": $0.name, "selected": dialog.selected.contains($0.path)] },
+			"progress": dialog.run.map { run in
+				["steps": run.steps, "outcome": run.outcome.map { "\($0)" } ?? NSNull()] as [String: Any]
+			} ?? NSNull(),
+		] as [String: Any]
+	}
+
+	/// Fills in and clicks what the New Agent dialog draws: `setName` and `setField` (with `key`) type a `value`, `toggleRepo` (with `name`), `save` (with `key`), `create` and `cancel`.
+	private func newAgentAction(_ body: [String: Any]) throws {
+		guard let dialog = surfaces.newAgent else { throw BridgeError(status: 409, "the New Agent dialog isn't open") }
+		switch body["action"] as? String {
+		case "setName": dialog.name = body["value"] as? String ?? ""
+		case "setField":
+			guard let key = body["key"] as? String else { throw BridgeError(status: 400, "missing key") }
+			dialog.edits[key] = body["value"] as? String ?? ""
+		case "toggleRepo":
+			guard let repo = dialog.repos.first(where: { $0.name == body["name"] as? String }) else { throw BridgeError(status: 404, "no such repo") }
+			dialog.toggle(repo)
+		case "save":
+			guard let field = dialog.editableFields.first(where: { $0.key == body["key"] as? String }) else { throw BridgeError(status: 404, "no such field") }
+			dialog.save(field)
+		case "create":
+			guard dialog.canCreate else { throw BridgeError(status: 409, "Create is disabled") }
+			dialog.create()
+		case "cancel": dialog.cancel()
+		default: throw BridgeError(status: 400, "unknown new agent action \(String(describing: body["action"]))")
+		}
+	}
+
 	private func newTaskState() -> Any {
 		guard let dialog = surfaces.newTask else { return NSNull() }
 		let active = dialog.activeRepo
@@ -752,6 +828,8 @@ final class TestBridge {
 			} ?? NSNull(),
 			"repurpose": surfaces.repurposeDialog.map { ["title": $0.title] } ?? NSNull(),
 			"hub": hubState(),
+			"agentHub": agentHubState(),
+			"newAgent": newAgentState(),
 			"health": healthState(),
 			"dialog": dialogState(),
 			"newTask": newTaskState(),
@@ -781,6 +859,7 @@ final class TestBridge {
 					"focused": session?.hasFocus ?? false,
 					"layers": surfaces.tabStacks[tab.id]?.layers.map(\.spec.name) ?? [],
 					"progress": progressState(of: tab),
+					"agentStatus": store.agentStatuses[tab.id].map { "\($0)" } ?? NSNull(),
 					"terminalID": NSNumber(value: tab.terminalID),
 					"previews": tab.previews.map { preview in ["id": NSNumber(value: preview.id), "path": preview.path, "revision": NSNumber(value: preview.revision), "width": NSNumber(value: preview.width), "error": surfaces.previewModels[preview.id]?.error ?? NSNull()] as [String: Any] },
 				] as [String: Any]

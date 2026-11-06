@@ -5,7 +5,7 @@ import SwiftUI
 /// One command descriptor is shared by the palette, its actions and the test bridge.
 struct PaletteCommand: Identifiable {
 	enum Action: Equatable {
-		case workspaceHub, newShell, repurpose, addRepo, cloneRepo, duplicate, closeSession
+		case agentHub, workspaceHub, newShell, repurpose, addRepo, cloneRepo, duplicate, closeSession
 		case health, newProfile, settings, switchProfile(String)
 	}
 	let id: String
@@ -17,7 +17,7 @@ struct PaletteCommand: Identifiable {
 
 	static func commands(profiles: [Profile], active: String?) -> [Self] {
 		[
-			Self(id: "workspace-hub", title: "Workspace Hub", description: "List, filter and open workspaces", icon: "▦", action: .workspaceHub, shortcut: .openWorkspaceHub),
+			Self(id: "workspace-hub", title: "Workspace Hub", description: "List, filter and open workspaces", icon: "▦", action: .workspaceHub),
 			Self(id: "new-shell", title: "New Shell", description: "Open a fresh shell tab", icon: "❯", action: .newShell, shortcut: .newShell),
 			Self(id: "repurpose-session", title: "Repurpose Current Session", description: "Replace the finished task with a new one in the same workspace", icon: "↻", action: .repurpose),
 			Self(id: "add-repo", title: "Add Repo to Workspace", description: "Add a repo (git worktree) to the current workspace", icon: "⊕", action: .addRepo),
@@ -26,6 +26,7 @@ struct PaletteCommand: Identifiable {
 			Self(id: "close-session", title: "Close Current Session", description: "Close the active session tab", icon: "×", action: .closeSession),
 			Self(id: "health-hub", title: "Health Hub", description: "Check Devora dependencies, credentials, and setup", icon: "✚", action: .health),
 			Self(id: "new-profile", title: "New Profile", description: "Create or register a profile root directory", icon: "＋", action: .newProfile),
+			Self(id: "agent-hub", title: "Agent Hub", description: "List, create and open agents", icon: "◎", action: .agentHub, shortcut: .hubs),
 			Self(id: "manage-profiles", title: "Settings / Manage Profiles", description: "Open the Settings Hub — switch, create, and delete profiles; edit Claude models, effort, and repos", icon: "⚙", action: .settings),
 		] + profiles.filter { $0.path != active }.map {
 			Self(id: "switch-profile:\($0.path)", title: "Switch Profile: \($0.name)", description: $0.path, icon: "⇄", action: .switchProfile($0.path))

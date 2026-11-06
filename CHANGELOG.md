@@ -20,6 +20,7 @@ Types of changes:
 
 ### Added
 
+- Devora Sapphire has an Agent Hub (`Ctrl+S`, which switches to the Workspace Hub inside either hub) for creating, opening and deleting Agent Spaces from a template-driven form; an agent's tab shows its status, and the chat panel follows in a later release
 - Nightly releases include a signed Devora Sapphire app in `Devora-Sapphire.dmg`, alongside `Devora-Ember.dmg`; the shared installer selects Sapphire with `--app sapphire --nightly` and defaults to Ember
 - Devora Sapphire can be built and installed from source with bundled tools, plugins, themes and User Guide through `mise run sapphire-install`, including separate suffixed installs
 - Devora Sapphire supports stacked file previews and draggable dividers, with sizes restored after restart and minimum widths preserved in narrow windows

@@ -18,6 +18,10 @@ final class Surfaces {
 	private(set) var previewModels: [UInt64: PreviewPaneModel] = [:]
 	/// The open Workspace Hub's model; nil while it is closed.
 	@ObservationIgnored private(set) var hub: WorkspaceHubModel?
+	/// The open Agent Hub's model; nil while it is closed.
+	@ObservationIgnored private(set) var agentHub: AgentHubModel?
+	/// The open New Agent dialog; nil while none is.
+	@ObservationIgnored private(set) var newAgent: NewAgentDialogModel?
 	/// The open cheatsheet's scrolling; nil while it is closed.
 	@ObservationIgnored private(set) var cheatsheet: VimScroll?
 	/// The open confirmation dialog; nil while none is.
@@ -43,6 +47,7 @@ final class Surfaces {
 	/// The same for the Add Repo and Clone Repo dialogs.
 	@ObservationIgnored private var addRepoOpening = false
 	@ObservationIgnored private var cloneRepoOpening = false
+	@ObservationIgnored private var newAgentOpening = false
 	@ObservationIgnored private var hubMenu: LayerHandle?
 	@ObservationIgnored private let store: Store
 
@@ -50,7 +55,7 @@ final class Surfaces {
 		self.store = store
 		router = LayerRouter { [unowned self] in store.app.window.activeTab.flatMap { tabStacks[$0] } }
 		shortcuts = AppShortcuts(store: store, windowStack: router.windowStack,
-			openWorkspaceHub: { [unowned self] in openWorkspaceHub() },
+			hubs: { [unowned self] in hubShortcut() },
 			openUserGuide: { [unowned self] in openUserGuide() })
 		router.shortcuts = shortcuts.handle
 		shortcuts.openCommandPalette = { [unowned self] in openCommandPalette() }
@@ -81,6 +86,7 @@ final class Surfaces {
 
 	private func runPaletteCommand(_ action: PaletteCommand.Action) {
 		switch action {
+		case .agentHub: openAgentHub()
 		case .workspaceHub: openWorkspaceHub()
 		case .newShell: store.dispatch(.openShell)
 		case .addRepo:
@@ -163,6 +169,16 @@ final class Surfaces {
 			let id = tab.id
 			tabStacks[id] = router.makeTabStack { [store] in store.app.window.activeTab == id }
 		}
+		for tab in tabs {
+			guard case .agentSpace(let name) = tab.session.kind, let stack = tabStacks[tab.id],
+			      stack.find(AgentTabPage.layerName) == nil else { continue }
+			let store = store, id = tab.id
+			var spec = pageLayer(LayerSpec(name: AgentTabPage.layerName) { AgentTabPage(store: store, tab: id, name: name) })
+			spec.onKey = { $0.isUnusedOnAPage }
+			// Closing the agent is closing its tab, which pauses it (ADR-012).
+			spec.onUserDismissRequest = { .veto }
+			stack.push(spec)
+		}
 		for tab in tabs where tab.session.kind.isCreation {
 			if let stack = tabStacks[tab.id], stack.find(CreationProgressPage.layerName) == nil {
 				pushProgressPage(on: stack, tab: tab.id)
@@ -227,8 +243,83 @@ final class Surfaces {
 			closeHubMenu()
 			openAddRepoDialog(for: AddRepoTarget(workspace)) { [weak model] in model?.repoAdded() }
 		}
+		model.switchHub = { [unowned self] in switchHubs() }
 		hub = model
 		model.load()
+	}
+
+	/// `Ctrl+S` (ADR-012): inside a hub it switches to the other one; otherwise it opens the Agent Hub, unless another window surface is open.
+	func hubShortcut() {
+		switch windowStack.top?.spec.name {
+		case AgentHubModel.layerName, WorkspaceHubModel.layerName:
+			switchHubs()
+		default:
+			if !windowStack.hasOpaqueLayer { openAgentHub() }
+		}
+	}
+
+	/// Replaces the open hub with the other one; the first-run welcome, which can't be closed, stays.
+	private func switchHubs() {
+		if let handle = windowStack.find(AgentHubModel.layerName) {
+			windowStack.remove(handle)
+			openWorkspaceHub()
+		} else if let hub, let handle = windowStack.find(WorkspaceHubModel.layerName), hub.dismissDecision() == .close {
+			closeHubMenu()
+			windowStack.remove(handle)
+			openAgentHub()
+		}
+	}
+
+	/// Opens the Agent Hub over the window and lists the selected profile's agents; a page closing over it lists them again.
+	func openAgentHub() {
+		guard windowStack.find(AgentHubModel.layerName) == nil else { return }
+		let model = AgentHubModel(store: store)
+		var spec = pageLayer(LayerSpec(name: AgentHubModel.layerName) { AgentHubView(model: model) })
+		spec.onKey = model.handleKey
+		spec.onReveal = model.load
+		spec.onCleanup = { [unowned self] in
+			model.close()
+			if agentHub === model { agentHub = nil }
+		}
+		let handle = windowStack.push(spec)
+		model.open = { [unowned self, store] space in
+			windowStack.remove(handle)
+			Task { await store.openAgentSpace(space.name) }
+		}
+		model.newAgent = { [unowned self] in openNewAgentDialog() }
+		model.switchHub = { [unowned self] in switchHubs() }
+		model.confirm = { [unowned self] confirmation, action in confirm(confirmation, then: action) }
+		agentHub = model
+		model.load()
+	}
+
+	/// Opens the New Agent dialog over the Agent Hub once the profile's repos have loaded; a created agent opens in its tab, closing the hub.
+	private func openNewAgentDialog() {
+		guard windowStack.find(NewAgentDialogModel.layerName) == nil, !newAgentOpening else { return }
+		newAgentOpening = true
+		Task { [unowned self, store] in
+			defer { newAgentOpening = false }
+			guard let repos = await store.registeredRepos() else { return }
+			let model = NewAgentDialogModel(store: store, repos: repos, clearFocus: { [unowned self] in router.clearFocus() })
+			var spec = modalLayer(LayerSpec(name: NewAgentDialogModel.layerName) { NewAgentDialogView(model: model) })
+			spec.onKey = model.handleKey
+			spec.cycleFocus = { model.cycleFocus(backward: $0) }
+			spec.focus = { model.focus = .name }
+			spec.onUserDismissRequest = {
+				model.cancel()
+				return .handled
+			}
+			spec.onCleanup = { [unowned self] in if newAgent === model { newAgent = nil } }
+			let handle = windowStack.push(spec)
+			model.close = { [unowned self] in windowStack.remove(handle) }
+			model.opened = { [unowned self, store] name in
+				windowStack.remove(handle)
+				if let hub = windowStack.find(AgentHubModel.layerName) { windowStack.remove(hub) }
+				Task { await store.openAgentSpace(name) }
+			}
+			newAgent = model
+			model.refreshFields()
+		}
 	}
 
 	/// A header dropdown is a popup layer: it routes `q` and Escape to closing it and passes every other key on to the hub, while the hub draws it under its trigger.

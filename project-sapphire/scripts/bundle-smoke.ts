@@ -9,7 +9,8 @@ import { writeTestConfig } from '../../project-ember/tests/support/fixture-helpe
 
 const source = path.resolve(process.argv[2] ?? 'build/bundle/Devora Sapphire.app');
 execFileSync('codesign', ['--verify', '--deep', '--strict', source]);
-const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'Sapphire bundle smoke '));
+// Canonical, since the app reports its bundle's resolved path (macOS's temporary directory is under the /var symlink).
+const scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'Sapphire bundle smoke ')));
 try {
   const app = path.join(scratch, 'Installed Sapphire.app');
   execFileSync('ditto', [source, app]);

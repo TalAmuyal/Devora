@@ -37,7 +37,15 @@ pub(super) async fn resolve(
     global_config: PathBuf,
     resources: Option<PathBuf>,
 ) -> Result<LaunchContext, String> {
-    let (program, inherited) = capture_login_shell().await?;
+    // The acceptance harness runs a fake CLI with the app's own environment.
+    let test_program = std::env::var("DEVORA_TEST_MODE")
+        .is_ok_and(|mode| mode == "1")
+        .then(|| std::env::var_os("DEVORA_TEST_CLAUDE_PROGRAM"))
+        .flatten();
+    let (program, inherited) = match test_program {
+        Some(program) => (PathBuf::from(program), std::env::vars().collect()),
+        None => capture_login_shell().await?,
+    };
     Ok(context(
         global_config,
         resources.as_deref(),
