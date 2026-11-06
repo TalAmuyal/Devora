@@ -41,6 +41,24 @@ impl Transcript {
             .ok()?;
         self.items.get_mut(index)
     }
+    fn item(&self, sequence: u64) -> Option<&TranscriptItem> {
+        let index = self
+            .items
+            .binary_search_by_key(&sequence, |item| item.sequence)
+            .ok()?;
+        self.items.get(index)
+    }
+
+    fn tool_mut(&mut self, expected: &str) -> Option<&mut TranscriptItem> {
+        let session = self.session.as_str();
+        self.items.iter_mut().rev().find(|item| {
+            item.cli_session == session
+                && match &item.content {
+                    TranscriptContent::Tool { tool_use_id, .. } => tool_use_id == expected,
+                    _ => false,
+                }
+        })
+    }
     pub fn set_session(&mut self, session: String) {
         self.session = session;
         self.streams.clear();
@@ -182,10 +200,18 @@ impl Transcript {
                     rule: verdict.rule().map(|r| r.as_str().into()),
                     detail: format!("{verdict:?}"),
                 };
-                if let Some(item) = self.items.iter_mut().rev().find(|item| item.cli_session == self.session && matches!(&item.content, TranscriptContent::Tool { tool_use_id: id, .. } if Some(id) == tool_use_id.as_ref())) {
-                    if let TranscriptContent::Tool { verdict, .. } = &mut item.content { *verdict = Some(value); }
+                if let Some(item) = tool_use_id.as_deref().and_then(|id| self.tool_mut(id)) {
+                    if let TranscriptContent::Tool { verdict, .. } = &mut item.content {
+                        *verdict = Some(value);
+                    }
                     vec![TranscriptChange::upsert(item.clone())]
-                } else { vec![self.system(SystemKind::Judgement, "Tool judgement", json!({"tool_use_id":tool_use_id,"verdict":value}))] }
+                } else {
+                    vec![self.system(
+                        SystemKind::Judgement,
+                        "Tool judgement",
+                        json!({"tool_use_id":tool_use_id,"verdict":value}),
+                    )]
+                }
             }
             SessionEvent::PermissionRequested {
                 request_id,
@@ -274,27 +300,32 @@ impl Transcript {
                 },
                 json!(result),
             )],
-            Message::Known(KnownMessage::System(_)) => vec![],
+            Message::Known(KnownMessage::System(_))
+            | Message::Known(KnownMessage::ControlRequest { .. })
+            | Message::Known(KnownMessage::ControlResponse { .. })
+            | Message::Known(KnownMessage::ControlCancelRequest { .. }) => vec![],
             _ => vec![self.unknown(json!(message), None)],
         }
     }
 
     fn whole(&mut self, turn: &Turn, parent: Option<String>, user: bool) -> Vec<TranscriptChange> {
         if !user {
-            if let Some(id) = turn.extra.get("id").and_then(Value::as_str) {
-                if self
-                    .streams
-                    .get(&parent)
-                    .is_none_or(|stream| stream.id != id)
-                {
-                    self.streams.insert(
-                        parent.clone(),
-                        StreamingMessage {
-                            id: id.into(),
-                            blocks: BTreeMap::new(),
-                        },
-                    );
-                }
+            let id = turn.extra.get("id").and_then(Value::as_str);
+            let matches_stream = self.streams.get(&parent).is_some_and(|stream| match id {
+                Some(id) => stream.id == id,
+                None => stream.blocks.values().any(|sequence| {
+                    self.item(*sequence)
+                        .is_some_and(|item| item.state == ItemState::Streaming)
+                }),
+            });
+            if !matches_stream {
+                self.streams.insert(
+                    parent.clone(),
+                    StreamingMessage {
+                        id: id.unwrap_or("").into(),
+                        blocks: BTreeMap::new(),
+                    },
+                );
             }
         }
         match &turn.content {
@@ -306,11 +337,11 @@ impl Transcript {
                 ItemState::Complete,
                 parent,
             )],
-            Content::Text(text) => vec![self.block(
+            Content::Text(text) => vec![self.complete_block(
                 0,
                 TranscriptContent::Assistant { text: text.clone() },
                 parent,
-                ItemState::Complete,
+                true,
             )],
             Content::Blocks(blocks) => {
                 let mut changes = vec![];
@@ -329,10 +360,17 @@ impl Transcript {
                                     .and_then(Value::as_bool)
                                     .unwrap_or(false),
                             };
-                            if let Some(item) = self.items.iter_mut().rev().find(|i| i.cli_session == self.session && matches!(&i.content, TranscriptContent::Tool { tool_use_id: id, .. } if id == tool_use_id)) {
-                                if let TranscriptContent::Tool { result: current, .. } = &mut item.content { *current = Some(result); }
+                            if let Some(item) = self.tool_mut(tool_use_id) {
+                                if let TranscriptContent::Tool {
+                                    result: current, ..
+                                } = &mut item.content
+                                {
+                                    *current = Some(result);
+                                }
                                 changes.push(TranscriptChange::upsert(item.clone()));
-                            } else { changes.push(self.unknown(json!(block), parent.clone())); }
+                            } else {
+                                changes.push(self.unknown(json!(block), parent.clone()));
+                            }
                         }
                         Extensible::Known(ContentBlock::Text { text, .. }) if user => {
                             changes.push(self.insert(
@@ -346,31 +384,11 @@ impl Transcript {
                         }
                         _ => {
                             let content = block_content(block);
-                            let index = if blocks.len() == 1 {
-                                self.streams
-                                    .get(&parent)
-                                    .and_then(|stream| {
-                                        stream
-                                            .blocks
-                                            .iter()
-                                            .find(|(_, seq)| {
-                                                self.items.iter().any(|item| {
-                                                    item.sequence == **seq
-                                                        && item.state == ItemState::Streaming
-                                                        && same_block(&item.content, &content)
-                                                })
-                                            })
-                                            .map(|(index, _)| *index)
-                                    })
-                                    .unwrap_or(index as u64)
-                            } else {
-                                index as u64
-                            };
-                            changes.push(self.block(
-                                index,
+                            changes.push(self.complete_block(
+                                index as u64,
                                 content,
                                 parent.clone(),
-                                ItemState::Complete,
+                                blocks.len() == 1,
                             ));
                         }
                     }
@@ -379,6 +397,32 @@ impl Transcript {
             }
             Content::Raw(value) => vec![self.unknown(value.clone(), parent)],
         }
+    }
+
+    fn complete_block(
+        &mut self,
+        index: u64,
+        content: TranscriptContent,
+        parent: Option<String>,
+        single_block: bool,
+    ) -> TranscriptChange {
+        let streamed_index = self.streams.get(&parent).and_then(|stream| {
+            stream
+                .blocks
+                .iter()
+                .find(|(_, sequence)| {
+                    self.item(**sequence).is_some_and(|item| {
+                        item.state == ItemState::Streaming && same_block(&item.content, &content)
+                    })
+                })
+                .map(|(index, _)| *index)
+        });
+        let index = if single_block {
+            streamed_index.unwrap_or(index)
+        } else {
+            index
+        };
+        self.block(index, content, parent, ItemState::Complete)
     }
 
     fn block(
@@ -507,7 +551,7 @@ impl Transcript {
                 .streams
                 .get(&parent)
                 .and_then(|s| s.blocks.get(index))
-                .and_then(|sequence| self.items.iter().find(|i| i.sequence == *sequence))
+                .and_then(|sequence| self.item(*sequence))
                 .map(|item| vec![TranscriptChange::upsert(item.clone())])
                 .unwrap_or_default(),
             StreamEvent::MessageDelta { .. } | StreamEvent::MessageStop { .. } => vec![],

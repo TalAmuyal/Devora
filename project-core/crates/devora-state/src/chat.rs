@@ -1,5 +1,5 @@
-//! The Store's live chat projection. Its frames and token deltas live only in
-//! memory. Agent Space history belongs to the space database in the next slice.
+//! The Store's typed live chat projection. Token patches update existing items
+//! in memory. The space actor owns durable whole items in its own database.
 use crate::{StateError, TranscriptChange, TranscriptItem};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -153,11 +153,18 @@ pub(crate) fn apply(chats: &mut Vec<Chat>, command: ChatCommand) -> Result<ChatE
                         | TranscriptChange::AppendSignature { sequence, .. }
                         | TranscriptChange::AppendToolInput { sequence, .. } => *sequence,
                     };
-                    if let Some(item) = chat.items.iter_mut().find(|item| item.sequence == sequence)
+                    match chat
+                        .items
+                        .binary_search_by_key(&sequence, |item| item.sequence)
                     {
-                        item.apply(change);
-                    } else if let TranscriptChange::Upsert { item } = change {
-                        chat.items.push(item.as_ref().clone());
+                        Ok(index) => {
+                            chat.items[index].apply(change);
+                        }
+                        Err(index) => {
+                            if let TranscriptChange::Upsert { item } = change {
+                                chat.items.insert(index, item.as_ref().clone());
+                            }
+                        }
                     }
                 }
                 ChatUpdate::PermissionRequested { question } => {

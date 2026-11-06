@@ -586,23 +586,40 @@ async fn run_session(
 ) -> Result<(), String> {
     let path = key.profile.clone();
     let name = key.name.clone();
-    let space = tokio::task::spawn_blocking(move || Space::open(&path, &name))
-        .await
-        .map_err(|e| e.to_string())??;
+    let (space, history) = tokio::task::spawn_blocking(move || {
+        let space = Space::open(&path, &name)?;
+        let history = space.history()?;
+        Ok::<_, String>((space, history))
+    })
+    .await
+    .map_err(|e| e.to_string())??;
     if *pause.borrow() {
         return Ok(());
     }
-    publish(
-        inner,
-        state,
-        key,
-        generation,
-        SpaceEvent::Restored(space.history()?),
-    );
+    publish(inner, state, key, generation, SpaceEvent::Restored(history));
     let mut running = match space.start(&context, log.clone()).await {
         Ok(running) => running,
         Err(error) => {
-            if let Ok(items) = Space::read_history(&key.profile, &key.name, 0, 500) {
+            let profile = key.profile.clone();
+            let name = key.name.clone();
+            let restored = tokio::task::spawn_blocking(move || {
+                let mut items = vec![];
+                loop {
+                    let after = items
+                        .last()
+                        .map_or(0, |item: &devora_agent::transcript::TranscriptItem| {
+                            item.sequence
+                        });
+                    let page = Space::read_history(&profile, &name, after, 500)?;
+                    let finished = page.len() < 500;
+                    items.extend(page);
+                    if finished {
+                        return Ok::<_, String>(items);
+                    }
+                }
+            })
+            .await;
+            if let Ok(Ok(items)) = restored {
                 publish(inner, state, key, generation, SpaceEvent::Restored(items));
             }
             return Err(error);

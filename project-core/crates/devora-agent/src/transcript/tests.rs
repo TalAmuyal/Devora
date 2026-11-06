@@ -160,3 +160,52 @@ fn interrupted_first_prompt_is_retained_and_marked_once_before_a_new_identity() 
     assert_eq!(t.items()[2].sequence, 3);
     assert_eq!(t.items()[2].cli_session, "replacement");
 }
+
+#[test]
+fn idless_whole_messages_remain_distinct_and_incompatible_deltas_are_unknown() {
+    let mut t = Transcript::new(vec![], "cli".into());
+    message(
+        &mut t,
+        json!({"type":"assistant","message":{"role":"assistant","content":"One"}}),
+    );
+    message(
+        &mut t,
+        json!({"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Two"}]}}),
+    );
+    assert_eq!(t.items().len(), 2);
+    start(&mut t, "new");
+    stream(
+        &mut t,
+        json!({"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}),
+    );
+    stream(
+        &mut t,
+        json!({"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"incompatible"}}),
+    );
+    assert!(
+        matches!(&t.items()[3].content, TranscriptContent::Unknown { json } if json.contains("thinking_delta"))
+    );
+}
+
+#[test]
+fn initialization_and_control_metadata_stay_out_of_the_transcript() {
+    let mut t = Transcript::new(vec![], "cli".into());
+    let recording = include_str!("../../tests/fixtures/claude-2.1.312/basic.jsonl");
+    let response = recording
+        .lines()
+        .map(|line| serde_json::from_str::<Value>(line).unwrap())
+        .find(|row| row["msg"]["type"] == "control_response")
+        .unwrap();
+    assert!(message(&mut t, response["msg"].clone()).is_empty());
+    assert!(message(
+        &mut t,
+        json!({"type":"control_cancel_request","request_id":"request"})
+    )
+    .is_empty());
+    assert!(t.items().is_empty());
+    message(&mut t, json!({"type":"future_conversation","value":1}));
+    assert!(matches!(
+        &t.items()[0].content,
+        TranscriptContent::Unknown { .. }
+    ));
+}

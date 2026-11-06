@@ -16,6 +16,9 @@ CREATE TABLE space (
  has_conversation INTEGER NOT NULL CHECK(has_conversation IN (0,1)),
  ready INTEGER NOT NULL CHECK(ready IN (0,1))
 );
+PRAGMA user_version = 1;";
+
+const HISTORY_SCHEMA: &str = "
 CREATE TABLE cli_sessions (
  session_id TEXT PRIMARY KEY,
  position INTEGER NOT NULL UNIQUE CHECK(position > 0)
@@ -26,7 +29,7 @@ CREATE TABLE events (
  kind TEXT NOT NULL,
  payload TEXT NOT NULL
 );
-PRAGMA user_version = 1;";
+";
 
 pub(crate) fn storage(error: impl std::fmt::Display) -> String {
     format!("agent space storage: {error}")
@@ -49,6 +52,8 @@ impl Db {
         db.configure()?;
         let tx = db.conn.transaction().map_err(storage)?;
         tx.execute_batch(SCHEMA).map_err(storage)?;
+        tx.execute_batch(HISTORY_SCHEMA).map_err(storage)?;
+        tx.pragma_update(None, "user_version", 2).map_err(storage)?;
         tx.execute(
             "INSERT INTO space VALUES (0,?1,?2,?3,?4,?5,0,0)",
             params![
@@ -77,20 +82,46 @@ impl Db {
         } else {
             OpenFlags::SQLITE_OPEN_READ_WRITE
         };
-        let db = Self {
+        let mut db = Self {
             conn: Connection::open_with_flags(path, flags).map_err(storage)?,
         };
         let version: u32 = db
             .conn
             .pragma_query_value(None, "user_version", |r| r.get(0))
             .map_err(storage)?;
-        if version != 1 {
+        if !matches!(version, 1 | 2) {
             return Err(format!("unsupported agent space schema version {version}"));
         }
         if !readonly {
             db.configure()?;
+            if version == 1 {
+                db.migrate_v1()?;
+            }
         }
         Ok(db)
+    }
+
+    fn migrate_v1(&mut self) -> Result<(), String> {
+        let tx = self
+            .conn
+            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+            .map_err(storage)?;
+        let version: u32 = tx
+            .pragma_query_value(None, "user_version", |row| row.get(0))
+            .map_err(storage)?;
+        if version == 1 {
+            tx.execute_batch(HISTORY_SCHEMA).map_err(storage)?;
+            let id: String = tx
+                .query_row("SELECT session_id FROM space WHERE id=0", [], |row| {
+                    row.get(0)
+                })
+                .map_err(storage)?;
+            register_session(&tx, &id)?;
+            tx.pragma_update(None, "user_version", 2).map_err(storage)?;
+        } else if version != 2 {
+            return Err(format!("unsupported agent space schema version {version}"));
+        }
+        tx.commit().map_err(storage)
     }
 
     fn configure(&self) -> Result<(), String> {
@@ -189,6 +220,13 @@ impl Db {
     }
 
     pub fn history(&self, after: u64, limit: u32) -> Result<Vec<TranscriptItem>, String> {
+        let version: u32 = self
+            .conn
+            .pragma_query_value(None, "user_version", |row| row.get(0))
+            .map_err(storage)?;
+        if version == 1 {
+            return Ok(vec![]);
+        }
         let mut query = self.conn.prepare(
             "SELECT sequence,cli_session,payload FROM events WHERE sequence > ?1 ORDER BY sequence LIMIT ?2",
         ).map_err(storage)?;

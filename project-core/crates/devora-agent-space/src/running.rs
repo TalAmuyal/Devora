@@ -114,9 +114,15 @@ pub(crate) async fn start(
     options: SessionOptions,
     log: Arc<Log>,
 ) -> Result<RunningSpace, String> {
-    let mut transcript = Transcript::new(space.db.all_history()?, space.resume.session_id.clone());
-    let interrupted = transcript.interrupt(!space.resume.has_conversation);
-    space.db.save_changes(None, &interrupted)?;
+    let (mut space, mut transcript) = tokio::task::spawn_blocking(move || {
+        let mut transcript =
+            Transcript::new(space.db.all_history()?, space.resume.session_id.clone());
+        let interrupted = transcript.interrupt(!space.resume.has_conversation);
+        space.db.save_changes(None, &interrupted)?;
+        Ok::<_, String>((space, transcript))
+    })
+    .await
+    .map_err(|e| e.to_string())??;
     let mut session = match Session::start(options, log.clone()).await {
         Ok(session) => session,
         Err(error) => {
@@ -151,6 +157,14 @@ pub(crate) async fn start(
                     &events,
                 );
             }
+            // A transient write failure may have cleared during shutdown. Keep
+            // the failure in history when storage can accept it again.
+            let _ = persist(
+                &mut space,
+                &mut transcript,
+                &SessionEvent::Failed(error.clone()),
+                &events,
+            );
             let _ = events.send(SpaceEvent::Session(SessionEvent::Failed(error.clone())));
         }
         result
@@ -225,11 +239,24 @@ fn begin(
             "Interrupt requested".into(),
             json!({}),
         ),
-        Action::Permission(id, answer) => transcript.intention(
-            SystemKind::PermissionAnswer,
-            "Permission answer submitted".into(),
-            json!({"request_id":id,"answer":format!("{answer:?}")}),
-        ),
+        Action::Permission(id, answer) => {
+            let (text, decision) = match answer {
+                PermissionAnswer::Allow => ("Permission allow requested", json!({"kind":"allow"})),
+                PermissionAnswer::Deny { message } => (
+                    "Permission denial requested",
+                    json!({"kind":"deny","message":message}),
+                ),
+                PermissionAnswer::AllowWithSuggestedRule => (
+                    "Permission allow with suggested rule requested",
+                    json!({"kind":"allow_with_suggested_rule"}),
+                ),
+            };
+            transcript.intention(
+                SystemKind::PermissionAnswer,
+                text.into(),
+                json!({"request_id":id,"answer":decision}),
+            )
+        }
     };
     let TranscriptChange::Upsert { item } = &change else {
         return Err("intention must be a whole item".into());

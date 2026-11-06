@@ -65,7 +65,7 @@ impl Store {
         Ok(events)
     }
 
-    /// Live chat is deliberately transient. Token frames never rewrite app-state SQLite.
+    /// The live projection is held in memory. Token patches never rewrite app-state SQLite.
     pub fn dispatch_chat(&self, command: ChatCommand) -> Result<(), StateError> {
         let inner = &mut *lock(&self.inner);
         let event = crate::chat::apply(&mut inner.chats, command)?;
