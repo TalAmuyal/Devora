@@ -79,6 +79,7 @@ for line in sys.stdin:
         emit({"type":"fake_answer","answer":message["response"].get("response", {"error":message["response"].get("error")})})
         result()
     elif kind == "user":
+        report({"kind":"user","message":message["message"]})
         text = message["message"]["content"]
         if text == "permission":
             question()

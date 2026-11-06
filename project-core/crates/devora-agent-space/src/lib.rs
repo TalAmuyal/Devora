@@ -9,7 +9,7 @@ mod inputs;
 mod running;
 pub mod template;
 pub use inputs::{fields, Field, Source};
-pub use running::RunningSpace;
+pub use running::{RunningSpace, SpaceEvent, SpaceHandle};
 
 use db::{storage, Db};
 use devora_agent::session::{Instructions, Plugin, Resume, SessionOptions};
@@ -352,6 +352,24 @@ impl Space {
             (path, ownership)
         };
         remove_directory(&root, &path)
+    }
+
+    pub fn history(&self) -> Result<Vec<devora_agent::transcript::TranscriptItem>, String> {
+        self.db.all_history()
+    }
+
+    /// Read-only history also works while the process owner holds the space.
+    pub fn read_history(
+        profile: &Path,
+        name: &str,
+        after: u64,
+        limit: u32,
+    ) -> Result<Vec<devora_agent::transcript::TranscriptItem>, String> {
+        let root = catalogue(profile)?;
+        let path = checked_path(&root, name)?;
+        let db = Db::open(&path.join(DATABASE), true)?;
+        db.load()?;
+        db.history(after, limit.clamp(1, 500))
     }
 
     pub fn identity(&self) -> &Identity {

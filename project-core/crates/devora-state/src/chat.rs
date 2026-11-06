@@ -1,6 +1,6 @@
 //! The Store's live chat projection. Its frames and token deltas live only in
 //! memory. Agent Space history belongs to the space database in the next slice.
-use crate::StateError;
+use crate::{StateError, TranscriptChange, TranscriptItem};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ChatPhase {
@@ -11,18 +11,14 @@ pub enum ChatPhase {
     Failed,
 }
 
-/// Protocol payloads retain their forward-compatible JSON. `kind` identifies
-/// message, user, judgement, compaction, warning, exit or interruption records.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ChatItem {
-    pub kind: String,
-    pub payload_json: String,
-}
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PermissionQuestion {
     pub request_id: String,
-    pub payload_json: String,
+    pub tool_name: String,
+    pub tool_use_id: String,
+    pub input_json: String,
+    pub decision_reason: Option<String>,
+    pub can_always_allow: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -32,7 +28,8 @@ pub struct Chat {
     pub phase: ChatPhase,
     pub turn_running: bool,
     pub session_id: Option<String>,
-    pub items: Vec<ChatItem>,
+    pub items: Vec<TranscriptItem>,
+    pub error: Option<String>,
     pub questions: Vec<PermissionQuestion>,
     pub usage_json: Option<String>,
 }
@@ -43,7 +40,9 @@ pub enum ChatUpdate {
     Generation { generation: u64 },
     Phase { phase: ChatPhase },
     Ready { session_id: String },
-    Item { item: ChatItem },
+    Restore { items: Vec<TranscriptItem> },
+    Transcript { change: TranscriptChange },
+    Failure { message: String },
     PermissionRequested { question: PermissionQuestion },
     PermissionRemoved { request_id: String },
     Usage { payload_json: String },
@@ -94,6 +93,7 @@ pub(crate) fn apply(chats: &mut Vec<Chat>, command: ChatCommand) -> Result<ChatE
                 turn_running: false,
                 session_id: None,
                 items: vec![],
+                error: None,
                 questions: vec![],
                 usage_json: None,
             };
@@ -129,11 +129,37 @@ pub(crate) fn apply(chats: &mut Vec<Chat>, command: ChatCommand) -> Result<ChatE
                 }
                 ChatUpdate::Ready { session_id } => {
                     chat.phase = ChatPhase::Running;
+                    chat.error = None;
                     chat.turn_running = false;
                     chat.session_id = Some(session_id.clone());
                     chat.questions.clear();
                 }
-                ChatUpdate::Item { item } => chat.items.push(item.clone()),
+                ChatUpdate::Restore { items } => chat.items.clone_from(items),
+                ChatUpdate::Failure { message } => {
+                    chat.error = Some(message.clone());
+                    chat.phase = ChatPhase::Failed;
+                    chat.turn_running = false;
+                    chat.questions.clear();
+                }
+                ChatUpdate::Transcript { change } => {
+                    if matches!(change, TranscriptChange::Upsert { item } if matches!(item.content, crate::TranscriptContent::System { kind:crate::SystemKind::Result, .. }))
+                    {
+                        chat.turn_running = false;
+                    }
+                    let sequence = match change {
+                        TranscriptChange::Upsert { item } => item.sequence,
+                        TranscriptChange::AppendText { sequence, .. }
+                        | TranscriptChange::AppendThinking { sequence, .. }
+                        | TranscriptChange::AppendSignature { sequence, .. }
+                        | TranscriptChange::AppendToolInput { sequence, .. } => *sequence,
+                    };
+                    if let Some(item) = chat.items.iter_mut().find(|item| item.sequence == sequence)
+                    {
+                        item.apply(change);
+                    } else if let TranscriptChange::Upsert { item } = change {
+                        chat.items.push(item.as_ref().clone());
+                    }
+                }
                 ChatUpdate::PermissionRequested { question } => {
                     chat.questions
                         .retain(|q| q.request_id != question.request_id);

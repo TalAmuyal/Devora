@@ -625,3 +625,43 @@ fn creation_fields_list_form_only_then_prefilled_then_derived_with_their_sources
         )
     );
 }
+
+#[tokio::test]
+async fn an_intention_write_failure_prevents_transport_and_uncommitted_publication() {
+    let fixture = Fixture::new();
+    let context = fixture.context();
+    let space = fixture.create(fixture.form("Durable")).unwrap();
+    let path = space.path().join(".agent-space.db");
+    let log = Arc::new(Log::open(&fixture.root.path().join("failure.log")).unwrap());
+    let mut running = space.start(&context, log).await.unwrap();
+    assert!(matches!(
+        running.next_event().await,
+        Some(SessionEvent::Ready { .. })
+    ));
+    let connection = rusqlite::Connection::open(&path).unwrap();
+    connection.execute_batch("CREATE TRIGGER fail_user BEFORE INSERT ON events WHEN NEW.kind='user' BEGIN SELECT RAISE(ABORT,'injected intention failure'); END;").unwrap();
+    let error = running
+        .handle()
+        .send_turn("must never reach CLI".into())
+        .await
+        .unwrap_err();
+    assert!(error.contains("injected intention failure"), "{error}");
+    while let Some(event) = running.next_event().await {
+        if matches!(event, SessionEvent::Failed(_)) {
+            break;
+        }
+    }
+    let _ = running.pause().await;
+    let report = std::fs::read_to_string(fixture.root.path().join("report.jsonl")).unwrap();
+    assert!(!report
+        .lines()
+        .any(|line| serde_json::from_str::<serde_json::Value>(line).unwrap()["kind"] == "user"));
+    assert_eq!(
+        connection
+            .query_row("SELECT count(*) FROM events WHERE kind='user'", [], |row| {
+                row.get::<_, u64>(0)
+            })
+            .unwrap(),
+        0
+    );
+}

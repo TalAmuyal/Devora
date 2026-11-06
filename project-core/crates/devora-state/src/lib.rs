@@ -18,7 +18,7 @@ mod model;
 mod persist;
 mod store;
 
-pub use chat::{Chat, ChatCommand, ChatEvent, ChatItem, ChatPhase, ChatUpdate, PermissionQuestion};
+pub use chat::{Chat, ChatCommand, ChatEvent, ChatPhase, ChatUpdate, PermissionQuestion};
 pub use command::{Command, Event, StateError};
 pub use feed::{feed, Feed, Subscription};
 pub use model::{
@@ -69,3 +69,8 @@ impl State {
         interrupted
     }
 }
+
+pub use devora_agent::transcript::{
+    ItemState, SystemKind, ToolResult, ToolVerdict, TranscriptChange, TranscriptContent,
+    TranscriptItem,
+};
