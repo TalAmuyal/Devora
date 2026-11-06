@@ -222,7 +222,7 @@ extension Store {
 								chat.phase = .failed
 								chat.turn = false
 								chat.questions = []
-							case .restore, .transcript, .usage: continue
+							case .restore, .transcript, .usage, .context: continue
 							}
 							chats[tab] = chat
 						}

@@ -1,6 +1,7 @@
 use devora_agent::protocol::{KnownMessage, Message};
 use devora_agent::session::SessionEvent;
-use devora_agent_space::{template, CreationForm, LaunchContext, Space};
+use devora_agent::transcript::{SystemKind, TranscriptChange, TranscriptContent};
+use devora_agent_space::{template, CreationForm, LaunchContext, Space, SpaceEvent};
 use devora_app::log::Log;
 use devora_workspace::creation::{CreationHandle, EventSink};
 use serde_json::json;
@@ -872,4 +873,145 @@ async fn large_history_reopens_with_only_the_tail_and_pages_back_in_order() {
         }
     }
     running.pause().await.unwrap();
+}
+
+#[tokio::test]
+async fn over_the_threshold_the_agent_saves_its_memory_then_devora_compacts() {
+    let fixture = Fixture::new();
+    // The recorded turn fills about 2% of its model's 1,000,000-token window.
+    std::fs::write(
+        fixture.profile.join("config.json"),
+        json!({"prepare-command":"true","agent":{"compact-threshold":1}}).to_string(),
+    )
+    .unwrap();
+    let context = fixture.context();
+    let space = fixture.create(fixture.form("Delta")).unwrap();
+    let log = Arc::new(Log::open(&fixture.root.path().join("log")).unwrap());
+    let mut running = space.start(&context, log).await.unwrap();
+    running
+        .handle()
+        .send_turn("first turn".into())
+        .await
+        .unwrap();
+    let mut contexts = vec![];
+    let mut announcements = vec![];
+    let mut results = 0;
+    tokio::time::timeout(Duration::from_secs(10), async {
+        while let Some(update) = running.next_update().await {
+            match update {
+                SpaceEvent::Context(context) => contexts.push(context),
+                SpaceEvent::Transcript(TranscriptChange::Upsert { item }) => {
+                    if let TranscriptContent::System {
+                        kind: SystemKind::Compaction,
+                        text,
+                        ..
+                    } = item.content
+                    {
+                        announcements.push(text);
+                    }
+                }
+                SpaceEvent::Session(SessionEvent::Message(Message::Known(
+                    KnownMessage::Result(_),
+                ))) => {
+                    results += 1;
+                    // The user's turn, the memory save, then `/compact`.
+                    if results == 3 {
+                        break;
+                    }
+                }
+                SpaceEvent::Session(SessionEvent::Failed(error)) => panic!("{error}"),
+                _ => {}
+            }
+        }
+    })
+    .await
+    .unwrap();
+    running.pause().await.unwrap();
+
+    let report = std::fs::read_to_string(fixture.root.path().join("report.jsonl")).unwrap();
+    let prompts: Vec<String> = report
+        .lines()
+        .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
+        .filter(|entry| entry["kind"] == "user")
+        .map(|entry| entry["message"]["content"].as_str().unwrap().to_owned())
+        .collect();
+    assert_eq!(prompts.len(), 3, "{prompts:?}");
+    assert_eq!(prompts[0], "first turn");
+    assert!(prompts[1].contains("save to memory/"), "{}", prompts[1]);
+    assert_eq!(prompts[2], "/compact");
+    // Devora's two steps, then the boundary the CLI reports.
+    assert_eq!(announcements.len(), 3, "{announcements:?}");
+    assert!(announcements[0].contains("save its memory"));
+    assert!(announcements[1].contains("Devora compacts"));
+
+    assert_eq!(contexts[0].threshold_percent, 1);
+    assert!(contexts
+        .iter()
+        .any(|c| c.window_tokens == 1_000_000 && c.used_tokens > 10_000));
+    assert_eq!(
+        contexts.last().unwrap().used_tokens,
+        2000,
+        "the compaction's post_tokens"
+    );
+}
+
+#[tokio::test]
+async fn pause_after_turn_waits_for_the_turn_and_wins_over_compaction() {
+    let fixture = Fixture::new();
+    std::fs::write(
+        fixture.profile.join("config.json"),
+        json!({"prepare-command":"true","agent":{"compact-threshold":1}}).to_string(),
+    )
+    .unwrap();
+    let context = fixture.context();
+    let space = fixture.create(fixture.form("Delta")).unwrap();
+    let log = Arc::new(Log::open(&fixture.root.path().join("log")).unwrap());
+    let mut running = space.start(&context, log.clone()).await.unwrap();
+    let handle = running.handle();
+    // The fake CLI holds this turn on a permission question until it is answered.
+    handle.send_turn("permission".into()).await.unwrap();
+    let request = tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            if let Some(SpaceEvent::Session(SessionEvent::PermissionRequested {
+                request_id, ..
+            })) = running.next_update().await
+            {
+                return request_id;
+            }
+        }
+    })
+    .await
+    .unwrap();
+    let pausing = tokio::spawn({
+        let handle = handle.clone();
+        async move { handle.pause_after_turn().await }
+    });
+    handle
+        .answer_permission(request, devora_agent::session::PermissionAnswer::Allow)
+        .await
+        .unwrap();
+    tokio::time::timeout(Duration::from_secs(10), pausing)
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    let report = std::fs::read_to_string(fixture.root.path().join("report.jsonl")).unwrap();
+    let prompts = report
+        .lines()
+        .filter(|line| line.contains("\"kind\": \"user\"") || line.contains("\"kind\":\"user\""))
+        .count();
+    assert_eq!(
+        prompts, 1,
+        "the turn's result is over the threshold, but the pause wins: {report}"
+    );
+    // Already paused; this only waits for the space to release its ownership.
+    assert!(running.pause().await.is_err());
+
+    // An idle agent pauses at once.
+    let idle = Space::open(&fixture.profile, "Delta").unwrap();
+    let running = idle.start(&context, log).await.unwrap();
+    tokio::time::timeout(Duration::from_secs(10), running.handle().pause_after_turn())
+        .await
+        .unwrap()
+        .unwrap();
 }

@@ -26,6 +26,9 @@ pub enum Scope {
 #[derive(Debug, Clone, Default)]
 pub struct AgentConfig {
     pub template_file: Option<PathBuf>,
+    /// `compact-threshold`: the share of the context window, in percent, at which
+    /// Devora saves the agent's memory and compacts (ADR-012); `None` for the default.
+    pub compact_threshold: Option<u8>,
     /// Template inputs by placeholder, each with the config that set it.
     pub inputs: BTreeMap<String, (String, Scope)>,
 }
@@ -59,6 +62,17 @@ pub fn read(global: &Path, profile: &Path) -> Result<AgentConfig, String> {
             if let Some(value) = section.get(name) {
                 set(&mut config.inputs, placeholder, value, scope)
                     .map_err(|e| format!("agent.{name} {e}"))?;
+            }
+        }
+        match section.get("compact-threshold") {
+            None => {}
+            Some(Value::Null) => config.compact_threshold = None,
+            Some(value) => {
+                let percent = value
+                    .as_u64()
+                    .filter(|percent| (1..=100).contains(percent))
+                    .ok_or("agent.compact-threshold must be a whole percentage from 1 to 100")?;
+                config.compact_threshold = Some(percent as u8);
             }
         }
         match section.get("template-file") {
@@ -184,5 +198,34 @@ mod tests {
             config.inputs["agent.role"],
             ("profile role".into(), Scope::Profile)
         );
+    }
+
+    #[test]
+    fn the_compact_threshold_is_a_percentage_the_profile_can_override() {
+        let root = tempfile::tempdir().unwrap();
+        let global = root.path().join("global.json");
+        let profile = root.path().join("profile");
+        std::fs::create_dir(&profile).unwrap();
+        std::fs::write(
+            &global,
+            json!({"agent":{"compact-threshold":70}}).to_string(),
+        )
+        .unwrap();
+        assert_eq!(read(&global, &profile).unwrap().compact_threshold, Some(70));
+        let profile_config = profile.join("config.json");
+        std::fs::write(
+            &profile_config,
+            json!({"agent":{"compact-threshold":90}}).to_string(),
+        )
+        .unwrap();
+        assert_eq!(read(&global, &profile).unwrap().compact_threshold, Some(90));
+        for invalid in [json!(0), json!(101), json!(80.5), json!("80")] {
+            std::fs::write(
+                &profile_config,
+                json!({"agent":{"compact-threshold":invalid}}).to_string(),
+            )
+            .unwrap();
+            assert!(read(&global, &profile).is_err(), "{invalid}");
+        }
     }
 }
