@@ -1,6 +1,6 @@
 /** Launching, quitting and killing the app under test. */
 
-import { spawn, type ChildProcess } from 'node:child_process';
+import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
 import * as path from 'node:path';
 import { Bridge, type AppState } from './bridge';
 
@@ -95,23 +95,77 @@ export function hasExited(app: ChildProcess): boolean {
 }
 
 /** Resolves with the exit code (or signal) once the app has exited. */
-function exited(app: ChildProcess): Promise<number | NodeJS.Signals> {
+function exited(app: ChildProcess, timeoutMs = 10_000): Promise<number | NodeJS.Signals> {
   if (hasExited(app)) return Promise.resolve(app.exitCode ?? app.signalCode!);
-  return new Promise((resolve) => app.once('exit', (code, signal) => resolve(code ?? signal!)));
+  return new Promise((resolve, reject) => {
+    const onExit = (code: number | null, signal: NodeJS.Signals | null) => {
+      clearTimeout(timer);
+      resolve(code ?? signal!);
+    };
+    const timer = setTimeout(() => {
+      app.off('exit', onExit);
+      reject(new Error(`The app did not exit within ${timeoutMs}ms`));
+    }, timeoutMs);
+    app.once('exit', onExit);
+  });
 }
 
 /** Quits the app as the app menu's Quit does, and waits for it to exit. */
 export async function quit(app: LaunchedApp): Promise<void> {
-  const done = exited(app.app);
-  await app.bridge.quit();
-  const result = await done;
+  const [, result] = await Promise.all([app.bridge.quit(), exited(app.app)]);
   if (result !== 0) throw new Error(`The app exited with ${result} on quit:\n${(stderrOf.get(app.app) ?? []).join('')}`);
 }
 
 /** Sends `signal` and waits for the app to exit; does nothing if it already has. */
-export async function stop(app: ChildProcess, signal: NodeJS.Signals): Promise<void> {
+export async function stop(app: ChildProcess, signal: NodeJS.Signals, timeoutMs = 10_000): Promise<void> {
   if (hasExited(app)) return;
-  const done = exited(app);
+  const done = exited(app, timeoutMs);
   app.kill(signal);
   await done;
+}
+
+interface AgentChild {
+  pid: number;
+  parent: number;
+  command: string;
+}
+
+/** The full command includes the CLI session ID, guarding against PID reuse. */
+function agentProcesses(): AgentChild[] {
+  const rows = execFileSync('ps', ['-axo', 'pid=,ppid=,command='], { encoding: 'utf8' });
+  return rows.split('\n').flatMap(line => {
+    const match = line.trim().match(/^(\d+)\s+(\d+)\s+(.+)$/);
+    return match && match[3].includes(FAKE_CLAUDE)
+      ? [{ pid: Number(match[1]), parent: Number(match[2]), command: match[3] }] : [];
+  });
+}
+
+async function waitForAgentChildren(children: AgentChild[]): Promise<void> {
+  const deadline = Date.now() + 3000;
+  let remaining = children;
+  while (remaining.length > 0) {
+    const current = agentProcesses();
+    remaining = remaining.filter(child => current.some(process => process.pid === child.pid && process.command === child.command));
+    if (remaining.length === 0) return;
+    if (Date.now() >= deadline) {
+      throw new Error(`Agent children survived app shutdown: ${remaining.map(child => child.pid).join(', ')}`);
+    }
+    await new Promise(resolve => setTimeout(resolve, 50));
+  }
+}
+
+/** Normal Quit reaps agents before fixtures disappear. A forced fallback still
+ * waits for the owned fake CLI children, and preserves the shutdown failure. */
+export async function shutdown(app: LaunchedApp): Promise<void> {
+  const children = agentProcesses().filter(child => child.parent === app.app.pid);
+  try {
+    if (!hasExited(app.app)) await quit(app);
+  } finally {
+    if (!hasExited(app.app)) {
+      children.push(...agentProcesses().filter(child => child.parent === app.app.pid));
+      try { await stop(app.app, 'SIGTERM', 3000); }
+      catch { await stop(app.app, 'SIGKILL', 3000); }
+    }
+    await waitForAgentChildren(children);
+  }
 }
