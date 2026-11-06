@@ -5,14 +5,16 @@
 //! The blocking catalogue lock covers short reservation/removal sections. Listing
 //! is read-only, and each space retains its own fail-fast ownership lock while creating or open.
 mod db;
+mod inputs;
 mod running;
 pub mod template;
+pub use inputs::{fields, Field, Source};
 pub use running::RunningSpace;
 
 use db::{storage, Db};
 use devora_agent::session::{Instructions, Plugin, Resume, SessionOptions};
 use devora_app::log::Log;
-use devora_config::{agent, config};
+use devora_config::config;
 use devora_workspace::{
     creation::{self, CreationHandle, EventSink},
     workspace,
@@ -214,33 +216,23 @@ impl Space {
                 return Err(format!("duplicate or reserved repo name: {name}"));
             }
         }
-        let defaults = agent::read(global_config, &profile)?;
-        let mut inputs = launch_inputs;
-        inputs
-            .entry("agent.role".into())
-            .or_insert_with(|| "General assistant".into());
-        inputs.extend(defaults.inputs);
-        if let Some(role) = defaults.role {
-            inputs.insert("agent.role".into(), role);
-        }
-        if let Some(details) = defaults.user_details {
-            inputs.insert("user.details".into(), details);
-        }
-        if let Some(sections) = defaults.custom_sections {
-            inputs.insert("custom.sections".into(), sections);
-        }
+        let prefilled = inputs::prefilled(&profile, global_config, launch_inputs)?;
+        let mut inputs: BTreeMap<String, String> = prefilled
+            .values
+            .into_iter()
+            .map(|(key, (value, _))| (key, value))
+            .collect();
         inputs.extend(form.inputs.clone());
         if let Some(role) = &form.role {
             inputs.insert("agent.role".into(), role.clone());
         }
         // Derived entries describe the validated on-disk identity.
-        inputs.insert("agent.name".into(), form.name.clone());
-        inputs.insert("space.path".into(), path.to_string_lossy().into_owned());
-        inputs.insert(
-            "memory.path".into(),
-            path.join("memory").to_string_lossy().into_owned(),
-        );
-        inputs.insert("space.repos".into(), form.repos.join("\n"));
+        for (key, value) in inputs::DERIVED_KEYS
+            .into_iter()
+            .zip(inputs::derived(&path, &form))
+        {
+            inputs.insert(key.into(), value);
+        }
         let role = inputs
             .get("agent.role")
             .cloned()
@@ -248,11 +240,7 @@ impl Space {
         if role.trim().is_empty() {
             return Err("agent role cannot be empty".into());
         }
-        let template = match defaults.template_file {
-            Some(file) => fs::read_to_string(file).map_err(storage)?,
-            None => template::DEFAULT.into(),
-        };
-        let instructions = template::render(&template, &inputs)?;
+        let instructions = template::render(&prefilled.template, &inputs)?;
         let identity = Identity {
             name: form.name.clone(),
             role,

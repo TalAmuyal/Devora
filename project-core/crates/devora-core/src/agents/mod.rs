@@ -2,13 +2,15 @@
 //! it immediately and signals pause. Its entry remains reserved until the process
 //! is reaped and C's StopInfo persistence completes. Reopen waits for that barrier.
 mod events;
+mod launch;
 mod operations;
 
 pub use devora_agent::session::{PermissionAnswer, Plugin};
 use devora_agent::session::{SessionEvent, SessionHandle};
 use devora_agent_space::Space;
-pub use devora_agent_space::{CreationForm, Entry as SpaceEntry, LaunchContext};
+pub use devora_agent_space::{CreationForm, Entry as SpaceEntry, Field, LaunchContext, Source};
 use devora_app::log::Log;
+pub use devora_config::agent::Scope;
 use devora_state::{ChatCommand, ChatPhase, ChatUpdate, Command, Event, SessionKind, Store};
 pub use operations::{Creation, CreationEvent};
 use std::collections::BTreeMap;
@@ -301,6 +303,47 @@ impl Agents {
 
     pub fn list(&self, profile: &Path) -> Result<Vec<SpaceEntry>, String> {
         Space::list(profile)
+    }
+
+    /// The launch context from the user's login shell and the app bundle's
+    /// `Resources` directory, for hosts that supply nothing of their own.
+    pub async fn resolve_launch(
+        &self,
+        global_config: PathBuf,
+        resources: Option<PathBuf>,
+    ) -> Result<LaunchContext, String> {
+        self.runtime
+            .spawn(launch::resolve(global_config, resources))
+            .await
+            .map_err(|e| e.to_string())?
+    }
+
+    /// The template's fields for the creation form, as `form` would render them.
+    pub fn creation_fields(
+        &self,
+        profile: &Path,
+        global_config: &Path,
+        launch_inputs: BTreeMap<String, String>,
+        form: &CreationForm,
+    ) -> Result<Vec<Field>, String> {
+        devora_agent_space::fields(profile, global_config, launch_inputs, form)
+    }
+
+    /// Saves a creation-form value to the global or profile config, so later
+    /// agents start from it.
+    pub fn save_field(
+        &self,
+        profile: &Path,
+        global_config: &Path,
+        scope: Scope,
+        key: &str,
+        value: &str,
+    ) -> Result<(), String> {
+        let file = match scope {
+            Scope::Global => global_config.to_path_buf(),
+            Scope::Profile => profile.join("config.json"),
+        };
+        devora_config::agent::write(&file, key, value)
     }
 
     pub async fn delete(&self, profile: &Path, name: &str) -> Result<(), String> {

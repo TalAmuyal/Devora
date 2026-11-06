@@ -562,3 +562,66 @@ fn profile_model_aliases_reach_inline_settings_and_explicit_host_values_win() {
         .is_none());
     assert_eq!(options.permission_mode, "auto");
 }
+
+#[test]
+fn creation_fields_list_form_only_then_prefilled_then_derived_with_their_sources() {
+    let fixture = Fixture::new();
+    std::fs::write(
+        fixture.profile.join("instructions.md"),
+        "{{agent.name}} {{agent.role}} {{team}} {{focus}} {{user.details}} {{space.path}} {{ticket}} {{focus}}",
+    )
+    .unwrap();
+    std::fs::write(
+        &fixture.global,
+        json!({"agent":{"user-details":"Tal"}}).to_string(),
+    )
+    .unwrap();
+    std::fs::write(
+        fixture.profile.join("config.json"),
+        json!({"agent":{"template-file":"instructions.md","inputs":{"team":"core"}}}).to_string(),
+    )
+    .unwrap();
+    let fields = |form: &CreationForm| {
+        devora_agent_space::fields(
+            &fixture.profile,
+            &fixture.global,
+            BTreeMap::from([("ticket".into(), "T-1".into())]),
+            form,
+        )
+        .unwrap()
+        .into_iter()
+        .map(|f| (f.key, f.value, f.source))
+        .collect::<Vec<_>>()
+    };
+    use devora_agent_space::Source::*;
+    let some = |s: &str| Some(s.to_string());
+    assert_eq!(
+        fields(&fixture.form("")),
+        vec![
+            ("focus".into(), None, None),
+            (
+                "agent.role".into(),
+                some("General assistant"),
+                Some(Default)
+            ),
+            ("team".into(), some("core"), Some(Profile)),
+            ("user.details".into(), some("Tal"), Some(Global)),
+            ("ticket".into(), some("T-1"), Some(Launch)),
+            ("agent.name".into(), None, Some(Derived)),
+            ("space.path".into(), None, Some(Derived)),
+        ]
+    );
+    let named = fields(&fixture.form("Echo"));
+    let space = std::fs::canonicalize(&fixture.profile)
+        .unwrap()
+        .join("agent-spaces/Echo");
+    assert_eq!(named[5], ("agent.name".into(), some("Echo"), Some(Derived)));
+    assert_eq!(
+        named[6],
+        (
+            "space.path".into(),
+            some(&space.to_string_lossy()),
+            Some(Derived)
+        )
+    );
+}
