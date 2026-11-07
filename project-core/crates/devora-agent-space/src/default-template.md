@@ -16,7 +16,9 @@ It initially contains some repositories (Git worktrees) that I think are a good 
 
 Generally speaking, please don't *clone* repos yourself.
 If you need repos for reference, you can inspect those at `../../repos/`.
-If you need repos to work in, you can create a worktree from `../../repos/` in this workspace.
+Use `debi repo list` to see the repositories available to this profile.
+Use `debi repo add <repo> [--postfix <postfix>]` to add a worktree here.
+It checks out the default branch in detached HEAD mode and runs the configured prepare command.
 The repos at `../../repos/` are clean, full clones.
 You may run `gcl` in these repos to fetch and check out their latest version, and you may inspect them for context.
 If you need to make changes, make them in a worktree in this workspace, **never** in `../../repos/`.

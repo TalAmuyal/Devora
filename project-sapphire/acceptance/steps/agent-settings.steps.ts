@@ -50,18 +50,21 @@ Then('the Agent template path should resolve relative to profile {string} as {st
 When('the user adds Agent input {string} with value {string}', async function (this: SapphireWorld, key: string, value: string) {
   await this.bridge.waitFor('Agent inputs to load', () => this.bridge.state(), state => state.settings?.scope?.agent?.loaded === true);
   await this.bridge.settings({ action: 'addAgentInput', key, value });
+  await inputSaveSettled(this);
 });
 
 When('the user saves Agent input {string} as {string} with value {string}', async function (this: SapphireWorld, key: string, newKey: string, value: string) {
   await this.bridge.waitFor('the Agent input row', () => this.bridge.state(), state =>
     state.settings?.scope?.agent?.inputs.some(input => input.key === key) === true);
   await this.bridge.settings({ action: 'saveAgentInput', key, newKey, value });
+  await inputSaveSettled(this);
 });
 
 When('the user defaults Agent input {string}', async function (this: SapphireWorld, key: string) {
   await this.bridge.waitFor('the stored Agent input override', () => this.bridge.state(), state =>
     state.settings?.scope?.agent?.inputs.some(input => input.key === key && input.stored) === true);
   await this.bridge.settings({ action: 'defaultAgentInput', key });
+  await inputSaveSettled(this);
 });
 
 Then('the global Agent input {string} should equal {string}', async function (this: SapphireWorld, key: string, value: string) {
@@ -111,3 +114,8 @@ Then('the Agent prompt preview should not be shown', async function (this: Sapph
   await this.bridge.waitFor('the global Agent card without a preview', () => this.bridge.state(), state =>
     state.settings?.scope?.agent?.canPreview === false);
 });
+
+async function inputSaveSettled(world: SapphireWorld): Promise<void> {
+  await world.bridge.waitFor('the Agent input save to finish', () => world.bridge.state(), state =>
+    state.settings?.scope?.agent?.savingInputs.length === 0);
+}
