@@ -147,6 +147,18 @@ Highlights:
 - **Health check**: `debi health` verifies that all required dependencies are installed
 - **Read config**: `debi get-conf [--profile <name>] <key>` reads a resolved config value and prints it to stdout, intended for use in shell scripts
 
+### Repository worktrees
+
+Run `debi repo list` inside a workspace or Agent Space to print the profile's available repository names, one per line. This includes registered repositories and those discovered under the profile's `repos/` directory. Each name appears once. An empty list succeeds.
+
+Run `debi repo add <repo> [--postfix <postfix>]` to add a detached worktree of the repository's default branch to the current workspace or Agent Space. It uses the same checkout and prepare steps as the Add Repo dialog. The destination is `<repo>` or `<repo>-<postfix>`. Existing destinations are refused, and ambiguous names report the candidate repository paths. Workspaces retain their generated `CLAUDE.md` behavior. Agent Spaces keep their instructions in the system prompt.
+
+The session's registered `DEBI_PROFILE_PATH` selects the profile first. A stale session path falls back to the working directory's owning profile. Nested worktree directories resolve to the containing workspace or Agent Space. Adding a repo fails before making changes if the session profile differs from that target's owning profile.
+
+`add` writes progress and warnings to stderr and the final absolute worktree path to stdout. A prepare-command failure keeps the worktree, prints a warning and exits successfully, matching the UI. Ctrl+C stops the operation's subprocesses and waits for the added worktree to be rolled back. Other creation failures leave any partial worktree available for inspection.
+
+Exit codes are 0 for success/help, 2 for invalid arguments or unresolved/ambiguous context, 1 for operational failure, and 130 after a completed cancellation rollback. A rollback that leaves the destination behind reports failure with exit 1.
+
 ### Shell Completions
 
 `debi` supports tab-completion for bash, zsh, and fish.

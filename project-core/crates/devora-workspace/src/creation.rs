@@ -293,6 +293,13 @@ pub fn create_worktrees(
     Ok(())
 }
 
+/// The kind of directory receiving an added worktree.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AddRepoTargetKind {
+    Workspace,
+    AgentSpace,
+}
+
 /// Adds a worktree of `source_repo_path` to the workspace as `worktree_dir_name`, then runs the prepare-command and ensures the workspace's `CLAUDE.md`.
 /// A cancel rolls the added worktree back, leaving the workspace as it was; a failure leaves it for inspection.
 pub fn add_repo(
@@ -303,14 +310,29 @@ pub fn add_repo(
     on_event: &EventSink,
     warnings: &mut Vec<String>,
 ) -> Result<Outcome, String> {
-    // Guard against a name that would escape the workspace (e.g. a postfix of "../x").
-    let mut components = Path::new(worktree_dir_name).components();
-    let single_normal =
-        matches!(components.next(), Some(Component::Normal(_))) && components.next().is_none();
-    if worktree_dir_name.is_empty() || !single_normal {
-        return Err(format!("invalid worktree name: {worktree_dir_name}"));
-    }
+    add_repo_with_kind(
+        handle,
+        workspace_path,
+        source_repo_path,
+        worktree_dir_name,
+        AddRepoTargetKind::Workspace,
+        on_event,
+        warnings,
+    )
+}
 
+/// The shared add-repo operation for workspaces and Agent Spaces. Agent Spaces
+/// get their instructions from the system prompt, so adding a repo writes no CLAUDE.md.
+pub fn add_repo_with_kind(
+    handle: &CreationHandle,
+    workspace_path: &str,
+    source_repo_path: &str,
+    worktree_dir_name: &str,
+    kind: AddRepoTargetKind,
+    on_event: &EventSink,
+    warnings: &mut Vec<String>,
+) -> Result<Outcome, String> {
+    validate_worktree_name(worktree_dir_name)?;
     let ws_path = Path::new(workspace_path);
     let target = ws_path.join(worktree_dir_name);
     if target.exists() {
@@ -325,7 +347,7 @@ pub fn add_repo(
         ws_path,
         &target,
         source_repo_path,
-        worktree_dir_name,
+        kind,
         on_event,
         warnings,
     ) {
@@ -342,15 +364,32 @@ pub fn add_repo(
     }
 }
 
+/// A worktree directory name must be one nonempty path component.
+pub fn validate_worktree_name(worktree_dir_name: &str) -> Result<(), String> {
+    // Guard against a name that would escape the workspace (e.g. a postfix of "../x").
+    let mut components = Path::new(worktree_dir_name).components();
+    let single_normal =
+        matches!(components.next(), Some(Component::Normal(_))) && components.next().is_none();
+    if worktree_dir_name.is_empty() || !single_normal {
+        return Err(format!("invalid worktree name: {worktree_dir_name}"));
+    }
+
+    Ok(())
+}
+
 fn add_worktree(
     handle: &CreationHandle,
     ws_path: &Path,
     target: &Path,
     source_repo_path: &str,
-    worktree_dir_name: &str,
+    kind: AddRepoTargetKind,
     on_event: &EventSink,
     warnings: &mut Vec<String>,
 ) -> Result<Outcome, String> {
+    let worktree_dir_name = target
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or("invalid worktree name")?;
     let source = config::expand_tilde(source_repo_path)?;
     let default_branch = determine_default_branch(Path::new(&source));
 
@@ -389,7 +428,9 @@ fn add_worktree(
         return Ok(Outcome::Cancelled);
     }
 
-    ensure_workspace_claude_md(ws_path)?;
+    if kind == AddRepoTargetKind::Workspace {
+        ensure_workspace_claude_md(ws_path)?;
+    }
 
     let name = ws_path
         .file_name()
