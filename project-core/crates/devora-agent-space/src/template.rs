@@ -1,6 +1,16 @@
 use std::collections::BTreeMap;
 
-pub const DEFAULT: &str = "You are {{agent.name}}.\nYour role is {{agent.role}}.\nWork in {{space.path}} and keep persistent notes in {{memory.path}}.\n";
+/// The built-in template, used when no `agent.template-file` is configured.
+pub const DEFAULT: &str = include_str!("default-template.md");
+
+/// Placeholders of the built-in template that may stay empty; they default to
+/// an empty value, so an unset optional section doesn't block creation.
+pub const OPTIONAL: [&str; 4] = [
+    "role.details",
+    "user.details",
+    "extra.details",
+    "custom.sections",
+];
 
 /// Literal, single-pass {{key}} replacement. Dotted/underscored identifier keys
 /// are supported. Missing keys, stray delimiters and malformed keys are errors.
@@ -18,6 +28,27 @@ pub fn render(template: &str, inputs: &BTreeMap<String, String>) -> Result<Strin
         Ok(())
     })?;
     Ok(output)
+}
+
+/// Collapses the blank lines that empty optional values leave into one, and
+/// ends the text with a single newline.
+pub fn tidy(rendered: &str) -> String {
+    let mut output = String::new();
+    let mut blank = false;
+    for line in rendered.trim().lines() {
+        let line = line.trim_end();
+        if line.is_empty() {
+            if !blank {
+                output.push('\n');
+            }
+            blank = true;
+        } else {
+            output.push_str(line);
+            output.push('\n');
+            blank = false;
+        }
+    }
+    output
 }
 
 /// The template's placeholders, in order of first appearance, under the same

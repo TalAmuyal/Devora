@@ -21,7 +21,8 @@ Feature: Agent Hub
     When the user opens the New Agent dialog
     Then the New Agent dialog should show the field "agent.role" from "Default"
     When the user names the new agent "Echo"
-    And the user selects the repo "api" for the new agent
+    Then the New Agent preview should contain "You are Echo and you are working with me as a general-purpose assistant."
+    When the user selects the repo "api" for the new agent
     And the user creates the agent
     Then an agent tab "Echo" should be active
     And the agent "Echo" should be idle
@@ -54,3 +55,12 @@ Feature: Agent Hub
     When Sapphire is quit and relaunched
     Then an agent tab "Echo" should be active
     And the agent "Echo" should be idle
+
+  Scenario: Unchecking "Include coding instructions" replaces Claude Code's system prompt
+    Given the Agent Hub is open
+    When the user opens the New Agent dialog
+    And the user names the new agent "Echo"
+    And the user unchecks including coding instructions
+    And the user creates the agent
+    Then the agent "Echo" should be idle
+    And Claude should have been launched with the instructions as its whole system prompt

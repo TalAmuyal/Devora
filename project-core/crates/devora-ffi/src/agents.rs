@@ -19,6 +19,7 @@ pub struct AgentCreationForm {
     pub role: Option<String>,
     pub repos: Vec<String>,
     pub inputs: HashMap<String, String>,
+    pub keep_coding_instructions: bool,
 }
 
 #[derive(uniffi::Record)]
@@ -44,6 +45,7 @@ impl AgentCreationForm {
             role: self.role,
             repos: self.repos,
             inputs: self.inputs.into_iter().collect(),
+            keep_coding_instructions: self.keep_coding_instructions,
         }
     }
 }
@@ -341,6 +343,21 @@ impl DevoraCore {
         launch_inputs: HashMap<String, String>,
     ) -> Result<Vec<Field>, CoreError> {
         Ok(self.agents.creation_fields(
+            Path::new(&profile_path),
+            &self.config_path,
+            launch_inputs.into_iter().collect(),
+            &form.core(),
+        )?)
+    }
+    /// The instructions `form` would create, rendered as creation renders them;
+    /// an error says why creation would fail (a missing value, a bad template).
+    pub fn agent_creation_preview(
+        &self,
+        profile_path: String,
+        form: AgentCreationForm,
+        launch_inputs: HashMap<String, String>,
+    ) -> Result<String, CoreError> {
+        Ok(self.agents.creation_preview(
             Path::new(&profile_path),
             &self.config_path,
             launch_inputs.into_iter().collect(),

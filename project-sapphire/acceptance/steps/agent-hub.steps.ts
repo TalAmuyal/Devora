@@ -152,3 +152,19 @@ Then('the Agent Hub should list no agents', async function (this: SapphireWorld)
 Then('the agent space {string} should not exist', function (this: SapphireWorld, name: string) {
   assert.ok(!fs.existsSync(agentSpace(this, name)));
 });
+
+When('the user unchecks including coding instructions', async function (this: SapphireWorld) {
+  await this.bridge.newAgent({ action: 'setKeepCodingInstructions', value: false });
+});
+
+Then('the New Agent preview should contain {string}', async function (this: SapphireWorld, text: string) {
+  await waitForDialog(this, `the preview to contain ${text}`, (dialog) => dialog.preview?.text?.includes(text) === true);
+});
+
+Then('Claude should have been launched with the instructions as its whole system prompt', function (this: SapphireWorld) {
+  // The fake CLI reports each launch's arguments (`app.ts` puts its report beside the config).
+  const report = fs.readFileSync(path.join(path.dirname(this.testConfigPath), 'fake-claude.jsonl'), 'utf8');
+  const start = report.split('\n').filter(Boolean).map((line) => JSON.parse(line)).find((entry) => entry.kind === 'start');
+  assert.ok(start.args.includes('--system-prompt'), JSON.stringify(start.args));
+  assert.ok(!start.args.includes('--append-system-prompt'));
+});

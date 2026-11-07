@@ -42,7 +42,13 @@ final class NewAgentDialogModel {
 	/// The template's fields, as the core last listed them.
 	private(set) var fields: [AgentField] = []
 	/// What the user typed into each editable field, by key; a field not in it shows its listed value.
-	var edits: [String: String] = [:]
+	var edits: [String: String] = [:] {
+		didSet { if edits != oldValue { refreshPreview() } }
+	}
+	/// Whether the instructions keep Claude Code's own coding instructions, appended to them, or replace them.
+	var keepCodingInstructions = true
+	/// The instructions as creation would render them now, or why it would fail.
+	private(set) var preview: AgentPreview?
 	/// The fields whose value was saved to its source, for their button's label.
 	private(set) var saved: Set<String> = []
 	/// The creation, once started; the dialog shows its progress instead of the form.
@@ -54,6 +60,7 @@ final class NewAgentDialogModel {
 	@ObservationIgnored var opened: (String) -> Void = { _ in }
 	@ObservationIgnored private let clearFocus: () -> Void
 	@ObservationIgnored private var fieldsTask: Task<Void, Never>?
+	@ObservationIgnored private var previewTask: Task<Void, Never>?
 
 	init(store: Store, repos: [RepoInfo], clearFocus: @escaping () -> Void) {
 		self.store = store
@@ -73,9 +80,9 @@ final class NewAgentDialogModel {
 
 	func value(of field: AgentField) -> String { edits[field.key] ?? field.value ?? "" }
 
-	/// A name, and a value for every field only the form can fill.
+	/// A name, and a value for every field only the form can fill; a pre-filled field may be empty, as an unset optional section is.
 	var canCreate: Bool {
-		!trimmedName.isEmpty && editableFields.allSatisfy { !value(of: $0).trimmingCharacters(in: .whitespaces).isEmpty }
+		!trimmedName.isEmpty && editableFields.allSatisfy { $0.source != nil || !value(of: $0).trimmingCharacters(in: .whitespaces).isEmpty }
 	}
 
 	/// Where "Save" writes a field: back to the global config when it came from there, otherwise to the profile.
@@ -96,10 +103,21 @@ final class NewAgentDialogModel {
 	/// Lists the fields again for the current name and repos, which the derived ones show; the edits stay.
 	func refreshFields() {
 		fieldsTask?.cancel()
-		let form = AgentCreationForm(name: trimmedName, role: nil, repos: selectedRepoPaths, inputs: [:])
+		let form = AgentCreationForm(name: trimmedName, role: nil, repos: selectedRepoPaths, inputs: [:], keepCodingInstructions: keepCodingInstructions)
 		fieldsTask = Task { [weak self, store] in
 			guard let fields = await store.agentCreationFields(form), !Task.isCancelled else { return }
 			self?.fields = fields
+			self?.refreshPreview()
+		}
+	}
+
+	/// Renders the instructions again for the current form; a later request wins.
+	func refreshPreview() {
+		previewTask?.cancel()
+		let form = currentForm
+		previewTask = Task { [weak self, store] in
+			guard let preview = await store.agentCreationPreview(form), !Task.isCancelled else { return }
+			self?.preview = preview
 		}
 	}
 
@@ -114,8 +132,7 @@ final class NewAgentDialogModel {
 
 	func create() {
 		guard run == nil, canCreate else { return }
-		let inputs = Dictionary(uniqueKeysWithValues: editableFields.map { ($0.key, value(of: $0)) })
-		let form = AgentCreationForm(name: trimmedName, role: nil, repos: selectedRepoPaths, inputs: inputs)
+		let form = currentForm
 		let run = AgentCreationRun()
 		self.run = run
 		focus = .cancel
@@ -183,12 +200,21 @@ final class NewAgentDialogModel {
 
 	private var trimmedName: String { name.trimmingCharacters(in: .whitespaces) }
 
+	/// The form as it stands: the editable fields' values over their listed ones.
+	private var currentForm: AgentCreationForm {
+		let inputs = Dictionary(uniqueKeysWithValues: editableFields.map { ($0.key, value(of: $0)) })
+		return AgentCreationForm(
+			name: trimmedName, role: nil, repos: selectedRepoPaths, inputs: inputs, keepCodingInstructions: keepCodingInstructions)
+	}
+
 	private var selectedRepoPaths: [String] { repos.map(\.path).filter(selected.contains) }
 }
 
 struct NewAgentDialogView: View {
 	@Bindable var model: NewAgentDialogModel
 	@FocusState private var field: NewAgentDialogModel.Focus?
+	/// The form's full height, which its scroll view grows to before it scrolls.
+	@State private var formHeight: CGFloat = 0
 
 	var body: some View {
 		ZStack {
@@ -200,16 +226,31 @@ struct NewAgentDialogView: View {
 				Text("New Agent").font(.title3.weight(.semibold))
 				if let run = model.run {
 					AgentCreationProgress(run: run, cancel: model.cancel)
+						.frame(width: 520)
 				} else {
-					form
+					// The preview overlays the space beside the form, so the form alone sets the height, and the form is what narrows in a small window.
+					VStack(alignment: .leading, spacing: 10) {
+						ScrollView {
+							// The inset keeps the fields' focus rings and hover effects clear of the scroll view's clipping.
+							VStack(alignment: .leading, spacing: 10) { form }
+								.padding(.horizontal, 6)
+								.onGeometryChange(for: CGFloat.self, of: \.size.height) { formHeight = $0 }
+						}
+						.frame(maxHeight: formHeight)
+						.scrollBounceBehavior(.basedOnSize)
+						buttons
+					}
+					.frame(minWidth: 260, maxWidth: 330)
+					.padding(.trailing, 500)
+					.overlay(alignment: .trailing) { preview.frame(width: 480) }
 				}
 			}
 			.padding(20)
-			.frame(width: 560)
 			.background(.windowBackground, in: .rect(cornerRadius: 12))
 			.shadow(radius: 24)
 			.accessibilityElement(children: .contain)
 			.accessibilityIdentifier(NewAgentDialogModel.layerName)
+			.padding(40)
 		}
 		.onChange(of: model.focus, initial: true) { _, focus in field = focus.isTextField ? focus : nil }
 		.onChange(of: field) { _, field in
@@ -223,24 +264,19 @@ struct NewAgentDialogView: View {
 			.textFieldStyle(.roundedBorder)
 			.focused($field, equals: .name)
 			.accessibilityIdentifier("new-agent-name")
-		ScrollView {
-			VStack(alignment: .leading, spacing: 8) {
-				ForEach(model.editableFields, id: \.key) { agentField in
-					fieldRow(agentField)
-				}
-				ForEach(model.derivedFields, id: \.key) { agentField in
-					HStack(alignment: .firstTextBaseline) {
-						label(agentField.key)
-						Text(agentField.value ?? "from the name")
-							.font(.callout.monospaced())
-							.foregroundStyle(.secondary)
-							.lineLimit(2)
-							.textSelection(.enabled)
-					}
-				}
+		ForEach(model.editableFields, id: \.key) { agentField in
+			fieldRow(agentField)
+		}
+		ForEach(model.derivedFields, id: \.key) { agentField in
+			HStack(alignment: .firstTextBaseline) {
+				label(agentField.key)
+				Text(agentField.value ?? "from the name")
+					.font(.callout.monospaced())
+					.foregroundStyle(.secondary)
+					.lineLimit(2)
+					.textSelection(.enabled)
 			}
 		}
-		.frame(maxHeight: 260)
 		label("Initial repositories")
 		if model.repos.isEmpty {
 			Text("No repos in this profile yet.").font(.callout).foregroundStyle(.secondary)
@@ -255,6 +291,12 @@ struct NewAgentDialogView: View {
 				identifierPrefix: "new-agent-repo-")
 				.frame(maxHeight: 140)
 		}
+		Toggle("Include coding instructions", isOn: $model.keepCodingInstructions)
+			.help("On: the instructions are appended to Claude Code's own system prompt, with its coding instructions. Off: they replace it.")
+			.accessibilityIdentifier("new-agent-keep-coding-instructions")
+	}
+
+	private var buttons: some View {
 		HStack(spacing: 10) {
 			Spacer()
 			DialogButton(title: "Cancel", isFocused: model.focus == .cancel, action: model.cancel)
@@ -262,6 +304,29 @@ struct NewAgentDialogView: View {
 				.disabled(!model.canCreate)
 		}
 		.padding(.top, 4)
+	}
+
+	/// The instructions as creation would render them, beside the form.
+	private var preview: some View {
+		VStack(alignment: .leading, spacing: 6) {
+			label("Preview")
+			ScrollView {
+				switch model.preview {
+				case .text(let text):
+					Text(text).font(.callout.monospaced()).textSelection(.enabled)
+						.frame(maxWidth: .infinity, alignment: .leading)
+				case .failure(let error):
+					Text(error).font(.callout).foregroundStyle(.red)
+						.frame(maxWidth: .infinity, alignment: .leading)
+				case nil:
+					ProgressView().controlSize(.small)
+				}
+			}
+			.padding(8)
+			.background(.background.secondary, in: .rect(cornerRadius: 6))
+		}
+		.accessibilityElement(children: .contain)
+		.accessibilityIdentifier("new-agent-preview")
 	}
 
 	private func fieldRow(_ agentField: AgentField) -> some View {
