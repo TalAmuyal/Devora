@@ -23,7 +23,8 @@ pub enum SpaceEvent {
     TurnStarted,
 }
 
-/// Reads the host-owned global hold at turn admission and turn boundaries.
+/// Observes the host-owned global hold at turn admission and turn boundaries.
+/// The host callback may also record eligibility and publish hold status.
 pub type GlobalPauseCheck = Arc<dyn Fn() -> bool + Send + Sync>;
 
 enum Action {
@@ -443,7 +444,7 @@ async fn pump(
                         let _ = reply.send(Ok(Value::Bool(stopping)));
                     }
                     Some(command) if matches!(command.action, Action::Turn(_)) && (globally_paused() || stopping || pause_after_turn.is_some()) => {
-                        let _ = command.reply.send(Err("Globally paused — resume Devora to send, or wait until this agent resumes".into()));
+                        let _ = command.reply.send(Err("This agent is pausing. It starts no new turn until it resumes.".into()));
                     }
                     Some(command) => {
                         turn_running |= matches!(command.action, Action::Turn(_));

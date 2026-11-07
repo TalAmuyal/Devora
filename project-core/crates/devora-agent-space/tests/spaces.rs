@@ -983,10 +983,14 @@ async fn pause_after_turn_waits_for_the_turn_and_wins_over_compaction() {
     })
     .await
     .unwrap();
-    let pausing = tokio::spawn({
-        let handle = handle.clone();
-        async move { handle.pause_after_turn().await }
-    });
+    let pausing = tokio::spawn(handle.pause_after_turn());
+    assert_eq!(
+        handle
+            .send_turn("must stay unsent".into())
+            .await
+            .unwrap_err(),
+        "This agent is pausing. It starts no new turn until it resumes."
+    );
     handle
         .answer_permission(request, devora_agent::session::PermissionAnswer::Allow)
         .await
