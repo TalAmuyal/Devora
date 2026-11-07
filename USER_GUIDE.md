@@ -149,15 +149,16 @@ Highlights:
 
 ### Repository worktrees
 
-Run `debi repo list` inside a workspace or Agent Space to print the profile's available repository names, one per line. This includes registered repositories and those discovered under the profile's `repos/` directory. Each name appears once. An empty list succeeds.
+Run `debi repo list` inside a workspace or Agent Space to see the profile's available repository names, one per line.
+The list includes registered repositories and those discovered under the profile's `repos/` directory, with each name shown once.
 
-Run `debi repo add <repo> [--postfix <postfix>]` to add a detached worktree of the repository's default branch to the current workspace or Agent Space. It uses the same checkout and prepare steps as the Add Repo dialog. The destination is `<repo>` or `<repo>-<postfix>`. Existing destinations are refused, and ambiguous names report the candidate repository paths. Workspaces retain their generated `CLAUDE.md` behavior. Agent Spaces keep their instructions in the system prompt.
+Run `debi repo add <repo> [--postfix <postfix>]` to add a detached worktree of the repository's default branch here, using the same checkout and prepare steps as the Add Repo dialog.
+The destination is `<repo>` or `<repo>-<postfix>`.
+Existing destinations are refused, and ambiguous names report the candidate repository paths.
 
-The session's registered `DEBI_PROFILE_PATH` selects the profile first. A stale session path falls back to the working directory's owning profile. Nested worktree directories resolve to the containing workspace or Agent Space. Adding a repo fails before making changes if the session profile differs from that target's owning profile.
-
-`add` writes progress and warnings to stderr and the final absolute worktree path to stdout. A prepare-command failure keeps the worktree, prints a warning and exits successfully, matching the UI. Ctrl+C stops the operation's subprocesses and waits for the added worktree to be rolled back. Other creation failures leave any partial worktree available for inspection.
-
-Exit codes are 0 for success/help, 2 for invalid arguments or unresolved/ambiguous context, 1 for operational failure, and 130 after a completed cancellation rollback. A rollback that leaves the destination behind reports failure with exit 1.
+Progress and warnings go to stderr, and the final absolute worktree path goes to stdout.
+A prepare-command failure keeps the worktree and prints a warning, matching the UI.
+Ctrl+C stops the operation's subprocesses and waits for the added worktree to be rolled back.
 
 ### Shell Completions
 
