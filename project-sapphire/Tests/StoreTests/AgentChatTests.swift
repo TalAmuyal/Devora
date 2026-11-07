@@ -33,7 +33,7 @@ struct AgentChatTests {
 		let tab = try #require(core.snapshot().window.tabs.first)
 		let model = try AgentChat(store: store, core: core, tab: tab, name: "Delta")
 		let chat = Chat(
-			tab: tab.id, generation: 7, phase: .running, turnRunning: false, pauseRequested: false,
+			tab: tab.id, generation: 7, phase: .running, turnRunning: false, pauseRequested: false, globallyHeld: false,
 			sessionId: "cli", items: [], error: nil, questions: [], usageJson: nil, context: nil)
 		model.apply(.started(chat: chat))
 		let item = TranscriptItem(

@@ -66,7 +66,10 @@ public final class AgentChat {
 		if case .bool(let value)? = settings.resolved["agent.enter-sends"] { enterSends = value }
 	}
 
+	public var globallyPaused: Bool { store?.app.globalPaused == true }
+
 	public var canSend: Bool {
+		!globallyPaused &&
 		chat?.phase == .running && chat?.pauseRequested == false && chat?.turnRunning == false && !sending
 			&& !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
 	}
@@ -82,6 +85,7 @@ public final class AgentChat {
 			guard var value = chat, value.generation == generation else { return false }
 			switch update {
 			case .pauseRequested(let requested): value.pauseRequested = requested
+			case .globalHold(let held): value.globallyHeld = held
 			case .generation(let next):
 				value.generation = next
 				value.questions = []

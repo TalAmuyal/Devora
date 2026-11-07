@@ -2,11 +2,12 @@ import CoreBindings
 
 extension AppState {
 	/// The state before the core's first snapshot arrives.
-	public static let empty = AppState(window: AppWindow(tabs: [], activeTab: nil), activeProfile: nil, agentViews: [])
+	public static let empty = AppState(globalPaused: false, window: AppWindow(tabs: [], activeTab: nil), activeProfile: nil, agentViews: [])
 
 	/// Applies one of the core's events, the same change its reducer made.
 	public mutating func apply(_ event: StateEvent) {
 		switch event {
+		case .globalPauseChanged(let paused): globalPaused = paused
 		case .agentDraftCleared(let profile, let name, let text):
 			if let index = agentViews.firstIndex(where: { $0.profilePath == profile && $0.name == name && $0.draft == text }) { agentViews[index].draft = "" }
 		case .agentViewChanged(let profile, let name, let view):

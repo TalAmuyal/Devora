@@ -663,3 +663,241 @@ fn deletion_retry_finishes_presentation_cleanup_after_the_directory_is_gone() {
     .unwrap();
     assert!(f.core.snapshot().unwrap().agent_views.is_empty());
 }
+
+#[test]
+fn global_pause_drains_active_and_idle_agents_and_preserves_individual_pause() {
+    let f = Fixture::new(false);
+    let config = f.profile.path.join("config.json");
+    let mut profile: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&config).unwrap()).unwrap();
+    profile["agent"] = serde_json::json!({"compact-threshold": 1});
+    fs::write(config, profile.to_string()).unwrap();
+    let events = f.core.subscribe_agent_chats().unwrap();
+    let mut tabs = vec![];
+    for name in ["Active", "Idle", "Individual"] {
+        f.create(name);
+        let tab = f.open(name);
+        let chat = f.wait(&events, |c| c.tab == tab && c.phase == ChatPhase::Running);
+        tabs.push((tab, chat.generation));
+    }
+    let (active, generation) = tabs[0];
+    f.core.pause_agent_after_turn(tabs[2].0, tabs[2].1).unwrap();
+    f.wait(&events, |c| {
+        c.tab == tabs[2].0 && c.phase == ChatPhase::Paused
+    });
+    block_on(
+        f.core
+            .send_agent_turn(active, generation, "permission".into()),
+    )
+    .unwrap();
+    f.wait(&events, |c| c.tab == active && !c.questions.is_empty());
+    let owning_profile = f
+        .profile
+        .path
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    f.core
+        .dispatch(Command::SetAgentDraft {
+            profile_path: owning_profile,
+            name: "Active".into(),
+            text: "kept draft".into(),
+        })
+        .unwrap();
+    f.core
+        .dispatch(Command::SetGlobalPaused { paused: true })
+        .unwrap();
+    f.wait(&events, |c| {
+        c.tab == active && c.globally_held && c.pause_requested
+    });
+    f.wait(&events, |c| {
+        c.tab == tabs[1].0 && c.phase == ChatPhase::Paused && c.globally_held
+    });
+    assert_eq!(f.open("Individual"), tabs[2].0);
+    let refused = block_on(
+        f.core
+            .send_agent_turn(active, generation, "unexpected".into()),
+    )
+    .unwrap_err();
+    assert!(refused.to_string().contains("Globally paused"));
+    assert_eq!(
+        f.core.snapshot().unwrap().agent_views[0].draft,
+        "kept draft"
+    );
+    block_on(f.core.answer_agent_permission(
+        active,
+        generation,
+        "question".into(),
+        PermissionAnswer::Allow,
+    ))
+    .unwrap();
+    let paused = f.wait(&events, |c| c.tab == active && c.phase == ChatPhase::Paused);
+    assert!(has_message(&paused, "result"));
+    assert!(!paused.items.iter().any(|item| matches!(
+        item.content,
+        TranscriptContent::System {
+            kind: SystemKind::Compaction,
+            ..
+        }
+    )));
+    f.core
+        .dispatch(Command::SetGlobalPaused { paused: false })
+        .unwrap();
+    f.wait(&events, |c| {
+        c.tab == active && c.phase == ChatPhase::Running && c.generation > generation
+    });
+    f.wait(&events, |c| {
+        c.tab == tabs[1].0 && c.phase == ChatPhase::Running && c.generation > tabs[1].1
+    });
+    assert_eq!(
+        f.core
+            .agent_chat_snapshot()
+            .unwrap()
+            .into_iter()
+            .find(|c| c.tab == tabs[2].0)
+            .unwrap()
+            .phase,
+        ChatPhase::Paused
+    );
+    let report = fs::read_to_string(f.profile.root.path().join("report.jsonl")).unwrap();
+    assert_eq!(
+        report
+            .lines()
+            .filter(
+                |line| serde_json::from_str::<serde_json::Value>(line).unwrap()["kind"] == "user"
+            )
+            .count(),
+        1
+    );
+    block_on(f.core.shutdown_agents()).unwrap();
+}
+
+#[test]
+fn global_pause_survives_relaunch_and_restore_keeps_history_without_launching() {
+    let mut f = Fixture::new(true);
+    let events = f.core.subscribe_agent_chats().unwrap();
+    f.create("RestoreHold");
+    let tab = f.open("RestoreHold");
+    let chat = f.wait(&events, |c| c.tab == tab && c.phase == ChatPhase::Running);
+    block_on(f.core.send_agent_turn(tab, chat.generation, "hello".into())).unwrap();
+    f.wait(&events, |c| c.tab == tab && has_message(c, "result"));
+    f.core.pause_agent_after_turn(tab, chat.generation).unwrap();
+    f.wait(&events, |c| c.tab == tab && c.phase == ChatPhase::Paused);
+    f.core
+        .dispatch(Command::SetGlobalPaused { paused: true })
+        .unwrap();
+    block_on(f.core.shutdown_agents()).unwrap();
+    events.close().unwrap();
+    let report = fs::read(f.profile.root.path().join("report.jsonl")).unwrap();
+    let log = crate::log::test_log();
+    let old = std::mem::replace(
+        &mut f.core,
+        DevoraCore::new(Some(f.config.clone()), None, log.clone()).unwrap(),
+    );
+    drop(old);
+    f.core = DevoraCore::new(
+        Some(f.config.clone()),
+        Some(
+            f.profile
+                .root
+                .path()
+                .join("state.db")
+                .to_string_lossy()
+                .into_owned(),
+        ),
+        log,
+    )
+    .unwrap();
+    assert!(f.core.snapshot().unwrap().global_paused);
+    block_on(f.core.restore_agent_spaces(f.launch())).unwrap();
+    let events = f.core.subscribe_agent_chats().unwrap();
+    let held = f.wait(&events, |c| {
+        c.tab == tab && c.phase == ChatPhase::Paused && c.globally_held
+    });
+    assert!(has_message(&held, "assistant"));
+    assert_eq!(
+        fs::read(f.profile.root.path().join("report.jsonl")).unwrap(),
+        report
+    );
+    f.create("OpenedHeld");
+    let opened = f.open("OpenedHeld");
+    let held = f.wait(&events, |c| {
+        c.tab == opened && c.phase == ChatPhase::Paused && c.globally_held
+    });
+    f.core
+        .pause_agent_after_turn(opened, held.generation)
+        .unwrap();
+    f.wait(&events, |c| {
+        c.tab == opened && !c.globally_held && c.phase == ChatPhase::Paused
+    });
+    f.core
+        .dispatch(Command::SetGlobalPaused { paused: false })
+        .unwrap();
+    f.wait(&events, |c| c.tab == tab && c.phase == ChatPhase::Running);
+    assert_eq!(
+        f.core
+            .agent_chat_snapshot()
+            .unwrap()
+            .into_iter()
+            .find(|c| c.tab == opened)
+            .unwrap()
+            .phase,
+        ChatPhase::Paused
+    );
+    block_on(f.core.shutdown_agents()).unwrap();
+}
+
+#[test]
+fn global_release_cancels_the_pending_hold_and_close_keeps_ownership_serialized() {
+    let f = Fixture::new(false);
+    f.create("HoldRace");
+    let tab = f.open("HoldRace");
+    let events = f.core.subscribe_agent_chats().unwrap();
+    let chat = f.wait(&events, |c| c.tab == tab && c.phase == ChatPhase::Running);
+    block_on(
+        f.core
+            .send_agent_turn(tab, chat.generation, "permission".into()),
+    )
+    .unwrap();
+    f.wait(&events, |c| c.tab == tab && !c.questions.is_empty());
+    f.core
+        .dispatch(Command::SetGlobalPaused { paused: true })
+        .unwrap();
+    f.wait(&events, |c| {
+        c.tab == tab && c.globally_held && c.pause_requested
+    });
+    f.core
+        .dispatch(Command::SetGlobalPaused { paused: false })
+        .unwrap();
+    f.wait(&events, |c| c.tab == tab && !c.pause_requested);
+    block_on(f.core.answer_agent_permission(
+        tab,
+        chat.generation,
+        "question".into(),
+        PermissionAnswer::Allow,
+    ))
+    .unwrap();
+    let resumed = f.wait(&events, |c| {
+        c.tab == tab && !c.turn_running && has_message(c, "result")
+    });
+    assert_eq!(resumed.generation, chat.generation);
+    assert_eq!(resumed.phase, ChatPhase::Running);
+    f.core
+        .dispatch(Command::SetGlobalPaused { paused: true })
+        .unwrap();
+    f.wait(&events, |c| {
+        c.tab == tab && c.phase == ChatPhase::Paused && c.globally_held
+    });
+    f.core
+        .dispatch(Command::SetGlobalPaused { paused: false })
+        .unwrap();
+    f.core.dispatch(Command::CloseSession { tab }).unwrap();
+    let reopened = f.open("HoldRace");
+    assert_ne!(reopened, tab);
+    f.wait(&events, |c| {
+        c.tab == reopened && c.phase == ChatPhase::Running
+    });
+    assert_eq!(f.core.snapshot().unwrap().window.tabs.len(), 1);
+    block_on(f.core.shutdown_agents()).unwrap();
+}

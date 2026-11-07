@@ -11,7 +11,7 @@ mod running;
 pub mod template;
 pub use compaction::{Context, DEFAULT_THRESHOLD as DEFAULT_COMPACT_THRESHOLD};
 pub use inputs::{fields, preview, Field, Source};
-pub use running::{RunningSpace, SpaceEvent, SpaceHandle};
+pub use running::{GlobalPauseCheck, RunningSpace, SpaceEvent, SpaceHandle};
 
 use db::{storage, Db};
 use devora_agent::session::{Instructions, Plugin, Resume, SessionOptions};
@@ -449,10 +449,20 @@ impl Space {
         context: &LaunchContext,
         log: Arc<Log>,
     ) -> Result<RunningSpace, String> {
+        self.start_with_global_pause(context, log, Arc::new(|| false))
+            .await
+    }
+
+    pub async fn start_with_global_pause(
+        self,
+        context: &LaunchContext,
+        log: Arc<Log>,
+        globally_paused: GlobalPauseCheck,
+    ) -> Result<RunningSpace, String> {
         let options = self.session_options(context)?;
         let threshold = devora_config::agent::read(&context.global_config, &self.profile)?
             .compact_threshold
             .unwrap_or(compaction::DEFAULT_THRESHOLD);
-        running::start(self, options, threshold, log).await
+        running::start(self, options, threshold, log, globally_paused).await
     }
 }

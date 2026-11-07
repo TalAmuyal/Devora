@@ -11,6 +11,8 @@ pub type PaneId = u64;
 /// The whole app state.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AppState {
+    #[serde(default)]
+    pub global_paused: bool,
     pub window: Window,
     /// The profile the Workspace Hub shows and creates workspaces in, as the profile's root path.
     pub active_profile: Option<String>,

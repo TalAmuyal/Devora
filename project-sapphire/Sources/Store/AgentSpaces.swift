@@ -12,6 +12,7 @@ public enum AgentStatus: Equatable, Sendable {
 	case waiting
 	case idle
 	case pausing
+	case paused
 	case failed
 
 	/// What a chat's lifecycle says about its agent; a pending question outranks a running turn.
@@ -20,7 +21,7 @@ public enum AgentStatus: Equatable, Sendable {
 		case .opening: self = .working
 		case .running: self = questions > 0 ? .waiting : turnRunning ? .working : .idle
 		case .pausing: self = .pausing
-		case .paused: self = .idle
+		case .paused: self = .paused
 		case .failed: self = .failed
 		}
 	}
@@ -242,7 +243,7 @@ extension Store {
 								chat.pause = false
 								chat.turn = false
 								chat.questions = []
-							case .restore, .transcript, .usage, .context: continue
+							case .restore, .transcript, .usage, .context, .globalHold: continue
 							}
 							chats[tab] = chat
 						}

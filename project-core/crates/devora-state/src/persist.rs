@@ -46,6 +46,7 @@ const MIGRATIONS: &[&str] = &[
      UPDATE previews SET position = (SELECT COUNT(*) FROM previews AS earlier WHERE earlier.tab_id = previews.tab_id AND earlier.id < previews.id);
      CREATE UNIQUE INDEX preview_order ON previews(tab_id, position);",
     "CREATE TABLE agent_views (profile_path TEXT NOT NULL, name TEXT NOT NULL, draft TEXT NOT NULL, anchor_sequence INTEGER, anchor_offset INTEGER, PRIMARY KEY(profile_path, name));",
+    "ALTER TABLE meta ADD COLUMN global_paused INTEGER NOT NULL DEFAULT 0;",
 ];
 
 pub(crate) struct Db {
@@ -245,12 +246,16 @@ fn migrate(conn: &mut Connection) -> Result<(), Error> {
 }
 
 fn load(conn: &Connection) -> Result<State, Error> {
-    let (next_id, active_tab, active_profile): (u64, Option<u64>, Option<String>) = conn
-        .query_row(
-            "SELECT next_id, active_tab, active_profile FROM meta WHERE id = 0",
-            [],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
-        )?;
+    let (next_id, active_tab, active_profile, global_paused): (
+        u64,
+        Option<u64>,
+        Option<String>,
+        bool,
+    ) = conn.query_row(
+        "SELECT next_id, active_tab, active_profile, global_paused FROM meta WHERE id = 0",
+        [],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+    )?;
 
     let mut panes = HashMap::new();
     let mut statement = conn.prepare("SELECT id, tab_id, kind FROM panes")?;
@@ -358,6 +363,7 @@ fn load(conn: &Connection) -> Result<State, Error> {
 
     Ok(State {
         app: AppState {
+            global_paused,
             window: Window { tabs, active_tab },
             active_profile,
             agent_views,
@@ -410,11 +416,12 @@ fn write(conn: &mut Connection, state: &State) -> rusqlite::Result<()> {
         }
     }
     tx.execute(
-        "UPDATE meta SET next_id = ?1, active_tab = ?2, active_profile = ?3 WHERE id = 0",
+        "UPDATE meta SET next_id = ?1, active_tab = ?2, active_profile = ?3, global_paused = ?4 WHERE id = 0",
         params![
             state.next_id,
             state.app.window.active_tab,
-            state.app.active_profile
+            state.app.active_profile,
+            state.app.global_paused
         ],
     )?;
     tx.commit()

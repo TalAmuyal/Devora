@@ -1,6 +1,8 @@
 /** A client for the app's test bridge (`Sources/AppShell/TestBridge.swift`). */
 
 export interface AgentChatState {
+  globallyPaused: boolean;
+  globallyHeld: boolean;
   context: { used: string; window: string; threshold: number } | null;
   dom: {
     text: string;
@@ -271,6 +273,7 @@ export type NewAgentAction =
   | { action: 'create' | 'cancel' };
 
 export interface AppState {
+  globalPaused: boolean;
   agentHub: AgentHubState | null;
   newAgent: NewAgentState | null;
 	palette: { items: { id: string; title: string }[]; selected: string | null; filter: string; focused: boolean } | null;
@@ -317,6 +320,7 @@ export type Command =
   | { command: 'closeTab'; id: number }
   | { command: 'resizePreview'; tab: number; pane: number; width: number }
   | { command: 'startFresh' }
+  | { command: 'setGlobalPaused'; paused: boolean }
   | { command: 'dismissError'; id: number };
 
 export class BridgeError extends Error {

@@ -84,3 +84,19 @@ struct CommandPaletteTests {
 		#expect(submitted == "Next task")
 	}
 }
+
+@MainActor
+struct GlobalPausePaletteTests {
+	@Test func paletteReflectsTheCurrentHoldAndKeepsTheSharedAction() {
+		let model = CommandPaletteModel(commands: PaletteCommand.commands(profiles: [], active: nil))
+		model.filter = "Pause Devora"
+		#expect(model.selected?.action == .toggleGlobalPause)
+		#expect(model.selected?.shortcut == nil)
+		model.filter = "Devora"
+		model.updateProfiles([], active: nil, globalPaused: true)
+		#expect(model.items.contains { $0.title == "Resume Devora" && $0.action == .toggleGlobalPause })
+		#expect(AgentStatusEmoji.emoji(.paused) == "⏸️")
+		#expect(AgentStatusEmoji.describe(.paused) == "Paused")
+		#expect(AgentStatusEmoji.describe(.pausing) == "Pausing…")
+	}
+}

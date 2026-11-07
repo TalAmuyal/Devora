@@ -153,6 +153,8 @@ final class TestBridge {
 				observation["phase"] = panel.chat.chat.map { String(describing: $0.phase) } ?? "opening"
 				observation["context"] = panel.chat.chat?.context.map { ["used": String($0.usedTokens), "window": String($0.windowTokens), "threshold": $0.thresholdPercent] as [String: Any] } ?? NSNull()
 				observation["enterSends"] = panel.chat.enterSends
+				observation["globallyPaused"] = panel.chat.globallyPaused
+				observation["globallyHeld"] = panel.chat.chat?.globallyHeld ?? false
 				observation["running"] = panel.chat.chat?.turnRunning ?? false
 				observation["anchor"] = panel.chat.anchor.map { String($0.sequence) as Any } ?? NSNull()
 				observation["questions"] = panel.chat.chat?.questions.count ?? 0
@@ -260,6 +262,9 @@ final class TestBridge {
 		let command: Command
 		switch body["command"] as? String {
 		case "load": command = .load
+		case "setGlobalPaused":
+			guard let paused = body["paused"] as? Bool else { throw BridgeError(status: 400, "missing paused boolean") }
+			command = .setGlobalPaused(paused)
 		case "openShell": command = .openShell
 		case "selectProfile":
 			guard let path = body["path"] as? String else { throw BridgeError(status: 400, "missing path") }
@@ -973,6 +978,7 @@ final class TestBridge {
 			"windowLayers": surfaces.windowStack.layers.map(\.spec.name),
 			"editingText": surfaces.router.isEditingText,
 			"version": store.version,
+			"globalPaused": store.app.globalPaused,
 			"profiles": store.profiles.map { ["name": $0.name, "path": $0.path] },
 			"selectedProfile": store.selectedProfilePath ?? NSNull(),
 			"workspaces": store.workspaces.map { ["id": $0.id, "title": $0.title, "path": $0.path, "active": $0.active] },

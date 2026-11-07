@@ -51,6 +51,27 @@ public struct RootView: View {
 		.overlay(alignment: .top) { ErrorBannerStack(store: store) }
 		.background(FrameDriver(store: store))
 		.navigationTitle(store.version.isEmpty ? "Devora Sapphire" : "Devora Sapphire \(store.version)")
+		.toolbar {
+			if store.startupProblem == nil {
+				ToolbarItem {
+					HStack {
+						if store.app.globalPaused {
+							Text("Paused").accessibilityIdentifier("global-pause-indicator")
+						}
+						Button {
+							store.dispatch(.setGlobalPaused(!store.app.globalPaused))
+						} label: {
+							Label(store.app.globalPaused ? "Resume Devora" : "Pause Devora", systemImage: store.app.globalPaused ? "play.fill" : "pause.fill")
+						}
+						.accessibilityIdentifier("global-pause-toggle")
+						.help(store.app.globalPaused ? "Resume Devora" : "Pause Devora after current work finishes")
+					}
+				}
+			}
+		}
+		.onChange(of: store.app.globalPaused) { _, _ in
+			surfaces.palette?.updateProfiles(store.profiles, active: store.selectedProfilePath, globalPaused: store.app.globalPaused)
+		}
 		.frame(minWidth: 900, minHeight: 560)
 		.task {
 			if store.startupProblem == nil {

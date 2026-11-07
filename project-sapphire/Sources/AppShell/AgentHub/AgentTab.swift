@@ -22,7 +22,8 @@ struct AgentStatusEmoji: View {
 		case .working: "Working"
 		case .waiting: "Waiting for you"
 		case .idle: "Idle"
-		case .pausing: "Pausing"
+		case .pausing: "Pausing…"
+		case .paused: "Paused"
 		case .failed: "Failed"
 		}
 	}
@@ -34,7 +35,7 @@ struct AgentStatusEmoji: View {
 		case .working: "⚙️"
 		case .waiting: "❓"
 		case .idle: "💤"
-		case .pausing: "⏸️"
+		case .pausing, .paused: "⏸️"
 		case .failed: "⚠️"
 		}
 	}

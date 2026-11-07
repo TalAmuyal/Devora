@@ -104,6 +104,19 @@ The facade queues `SpaceHandle::pause_after_turn` before returning, and the spac
 Retry and Resume reopen the existing tab against its owning profile.
 
 
+## Global Pause
+
+The title-bar toolbar and command palette dispatch `Command.setGlobalPaused` through Store.
+`AppState.globalPaused` is the core's durable, per-install hold, folded from the ordinary state subscription.
+The window shows one Paused hint while held.
+An agent tab shows Pausing… until its current turn ends and Paused afterward, using the paused emoji and matching accessibility description.
+`AgentChat.globallyPaused` disables sending and exposes the resume hint while drafts keep their normal persistence.
+The core also refuses sends during the hold.
+Permission responses and Stop remain available for a draining turn.
+The chat's Keep Paused action converts a global hold into an individual pause for that run.
+The core-owned chat `globallyHeld` projection selects this action.
+The initial restored snapshot carries the global hold before agent restore launches work.
+
 ## Profiles and the first run
 
 Ember's profile form and first-run welcome (`Sources/AppShell/Profiles/`).

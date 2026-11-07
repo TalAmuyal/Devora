@@ -9,6 +9,9 @@ use std::fmt;
 /// The same commands back keybindings and, later, the `:` command line (ADR-008).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Command {
+    SetGlobalPaused {
+        paused: bool,
+    },
     ClearAgentDraft {
         profile_path: String,
         name: String,
@@ -95,6 +98,9 @@ pub enum Command {
 /// What a command changed, for the UIs to fold into what they render.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Event {
+    GlobalPauseChanged {
+        paused: bool,
+    },
     AgentDraftCleared {
         profile_path: String,
         name: String,
@@ -230,6 +236,14 @@ pub(crate) fn apply(
 ) -> Result<Vec<Event>, StateError> {
     let window = &mut app.window;
     let events = match command {
+        Command::SetGlobalPaused { paused } => {
+            if app.global_paused == paused {
+                vec![]
+            } else {
+                app.global_paused = paused;
+                vec![Event::GlobalPauseChanged { paused }]
+            }
+        }
         Command::ClearAgentDraft {
             profile_path,
             name,

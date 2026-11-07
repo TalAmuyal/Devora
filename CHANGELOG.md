@@ -20,6 +20,8 @@ Types of changes:
 
 ### Added
 
+- Devora Sapphire has Global Pause in the title bar and command palette, holding agents after their current turn, preserving drafts and the hold across relaunch, with a shared core subscription for background integrations
+
 - Debi has `repo list` and `repo add <repo> [--postfix <postfix>]` for profile-aware worktree management in workspaces and Agent Spaces, with streamed progress and Ctrl+C rollback
 
 - Devora Sapphire's New Agent dialog shows a live preview of the agent's instructions beside the form, and an "Include coding instructions" switch (on by default) to keep or replace Claude Code's own system prompt; the built-in agent template now covers the space's path, memory and compaction, and `debi pr submit` / `debi pr close`
