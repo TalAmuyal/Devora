@@ -427,8 +427,13 @@ name = "debi"
 version = "0.1.0"
 dependencies = [
  "devora-agent",
+ "devora-agent-space",
+ "devora-config",
+ "devora-workspace",
+ "libc",
  "serde_json",
  "tempfile",
+ "tokio",
 ]
 
 [[package]]

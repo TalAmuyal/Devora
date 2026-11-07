@@ -1,6 +1,6 @@
 //! `debi`, Devora's CLI.
 //!
-//! Commands ported to Rust run here: today `ccc`, also reachable as a `ccc` symlink to this binary.
+//! Commands ported to Rust run here: `repo` and `ccc`, also reachable as a `ccc` symlink to this binary.
 //! Every other command is handed to the Go `debi-go` by `exec`, so its arguments, stdio, exit code and signals pass through untouched.
 //! Command groups move here one at a time, and `debi-go` is retired once none is left (ADR-007, TalAmuyal/Devora#210).
 
@@ -10,6 +10,8 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, ExitStatus};
 
 use devora_agent::{Ccc, CLAUDE};
+
+mod repo;
 
 /// The Go CLI that runs every command not yet ported.
 const DEBI_GO: &str = "debi-go";
@@ -30,6 +32,7 @@ fn main() -> ExitCode {
     }
     match args.split_first() {
         Some((command, rest)) if command == "ccc" => ccc(rest),
+        Some((command, rest)) if command == "repo" => ExitCode::from(repo::run(rest)),
         _ => delegate(&args),
     }
 }

@@ -140,7 +140,7 @@ export interface SettingsState {
     profilePath: string | null; loaded: boolean; fields?: SettingState[];
     claude?: { loaded: boolean; effort: string; effortLevels: string[]; defaultModelOn: boolean; fields: { key: string; segment: string; hint: string; input: string | null; showsSave: boolean; suggestions: string[] }[] };
     asana?: { isSet: boolean | null; canSave: boolean; hasDraft: boolean };
-    agent?: { loaded: boolean; inputsCleared: boolean; canPreview: boolean; previewText: string | null; previewError: string | null; inputs: { key: string; inputKey: string; value: string; stored: boolean; hint: string }[] };
+    agent?: { loaded: boolean; inputsCleared: boolean; savingInputs: string[]; canPreview: boolean; previewText: string | null; previewError: string | null; inputs: { key: string; inputKey: string; value: string; stored: boolean; hint: string }[] };
   } | null;
 }
 

@@ -147,6 +147,19 @@ Highlights:
 - **Health check**: `debi health` verifies that all required dependencies are installed
 - **Read config**: `debi get-conf [--profile <name>] <key>` reads a resolved config value and prints it to stdout, intended for use in shell scripts
 
+### Repository worktrees
+
+Run `debi repo list` inside a workspace or Agent Space to see the profile's available repository names, one per line.
+The list includes registered repositories and those discovered under the profile's `repos/` directory, with each name shown once.
+
+Run `debi repo add <repo> [--postfix <postfix>]` to add a detached worktree of the repository's default branch here, using the same checkout and prepare steps as the Add Repo dialog.
+The destination is `<repo>` or `<repo>-<postfix>`.
+Existing destinations are refused, and ambiguous names report the candidate repository paths.
+
+Progress and warnings go to stderr, and the final absolute worktree path goes to stdout.
+A prepare-command failure keeps the worktree and prints a warning, matching the UI.
+Ctrl+C stops the operation's subprocesses and waits for the added worktree to be rolled back.
+
 ### Shell Completions
 
 `debi` supports tab-completion for bash, zsh, and fish.

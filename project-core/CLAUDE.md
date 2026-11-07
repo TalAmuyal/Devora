@@ -5,7 +5,8 @@ It is being extracted from Ember's `src-tauri/` area by area (TalAmuyal/Devora#2
 
 ## Layout
 
-- `crates/debi`: the Rust `debi` CLI. It runs `ccc` (also as a `ccc` symlink) and hands every other command to the Go `debi-go` until each command group is ported (ADR-007).
+- `crates/debi`: the Rust `debi` CLI.
+  It runs `repo` and `ccc` (also as a `ccc` symlink) and hands every other command to the Go `debi-go` until each command group is ported (ADR-007).
 - `crates/devora-agent`: Claude Code launch specs, the stream-json/control protocol and the UI-agnostic persistent session process (ADR-009, ADR-012). SessionOptions owns the settings/transport environment contract. Recorded contract fixtures and re-recording instructions live in `crates/devora-agent/tests/fixtures/README.md`. `devora_agent::version` owns the public minimum-version check for runtime and future Rust health consumers.
 - `crates/devora-agent-space`: Agent Space directories, their versioned per-space SQLite database and immutable creation-time instructions. Space owns the OS lock, and RunningSpace persists lifecycle state before forwarding session events. Worktrees use the shared creation/deletion stages in devora-workspace.
 - `crates/devora-app`: the app process around the core: its per-app log file, error reporting (with a listener the UI surfaces errors through) and panic hook, and what its bundle ships (version, install suffix, user guide).
@@ -33,6 +34,24 @@ It is being extracted from Ember's `src-tauri/` area by area (TalAmuyal/Devora#2
 - `devora-platform::credentials::TokenStore` separates token operations from the system keychain; `DEVORA_TEST_MODE=1` selects process-shared in-memory credentials for either app's acceptance harness, while production retains the Debi-compatible keychain service and encoding.
 - Preview rows retain the terminal identity and ordered preview IDs, paths, revisions and preferred widths. OpenPreview replaces new paths, StackPreview appends them, and either refreshes an already-open path in place without removing siblings. ResizePreview validates the bounds exported to Sapphire; window-size constraints are a UI projection, not persisted writes.
 - Tests live with the code they test; run them with `mise run test` (and `mise run lint`).
+
+## Debi repo commands
+
+Rust `debi repo list` prints distinct available repo names in sorted order.
+`repo add <repo> [--postfix <postfix>]` uses the shared creation operation with an explicit workspace/Agent Space target kind.
+Existing workspace callers retain the `add_repo` entry point.
+Agent Space additions omit generated CLAUDE.md instructions.
+Worktree-name validation belongs to the creation module and is shared by the CLI and operation.
+
+`debi/src/repo.rs` resolves registered profiles, preferring valid `DEBI_PROFILE_PATH` over the canonical containing initialized workspace or valid Agent Space.
+Adding refuses a selected/owning-profile mismatch and ambiguous repo names before mutation.
+Read-only Agent Space listing permits use while its agent holds the ownership lock.
+Progress and prepare warnings go to stderr, the completed worktree path to stdout.
+Exit codes are 0/1/2/130 for success/operation/usage/cancellation.
+Prepare warnings keep the successful worktree and exit 0.
+The repo add runtime installs its SIGINT handler before starting the shared worker and awaits cancellation/rollback through CreationHandle.
+The CCC exec path keeps its original signal behavior.
+Real-Git integration coverage lives in `crates/debi/tests/repo.rs`.
 
 ## Agent Space facade
 

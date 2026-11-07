@@ -690,6 +690,7 @@ final class TestBridge {
 			}
 			state["agent"] = [
 				"loaded": true, "inputsCleared": settings.inputsCleared,
+				"savingInputs": agent.savingInputs.sorted(),
 				"canPreview": agent.canPreview, "previewText": previewText ?? NSNull(),
 				"previewError": previewError ?? NSNull(),
 				"inputs": settings.inputs.map { entry in
