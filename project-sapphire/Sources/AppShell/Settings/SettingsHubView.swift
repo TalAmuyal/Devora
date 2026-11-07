@@ -223,6 +223,13 @@ private struct ScopeCards: View {
 					ForEach(card.fields.filter(scope.isVisible), id: \.key) { field in
 						ConfigRow(field: field, scope: scope, focus: $focus)
 					}
+					if card.title == ConfigCard.agent.title, let agent = scope.agent {
+						AgentSettingsFields(model: agent)
+						if scope.profilePath == nil {
+							Text("The prompt preview is on each profile's Agent card.")
+								.font(.caption).foregroundStyle(.secondary)
+						}
+					}
 					if card.title == ConfigCard.taskTracker.title, scope.usesAsana, let token = scope.asana {
 						AsanaTokenRow(model: token)
 					}

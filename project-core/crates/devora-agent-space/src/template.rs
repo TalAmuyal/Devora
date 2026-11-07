@@ -85,11 +85,7 @@ fn walk<'a>(
         rest = &rest[start + 2..];
         let end = rest.find("}}").ok_or("unclosed template placeholder")?;
         let key = &rest[..end];
-        if key.is_empty()
-            || !key
-                .bytes()
-                .all(|c| c.is_ascii_alphanumeric() || c == b'.' || c == b'_')
-        {
+        if !devora_config::agent::valid_placeholder_key(key) {
             return Err(format!("invalid template placeholder: {key}"));
         }
         visit(Piece::Placeholder(key))?;

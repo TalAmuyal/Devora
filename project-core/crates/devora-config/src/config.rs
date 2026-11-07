@@ -8,6 +8,15 @@ use std::path::{Path, PathBuf};
 use serde::Serialize;
 use serde_json::Value;
 
+/// Serialize config read/modify/replace operations inside the app, including
+/// callers from a previous Settings scope whose queued writes are still finishing.
+pub(crate) fn lock_config_writes() -> std::sync::MutexGuard<'static, ()> {
+    static WRITES: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    WRITES
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
 fn home_dir() -> Result<PathBuf, String> {
     std::env::var("HOME")
         .map(PathBuf::from)
@@ -389,6 +398,7 @@ pub fn write_claude_setting_in(
     state: &str,
     value: Option<&str>,
 ) -> Result<(), String> {
+    let _write = lock_config_writes();
     let spec = CLAUDE_SETTINGS
         .iter()
         .find(|s| s.key == key)
@@ -684,6 +694,7 @@ pub fn write_config_setting_in(
     state: &str,
     value: Option<&str>,
 ) -> Result<(), String> {
+    let _write = lock_config_writes();
     let spec = config_field(key).ok_or_else(|| format!("unknown config key: {key}"))?;
 
     let config_path = match profile_path {

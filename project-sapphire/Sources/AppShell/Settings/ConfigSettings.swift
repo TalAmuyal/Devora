@@ -80,7 +80,7 @@ struct ConfigCard {
 		asana(.text("task-tracker.asana.section-id", "Section ID", hint: "optional")),
 	])
 
-	static let agent = ConfigCard(title: "Agent Chat", fields: [
+	static let agent = ConfigCard(title: "Agent", fields: [
 		ConfigField(key: "agent.enter-sends", label: "Enter sends", hint: "Shift+Enter always inserts a newline", kind: .bool),
 	])
 
@@ -136,6 +136,7 @@ final class ConfigSettingsModel {
 	let profilePath: String?
 	var claude: ClaudeSettingsModel?
 	var asana: AsanaTokenModel?
+	var agent: AgentSettingsModel?
 	/// Nil until the first read.
 	private(set) var settings: ConfigSettings?
 	/// The text settings switched to Set and not committed yet.
@@ -166,6 +167,7 @@ final class ConfigSettingsModel {
 		guard let settings = await read() else { return }
 		self.settings = settings
 		await claude?.reload()
+		await agent?.reload()
 		if usesAsana { await asana?.reload() }
 	}
 
@@ -264,6 +266,9 @@ final class ConfigSettingsModel {
 	/// What "Default" inherits, shown beside it: the resolved value, or Devora's default when nothing applies; nil for a field that doesn't show it.
 	func inheritedHint(_ field: ConfigField) -> String? {
 		guard field.showsInherited else { return nil }
+		if field.key == "agent.enter-sends", let entry = agent?.entry("enter-sends") {
+			return agent?.hint(entry)
+		}
 		return Self.describe(resolved(field.key))
 	}
 
@@ -294,5 +299,13 @@ extension ConfigSettingsModel {
 			write: { key, value in await store.setConfigSetting(profilePath: profilePath, key: key, value: value) })
 		claude = ClaudeSettingsModel(store: store, profilePath: profilePath, writes: writeQueue)
 		asana = AsanaTokenModel(store: store, writes: writeQueue)
+		agent = AgentSettingsModel(
+			writes: writeQueue,
+			read: { await store.agentSettings(profilePath: profilePath) },
+			write: { key, value in await store.setAgentSetting(profilePath: profilePath, key: key, value: value) },
+			writeInput: { previous, key, value in
+				await store.setAgentInput(profilePath: profilePath, previousKey: previous, key: key, value: value)
+			},
+			reloadScope: { [weak self] in await self?.reload() })
 	}
 }

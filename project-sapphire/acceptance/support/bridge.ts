@@ -140,6 +140,7 @@ export interface SettingsState {
     profilePath: string | null; loaded: boolean; fields?: SettingState[];
     claude?: { loaded: boolean; effort: string; effortLevels: string[]; defaultModelOn: boolean; fields: { key: string; segment: string; hint: string; input: string | null; showsSave: boolean; suggestions: string[] }[] };
     asana?: { isSet: boolean | null; canSave: boolean; hasDraft: boolean };
+    agent?: { loaded: boolean; inputsCleared: boolean; inputs: { key: string; inputKey: string; value: string; stored: boolean; hint: string }[] };
   } | null;
 }
 
@@ -154,7 +155,10 @@ export type SettingsAction =
   | { action: 'commit'; key: string }
   | { action: 'save'; key: string }
   | { action: 'clear'; key: string }
-  | { action: 'suggest'; key: string; label: string };
+  | { action: 'suggest'; key: string; label: string }
+  | { action: 'addAgentInput'; key: string; value: string }
+  | { action: 'saveAgentInput'; key: string; newKey?: string; value: string }
+  | { action: 'defaultAgentInput'; key: string };
 
 /** A click on what the open New Task dialog draws. */
 export type NewTaskAction =
