@@ -730,6 +730,13 @@ final class TestBridge {
 		return [
 			"name": dialog.name,
 			"focus": "\(dialog.focus)",
+			"keepCodingInstructions": dialog.keepCodingInstructions,
+			"preview": dialog.preview.map { preview -> Any in
+				switch preview {
+				case .text(let text): ["text": text]
+				case .failure(let error): ["error": error]
+				}
+			} ?? NSNull(),
 			"canCreate": dialog.canCreate,
 			"fields": dialog.fields.map { field in
 				let value: Any = field.source == .derived ? field.value.map { $0 as Any } ?? NSNull() : dialog.value(of: field)
@@ -750,6 +757,7 @@ final class TestBridge {
 		guard let dialog = surfaces.newAgent else { throw BridgeError(status: 409, "the New Agent dialog isn't open") }
 		switch body["action"] as? String {
 		case "setName": dialog.name = body["value"] as? String ?? ""
+		case "setKeepCodingInstructions": dialog.keepCodingInstructions = body["value"] as? Bool ?? true
 		case "setField":
 			guard let key = body["key"] as? String else { throw BridgeError(status: 400, "missing key") }
 			dialog.edits[key] = body["value"] as? String ?? ""

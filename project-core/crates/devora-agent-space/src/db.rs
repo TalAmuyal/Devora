@@ -367,6 +367,7 @@ mod tests {
                 role: None,
                 repos: vec![],
                 inputs: BTreeMap::new(),
+                keep_coding_instructions: true,
             },
             "instructions",
         )

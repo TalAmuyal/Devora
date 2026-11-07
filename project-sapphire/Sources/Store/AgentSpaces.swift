@@ -26,6 +26,12 @@ public enum AgentStatus: Equatable, Sendable {
 	}
 }
 
+/// The New Agent dialog's preview: the instructions creation would render, or why it would fail.
+public enum AgentPreview: Equatable, Sendable {
+	case text(String)
+	case failure(String)
+}
+
 /// One Agent Space creation, from its start until it ends: its steps, then its outcome.
 @MainActor
 @Observable
@@ -82,6 +88,16 @@ extension Store {
 		return try? await call("agent_creation_fields", {
 			try core.agentCreationFields(profilePath: profile, form: form, launchInputs: [:])
 		})
+	}
+
+	/// The instructions `form` would create, or why creation would fail; a failure is the form's to show, not a banner.
+	public func agentCreationPreview(_ form: AgentCreationForm) async -> AgentPreview? {
+		guard let core, let profile = selectedProfilePath else { return nil }
+		do {
+			return .text(try await Task.detached { try core.agentCreationPreview(profilePath: profile, form: form, launchInputs: [:]) }.value)
+		} catch {
+			return .failure(Self.describe(error))
+		}
 	}
 
 	/// Saves a creation-form value to the global or the profile config, as the Settings Hub would.

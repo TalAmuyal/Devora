@@ -99,6 +99,7 @@ impl Fixture {
                     role: None,
                     repos: vec![],
                     inputs: HashMap::new(),
+                    keep_coding_instructions: true,
                 },
                 HashMap::new(),
             )
@@ -471,6 +472,7 @@ fn creation_progress_cancel_failure_and_invalid_listing_use_the_facade() {
                 role: None,
                 repos: vec![f.profile.repo.to_string_lossy().into_owned()],
                 inputs: HashMap::new(),
+                keep_coding_instructions: true,
             },
             HashMap::new(),
         )
@@ -503,6 +505,7 @@ fn creation_progress_cancel_failure_and_invalid_listing_use_the_facade() {
                 role: None,
                 repos: vec![],
                 inputs: HashMap::new(),
+                keep_coding_instructions: true,
             },
             HashMap::new(),
         )

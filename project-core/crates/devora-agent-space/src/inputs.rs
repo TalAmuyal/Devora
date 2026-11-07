@@ -6,7 +6,7 @@ use devora_config::agent::{self, Scope};
 use std::collections::BTreeMap;
 use std::path::Path;
 
-pub(crate) const DEFAULT_ROLE: &str = "General assistant";
+pub(crate) const DEFAULT_ROLE: &str = "a general-purpose assistant";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Source {
@@ -48,6 +48,11 @@ pub(crate) fn prefilled(
     values
         .entry("agent.role".into())
         .or_insert_with(|| (DEFAULT_ROLE.into(), Source::Default));
+    for key in template::OPTIONAL {
+        values
+            .entry(key.into())
+            .or_insert_with(|| (String::new(), Source::Default));
+    }
     for (key, (value, scope)) in config.inputs {
         let source = match scope {
             Scope::Global => Source::Global,
@@ -75,6 +80,59 @@ pub(crate) fn derived(space: &Path, form: &CreationForm) -> [String; 4] {
         space.join("memory").to_string_lossy().into_owned(),
         form.repos.join("\n"),
     ]
+}
+
+/// Renders the instructions as creation does: the form's values over the
+/// pre-filled ones, then the space's own; returns the role and the text.
+pub(crate) fn render(
+    prefilled: Inputs,
+    form: &CreationForm,
+    space: &Path,
+) -> Result<(String, String), String> {
+    let mut inputs: BTreeMap<String, String> = prefilled
+        .values
+        .into_iter()
+        .map(|(key, (value, _))| (key, value))
+        .collect();
+    inputs.extend(form.inputs.clone());
+    if let Some(role) = &form.role {
+        inputs.insert("agent.role".into(), role.clone());
+    }
+    // Derived entries describe the validated on-disk identity.
+    for (key, value) in DERIVED_KEYS.into_iter().zip(derived(space, form)) {
+        inputs.insert(key.into(), value);
+    }
+    let role = inputs
+        .get("agent.role")
+        .cloned()
+        .ok_or("missing agent.role")?;
+    if role.trim().is_empty() {
+        return Err("agent role cannot be empty".into());
+    }
+    let text = template::tidy(&template::render(&prefilled.template, &inputs)?);
+    Ok((role, text))
+}
+
+/// The instructions `form` would create, for the creation form's preview; a
+/// form without a name yet previews with a stand-in.
+pub fn preview(
+    profile: &Path,
+    global_config: &Path,
+    launch_inputs: BTreeMap<String, String>,
+    form: &CreationForm,
+) -> Result<String, String> {
+    let profile = std::fs::canonicalize(profile).map_err(crate::db::storage)?;
+    let mut form = form.clone();
+    if form.name.trim().is_empty() {
+        form.name = "<name>".into();
+    }
+    let space = profile.join("agent-spaces").join(&form.name);
+    render(
+        prefilled(&profile, global_config, launch_inputs)?,
+        &form,
+        &space,
+    )
+    .map(|(_, text)| text)
 }
 
 /// The template's placeholders for the creation form: the ones only the form can

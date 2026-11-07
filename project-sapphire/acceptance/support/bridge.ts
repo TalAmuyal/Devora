@@ -106,6 +106,7 @@ export interface ProfileFormState {
 /** Fills in a field of the open profile form, as typing into it does, or clicks one of its buttons. */
 export type ProfileFormAction =
   | { action: 'setName'; value: string }
+  | { action: 'setKeepCodingInstructions'; value: boolean }
   | { action: 'setPath'; value: string }
   | { action: 'submit' }
   | { action: 'cancel' };
@@ -251,6 +252,9 @@ export interface NewAgentState {
   fields: { key: string; value: string | null; source: string | null; saved: boolean }[];
   repos: { name: string; selected: boolean }[];
   progress: { steps: string[]; outcome: string | null } | null;
+  keepCodingInstructions: boolean;
+  /** The rendered instructions, or why creation would fail. */
+  preview: { text?: string; error?: string } | null;
 }
 
 export type AgentHubAction = { action: 'newAgent' } | { action: 'open' | 'delete'; name: string };

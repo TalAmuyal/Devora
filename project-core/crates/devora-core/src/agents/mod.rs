@@ -431,6 +431,17 @@ impl Agents {
         devora_agent_space::fields(profile, global_config, launch_inputs, form)
     }
 
+    /// The instructions `form` would create, as creation renders them.
+    pub fn creation_preview(
+        &self,
+        profile: &Path,
+        global_config: &Path,
+        launch_inputs: BTreeMap<String, String>,
+        form: &CreationForm,
+    ) -> Result<String, String> {
+        devora_agent_space::preview(profile, global_config, launch_inputs, form)
+    }
+
     /// Saves a creation-form value to the global or profile config, so later
     /// agents start from it.
     pub fn save_field(

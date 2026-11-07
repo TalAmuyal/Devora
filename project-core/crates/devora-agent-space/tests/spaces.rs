@@ -36,6 +36,7 @@ impl Fixture {
             role: None,
             repos: vec![],
             inputs: BTreeMap::new(),
+            keep_coding_instructions: true,
         }
     }
     fn create(&self, form: CreationForm) -> Result<Space, String> {
@@ -267,7 +268,7 @@ fn frozen_rendering_merges_inputs_and_survives_template_removal() {
         .unwrap();
     assert_eq!(
         space.instructions(),
-        "Delta|form role|form {{literal}}|from global|profile user"
+        "Delta|form role|form {{literal}}|from global|profile user\n"
     );
     let id = space.saved_session().session_id.clone();
     drop(space);
@@ -602,7 +603,7 @@ fn creation_fields_list_form_only_then_prefilled_then_derived_with_their_sources
             ("focus".into(), None, None),
             (
                 "agent.role".into(),
-                some("General assistant"),
+                some("a general-purpose assistant"),
                 Some(Default)
             ),
             ("team".into(), some("core"), Some(Profile)),
@@ -1014,4 +1015,62 @@ async fn pause_after_turn_waits_for_the_turn_and_wins_over_compaction() {
         .await
         .unwrap()
         .unwrap();
+}
+
+#[test]
+fn the_built_in_template_needs_only_a_name_and_leaves_no_gaps_for_unset_sections() {
+    let fixture = Fixture::new();
+    let space = fixture.create(fixture.form("Echo")).unwrap();
+    let instructions = space.instructions();
+    assert!(
+        instructions.starts_with(
+            "Hi,\n\nYou are Echo and you are working with me as a general-purpose assistant.\n"
+        ),
+        "{instructions}"
+    );
+    assert!(!instructions.contains("{{"));
+    assert!(
+        !instructions.contains("\n\n\n"),
+        "unset optional sections leave no runs of blank lines"
+    );
+    assert!(
+        instructions.ends_with("confirm with me first.\n"),
+        "{instructions}"
+    );
+}
+
+#[test]
+fn the_preview_is_what_creation_renders_and_coding_instructions_can_be_replaced() {
+    let fixture = Fixture::new();
+    let mut form = fixture.form("Echo");
+    form.keep_coding_instructions = false;
+    let preview =
+        devora_agent_space::preview(&fixture.profile, &fixture.global, BTreeMap::new(), &form)
+            .unwrap();
+    let space = fixture.create(form).unwrap();
+    assert_eq!(preview, space.instructions());
+    assert!(matches!(
+        space.session_options(&fixture.context()).unwrap().instructions,
+        devora_agent::session::Instructions::Replace(text) if text == preview
+    ));
+
+    // A template value only the form can fill makes the preview say why creation would fail.
+    std::fs::write(
+        fixture.profile.join("template.md"),
+        "{{agent.name}} on {{team}}",
+    )
+    .unwrap();
+    std::fs::write(
+        fixture.profile.join("config.json"),
+        json!({"prepare-command":"true","agent":{"template-file":"template.md"}}).to_string(),
+    )
+    .unwrap();
+    let error = devora_agent_space::preview(
+        &fixture.profile,
+        &fixture.global,
+        BTreeMap::new(),
+        &fixture.form(""),
+    )
+    .unwrap_err();
+    assert!(error.contains("team"), "{error}");
 }

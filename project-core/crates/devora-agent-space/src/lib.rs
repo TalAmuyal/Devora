@@ -10,7 +10,7 @@ mod inputs;
 mod running;
 pub mod template;
 pub use compaction::{Context, DEFAULT_THRESHOLD as DEFAULT_COMPACT_THRESHOLD};
-pub use inputs::{fields, Field, Source};
+pub use inputs::{fields, preview, Field, Source};
 pub use running::{RunningSpace, SpaceEvent, SpaceHandle};
 
 use db::{storage, Db};
@@ -43,6 +43,14 @@ pub struct CreationForm {
     pub role: Option<String>,
     pub repos: Vec<String>,
     pub inputs: BTreeMap<String, String>,
+    /// Whether the instructions are appended to Claude Code's own system prompt,
+    /// keeping its coding instructions, rather than replacing it.
+    #[serde(default = "keep_by_default")]
+    pub keep_coding_instructions: bool,
+}
+
+fn keep_by_default() -> bool {
+    true
 }
 
 /// Host-owned executable, selected plugins, behavioral settings and scrubbed
@@ -218,31 +226,11 @@ impl Space {
                 return Err(format!("duplicate or reserved repo name: {name}"));
             }
         }
-        let prefilled = inputs::prefilled(&profile, global_config, launch_inputs)?;
-        let mut inputs: BTreeMap<String, String> = prefilled
-            .values
-            .into_iter()
-            .map(|(key, (value, _))| (key, value))
-            .collect();
-        inputs.extend(form.inputs.clone());
-        if let Some(role) = &form.role {
-            inputs.insert("agent.role".into(), role.clone());
-        }
-        // Derived entries describe the validated on-disk identity.
-        for (key, value) in inputs::DERIVED_KEYS
-            .into_iter()
-            .zip(inputs::derived(&path, &form))
-        {
-            inputs.insert(key.into(), value);
-        }
-        let role = inputs
-            .get("agent.role")
-            .cloned()
-            .ok_or("missing agent.role")?;
-        if role.trim().is_empty() {
-            return Err("agent role cannot be empty".into());
-        }
-        let instructions = template::render(&prefilled.template, &inputs)?;
+        let (role, instructions) = inputs::render(
+            inputs::prefilled(&profile, global_config, launch_inputs)?,
+            &form,
+            &path,
+        )?;
         let identity = Identity {
             name: form.name.clone(),
             role,
@@ -441,7 +429,11 @@ impl Space {
         Ok(SessionOptions {
             program: context.program.clone(),
             working_directory: self.path.clone(),
-            instructions: Instructions::Append(self.instructions.clone()),
+            instructions: if self.form.keep_coding_instructions {
+                Instructions::Append(self.instructions.clone())
+            } else {
+                Instructions::Replace(self.instructions.clone())
+            },
             model: required("default-model")?,
             effort: required("effort")?,
             permission_mode: "auto".into(),
