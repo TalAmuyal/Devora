@@ -7,7 +7,7 @@
 use devora_agent::protocol::{CompactMetadata, TurnResult};
 use serde_json::Value;
 
-pub const DEFAULT_THRESHOLD: u8 = 80;
+pub use devora_config::agent::DEFAULT_COMPACT_THRESHOLD as DEFAULT_THRESHOLD;
 
 /// How full the context is, as the chat's context bar shows it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

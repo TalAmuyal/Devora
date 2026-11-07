@@ -122,6 +122,7 @@ pub fn register_profile(
     root_path: &str,
     name: &str,
 ) -> Result<RegisteredProfile, String> {
+    let _write = config::lock_config_writes();
     let validation = validate_profile_path(root_path)?;
     let expanded = validation.expanded_path.clone();
     let profile_dir = Path::new(&expanded);
@@ -178,6 +179,7 @@ pub fn register_profile(
 /// The profile directory and its contents are left untouched.
 /// Removing a path that is not registered is a no-op success.
 pub fn unregister_profile(config_path: &Path, root_path: &str) -> Result<(), String> {
+    let _write = config::lock_config_writes();
     let expanded = config::expand_tilde(root_path.trim())?;
 
     let mut global = load_global_config(config_path)?;

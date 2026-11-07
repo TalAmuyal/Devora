@@ -531,6 +531,46 @@ final class TestBridge {
 			}
 			return
 		}
+		if ["selectSegment", "type", "save", "commit"].contains(action ?? ""),
+			let key, key.hasPrefix("agent."),
+			let field = AgentSettingsField.all.first(where: { "agent.\($0.key)" == key })
+		{
+			guard let agent = scope.agent, agent.settings != nil else { throw BridgeError(status: 409, "Agent settings aren't loaded") }
+			switch action {
+			case "selectSegment":
+				guard let mode = TextMode.allCases.first(where: { $0.label == body["label"] as? String }) else {
+					throw BridgeError(status: 400, "unknown Agent setting segment")
+				}
+				if agent.mode(field.key) != mode { agent.select(mode, key: field.key) }
+			case "type":
+				guard agent.mode(field.key) == .set, let value = body["value"] as? String else { throw BridgeError(status: 409, "Agent input isn't shown") }
+				agent.edit(field.key, value)
+			case "save", "commit":
+				guard agent.mode(field.key) == .set, agent.showsSave(field) else { throw BridgeError(status: 409, "Agent setting has no Save button") }
+				agent.commit(field.key)
+			default: throw BridgeError(status: 400, "unknown Agent field action")
+			}
+			return
+		}
+		if ["addAgentInput", "saveAgentInput", "defaultAgentInput"].contains(action ?? "") {
+			guard let agent = scope.agent, agent.settings != nil, let key else { throw BridgeError(status: 409, "Agent inputs aren't loaded") }
+			if action == "addAgentInput" {
+				guard agent.settings?.inputsCleared == false, !agent.savingInputs.contains("$new") else { throw BridgeError(status: 409, "Agent input addition isn't available") }
+				agent.newInput = .init(key: key, value: body["value"] as? String ?? "")
+				agent.addInput()
+			} else {
+				guard let entry = agent.settings?.inputs.first(where: { $0.key == key }), !agent.savingInputs.contains(key) else { throw BridgeError(status: 404, "Agent input isn't shown") }
+				if action == "defaultAgentInput" {
+					guard entry.stored != nil else { throw BridgeError(status: 409, "Agent input already inherits") }
+					agent.defaultInput(entry)
+				} else {
+					if let newKey = body["newKey"] as? String, newKey != key, entry.stored == nil { throw BridgeError(status: 409, "An inherited key cannot be renamed") }
+					agent.editInput(entry, key: body["newKey"] as? String, value: body["value"] as? String)
+					agent.saveInput(entry)
+				}
+			}
+			return
+		}
 		guard let field = ConfigCard.all.flatMap(\.fields).first(where: { $0.key == key }), scope.isVisible(field) else {
 			throw BridgeError(status: 404, "no setting \(key ?? "nil") is shown")
 		}
@@ -623,6 +663,41 @@ final class TestBridge {
 				shown["segment"] = scope.chosenOption(options, for: field.key)?.label ?? NSNull()
 			}
 			return shown
+		}
+		if let agent = scope.agent, let settings = agent.settings {
+			let fields = AgentSettingsField.all.map { field -> [String: Any] in
+				let mode = agent.mode(field.key)
+				return [
+					"key": "agent.\(field.key)", "segment": mode.label,
+					"input": mode == .set ? agent.input(field.key) : NSNull(),
+					"showsSave": mode == .set && agent.showsSave(field),
+					"hint": agent.entry(field.key).map { agent.hint($0) } ?? NSNull(),
+				]
+			}
+			state["fields"] = (state["fields"] as? [[String: Any]] ?? []) + fields
+			let previewText: String?
+			let previewError: String?
+			switch agent.preview {
+			case .text(let text):
+				previewText = text
+				previewError = nil
+			case .failure(let reason):
+				previewText = nil
+				previewError = reason
+			case nil:
+				previewText = nil
+				previewError = nil
+			}
+			state["agent"] = [
+				"loaded": true, "inputsCleared": settings.inputsCleared,
+				"canPreview": agent.canPreview, "previewText": previewText ?? NSNull(),
+				"previewError": previewError ?? NSNull(),
+				"inputs": settings.inputs.map { entry in
+					["key": entry.key, "inputKey": agent.inputDraft(entry).key,
+					 "value": agent.inputDraft(entry).value, "stored": entry.stored != nil,
+					 "hint": agent.hint(entry)] as [String: Any]
+				},
+			] as [String: Any]
 		}
 		if let claude = scope.claude {
 			state["claude"] = [

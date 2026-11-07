@@ -9,6 +9,18 @@ use serde_json::{Map, Value};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+pub mod settings;
+
+pub const DEFAULT_COMPACT_THRESHOLD: u8 = 80;
+
+/// The shared template-placeholder and free-form input key grammar.
+pub fn valid_placeholder_key(key: &str) -> bool {
+    !key.is_empty()
+        && key
+            .bytes()
+            .all(|c| c.is_ascii_alphanumeric() || c == b'.' || c == b'_')
+}
+
 /// The named keys of the `agent` section and the placeholders they fill.
 const NAMED: [(&str, &str); 3] = [
     ("role", "agent.role"),
@@ -34,14 +46,29 @@ pub struct AgentConfig {
 }
 
 pub fn read(global: &Path, profile: &Path) -> Result<AgentConfig, String> {
+    resolve(&sections(global, Some(profile))?)
+}
+
+type ConfigSection = (PathBuf, Scope, Map<String, Value>);
+
+fn sections(global: &Path, profile: Option<&Path>) -> Result<Vec<ConfigSection>, String> {
+    let mut files = vec![(global.to_path_buf(), Scope::Global)];
+    if let Some(profile) = profile {
+        files.push((profile.join("config.json"), Scope::Profile));
+    }
+    let mut result = Vec::new();
+    for (file, scope) in files {
+        if let Some(section) = section(&file)? {
+            result.push((file, scope, section));
+        }
+    }
+    Ok(result)
+}
+
+fn resolve(sections: &[ConfigSection]) -> Result<AgentConfig, String> {
     let mut config = AgentConfig::default();
-    for (file, scope) in [
-        (global.to_path_buf(), Scope::Global),
-        (profile.join("config.json"), Scope::Profile),
-    ] {
-        let Some(section) = section(&file)? else {
-            continue;
-        };
+    for (file, scope, section) in sections {
+        let scope = *scope;
         match section.get("inputs") {
             None => {}
             Some(Value::Null) => config
@@ -93,6 +120,7 @@ pub fn read(global: &Path, profile: &Path) -> Result<AgentConfig, String> {
 
 /// Saves one template input to a config file, as editing it in the Settings Hub would.
 pub fn write(file: &Path, placeholder: &str, value: &str) -> Result<(), String> {
+    let _write = crate::config::lock_config_writes();
     let mut document = if file.exists() {
         read_json_file(file)?
     } else {

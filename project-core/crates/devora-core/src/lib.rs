@@ -4,7 +4,7 @@
 //! The `DevoraCore` object (commands in, events out) replaces these re-exports as the core grows.
 
 pub use devora_app::{bundle, log};
-pub use devora_config::{config, profile};
+pub use devora_config::{agent as agent_config, config, profile};
 pub use devora_health as health;
 pub use devora_ipc as ipc;
 pub use devora_platform::credentials;

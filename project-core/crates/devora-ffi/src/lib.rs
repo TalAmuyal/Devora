@@ -10,6 +10,7 @@ use std::sync::Arc;
 
 use devora_core::{config, state, theme, workspace};
 
+mod agent_settings;
 mod agents;
 mod app_state;
 mod asana_credentials;
