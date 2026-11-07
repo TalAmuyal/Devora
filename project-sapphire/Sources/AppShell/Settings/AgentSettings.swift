@@ -28,6 +28,7 @@ struct AgentInputDraft: Equatable {
 @Observable
 final class AgentSettingsModel {
 	private(set) var settings: AgentSettings?
+	private(set) var preview: AgentPreview?
 	private(set) var drafts: [String: String] = [:]
 	private(set) var pending: Set<String> = []
 	private(set) var inputDrafts: [String: AgentInputDraft] = [:]
@@ -39,22 +40,40 @@ final class AgentSettingsModel {
 	@ObservationIgnored private let write: (String, String?) async -> Bool
 	@ObservationIgnored private let writeInput: (String?, String, String?) async -> Bool
 	@ObservationIgnored private let reloadScope: () async -> Void
+	@ObservationIgnored private let readPreview: (() async -> AgentPreview?)?
+	@ObservationIgnored private var reloadVersion: UInt64 = 0
+	var canPreview: Bool { readPreview != nil }
 
 	init(
 		writes: SettingsWriteQueue, read: @escaping () async -> AgentSettings?,
 		write: @escaping (String, String?) async -> Bool,
 		writeInput: @escaping (String?, String, String?) async -> Bool,
-		reloadScope: @escaping () async -> Void
+		reloadScope: @escaping () async -> Void,
+		readPreview: (() async -> AgentPreview?)? = nil
 	) {
 		self.writes = writes
 		self.read = read
 		self.write = write
 		self.writeInput = writeInput
 		self.reloadScope = reloadScope
+		self.readPreview = readPreview
 	}
 
 	func reload() async {
-		if let value = await read() { settings = value }
+		reloadVersion &+= 1
+		let version = reloadVersion
+		let value = await read()
+		guard version == reloadVersion else { return }
+		guard let value else {
+			if canPreview { preview = .failure("Could not refresh the saved settings") }
+			return
+		}
+		settings = value
+		guard let readPreview else { return }
+		preview = nil
+		let rendered = await readPreview()
+		guard version == reloadVersion else { return }
+		preview = rendered ?? .failure("Prompt preview is unavailable")
 	}
 
 	func entry(_ key: String) -> AgentSettingEntry? { settings?.fields.first { $0.key == key } }

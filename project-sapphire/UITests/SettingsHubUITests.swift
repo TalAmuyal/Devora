@@ -30,6 +30,7 @@ final class SettingsHubUITests: XCTestCase {
 		XCTAssertTrue(settings.waitForExistence(timeout: 5), "P opens the Settings Hub")
 		let segments = element("config-segments-terminal.default-app")
 		XCTAssertTrue(segments.waitForExistence(timeout: 5), "the active profile's cards load")
+		app.scrollSettingsDetail(to: segments)
 		segments.radioButtons["Set"].click()
 
 		let input = element("config-input-terminal.default-app")

@@ -91,8 +91,8 @@ extension Store {
 	}
 
 	/// The instructions `form` would create, or why creation would fail; a failure is the form's to show, not a banner.
-	public func agentCreationPreview(_ form: AgentCreationForm) async -> AgentPreview? {
-		guard let core, let profile = selectedProfilePath else { return nil }
+	public func agentCreationPreview(_ form: AgentCreationForm, profilePath: String? = nil) async -> AgentPreview? {
+		guard let core, let profile = profilePath ?? selectedProfilePath else { return nil }
 		do {
 			return .text(try await Task.detached { try core.agentCreationPreview(profilePath: profile, form: form, launchInputs: [:]) }.value)
 		} catch {

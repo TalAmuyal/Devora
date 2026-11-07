@@ -1,5 +1,6 @@
 @testable import AppShell
 import CoreBindings
+import Store
 import Testing
 
 @MainActor
@@ -104,5 +105,47 @@ struct AgentSettingsTests {
 		#expect(writes[0].0 == "repo.notes")
 		#expect(writes[0].1 == "repo.other")
 		#expect(writes[0].2 == "new")
+	}
+
+	@Test func previewReadsSavedValuesOnlyAndRefreshesAfterAQueuedWrite() async {
+		let queue = SettingsWriteQueue()
+		var saved = "saved role"
+		var renders = 0
+		weak var owner: AgentSettingsModel?
+		let model = AgentSettingsModel(
+			writes: queue, read: { settings(stored: .text(value: saved)) },
+			write: { _, value in saved = value ?? "default role"; return true },
+			writeInput: { _, _, _ in true }, reloadScope: { await owner?.reload() },
+			readPreview: { renders += 1; return .text(saved) })
+		owner = model
+		await model.reload()
+		#expect(model.preview == .text("saved role"))
+		model.edit("role", "unsaved role")
+		#expect(model.preview == .text("saved role"))
+		#expect(renders == 1)
+		model.commit("role")
+		await queue.settled()
+		#expect(model.preview == .text("unsaved role"))
+		#expect(renders == 2)
+	}
+
+	@Test func aNewPreviewOrFailureCannotBeReplacedByAnOlderRender() async throws {
+		var first: CheckedContinuation<AgentPreview?, Never>?
+		var renders = 0
+		let model = AgentSettingsModel(
+			writes: SettingsWriteQueue(), read: { settings() }, write: { _, _ in true },
+			writeInput: { _, _, _ in true }, reloadScope: {},
+			readPreview: {
+				renders += 1
+				if renders == 1 { return await withCheckedContinuation { first = $0 } }
+				return .failure("missing template value: team")
+			})
+		let initial = Task { await model.reload() }
+		try await eventually { first != nil }
+		await model.reload()
+		#expect(model.preview == .failure("missing template value: team"))
+		first?.resume(returning: .text("old render"))
+		await initial.value
+		#expect(model.preview == .failure("missing template value: team"))
 	}
 }

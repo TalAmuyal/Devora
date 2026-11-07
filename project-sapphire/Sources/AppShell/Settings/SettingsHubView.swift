@@ -119,6 +119,7 @@ private struct DetailPanel: View {
 				.frame(maxWidth: 760, alignment: .leading)
 				.frame(maxWidth: .infinity, alignment: .leading)
 			}
+			.accessibilityIdentifier("settings-detail-scroll")
 		} else {
 			Color.clear
 		}

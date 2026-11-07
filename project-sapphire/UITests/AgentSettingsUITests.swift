@@ -23,6 +23,10 @@ final class AgentSettingsUITests: XCTestCase {
 		app.typeKey("p", modifierFlags: .shift)
 		let roleMode = app.descendants(matching: .any)["agent-mode-role"].firstMatch
 		XCTAssertTrue(roleMode.waitForExistence(timeout: 10), "The profile Agent card must load")
+		let preview = app.descendants(matching: .any)["agent-settings-preview-text"].firstMatch
+		XCTAssertTrue(preview.waitForExistence(timeout: 10), "The profile card draws its saved prompt preview")
+		XCTAssertTrue((preview.value as? String ?? preview.label).contains("/Work/agent-spaces/<name>"), "The preview uses this profile's space path")
+		app.scrollSettingsDetail(to: roleMode)
 		roleMode.radioButtons["Set"].click()
 		let role = app.textViews["agent-input-role"]
 		XCTAssertTrue(role.waitForExistence(timeout: 5), "Set reveals the multiline editor")
@@ -43,6 +47,7 @@ final class AgentSettingsUITests: XCTestCase {
 		XCTAssertEqual(XCTWaiter.wait(for: [savedRole], timeout: 10), .completed, "Save writes multiline text verbatim")
 
 		let templateMode = app.descendants(matching: .any)["agent-mode-template-file"].firstMatch
+		app.scrollSettingsDetail(to: templateMode)
 		templateMode.radioButtons["Set"].click()
 		let pathInput = app.textFields["agent-input-template-file"]
 		XCTAssertTrue(pathInput.waitForExistence(timeout: 5))

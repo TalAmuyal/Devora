@@ -1,5 +1,6 @@
 import AppKit
 import CoreBindings
+import Store
 import SwiftUI
 
 /// Additional Agent controls inside the scope's existing Agent card.
@@ -39,10 +40,35 @@ struct AgentSettingsFields: View {
 				}
 				Divider()
 				inputs
+				if model.canPreview { promptPreview }
 			}
 		}
 		.onChange(of: model.focusedKey) { _, key in focus = key }
 		.onChange(of: focus) { _, key in model.focusedKey = key }
+	}
+
+	private var promptPreview: some View {
+		VStack(alignment: .leading, spacing: 6) {
+			Text("Preview of saved settings").font(.headline)
+			ScrollView {
+				switch model.preview {
+				case .text(let text):
+					Text(text).font(.callout.monospaced()).textSelection(.enabled)
+						.frame(maxWidth: .infinity, alignment: .leading)
+						.accessibilityIdentifier("agent-settings-preview-text")
+				case .failure(let message):
+					Text(message).foregroundStyle(.red).textSelection(.enabled)
+						.frame(maxWidth: .infinity, alignment: .leading)
+						.accessibilityIdentifier("agent-settings-preview-error")
+				case nil:
+					ProgressView().controlSize(.small)
+				}
+			}
+			.frame(height: 220).padding(8)
+			.background(.background.secondary, in: .rect(cornerRadius: 6))
+		}
+		.accessibilityElement(children: .contain)
+		.accessibilityIdentifier("agent-settings-preview")
 	}
 
 	@ViewBuilder private func fieldEditor(_ field: AgentSettingsField) -> some View {

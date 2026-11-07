@@ -82,3 +82,33 @@ Feature: Agent settings at global and profile scopes
     When the user adds Agent input "agent.role" with value "wrong field"
     Then the recorded errors should include "named placeholders have their own Agent settings fields"
     And Agent input "agent.role" should be absent
+
+  Scenario: The profile preview follows saved settings and leaves drafts local
+    Given profile "Work" has a prompt template with text:
+      """
+      Saved role is {{agent.role}}.
+      """
+    When the user opens the "User Defaults" settings detail
+    Then the Agent prompt preview should not be shown
+    When the user sets "agent.role" to "global role"
+    Then the global config should have "agent.role" set to "global role"
+    When the user opens the "Work" settings detail
+    And the user sets "agent.template-file" to "preview.md"
+    Then the saved Agent prompt preview should contain "Saved role is global role."
+    When the user drafts Agent setting "agent.role" as "local draft"
+    Then the saved Agent prompt preview should contain "Saved role is global role."
+    When the user saves Agent setting "agent.role"
+    Then the saved Agent prompt preview should contain "Saved role is local draft."
+    When the user switches "agent.role" to "Default"
+    Then the saved Agent prompt preview should contain "Saved role is global role."
+
+  Scenario: Preview explains creation errors inline and recovers after an input save
+    Given profile "Work" has a prompt template with text:
+      """
+      Required input is {{required.value}}.
+      """
+    When the user opens the "Work" settings detail
+    And the user sets "agent.template-file" to "preview.md"
+    Then the Agent prompt preview error should include "required.value"
+    When the user adds Agent input "required.value" with value "provided"
+    Then the saved Agent prompt preview should contain "Required input is provided."

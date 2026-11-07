@@ -37,3 +37,20 @@ extension XCUIApplication {
 		XCTAssertTrue(shellTabs.element(boundBy: count).waitForExistence(timeout: 10), "+ opens a shell tab")
 	}
 }
+
+
+extension XCUIApplication {
+	/// Scroll the detail's margin so a nested prompt preview cannot consume the wheel events.
+	@MainActor
+	func scrollSettingsDetail(to control: XCUIElement) {
+		let detail = scrollViews["settings-detail-scroll"]
+		for _ in 0..<30 {
+			let visible = detail.frame.insetBy(dx: 0, dy: 40)
+			if visible.contains(control.frame) { return }
+			let delta: CGFloat = control.frame.midY > visible.midY ? -200 : 200
+			detail.coordinate(withNormalizedOffset: CGVector(dx: 0.01, dy: 0.5))
+				.scroll(byDeltaX: 0, deltaY: delta)
+		}
+		XCTFail("Settings control did not scroll into view: \(control.identifier)")
+	}
+}

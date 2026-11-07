@@ -21,7 +21,7 @@ Types of changes:
 ### Added
 
 - Devora Sapphire's New Agent dialog shows a live preview of the agent's instructions beside the form, and an "Include coding instructions" switch (on by default) to keep or replace Claude Code's own system prompt; the built-in agent template now covers the space's path, memory and compaction, and `debi pr submit` / `debi pr close`
-- Devora Sapphire's Settings Hub has an Agent card for compaction, template paths, multiline instructions and named template inputs at global and profile scopes
+- Devora Sapphire's Settings Hub has an Agent card for compaction, template paths, multiline instructions and named template inputs at global and profile scopes, with a preview of saved instructions on each profile
 - Devora Sapphire agent tabs have a streaming chat panel with durable drafts and scroll position, inline permission cards, multi-line input, Stop and pause-after-turn controls
 - Devora Sapphire has an Agent Hub (`Ctrl+S`, which switches to the Workspace Hub inside either hub) for creating, opening and deleting Agent Spaces from a template-driven form, with status shown on each agent tab
 - Nightly releases include a signed Devora Sapphire app in `Devora-Sapphire.dmg`, alongside `Devora-Ember.dmg`; the shared installer selects Sapphire with `--app sapphire --nightly` and defaults to Ember

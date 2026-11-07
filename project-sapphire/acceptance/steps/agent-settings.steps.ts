@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { When, Then } from '@cucumber/cucumber';
+import { Given, When, Then } from '@cucumber/cucumber';
 import { SapphireWorld } from '../support/world';
 
 When('the user saves Agent setting {string} with text:', async function (this: SapphireWorld, key: string, text: string) {
@@ -80,4 +80,34 @@ Then('Agent input {string} should show {string} from {string}', async function (
 Then('Agent input {string} should be absent', async function (this: SapphireWorld, key: string) {
   await this.bridge.waitFor('the removed or rejected Agent input', () => this.bridge.state(), state =>
     state.settings?.scope?.agent?.loaded === true && !state.settings.scope.agent.inputs.some(input => input.key === key));
+});
+
+Given('profile {string} has a prompt template with text:', function (this: SapphireWorld, profile: string, text: string) {
+  fs.writeFileSync(path.join(this.fixtureRoot!, profile, 'preview.md'), text);
+});
+
+When('the user drafts Agent setting {string} as {string}', async function (this: SapphireWorld, key: string, value: string) {
+  await this.bridge.settings({ action: 'selectSegment', key, label: 'Set' });
+  await this.bridge.waitFor('the Agent text editor', () => this.bridge.state(), state =>
+    state.settings?.scope?.fields?.some(field => field.key === key && field.segment === 'Set') === true);
+  await this.bridge.settings({ action: 'type', key, value });
+});
+
+When('the user saves Agent setting {string}', async function (this: SapphireWorld, key: string) {
+  await this.bridge.settings({ action: 'save', key });
+});
+
+Then('the saved Agent prompt preview should contain {string}', async function (this: SapphireWorld, text: string) {
+  await this.bridge.waitFor('the saved prompt preview', () => this.bridge.state(), state =>
+    state.settings?.scope?.agent?.previewText?.includes(text) === true && state.settings.scope.agent.previewError === null);
+});
+
+Then('the Agent prompt preview error should include {string}', async function (this: SapphireWorld, text: string) {
+  await this.bridge.waitFor('the inline prompt preview error', () => this.bridge.state(), state =>
+    state.settings?.scope?.agent?.previewError?.includes(text) === true);
+});
+
+Then('the Agent prompt preview should not be shown', async function (this: SapphireWorld) {
+  await this.bridge.waitFor('the global Agent card without a preview', () => this.bridge.state(), state =>
+    state.settings?.scope?.agent?.canPreview === false);
 });

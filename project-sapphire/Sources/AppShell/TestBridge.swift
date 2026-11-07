@@ -675,14 +675,29 @@ final class TestBridge {
 				]
 			}
 			state["fields"] = (state["fields"] as? [[String: Any]] ?? []) + fields
+			let previewText: String?
+			let previewError: String?
+			switch agent.preview {
+			case .text(let text):
+				previewText = text
+				previewError = nil
+			case .failure(let reason):
+				previewText = nil
+				previewError = reason
+			case nil:
+				previewText = nil
+				previewError = nil
+			}
 			state["agent"] = [
 				"loaded": true, "inputsCleared": settings.inputsCleared,
+				"canPreview": agent.canPreview, "previewText": previewText ?? NSNull(),
+				"previewError": previewError ?? NSNull(),
 				"inputs": settings.inputs.map { entry in
 					["key": entry.key, "inputKey": agent.inputDraft(entry).key,
 					 "value": agent.inputDraft(entry).value, "stored": entry.stored != nil,
 					 "hint": agent.hint(entry)] as [String: Any]
 				},
-			]
+			] as [String: Any]
 		}
 		if let claude = scope.claude {
 			state["claude"] = [

@@ -306,6 +306,13 @@ extension ConfigSettingsModel {
 			writeInput: { previous, key, value in
 				await store.setAgentInput(profilePath: profilePath, previousKey: previous, key: key, value: value)
 			},
-			reloadScope: { [weak self] in await self?.reload() })
+			reloadScope: { [weak self] in await self?.reload() },
+			readPreview: profilePath.map { profile in
+				{
+					await store.agentCreationPreview(
+						AgentCreationForm(name: "", role: nil, repos: [], inputs: [:], keepCodingInstructions: true),
+						profilePath: profile)
+				}
+			})
 	}
 }
