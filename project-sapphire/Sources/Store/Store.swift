@@ -4,6 +4,7 @@ import Observation
 import Synchronization
 
 public enum Command: Sendable {
+	case setGlobalPaused(Bool)
 	/// Loads the version and the profiles, then the workspaces of the selected profile: the one restored from the app state while it is registered, otherwise the first.
 	case load
 	/// Selects a profile (`SetActiveProfile`, so that a launch restores it) and lists its workspaces.
@@ -144,6 +145,8 @@ public final class Store {
 	@discardableResult
 	public func dispatch(_ command: Command) -> Task<Void, Never> {
 		switch command {
+		case .setGlobalPaused(let paused):
+			apply(.setGlobalPaused(paused: paused))
 		case .load:
 			return Task { await load() }
 		case .selectProfile(let path):

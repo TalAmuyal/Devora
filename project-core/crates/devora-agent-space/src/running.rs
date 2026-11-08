@@ -23,11 +23,16 @@ pub enum SpaceEvent {
     TurnStarted,
 }
 
+/// Observes the host-owned global hold at turn admission and turn boundaries.
+/// The host callback may also record eligibility and publish hold status.
+pub type GlobalPauseCheck = Arc<dyn Fn() -> bool + Send + Sync>;
+
 enum Action {
     Turn(String),
     Interrupt,
     Permission(String, PermissionAnswer),
     PauseAfterTurn,
+    GlobalPauseChanged,
 }
 struct Command {
     action: Action,
@@ -58,6 +63,14 @@ impl SpaceHandle {
             .await
             .map_err(|_| "agent space stopped before recording the outcome")?
     }
+    /// Wake the shared boundary and report whether stopping has already begun.
+    pub async fn global_pause_changed(&self) -> Result<bool, String> {
+        self.call(Action::GlobalPauseChanged)
+            .await?
+            .as_bool()
+            .ok_or_else(|| "invalid pause-boundary response".into())
+    }
+
     pub async fn send_turn(&self, text: String) -> Result<(), String> {
         self.call(Action::Turn(text)).await.map(|_| ())
     }
@@ -147,6 +160,7 @@ pub(crate) async fn start(
     options: SessionOptions,
     compact_threshold: u8,
     log: Arc<Log>,
+    globally_paused: GlobalPauseCheck,
 ) -> Result<RunningSpace, String> {
     let (mut space, mut transcript, history) = tokio::task::spawn_blocking(move || {
         let mut transcript = space.db.fold(&space.resume.session_id)?;
@@ -181,6 +195,7 @@ pub(crate) async fn start(
             &mut Compaction::new(compact_threshold),
             &events,
             received_commands,
+            globally_paused,
         )
         .await;
         if let Err(error) = &result {
@@ -276,7 +291,9 @@ fn begin(
             "Interrupt requested".into(),
             json!({}),
         ),
-        Action::PauseAfterTurn => return Err("pause after turn is not a transport action".into()),
+        Action::PauseAfterTurn | Action::GlobalPauseChanged => {
+            return Err("pause after turn is not a transport action".into())
+        }
         Action::Permission(id, answer) => {
             let (text, decision) = match answer {
                 PermissionAnswer::Allow => ("Permission allow requested", json!({"kind":"allow"})),
@@ -314,7 +331,9 @@ fn begin(
                 .answer_permission(id, answer)
                 .await
                 .map(|_| Value::Null),
-            Action::PauseAfterTurn => unreachable!("handled by the pump"),
+            Action::PauseAfterTurn | Action::GlobalPauseChanged => {
+                unreachable!("handled by the pump")
+            }
         };
         let _ = completions.send(Completion {
             sequence,
@@ -333,15 +352,25 @@ async fn pump(
     compaction: &mut Compaction,
     events: &mpsc::UnboundedSender<SpaceEvent>,
     mut commands: mpsc::UnboundedReceiver<Command>,
+    globally_paused: GlobalPauseCheck,
 ) -> Result<(), String> {
     let (completed, mut completions) = mpsc::unbounded_channel::<Completion>();
     let mut pending = 0usize;
     // Whether a turn runs, and a pause waiting for it to end.
     let mut turn_running = false;
+    let mut stopping = false;
     let mut pause_after_turn: Option<oneshot::Sender<Result<Value, String>>> = None;
     // The threshold, before any usage arrives.
     let _ = events.send(SpaceEvent::Context(compaction.context()));
     loop {
+        if !turn_running && !stopping && (pause_after_turn.is_some() || globally_paused()) {
+            stopping = true;
+            compaction.reset();
+            let reply = pause_after_turn
+                .take()
+                .unwrap_or_else(|| oneshot::channel().0);
+            pause(session.handle(), reply);
+        }
         tokio::select! {
             biased;
             _ = events.closed() => {
@@ -363,7 +392,6 @@ async fn pump(
                 if let Some(completion) = completion {
                     if completion.failed_turn {
                         turn_running = false;
-                        if let Some(reply) = pause_after_turn.take() { pause(session.handle(), reply); }
                     }
                     finish(space,transcript,events,completion)?;
                     pending -= 1;
@@ -378,13 +406,10 @@ async fn pump(
                 let ended = matches!(event,SessionEvent::Message(Message::Known(KnownMessage::Result(_))) | SessionEvent::Exited { .. });
                 if ended { turn_running = false; }
                 let _ = events.send(SpaceEvent::Session(event));
-                if ended {
-                    if let Some(reply) = pause_after_turn.take() {
-                        // A requested pause wins over the next compaction step.
-                        step = None;
-                        compaction.reset();
-                        pause(session.handle(), reply);
-                    }
+                if ended && (pause_after_turn.is_some() || globally_paused()) {
+                    // Every pause reason uses the same boundary before compaction.
+                    step = None;
+                    compaction.reset();
                 }
                 if let Some(step) = step {
                     let announcement = transcript.system(SystemKind::Compaction, step.announcement(&compaction.context()), json!({}));
@@ -398,6 +423,9 @@ async fn pump(
                     let _ = events.send(SpaceEvent::TurnStarted);
                 }
                 if terminal {
+                    if let Some(reply) = pause_after_turn.take() {
+                        let _ = reply.send(Ok(Value::Null));
+                    }
                     while pending > 0 {
                         if let Some(completion) = completions.recv().await {
                             finish(space,transcript,events,completion)?;
@@ -410,7 +438,13 @@ async fn pump(
             command = commands.recv() => {
                 match command {
                     Some(Command { action: Action::PauseAfterTurn, reply }) => {
-                        if turn_running { pause_after_turn = Some(reply); } else { pause(session.handle(), reply); }
+                        pause_after_turn = Some(reply);
+                    }
+                    Some(Command { action: Action::GlobalPauseChanged, reply }) => {
+                        let _ = reply.send(Ok(Value::Bool(stopping)));
+                    }
+                    Some(command) if matches!(command.action, Action::Turn(_)) && (globally_paused() || stopping || pause_after_turn.is_some()) => {
+                        let _ = command.reply.send(Err("This agent is pausing. It starts no new turn until it resumes.".into()));
                     }
                     Some(command) => {
                         turn_running |= matches!(command.action, Action::Turn(_));

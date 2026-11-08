@@ -6,7 +6,7 @@ import SwiftUI
 struct PaletteCommand: Identifiable {
 	enum Action: Equatable {
 		case agentHub, workspaceHub, newShell, repurpose, addRepo, cloneRepo, duplicate, closeSession
-		case health, newProfile, settings, switchProfile(String)
+		case health, newProfile, settings, switchProfile(String), toggleGlobalPause
 	}
 	let id: String
 	let title: String
@@ -15,7 +15,7 @@ struct PaletteCommand: Identifiable {
 	let action: Action
 	var shortcut: AppShortcut?
 
-	static func commands(profiles: [Profile], active: String?) -> [Self] {
+	static func commands(profiles: [Profile], active: String?, globalPaused: Bool = false) -> [Self] {
 		[
 			Self(id: "workspace-hub", title: "Workspace Hub", description: "List, filter and open workspaces", icon: "▦", action: .workspaceHub),
 			Self(id: "new-shell", title: "New Shell", description: "Open a fresh shell tab", icon: "❯", action: .newShell, shortcut: .newShell),
@@ -25,6 +25,7 @@ struct PaletteCommand: Identifiable {
 			Self(id: "duplicate-session", title: "Duplicate Current Session", description: "Open the New Task dialog pre-filled to copy the current workspace", icon: "⧉", action: .duplicate),
 			Self(id: "close-session", title: "Close Current Session", description: "Close the active session tab", icon: "×", action: .closeSession),
 			Self(id: "health-hub", title: "Health Hub", description: "Check Devora dependencies, credentials, and setup", icon: "✚", action: .health),
+			Self(id: "global-pause", title: globalPaused ? "Resume Devora" : "Pause Devora", description: "Hold background work at its next graceful boundary", icon: globalPaused ? "▶️" : "⏸️", action: .toggleGlobalPause),
 			Self(id: "new-profile", title: "New Profile", description: "Create or register a profile root directory", icon: "＋", action: .newProfile),
 			Self(id: "agent-hub", title: "Agent Hub", description: "List, create and open agents", icon: "◎", action: .agentHub, shortcut: .hubs),
 			Self(id: "manage-profiles", title: "Settings / Manage Profiles", description: "Open the Settings Hub — switch, create, and delete profiles; edit Claude models, effort, and repos", icon: "⚙", action: .settings),
@@ -48,9 +49,9 @@ final class CommandPaletteModel {
 
 	init(commands: [PaletteCommand]) { self.commands = commands }
 	/// Refresh the dynamic profile rows without losing the user's filter or selection.
-	func updateProfiles(_ profiles: [Profile], active: String?) {
+	func updateProfiles(_ profiles: [Profile], active: String?, globalPaused: Bool = false) {
 		let selectedID = selected?.id
-		commands = PaletteCommand.commands(profiles: profiles, active: active)
+		commands = PaletteCommand.commands(profiles: profiles, active: active, globalPaused: globalPaused)
 		if let index = items.firstIndex(where: { $0.id == selectedID }) {
 			cursor.select(index)
 		} else {

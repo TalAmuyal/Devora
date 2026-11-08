@@ -62,7 +62,15 @@ final class AgentSettingsUITests: XCTestCase {
 		app.typeKey("g", modifierFlags: [.command, .shift])
 		app.typeText(template.path)
 		app.typeKey(.return, modifierFlags: [])
-		picker.buttons["Choose Template"].click()
+		let file = picker.textFields.matching(NSPredicate(format: "value == %@", template.lastPathComponent)).firstMatch
+		let choose = picker.buttons["Choose Template"]
+		let ready = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+			file.exists && file.isSelected && choose.isEnabled
+		}, object: nil)
+		XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 10), .completed,
+			"Go to Folder must select the target file and enable confirmation. \(picker.debugDescription)")
+		choose.click()
+		XCTAssertTrue(picker.waitForNonExistence(timeout: 5), "Choosing the ready file closes the picker")
 		let selected = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
 			app.textFields["agent-input-template-file"].value as? String == template.path
 		}, object: nil)

@@ -179,6 +179,23 @@ mkdir -p ~/.zsh/completions
 debi completion zsh > ~/.zsh/completions/_debi
 ```
 
+## Global Pause (Sapphire)
+
+Use the title-bar Pause Devora button or the Pause Devora command in the palette to hold background work.
+An agent finishes its current turn, including permission requests, and then pauses.
+Its tab shows Pausing… until the turn ends, then Paused, and the window shows one Paused hint.
+Permission answers and Stop remain available while the turn finishes.
+The hold also prevents the next save-memory or compaction turn from starting.
+
+Sending during the hold shows a hint to resume Devora and keeps the prompt as a saved draft.
+Resume Devora releases agents held by Global Pause.
+Agents paused individually before or during the hold stay paused during that run.
+Use Keep Paused on a globally held agent to preserve its individual pause when the global hold is released.
+
+The global hold survives quitting and relaunching Sapphire.
+Restored agent tabs show their history while held, and Resume Devora then starts every open agent tab as normal startup would.
+Each suffixed Sapphire installation keeps its own hold.
+
 ## Settings
 
 Devora's behavior is configured from the **[Settings Hub](#profiles)** (press `P` in the Workspace Hub).

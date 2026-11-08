@@ -35,6 +35,24 @@ It is being extracted from Ember's `src-tauri/` area by area (TalAmuyal/Devora#2
 - Preview rows retain the terminal identity and ordered preview IDs, paths, revisions and preferred widths. OpenPreview replaces new paths, StackPreview appends them, and either refreshes an already-open path in place without removing siblings. ResizePreview validates the bounds exported to Sapphire; window-size constraints are a UI projection, not persisted writes.
 - Tests live with the code they test; run them with `mise run test` (and `mise run lint`).
 
+## Global Pause
+
+`AppState.global_paused` is written through `Command::SetGlobalPaused` in app state.db and projected through `Event::GlobalPauseChanged`.
+Existing databases migrate to running.
+`Store::subscribe_global_pause` registers under the state lock and delivers the current bool followed by committed changes.
+Integrations subscribe and choose their own graceful unit boundary.
+The authoritative `global_paused` read also guards admission at those boundaries.
+
+Agents use the existing actor pause-after-turn boundary for individual and global pauses.
+The registry's in-memory `globally_held` eligibility distinguishes agents held globally from individual pauses.
+A new hold wakes the actor, and its current turn, permission answers and Stop can complete.
+The actor checks the committed hold before user turns and subsequent compaction turns.
+A released hold cancels its pending boundary request, or resumes through the ownership barrier once stopping already began.
+Resume eligibility ends on individual pause or tab close, and stays in memory.
+The registry retains each held owner through process reaping and uses a new generation when its runtime restarts.
+A fresh process restores all open agent tabs under the saved hold, showing history before any CLI launch, and releases all of them on global resume.
+Only the global bool persists across app restarts.
+
 ## Debi repo commands
 
 Rust `debi repo list` prints distinct available repo names in sorted order.

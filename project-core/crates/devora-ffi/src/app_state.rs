@@ -17,6 +17,7 @@ use crate::{CoreError, DevoraCore};
 
 #[uniffi::remote(Record)]
 pub struct AppState {
+    pub global_paused: bool,
     pub window: Window,
     pub active_profile: Option<String>,
     pub agent_views: Vec<AgentViewState>,
@@ -89,6 +90,9 @@ pub struct PreviewPane {
 #[uniffi::remote(Enum)]
 #[uniffi(name = "StateCommand")]
 pub enum Command {
+    SetGlobalPaused {
+        paused: bool,
+    },
     ClearAgentDraft {
         profile_path: String,
         name: String,
@@ -164,6 +168,9 @@ pub enum Command {
 #[uniffi::remote(Enum)]
 #[uniffi(name = "StateEvent")]
 pub enum Event {
+    GlobalPauseChanged {
+        paused: bool,
+    },
     AgentDraftCleared {
         profile_path: String,
         name: String,

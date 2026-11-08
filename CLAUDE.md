@@ -62,6 +62,7 @@ Reference those homes rather than restating them.
 - [ADR-010: Sapphire UI Stack and Build](docs/adrs/ADR-010-sapphire-ui-stack.md) — SwiftUI on macOS 27 over UniFFI, libghostty terminal, natively drawn `nvim --embed` prompt editor, `WKWebView` panes, SwiftPM modules plus a generated app target
 - [ADR-011: Sapphire Testing](docs/adrs/ADR-011-sapphire-testing.md) — unit tests against the real core, Gherkin over a test bridge shared with Ember, and XCUITests for real input and drawing, all under one `mise run test`; `project-sapphire/acceptance/PARITY.md` tracks what Sapphire doesn't share
 - [ADR-012: Agent Spaces](docs/adrs/ADR-012-agent-spaces.md) — a persistent agent per `<profile>/agent-spaces/<name>/`, with its own `memory/` and SQLite database; opened from the Agent Hub as a tab with a chat panel; closing the tab pauses the agent and reopening resumes it
+- [ADR-013: Global Pause](docs/adrs/ADR-013-global-pause.md) — a durable per-app hold with subscribed integrations and graceful work boundaries
 
 ## Vision
 

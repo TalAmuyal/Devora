@@ -133,8 +133,12 @@ struct AgentChatPanel: View {
 				if model.chat.chat?.turnRunning == true {
 					Button("■ Stop") { Task { await model.chat.stop() } }
 				}
-				if model.chat.chat?.phase == .paused {
-					Button("Resume") { Task { await model.chat.retry() } }
+				if model.chat.globallyPaused && model.chat.chat?.globallyHeld == true {
+					Text(model.chat.chat?.phase == .paused ? "Paused" : "Pausing…").font(.caption)
+						.accessibilityIdentifier("agent-global-pause-status")
+					Button("Keep Paused") { model.chat.pause() }
+				} else if model.chat.chat?.phase == .paused {
+					Button("Resume") { Task { await model.chat.retry() } }.disabled(model.chat.globallyPaused)
 				} else {
 					Button(model.chat.chat?.pauseRequested == true ? "⏸️ Pausing…" : "Pause") {
 						model.chat.pause()
@@ -149,7 +153,7 @@ struct AgentChatPanel: View {
 				HStack {
 					Text(error).textSelection(.enabled)
 					Spacer()
-					Button("Retry") { Task { await model.chat.retry() } }
+					Button("Retry") { Task { await model.chat.retry() } }.disabled(model.chat.globallyPaused)
 				}
 				.padding(12).foregroundStyle(.orange)
 			}
@@ -164,6 +168,11 @@ struct AgentChatPanel: View {
 			}
 			Divider()
 			AgentContextBar(context: model.chat.chat?.context)
+			if model.chat.globallyPaused {
+				Text("Globally paused — resume Devora to send")
+					.font(.caption).foregroundStyle(.secondary)
+					.accessibilityIdentifier("global-pause-send-hint")
+			}
 			Divider()
 			AgentPrompt(
 				text: Binding(get: { model.chat.draft }, set: { model.chat.draft = $0 }),

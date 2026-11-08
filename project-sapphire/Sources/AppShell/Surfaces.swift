@@ -67,7 +67,7 @@ final class Surfaces {
 	/// Opens immediately, then refreshes only the profile rows without delaying the search field.
 	func openCommandPalette() {
 		guard windowStack.find(CommandPaletteModel.layerName) == nil else { return }
-		let model = CommandPaletteModel(commands: PaletteCommand.commands(profiles: store.profiles, active: store.selectedProfilePath))
+		let model = CommandPaletteModel(commands: PaletteCommand.commands(profiles: store.profiles, active: store.selectedProfilePath, globalPaused: store.app.globalPaused))
 		model.isEditingText = { [unowned self] in router.isEditingText }
 		var spec = pageLayer(LayerSpec(name: CommandPaletteModel.layerName) { CommandPaletteView(model: model) })
 		spec.onKey = model.handleKey
@@ -81,12 +81,13 @@ final class Surfaces {
 		palette = model
 		Task { [weak self, weak model, store] in
 			guard await store.listProfiles(), let self, let model, self.palette === model else { return }
-			model.updateProfiles(store.profiles, active: store.selectedProfilePath)
+			model.updateProfiles(store.profiles, active: store.selectedProfilePath, globalPaused: store.app.globalPaused)
 		}
 	}
 
 	private func runPaletteCommand(_ action: PaletteCommand.Action) {
 		switch action {
+		case .toggleGlobalPause: store.dispatch(.setGlobalPaused(!store.app.globalPaused))
 		case .agentHub: openAgentHub()
 		case .workspaceHub: openWorkspaceHub()
 		case .newShell: store.dispatch(.openShell)

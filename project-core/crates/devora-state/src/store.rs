@@ -16,6 +16,7 @@ pub struct Store {
 struct Inner {
     state: State,
     subscribers: Vec<Feed<Event>>,
+    pause_subscribers: Vec<Feed<bool>>,
     /// Where every change is committed before it takes effect; `None` for an in-memory store.
     db: Option<Db>,
     chats: Vec<Chat>,
@@ -61,6 +62,12 @@ impl Store {
             db.save(&next)?;
         }
         inner.state = next;
+        if let Some(paused) = events.iter().find_map(|event| match event {
+            Event::GlobalPauseChanged { paused } => Some(*paused),
+            _ => None,
+        }) {
+            inner.pause_subscribers.retain(|feed| feed.push(&[paused]));
+        }
         inner.subscribers.retain(|feed| feed.push(&events));
         Ok(events)
     }
@@ -122,6 +129,20 @@ impl Store {
     #[cfg(test)]
     pub(crate) fn state(&self) -> State {
         lock(&self.inner).state.clone()
+    }
+
+    /// Integrations receive the current hold followed by committed changes.
+    /// Each integration chooses its graceful work boundary.
+    pub fn subscribe_global_pause(&self) -> Subscription<bool> {
+        let mut inner = lock(&self.inner);
+        let (feed, subscription) = feed();
+        feed.push(&[inner.state.snapshot().global_paused]);
+        inner.pause_subscribers.push(feed);
+        subscription
+    }
+
+    pub fn global_paused(&self) -> bool {
+        lock(&self.inner).state.snapshot().global_paused
     }
 
     /// Opens a subscription whose first event is an [`Event::Snapshot`] of the current state, followed by every event from later commands.
@@ -490,5 +511,70 @@ mod chat_tests {
         assert!(store.chat_snapshot().is_empty());
         drop(store);
         assert!(Store::open(&path).unwrap().chat_snapshot().is_empty());
+    }
+}
+
+#[cfg(test)]
+mod global_pause_tests {
+    use super::*;
+    use std::sync::{mpsc, Arc};
+    use std::time::Duration;
+
+    #[test]
+    fn integration_finishes_its_unit_then_subscribes_until_the_hold_is_released() {
+        let store = Arc::new(Store::new());
+        let changes = store.subscribe_global_pause();
+        assert_eq!(changes.try_next_batch(1), vec![false]);
+        let (started, start) = mpsc::channel();
+        let (finish, finished) = mpsc::channel();
+        let (boundary, held) = mpsc::channel();
+        let (next, resumed) = mpsc::channel();
+        let worker_store = store.clone();
+        let worker = std::thread::spawn(move || {
+            started.send(()).unwrap();
+            finished.recv().unwrap();
+            boundary.send(()).unwrap();
+            while worker_store.global_paused() {
+                changes.next_batch_blocking(32);
+            }
+            next.send(()).unwrap();
+        });
+        start.recv_timeout(Duration::from_secs(2)).unwrap();
+        store
+            .dispatch(Command::SetGlobalPaused { paused: true })
+            .unwrap();
+        finish.send(()).unwrap();
+        held.recv_timeout(Duration::from_secs(2)).unwrap();
+        assert!(resumed.try_recv().is_err());
+        store
+            .dispatch(Command::SetGlobalPaused { paused: false })
+            .unwrap();
+        resumed.recv_timeout(Duration::from_secs(2)).unwrap();
+        worker.join().unwrap();
+    }
+
+    #[test]
+    fn existing_databases_default_to_running_and_hold_survives_reopen() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("state.db");
+        {
+            let conn = rusqlite::Connection::open(&path).unwrap();
+            conn.execute_batch("CREATE TABLE meta (id INTEGER PRIMARY KEY, next_id INTEGER NOT NULL, active_tab INTEGER, active_profile TEXT); INSERT INTO meta(id,next_id) VALUES(0,0); CREATE TABLE tabs(id INTEGER PRIMARY KEY,position INTEGER,title TEXT,kind TEXT,kind_data TEXT,profile_path TEXT); CREATE TABLE panes(id INTEGER PRIMARY KEY,tab_id INTEGER,kind TEXT); PRAGMA user_version=1;").unwrap();
+        }
+        let store = Store::open(&path).unwrap();
+        assert!(!store.global_paused());
+        assert_eq!(
+            store
+                .dispatch(Command::SetGlobalPaused { paused: true })
+                .unwrap(),
+            vec![Event::GlobalPauseChanged { paused: true }]
+        );
+        drop(store);
+        let reopened = Store::open(&path).unwrap();
+        assert!(reopened.snapshot().global_paused);
+        assert_eq!(
+            reopened.subscribe_global_pause().try_next_batch(1),
+            vec![true]
+        );
     }
 }

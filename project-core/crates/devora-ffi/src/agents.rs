@@ -242,6 +242,7 @@ pub struct Chat {
     pub phase: ChatPhase,
     pub turn_running: bool,
     pub pause_requested: bool,
+    pub globally_held: bool,
     pub session_id: Option<String>,
     pub items: Vec<TranscriptItem>,
     pub error: Option<String>,
@@ -257,6 +258,7 @@ pub struct ChatContext {
 }
 #[uniffi::remote(Enum)]
 pub enum ChatUpdate {
+    GlobalHold { held: bool },
     PauseRequested { requested: bool },
     Turn { running: bool },
     Generation { generation: u64 },

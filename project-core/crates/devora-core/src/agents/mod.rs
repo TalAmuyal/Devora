@@ -2,6 +2,7 @@
 //! it immediately and signals pause. Its entry remains reserved until the process
 //! is reaped and C's StopInfo persistence completes. Reopen waits for that barrier.
 mod events;
+mod global_pause;
 mod launch;
 mod operations;
 
@@ -44,6 +45,7 @@ struct Owner {
     handle: Option<SpaceHandle>,
     pause: watch::Sender<bool>,
     pause_requested: bool,
+    globally_held: bool,
     done: watch::Sender<bool>,
 }
 
@@ -134,6 +136,14 @@ impl Agents {
                 if inner.deletions.contains_key(&key) {
                     return Err("agent space is being deleted".into());
                 }
+                if self.state.global_paused() {
+                    if let Some(tab) = inner.owners.get(&key).and_then(|owner| owner.tab) {
+                        self.state
+                            .dispatch(Command::ActivateTab { tab })
+                            .map_err(|e| e.to_string())?;
+                        return Ok(tab);
+                    }
+                }
                 let waiting = inner.owners.get(&key).filter(|owner| !*owner.done.borrow());
                 if let Some(owner) = waiting {
                     if !*owner.pause.borrow() && !owner.pause_requested {
@@ -159,6 +169,7 @@ impl Agents {
                             handle: None,
                             pause,
                             pause_requested: false,
+                            globally_held: false,
                             done,
                         },
                     );
@@ -282,12 +293,20 @@ impl Agents {
 
     pub async fn pause(&self, tab: u64) -> Result<(), String> {
         let mut done = {
-            let inner = lock(&self.inner);
+            let mut inner = lock(&self.inner);
             let owner = inner
                 .owners
-                .values()
+                .values_mut()
                 .find(|o| o.tab == Some(tab))
                 .ok_or("agent is not open")?;
+            owner.globally_held = false;
+            owner.pause_requested = true;
+            events::update(
+                &self.state,
+                tab,
+                owner.generation,
+                ChatUpdate::GlobalHold { held: false },
+            );
             if *owner.done.borrow() {
                 return Ok(());
             }
@@ -319,11 +338,30 @@ impl Agents {
         if owner.pause_requested {
             return Ok(());
         }
+        if owner.globally_held && owner.handle.is_none() {
+            owner.globally_held = false;
+            owner.pause_requested = true;
+            events::update(
+                &self.state,
+                tab,
+                generation,
+                ChatUpdate::GlobalHold { held: false },
+            );
+            owner.pause.send_replace(true);
+            return Ok(());
+        }
         let completion = owner
             .handle
             .as_ref()
             .ok_or("agent is not ready")?
             .pause_after_turn();
+        owner.globally_held = false;
+        events::update(
+            &self.state,
+            tab,
+            generation,
+            ChatUpdate::GlobalHold { held: false },
+        );
         owner.pause_requested = true;
         let run_id = owner.run_id;
         events::update(
@@ -520,6 +558,9 @@ impl Agents {
     }
 
     pub async fn send_turn(&self, tab: u64, generation: u64, text: String) -> Result<(), String> {
+        if self.state.global_paused() {
+            return Err("Globally paused — resume Devora to send".into());
+        }
         let (handle, key) = {
             let inner = lock(&self.inner);
             let (key, owner) = inner
@@ -665,38 +706,84 @@ async fn run(
     mut pause: watch::Receiver<bool>,
     context: LaunchContext,
 ) {
-    let outcome = run_session(&inner, &state, &log, &key, generation, &mut pause, context).await;
-    let mut inner = lock(&inner);
-    let Some(owner) = inner
-        .owners
-        .get_mut(&key)
-        .filter(|o| o.run_id == generation)
-    else {
-        return;
-    };
-    if let Err(error) = outcome {
-        log.report_error(&error);
-        if let Some(tab) = owner.tab {
-            events::update(
-                &state,
-                tab,
-                owner.generation,
-                ChatUpdate::Failure {
-                    message: error.clone(),
-                },
-            );
+    loop {
+        let outcome = run_session(
+            &inner,
+            &state,
+            &log,
+            &key,
+            generation,
+            &mut pause,
+            context.clone(),
+        )
+        .await;
+        {
+            let mut inner = lock(&inner);
+            let Some(owner) = inner
+                .owners
+                .get_mut(&key)
+                .filter(|o| o.run_id == generation)
+            else {
+                return;
+            };
+            owner.handle = None;
+            if let Err(error) = outcome {
+                log.report_error(&error);
+                if let Some(tab) = owner.tab {
+                    events::update(
+                        &state,
+                        tab,
+                        owner.generation,
+                        ChatUpdate::Failure { message: error },
+                    );
+                }
+                phase(&state, owner, ChatPhase::Failed);
+                owner.done.send_replace(true);
+                return;
+            }
+            phase(&state, owner, ChatPhase::Paused);
         }
-        phase(&state, owner, ChatPhase::Failed);
-    } else {
-        phase(&state, owner, ChatPhase::Paused);
+        if !global_pause::wait_for_release(&inner, &state, &key, generation, &mut pause).await {
+            if let Some(owner) = lock(&inner)
+                .owners
+                .get_mut(&key)
+                .filter(|o| o.run_id == generation)
+            {
+                owner.done.send_replace(true);
+            }
+            return;
+        }
+        let mut inner = lock(&inner);
+        let eligible = inner.owners.get(&key).is_some_and(|o| {
+            o.run_id == generation && o.tab.is_some() && !o.pause_requested && !*o.pause.borrow()
+        });
+        if !eligible || inner.closing {
+            if let Some(owner) = inner
+                .owners
+                .get_mut(&key)
+                .filter(|o| o.run_id == generation)
+            {
+                owner.done.send_replace(true);
+            }
+            return;
+        }
+        inner.generation += 1;
+        let next = inner.generation;
+        let owner = inner.owners.get_mut(&key).expect("checked owner");
+        owner.generation = next;
+        owner.globally_held = false;
+        if let Some(tab) = owner.tab {
+            let _ = state.dispatch_chat(ChatCommand::Start {
+                tab,
+                generation: next,
+            });
+        }
     }
-    owner.handle = None;
-    owner.done.send_replace(true);
 }
 
 async fn run_session(
-    inner: &Mutex<Inner>,
-    state: &Store,
+    inner: &Arc<Mutex<Inner>>,
+    state: &Arc<Store>,
     log: &Arc<Log>,
     key: &Key,
     generation: u64,
@@ -712,11 +799,38 @@ async fn run_session(
     })
     .await
     .map_err(|e| e.to_string())??;
+    let changes = state.subscribe_global_pause();
+    let globally_paused =
+        global_pause::check(inner.clone(), state.clone(), key.clone(), generation);
+    publish(inner, state, key, generation, SpaceEvent::Restored(history));
+    while globally_paused() && !*pause.borrow() {
+        if let Some(owner) = lock(inner).owners.get(key) {
+            phase(state, owner, ChatPhase::Paused);
+        }
+        tokio::select! {
+            _ = pause.changed() => {},
+            _ = changes.next_batch(32) => {},
+        }
+    }
     if *pause.borrow() {
         return Ok(());
     }
-    publish(inner, state, key, generation, SpaceEvent::Restored(history));
-    let mut running = match space.start(&context, log.clone()).await {
+    if let Some(owner) = lock(inner).owners.get_mut(key) {
+        owner.globally_held = false;
+        phase(state, owner, ChatPhase::Opening);
+        if let Some(tab) = owner.tab {
+            events::update(
+                state,
+                tab,
+                owner.generation,
+                ChatUpdate::GlobalHold { held: false },
+            );
+        }
+    }
+    let mut running = match space
+        .start_with_global_pause(&context, log.clone(), globally_paused)
+        .await
+    {
         Ok(running) => running,
         Err(error) => {
             let profile = key.profile.clone();
@@ -747,6 +861,9 @@ async fn run_session(
         tokio::select! {
             biased;
             _ = pause.changed() => {},
+            _ = changes.next_batch(32) => {
+                global_pause::changed(inner.clone(), state.clone(), key.clone(), generation, running.handle());
+            },
             event = running.next_update() => {
                 let Some(event) = event else { let _ = running.pause().await; return Ok(()); };
                 let failed = match &event { SpaceEvent::Session(SessionEvent::Failed(message)) => Some(message.clone()), _ => None };
