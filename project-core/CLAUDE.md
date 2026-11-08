@@ -73,8 +73,10 @@ A hold finishes the admitted repo and keeps the next repo waiting until release.
 
 Each round discovers canonical parent clones directly under every registered profile's repos directory.
 External registrations and escaping symlinks are excluded, and aliases are deduplicated.
+Unavailable profiles are logged and skipped independently so healthy profiles still run.
 The workspace crate's `RepoLock` uses flock on Git's common directory `devora-repo.lock`.
 Creation, refresh and add-repo share that lock around fetch/worktree mutations, with prepare commands outside it.
+Creation and refresh report the first lock contention as a progress step.
 Eligibility requires a clean index/worktree including untracked files, detached HEAD and no Git operation or leftover Git lock.
 Git locks are logged and retained.
 Fetch is non-interactive with a 120-second timeout and BatchMode SSH unless a configured core.sshCommand supplies the command.

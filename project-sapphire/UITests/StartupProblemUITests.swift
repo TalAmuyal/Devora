@@ -17,7 +17,7 @@ final class StartupProblemUITests: XCTestCase {
 	@MainActor
 	func testAnUnreadableStateIsLeftAloneOnQuitAndKeptAsideOnStartFresh() throws {
 		let config = scratch.appending(path: "config.json")
-		try #"{"profiles": []}"#.write(to: config, atomically: true, encoding: .utf8)
+		try #"{"repo-update":{"enabled":false},"profiles": []}"#.write(to: config, atomically: true, encoding: .utf8)
 		let stateDir = scratch.appending(path: "state")
 		let corrupt = Data(repeating: 0x5a, count: 8192)
 		try corrupt.write(to: stateDir.appending(path: "state.db"))

@@ -29,7 +29,7 @@ final class NewTaskDialogUITests: XCTestCase {
 		try FileManager.default.createDirectory(at: profile.appending(path: "workspaces"), withIntermediateDirectories: true)
 		try #"{"name": "Work"}"#.write(to: profile.appending(path: "config.json"), atomically: true, encoding: .utf8)
 		let config = scratch.appending(path: "config.json")
-		try #"{"profiles": ["\#(profile.path)"]}"#.write(to: config, atomically: true, encoding: .utf8)
+		try #"{"repo-update":{"enabled":false},"profiles": ["\#(profile.path)"]}"#.write(to: config, atomically: true, encoding: .utf8)
 		app = XCUIApplication()
 		app.launchEnvironment["DEVORA_CONFIG_PATH"] = config.path
 		app.launchEnvironment["DEVORA_STATE_DIR"] = scratch.appending(path: "state").path

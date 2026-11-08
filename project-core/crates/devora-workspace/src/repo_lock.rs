@@ -8,7 +8,11 @@ use std::time::Duration;
 pub struct RepoLock(File);
 
 impl RepoLock {
-    pub fn acquire(repo: &Path, cancelled: impl Fn() -> bool) -> Result<Option<Self>, String> {
+    pub fn acquire(
+        repo: &Path,
+        cancelled: impl Fn() -> bool,
+        mut on_wait: impl FnMut(),
+    ) -> Result<Option<Self>, String> {
         let common = crate::repo_update::git_output(
             repo,
             &["rev-parse", "--path-format=absolute", "--git-common-dir"],
@@ -21,6 +25,7 @@ impl RepoLock {
             .write(true)
             .open(&path)
             .map_err(|e| format!("{}: {e}", path.display()))?;
+        let mut announced = false;
         loop {
             if cancelled() {
                 return Ok(None);
@@ -28,6 +33,10 @@ impl RepoLock {
             match file.try_lock_exclusive() {
                 Ok(()) => return Ok(Some(Self(file))),
                 Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                    if !announced {
+                        on_wait();
+                        announced = true;
+                    }
                     thread::sleep(Duration::from_millis(50))
                 }
                 Err(error) => return Err(format!("locking {}: {error}", path.display())),

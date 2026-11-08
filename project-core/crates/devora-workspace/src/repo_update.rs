@@ -195,7 +195,7 @@ fn fetch(repo: &Path, stop: &AtomicBool, timeout: Duration) -> Result<(), String
 /// Hold the cooperative lock through fetch and checkout. A running checkout is
 /// always reaped to completion, even after shutdown is requested.
 pub fn update(repo: &Path, stop: &AtomicBool) -> Result<Outcome, String> {
-    let Some(_guard) = RepoLock::acquire(repo, || stop.load(Ordering::Acquire))? else {
+    let Some(_guard) = RepoLock::acquire(repo, || stop.load(Ordering::Acquire), || {})? else {
         return Ok(Outcome::Skipped("shutting down".into()));
     };
     if let Some(reason) = eligible(repo)? {
@@ -438,7 +438,9 @@ mod tests {
             ],
         )
         .unwrap();
-        let guard = RepoLock::acquire(&f.repo, || false).unwrap().unwrap();
+        let guard = RepoLock::acquire(&f.repo, || false, || {})
+            .unwrap()
+            .unwrap();
         let common = git_output(
             &linked,
             &["rev-parse", "--path-format=absolute", "--git-common-dir"],
@@ -453,9 +455,13 @@ mod tests {
             contender.try_lock_exclusive().unwrap_err().kind(),
             std::io::ErrorKind::WouldBlock
         );
-        assert!(RepoLock::acquire(&linked, || true).unwrap().is_none());
+        assert!(RepoLock::acquire(&linked, || true, || {})
+            .unwrap()
+            .is_none());
         drop(guard);
-        assert!(RepoLock::acquire(&linked, || false).unwrap().is_some());
+        assert!(RepoLock::acquire(&linked, || false, || {})
+            .unwrap()
+            .is_some());
     }
 
     #[test]

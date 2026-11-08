@@ -706,8 +706,15 @@ fn create_worktree_for_repo(
     handle: &CreationHandle,
     warnings: &mut Vec<String>,
 ) -> Result<bool, String> {
-    let Some(_repo_lock) =
-        crate::repo_lock::RepoLock::acquire(source_repo, || handle.is_cancelled())?
+    let Some(_repo_lock) = crate::repo_lock::RepoLock::acquire(
+        source_repo,
+        || handle.is_cancelled(),
+        || {
+            on_event(CreationEvent::Step {
+                label: format!("Waiting for repository lock on {label}"),
+            });
+        },
+    )?
     else {
         return Ok(false);
     };
@@ -819,7 +826,15 @@ pub(crate) fn refresh_worktree(
     on_event: &EventSink,
     handle: &CreationHandle,
 ) -> Result<(), String> {
-    let Some(_repo_lock) = crate::repo_lock::RepoLock::acquire(worktree, || handle.is_cancelled())?
+    let Some(_repo_lock) = crate::repo_lock::RepoLock::acquire(
+        worktree,
+        || handle.is_cancelled(),
+        || {
+            on_event(CreationEvent::Step {
+                label: format!("Waiting for repository lock on {}", worktree.display()),
+            });
+        },
+    )?
     else {
         return Ok(());
     };
@@ -1109,6 +1124,50 @@ mod tests {
             String::from_utf8_lossy(&out.stderr)
         );
         out
+    }
+
+    #[test]
+    fn worktree_creation_reports_lock_contention_and_can_be_cancelled() {
+        let root = tempfile::tempdir().unwrap();
+        let source = root.path().join("source");
+        fs::create_dir(&source).unwrap();
+        git(&source, &["init", "-b", "main"]);
+        let guard = crate::repo_lock::RepoLock::acquire(&source, || false, || {})
+            .unwrap()
+            .unwrap();
+        let target = root.path().join("worktree");
+        let worktree = target.clone();
+        let handle = CreationHandle::new();
+        let cancel = handle.clone();
+        let (sent, received) = std::sync::mpsc::channel();
+        let events: EventSink = Arc::new(move |event| {
+            if let CreationEvent::Step { label } = event {
+                sent.send(label).unwrap();
+            }
+        });
+        let worker = std::thread::spawn(move || {
+            create_worktree_for_repo(
+                &source,
+                "source",
+                &worktree,
+                "HEAD",
+                false,
+                &events,
+                &handle,
+                &mut Vec::new(),
+            )
+        });
+        assert_eq!(
+            received
+                .recv_timeout(std::time::Duration::from_secs(5))
+                .unwrap(),
+            "Waiting for repository lock on source"
+        );
+        cancel.request_cancel();
+        assert!(!worker.join().unwrap().unwrap());
+        assert!(received.try_recv().is_err());
+        assert!(!target.exists());
+        drop(guard);
     }
 
     #[test]

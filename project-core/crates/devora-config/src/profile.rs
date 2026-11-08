@@ -201,7 +201,22 @@ pub fn unregister_profile(config_path: &Path, root_path: &str) -> Result<(), Str
     write_global_config(config_path, &global)
 }
 
-/// Reads the global config, treating a missing file as `{}` but a corrupt one as an error (so a registration can never clobber unrelated settings).
+/// Raw registered paths. Each consumer resolves per-profile failures at its own boundary.
+pub fn registered_paths(config_path: &Path) -> Result<Vec<String>, String> {
+    let config = load_global_config(config_path)?;
+    let Some(paths) = config.get("profiles") else {
+        return Ok(Vec::new());
+    };
+    let paths = paths
+        .as_array()
+        .ok_or("\"profiles\" is not an array in global config")?;
+    Ok(paths
+        .iter()
+        .filter_map(|path| path.as_str().map(str::to_owned))
+        .collect())
+}
+
+/// Reads the global config, treating a missing file as `{}` but a corrupt one as an error.
 fn load_global_config(config_path: &Path) -> Result<Value, String> {
     if !config_path.exists() {
         return Ok(Value::Object(serde_json::Map::new()));

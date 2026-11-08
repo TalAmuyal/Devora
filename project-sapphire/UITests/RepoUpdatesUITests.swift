@@ -21,6 +21,14 @@ final class RepoUpdatesUITests: XCTestCase {
 		let enabled = app.descendants(matching: .any)["config-segments-repo-update.enabled"].firstMatch
 		XCTAssertTrue(enabled.waitForExistence(timeout: 5))
 		app.scrollSettingsDetail(to: enabled)
+		enabled.radioButtons["On"].click()
+		let optedIn = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+			guard let data = try? Data(contentsOf: config),
+			      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+			      let settings = json["repo-update"] as? [String: Any] else { return false }
+			return settings["enabled"] as? Bool == true
+		}, object: nil)
+		XCTAssertEqual(XCTWaiter.wait(for: [optedIn], timeout: 5), .completed)
 		enabled.radioButtons["Off"].click()
 		let interval = app.descendants(matching: .any)["config-segments-repo-update.interval-minutes"].firstMatch
 		app.scrollSettingsDetail(to: interval)

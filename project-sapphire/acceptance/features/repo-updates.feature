@@ -9,6 +9,7 @@ Feature: Parent clone updates
 
   Scenario: Periodic settings are global and keep their numeric type
     When the user opens the "User Defaults" settings detail
+    And the user switches "repo-update.enabled" to "Default"
     Then the setting "repo-update.enabled" should show the hint "→ on"
     And the setting "repo-update.interval-minutes" should show the hint "→ 60"
     When the user switches "repo-update.enabled" to "Off"

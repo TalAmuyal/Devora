@@ -8,7 +8,7 @@ func writeConfigWithAProfile(in dir: URL) throws -> URL {
 	}
 	try #"{"name": "Work"}"#.write(to: profile.appending(path: "config.json"), atomically: true, encoding: .utf8)
 	let config = dir.appending(path: "config.json")
-	try #"{"profiles": ["\#(profile.path)"]}"#.write(to: config, atomically: true, encoding: .utf8)
+	try #"{"repo-update":{"enabled":false},"profiles": ["\#(profile.path)"]}"#.write(to: config, atomically: true, encoding: .utf8)
 	return config
 }
 

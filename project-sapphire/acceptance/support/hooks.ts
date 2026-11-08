@@ -1,8 +1,9 @@
+import { writeTestConfig } from './test-config';
 import { After, AfterStep, Before, BeforeAll, Status } from '@cucumber/cucumber';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { cleanupFixtures, writeTestConfig } from '../../../project-ember/tests/support/fixture-helper';
+import { cleanupFixtures } from '../../../project-ember/tests/support/fixture-helper';
 import { APP_BINARY, BUNDLED_APP_BINARY, hasExited, shutdown, waitUntilReady } from './app';
 import { SapphireWorld } from './world';
 import { stopTestClaude } from './claude';

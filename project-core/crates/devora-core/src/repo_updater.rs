@@ -1,10 +1,11 @@
 //! One app-owned periodic worker, with a host-provided global hold.
 use devora_app::log::{Level, Log};
 use devora_config::repo_update::Settings;
+use devora_config::{config, profile};
 use devora_platform::clock::{ContinuousClock, MonotonicClock};
 use devora_platform::priority::{SystemThreadPriority, ThreadPriority};
 use devora_state::{Store, Subscription};
-use devora_workspace::{repo_update, workspace};
+use devora_workspace::repo_update;
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -253,31 +254,49 @@ async fn run_worker(
     }
 }
 
-fn repos(config_path: &Path) -> Result<BTreeSet<PathBuf>, String> {
-    let mut repos = BTreeSet::new();
-    for profile in workspace::list_profiles_in(config_path)? {
-        let profile = std::fs::canonicalize(profile.path).map_err(|e| e.to_string())?;
-        let Ok(root) = std::fs::canonicalize(profile.join("repos")) else {
+fn profile_repos(path: &str) -> Result<Vec<PathBuf>, String> {
+    let profile = std::fs::canonicalize(config::expand_tilde(path)?).map_err(|e| e.to_string())?;
+    let metadata = config::read_json_file(&profile.join("config.json"))?;
+    if metadata
+        .get("name")
+        .and_then(|name| name.as_str())
+        .is_none()
+    {
+        return Err("profile config has no name".into());
+    }
+    let root = std::fs::canonicalize(profile.join("repos")).map_err(|e| e.to_string())?;
+    if !root.starts_with(&profile) {
+        return Err("repos directory escapes the profile".into());
+    }
+    let mut repos = Vec::new();
+    for entry in std::fs::read_dir(&root).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let Ok(repo) = entry.path().canonicalize() else {
             continue;
         };
-        if !root.starts_with(&profile) {
-            continue;
+        if repo.parent() == Some(&root) && repo.join(".git").exists() {
+            repos.push(repo);
         }
-        for entry in std::fs::read_dir(&root).map_err(|e| e.to_string())? {
-            let entry = entry.map_err(|e| e.to_string())?;
-            let Ok(repo) = entry.path().canonicalize() else {
-                continue;
-            };
-            if repo.parent() == Some(&root) && repo.join(".git").exists() {
-                repos.insert(repo);
-            }
+    }
+    Ok(repos)
+}
+
+fn repos(config_path: &Path, log: &Log) -> Result<BTreeSet<PathBuf>, String> {
+    let mut repos = BTreeSet::new();
+    for path in profile::registered_paths(config_path)? {
+        match profile_repos(&path) {
+            Ok(paths) => repos.extend(paths),
+            Err(error) => log.write(
+                Level::Warn,
+                &format!("repo-update skipped profile {path}: {error}"),
+            ),
         }
     }
     Ok(repos)
 }
 
 async fn run_round(work: Arc<Work>, changes: &Subscription<bool>) {
-    let repos = match repos(&work.config_path) {
+    let repos = match repos(&work.config_path, &work.log) {
         Ok(repos) => repos,
         Err(error) => {
             work.log.write(
@@ -414,7 +433,8 @@ mod tests {
     #[test]
     fn manual_rounds_coalesce_while_disabled_and_pause_at_the_next_repo() {
         let (root, config, expected) = fixture();
-        assert_eq!(repos(&config).unwrap(), expected);
+        let log = Log::open(&root.path().join("enumeration.log")).unwrap();
+        assert_eq!(repos(&config, &log).unwrap(), expected);
         let (held, observed) = mpsc::channel();
         let pause = Arc::new(ObservedPause {
             state: Store::new(),
@@ -543,5 +563,30 @@ mod tests {
         assert_eq!(expected, actual);
         worker.shutdown();
         assert!(received.try_recv().is_err());
+    }
+    #[test]
+    fn missing_and_unreadable_profiles_are_logged_without_losing_good_repos() {
+        let (root, config, expected) = fixture();
+        let missing = root.path().join("missing-profile");
+        let bad = root.path().join("bad-repos");
+        std::fs::create_dir(&bad).unwrap();
+        std::fs::write(bad.join("config.json"), r#"{"name":"Bad"}"#).unwrap();
+        std::fs::write(bad.join("repos"), "a file instead of a directory").unwrap();
+        let mut value = config::read_json_file(&config).unwrap();
+        value["profiles"]
+            .as_array_mut()
+            .unwrap()
+            .insert(0, serde_json::json!(missing));
+        value["profiles"]
+            .as_array_mut()
+            .unwrap()
+            .insert(1, serde_json::json!(bad));
+        std::fs::write(&config, value.to_string()).unwrap();
+        let log_path = root.path().join("profiles.log");
+        let log = Log::open(&log_path).unwrap();
+        assert_eq!(repos(&config, &log).unwrap(), expected);
+        let text = std::fs::read_to_string(log_path).unwrap();
+        assert!(text.contains("skipped profile") && text.contains("missing-profile"));
+        assert!(text.contains("bad-repos"));
     }
 }
