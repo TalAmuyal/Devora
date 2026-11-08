@@ -191,8 +191,8 @@ describe('populate-app-resources.sh --list-sources', () => {
     expect(listSources()).toEqual(listSources());
   });
 
-  it('uses the same resource-source manifest for Sapphire', () => {
+  it('uses the same resource-source manifest for Sapphire, with its own base icon', () => {
     const sapphire = execFileSync(POPULATE_SCRIPT, ['--app', 'sapphire', '--list-sources'], { encoding: 'utf8' }).trim().split('\n');
-    expect(sapphire).toEqual(listSources());
+    expect(sapphire).toEqual(listSources().map((source) => (source === 'base-icon-ember.png' ? 'base-icon-sapphire.png' : source)));
   });
 });
