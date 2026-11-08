@@ -1,3 +1,4 @@
+import { writeTestConfig } from '../support/test-config';
 import { Given, When } from '@cucumber/cucumber';
 import * as path from 'node:path';
 import {
@@ -7,7 +8,6 @@ import {
   createTestRepo,
   createTestWorkspaces,
   setDirectoryPrintingDefaultApp,
-  writeTestConfig,
 } from '../../../project-ember/tests/support/fixture-helper';
 import { openWorkspaceHub } from './workspace-hub.steps';
 import { SapphireWorld } from '../support/world';

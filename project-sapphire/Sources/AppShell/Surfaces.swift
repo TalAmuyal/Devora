@@ -87,6 +87,7 @@ final class Surfaces {
 
 	private func runPaletteCommand(_ action: PaletteCommand.Action) {
 		switch action {
+		case .runRepoUpdates: Task { await store.runRepoUpdates() }
 		case .toggleGlobalPause: store.dispatch(.setGlobalPaused(!store.app.globalPaused))
 		case .agentHub: openAgentHub()
 		case .workspaceHub: openWorkspaceHub()

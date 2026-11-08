@@ -84,7 +84,12 @@ struct ConfigCard {
 		ConfigField(key: "agent.enter-sends", label: "Enter sends", hint: "Shift+Enter always inserts a newline", kind: .bool),
 	])
 
-	static let all = [agent, terminal, pullRequests, taskTracker]
+	static let repoUpdates = ConfigCard(title: "Repository Updates", fields: [
+		ConfigField(key: "repo-update.enabled", label: "Periodic updates", hint: "clean, detached parent clones in every profile", kind: .bool),
+		.text("repo-update.interval-minutes", "Interval", hint: "positive number of minutes", placeholder: "60"),
+	])
+
+	static let all = [agent, terminal, pullRequests, taskTracker, repoUpdates]
 
 	private static func asana(_ field: ConfigField) -> ConfigField {
 		var field = field
@@ -182,7 +187,9 @@ final class ConfigSettingsModel {
 
 	var usesAsana: Bool { resolved("task-tracker.provider") == .text(value: "asana") }
 
-	func isVisible(_ field: ConfigField) -> Bool { !field.needsAsana || usesAsana }
+	func isVisible(_ field: ConfigField) -> Bool {
+		(profilePath == nil || !field.key.hasPrefix("repo-update.")) && (!field.needsAsana || usesAsana)
+	}
 
 	// MARK: Text settings
 

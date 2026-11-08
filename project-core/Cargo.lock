@@ -541,6 +541,7 @@ name = "devora-platform"
 version = "0.1.0"
 dependencies = [
  "base64",
+ "libc",
 ]
 
 [[package]]
@@ -586,6 +587,7 @@ name = "devora-workspace"
 version = "0.1.0"
 dependencies = [
  "devora-config",
+ "devora-platform",
  "fs2",
  "libc",
  "serde",

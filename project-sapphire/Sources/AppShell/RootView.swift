@@ -72,6 +72,9 @@ public struct RootView: View {
 		.onChange(of: store.app.globalPaused) { _, _ in
 			surfaces.palette?.updateProfiles(store.profiles, active: store.selectedProfilePath, globalPaused: store.app.globalPaused)
 		}
+		.onReceive(NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didWakeNotification)) { _ in
+			Task { await store.repoUpdatesWoke() }
+		}
 		.frame(minWidth: 900, minHeight: 560)
 		.task {
 			if store.startupProblem == nil {
@@ -91,6 +94,7 @@ public struct RootView: View {
 		AppTermination.saveDrafts = { [weak store] in store?.flushAgentDrafts() ?? true }
 		AppTermination.pauseAgents = store.agentShutdown()
 		await store.dispatch(.load).value
+		await store.startRepoUpdates()
 		// Restored agent tabs resume in the background, each showing its own failure.
 		Task { await store.restoreAgentSpaces() }
 		if let path = LaunchOptions.value("--open-workspace") {

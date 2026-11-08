@@ -38,7 +38,7 @@ final class WorkspaceOperationsUITests: XCTestCase {
 	private func launch(profiles: [URL]) throws {
 		let config = scratch.appending(path: "config.json")
 		let paths = profiles.map { "\"\($0.path)\"" }.joined(separator: ", ")
-		try #"{"profiles": [\#(paths)]}"#.write(to: config, atomically: true, encoding: .utf8)
+		try #"{"repo-update":{"enabled":false},"profiles": [\#(paths)]}"#.write(to: config, atomically: true, encoding: .utf8)
 		app = XCUIApplication()
 		app.launchEnvironment["DEVORA_CONFIG_PATH"] = config.path
 		app.launchEnvironment["DEVORA_STATE_DIR"] = scratch.appending(path: "state").path

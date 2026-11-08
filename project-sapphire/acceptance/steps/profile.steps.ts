@@ -1,3 +1,4 @@
+import { writeTestConfig } from '../support/test-config';
 import assert from 'node:assert';
 import { Given, When, Then } from '@cucumber/cucumber';
 import * as fs from 'node:fs';
@@ -5,7 +6,6 @@ import * as path from 'node:path';
 import {
   createTestFixtureRoot,
   createTestProfile,
-  writeTestConfig,
 } from '../../../project-ember/tests/support/fixture-helper';
 import type { ProfileFormState } from '../support/bridge';
 import { SapphireWorld } from '../support/world';

@@ -213,6 +213,16 @@ Sapphire follows Ember's error reporting (ADR-002).
 - `scripts/build-core.sh`: `devora-ffi` → static library → bindings → `build/DevoraCoreFFI.xcframework`.
 - `build/` and `vendor/` (gitignored): the xcframeworks, DerivedData, and the Ghostty checkout.
 
+## Repository Updates
+
+The Repository Updates card appears only in User Defaults.
+It edits the shared core's enabled flag and positive interval in minutes, with Sapphire's enabled default shown in the inherited hint.
+Interval values are edited as text and stored as JSON numbers by the core.
+Run Repo Updates in the palette requests a manual round even with the periodic switch off.
+It uses the same Global Pause boundary as automatic rounds.
+The launch starts the single core worker, and the off-main termination closure shuts it down before awaiting the agents.
+Operational outcomes go to the app log without banners.
+
 ## Commands
 
 - `mise run bundle` (or root `sapphire-bundle`) builds the signed distribution with the shared tool/plugin/resource manifest into `build/bundle/Devora Sapphire.app`. Root `sapphire-install --path <directory> --suffix <name>` installs it; the suffix changes the visible name and core state directory. Plain `build` remains the development app, without the distribution resources. Health retains the core's PATH fallback and the guide retains its checkout fallback there.
@@ -248,6 +258,7 @@ Real input (key events, focus, the IME, libghostty's key path) is what the bridg
 	It starts early when the launch meets a startup problem, so that a scenario can answer it.
 	State changes fold on the next frame, so steps poll `state` (`Bridge.waitFor`) rather than reading it once.
 - Every scenario launches a fresh app (`acceptance/support/hooks.ts`, `app.ts`), straight from the bundle's binary rather than through `open`, with a config and an app state of its own (`DEVORA_CONFIG_PATH`, `DEVORA_STATE_DIR`) and only a login session's environment, and starts once the launch has settled: the Workspace Hub it opens has loaded, or, after a relaunch, the restored tabs' terminals run.
+	Generated acceptance and native UI configs disable periodic repo updates to isolate repo fixtures, and updater tests opt in explicitly.
 	A scenario's config starts with no profiles, so the launch's hub is the first-run welcome, which refuses `q` and Escape: steps that need a known state remove it through the bridge ("Devora is running with no sessions open", as Ember's scenarios start after its teardown), and "the Workspace Hub is open" removes an open hub before opening it, so that it loads the profiles the scenario has made since.
 	Failed steps save a window screenshot (the bridge's `POST /test/snapshot`), the state, the active terminal's text and the app's stderr to `test-results/failures/` (`acceptance/support/failure-capture.ts`); the shared `failure-capture.feature` checks the screenshot and the terminal text.
 	As in Ember, a scenario fails if an error was shown that no step scraped ("the recorded errors should include").

@@ -53,6 +53,41 @@ The registry retains each held owner through process reaping and uses a new gene
 A fresh process restores all open agent tabs under the saved hold, showing history before any CLI launch, and releases all of them on global resume.
 Only the global bool persists across app restarts.
 
+## Periodic repository updates
+
+`repo_updater::RepoUpdater` owns one background worker per app process.
+Sapphire starts it through the FFI after launch and stops it before the agent shutdown barrier.
+`PauseSource` supplies the host's authoritative current hold and committed bool subscription.
+The Sapphire adapter uses the existing Store contract.
+The queue is shared transport, and the trait does not require a Store owner in another host.
+
+User Defaults keys `repo-update.enabled` and `repo-update.interval-minutes` control periodic rounds.
+The interval is a positive JSON integer in minutes, default 60.
+An absent enabled value defaults on for Sapphire and off for Ember.
+Profile writes are refused.
+Startup waits ten seconds, and each completed round establishes the next deadline.
+A sleep-inclusive continuous clock owns deadlines, and the host forwards wake notifications to re-evaluate them.
+An overdue wake admits one round, interval changes recompute the deadline, and disabling removes the periodic timer.
+Manual requests run even when periodic updates are off and coalesce into one pending round.
+A hold finishes the admitted repo and keeps the next repo waiting until release.
+
+Each round discovers canonical parent clones directly under every registered profile's repos directory.
+External registrations and escaping symlinks are excluded, and aliases are deduplicated.
+Unavailable profiles are logged and skipped independently so healthy profiles still run.
+The workspace crate's `RepoLock` uses flock on Git's common directory `devora-repo.lock`.
+Creation, refresh and add-repo share that lock around fetch/worktree mutations, with prepare commands outside it.
+Creation and refresh report the first lock contention as a progress step.
+Eligibility requires a clean index/worktree including untracked files, detached HEAD and no Git operation or leftover Git lock.
+Git locks are logged and retained.
+Fetch is non-interactive with a 120-second timeout and BatchMode SSH unless a configured core.sshCommand supplies the command.
+Eligibility is checked again after fetch, then checkout uses the resolved origin default branch without forcing.
+Each outcome and round summary is log-only.
+
+Shutdown stops admission and cancels fetch, while an admitted checkout runs to completion.
+The host waits up to thirty seconds.
+If that wait expires, the worker retains its child and cooperative lock until checkout finishes, with a warning in the log.
+No checkout process is killed.
+
 ## Debi repo commands
 
 Rust `debi repo list` prints distinct available repo names in sorted order.

@@ -100,3 +100,13 @@ struct GlobalPausePaletteTests {
 		#expect(AgentStatusEmoji.describe(.pausing) == "Pausing…")
 	}
 }
+
+@MainActor
+struct RepoUpdatePaletteTests {
+	@Test func manualUpdatesHaveAPaletteActionWithoutAKeybinding() throws {
+		let command = try #require(PaletteCommand.commands(profiles: [], active: nil).first { $0.id == "repo-updates" })
+		#expect(command.title == "Run Repo Updates")
+		#expect(command.action == .runRepoUpdates)
+		#expect(command.shortcut == nil)
+	}
+}

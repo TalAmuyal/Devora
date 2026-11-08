@@ -7,7 +7,7 @@ use serde_json::Value;
 
 use crate::{CoreError, DevoraCore};
 
-/// A config setting's value: text, or a boolean for the On/Off settings.
+/// Editable config values. Numeric fields use text here and typed JSON in config.
 #[derive(Debug, Clone, PartialEq, uniffi::Enum)]
 pub enum ConfigValue {
     Text { value: String },
@@ -19,6 +19,9 @@ impl ConfigValue {
         match value {
             Value::String(value) => Some(Self::Text { value }),
             Value::Bool(value) => Some(Self::Bool { value }),
+            Value::Number(value) => Some(Self::Text {
+                value: value.to_string(),
+            }),
             _ => None,
         }
     }
@@ -40,7 +43,21 @@ impl DevoraCore {
         &self,
         profile_path: Option<String>,
     ) -> Result<ConfigSettings, CoreError> {
-        let response = config::read_config_settings_in(&self.config_path, profile_path.as_deref())?;
+        let mut response =
+            config::read_config_settings_in(&self.config_path, profile_path.as_deref())?;
+        if profile_path.is_none()
+            && response
+                .resolved
+                .get("repo-update.enabled")
+                .is_none_or(|v| v.is_null())
+        {
+            response.resolved.insert(
+                "repo-update.enabled".into(),
+                Value::Bool(
+                    devora_core::repo_update_config::AppKind::Sapphire.enabled_by_default(),
+                ),
+            );
+        }
         Ok(ConfigSettings {
             stored: response
                 .stored
@@ -64,13 +81,23 @@ impl DevoraCore {
         value: Option<String>,
     ) -> Result<(), CoreError> {
         let state = if value.is_some() { "value" } else { "default" };
-        Ok(config::write_config_setting_in(
+        config::write_config_setting_in(
             &self.config_path,
             profile_path.as_deref(),
             &key,
             state,
             value.as_deref(),
-        )?)
+        )?;
+        if devora_core::repo_update_config::is_key(&key) {
+            let settings = devora_core::repo_update_config::Settings::read(
+                &self.config_path,
+                devora_core::repo_update_config::AppKind::Sapphire,
+            )?;
+            if let Some(updater) = &*self.updater.lock().unwrap_or_else(|e| e.into_inner()) {
+                updater.configure(settings);
+            }
+        }
+        Ok(())
     }
 }
 
@@ -198,5 +225,42 @@ mod tests {
             unknown.unwrap_err().to_string(),
             "unknown config key: no.such-key"
         );
+    }
+    #[test]
+    fn updater_settings_keep_sapphire_defaults_global_scope_and_numeric_storage() {
+        let root = tempfile::tempdir().unwrap();
+        let (core, profile) = core(root.path());
+        let settings = core.get_config_settings(None).unwrap();
+        assert_eq!(
+            settings.resolved.get("repo-update.enabled"),
+            Some(&Some(ConfigValue::Bool { value: true }))
+        );
+        assert_eq!(
+            settings.resolved.get("repo-update.interval-minutes"),
+            Some(&Some(text("60")))
+        );
+        core.set_config_setting(None, "repo-update.enabled".into(), Some("false".into()))
+            .unwrap();
+        core.set_config_setting(
+            None,
+            "repo-update.interval-minutes".into(),
+            Some("15".into()),
+        )
+        .unwrap();
+        assert_eq!(
+            read(&root.path().join("config.json"))["repo-update"]["interval-minutes"],
+            15
+        );
+        assert!(core
+            .set_config_setting(
+                Some(profile),
+                "repo-update.enabled".into(),
+                Some("true".into())
+            )
+            .is_err());
+        core.start_repo_updates().unwrap();
+        core.start_repo_updates().unwrap();
+        core.run_repo_updates().unwrap();
+        core.shutdown_repo_updates().unwrap();
     }
 }

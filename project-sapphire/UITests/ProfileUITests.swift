@@ -19,7 +19,7 @@ final class ProfileUITests: XCTestCase {
 	@MainActor
 	private func launchWithNoProfiles() throws -> XCUIElement {
 		let config = scratch.appending(path: "config.json")
-		try #"{"profiles": []}"#.write(to: config, atomically: true, encoding: .utf8)
+		try #"{"repo-update":{"enabled":false},"profiles": []}"#.write(to: config, atomically: true, encoding: .utf8)
 		app = XCUIApplication()
 		app.launchEnvironment["DEVORA_CONFIG_PATH"] = config.path
 		app.launchEnvironment["DEVORA_STATE_DIR"] = scratch.appending(path: "state").path

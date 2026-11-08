@@ -11,6 +11,7 @@ use std::sync::{Mutex, RwLock};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Level {
+    Info,
     Error,
     Warn,
 }
@@ -18,6 +19,7 @@ pub enum Level {
 impl Level {
     pub fn as_str(self) -> &'static str {
         match self {
+            Self::Info => "INFO",
             Self::Error => "ERROR",
             Self::Warn => "WARN",
         }
@@ -29,6 +31,7 @@ impl FromStr for Level {
 
     fn from_str(level: &str) -> Result<Self, String> {
         match level {
+            "INFO" => Ok(Self::Info),
             "ERROR" => Ok(Self::Error),
             "WARN" => Ok(Self::Warn),
             _ => Err(format!("unknown log level: {level}")),

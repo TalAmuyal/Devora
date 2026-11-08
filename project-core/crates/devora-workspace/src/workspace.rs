@@ -138,27 +138,9 @@ pub fn list_profiles() -> Result<Vec<ProfileInfo>, String> {
 
 /// Lists the profiles registered in the global config at `config_path`.
 pub fn list_profiles_in(config_path: &Path) -> Result<Vec<ProfileInfo>, String> {
-    if !config_path.exists() {
-        return Ok(Vec::new());
-    }
-
-    let config = read_json_file(config_path)?;
-
-    let profiles_val = match config.get("profiles") {
-        Some(v) => v,
-        None => return Ok(Vec::new()),
-    };
-
-    let profile_paths = profiles_val
-        .as_array()
-        .ok_or("\"profiles\" is not an array in global config")?;
-
     let mut result = Vec::new();
-    for path_val in profile_paths {
-        let path_str = match path_val.as_str() {
-            Some(s) => expand_tilde(s)?,
-            None => continue,
-        };
+    for path in devora_config::profile::registered_paths(config_path)? {
+        let path_str = expand_tilde(&path)?;
 
         let profile_dir = Path::new(&path_str);
         let profile_config_path = profile_dir.join("config.json");
