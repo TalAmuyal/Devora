@@ -18,7 +18,7 @@ import Testing
 
 	let creation = try core.createAgentSpace(
 		profilePath: profile,
-		form: AgentCreationForm(name: "Delta", role: "Developer", repos: [], inputs: [:], keepCodingInstructions: true),
+		form: AgentCreationForm(name: "Delta", role: "Developer", repos: [], inputs: [:], keepCodingInstructions: true, model: nil),
 		launchInputs: [:])
 	var finished = false
 	while !finished {

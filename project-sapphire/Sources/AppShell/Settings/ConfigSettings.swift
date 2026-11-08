@@ -310,7 +310,7 @@ extension ConfigSettingsModel {
 			readPreview: profilePath.map { profile in
 				{
 					await store.agentCreationPreview(
-						AgentCreationForm(name: "", role: nil, repos: [], inputs: [:], keepCodingInstructions: true),
+						AgentCreationForm(name: "", role: nil, repos: [], inputs: [:], keepCodingInstructions: true, model: nil),
 						profilePath: profile)
 				}
 			})

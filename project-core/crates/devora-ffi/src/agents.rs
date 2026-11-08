@@ -2,7 +2,7 @@
 //! loop. Subscriptions are observations and never own the running process.
 use crate::{CoreError, DevoraCore};
 use devora_core::agents::{
-    self, CreationForm, Field, LaunchContext, PermissionAnswer, Scope, Source,
+    self, CreationForm, Field, LaunchContext, ModelChoice, PermissionAnswer, Scope, Source,
 };
 use devora_core::state::{
     Chat, ChatContext, ChatEvent, ChatPhase, ChatUpdate, ItemState, PermissionQuestion,
@@ -20,6 +20,22 @@ pub struct AgentCreationForm {
     pub repos: Vec<String>,
     pub inputs: HashMap<String, String>,
     pub keep_coding_instructions: bool,
+    /// The model and effort for every launch; `None` follows the profile's Claude settings.
+    pub model: Option<AgentModelChoice>,
+}
+
+/// An agent's model, and its effort; no effort leaves it to Claude Code.
+#[derive(uniffi::Record)]
+pub struct AgentModelChoice {
+    pub model: String,
+    pub effort: Option<String>,
+}
+
+/// What the New Agent form's model and effort start with, and the efforts it offers (low → max).
+#[derive(uniffi::Record)]
+pub struct AgentModelDefaults {
+    pub choice: AgentModelChoice,
+    pub effort_levels: Vec<String>,
 }
 
 #[derive(uniffi::Record)]
@@ -46,6 +62,10 @@ impl AgentCreationForm {
             repos: self.repos,
             inputs: self.inputs.into_iter().collect(),
             keep_coding_instructions: self.keep_coding_instructions,
+            model: self.model.map(|choice| ModelChoice {
+                model: choice.model,
+                effort: choice.effort,
+            }),
         }
     }
 }
@@ -365,6 +385,25 @@ impl DevoraCore {
             launch_inputs.into_iter().collect(),
             &form.core(),
         )?)
+    }
+    /// The model and effort the New Agent form starts with: `opus`, and the
+    /// effort set for the profile or in User Defaults, if any.
+    pub fn agent_model_defaults(
+        &self,
+        profile_path: String,
+    ) -> Result<AgentModelDefaults, CoreError> {
+        let choice = self
+            .agents
+            .model_defaults(Path::new(&profile_path), &self.config_path)?;
+        Ok(AgentModelDefaults {
+            choice: AgentModelChoice {
+                model: choice.model,
+                effort: choice.effort,
+            },
+            effort_levels: devora_core::config::CLAUDE_EFFORT_LEVELS
+                .map(str::to_owned)
+                .into(),
+        })
     }
     /// Saves a creation-form value to its config, as the Settings Hub would.
     pub fn save_agent_field(

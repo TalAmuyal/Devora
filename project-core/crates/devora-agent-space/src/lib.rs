@@ -47,15 +47,65 @@ pub struct CreationForm {
     /// keeping its coding instructions, rather than replacing it.
     #[serde(default = "keep_by_default")]
     pub keep_coding_instructions: bool,
+    /// The model and effort chosen at creation, used for every launch. Agents
+    /// created before the choice existed have none and follow the profile's
+    /// Claude settings.
+    #[serde(default)]
+    pub model: Option<ModelChoice>,
 }
 
 fn keep_by_default() -> bool {
     true
 }
 
+/// The model an agent runs, with its effort; no effort leaves it to Claude Code.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ModelChoice {
+    pub model: String,
+    pub effort: Option<String>,
+}
+
+/// The model the New Agent form starts with.
+pub const DEFAULT_MODEL: &str = "opus";
+
+/// What the New Agent form starts with: [`DEFAULT_MODEL`], and the effort the
+/// user set for the profile or in User Defaults, or none when neither sets one
+/// (the built-in default doesn't count), leaving the effort to Claude Code.
+pub fn model_defaults(global_config: &Path, profile: &Path) -> Result<ModelChoice, String> {
+    let profile = profile.to_str().ok_or("profile path is not UTF-8")?;
+    let mut effort = None;
+    for scope in [Some(profile), None] {
+        let settings = config::read_claude_settings_in(global_config, scope)?;
+        if let Some(stored) = settings.stored.get("effort") {
+            effort = stored.as_str().map(str::to_owned);
+            break;
+        }
+    }
+    Ok(ModelChoice {
+        model: DEFAULT_MODEL.into(),
+        effort,
+    })
+}
+
+fn validate_model(choice: &ModelChoice) -> Result<(), String> {
+    if choice.model.trim().is_empty() {
+        return Err("the agent's model must not be empty".into());
+    }
+    if let Some(effort) = &choice.effort {
+        if !config::CLAUDE_EFFORT_LEVELS.contains(&effort.as_str()) {
+            return Err(format!(
+                "effort must be one of {}",
+                config::CLAUDE_EFFORT_LEVELS.join(", ")
+            ));
+        }
+    }
+    Ok(())
+}
+
 /// Host-owned executable, selected plugins, behavioral settings and scrubbed
 /// transport environment. Configured tool env belongs in settings.env. Credentials
-/// stay in environment. The containing profile supplies model, effort and alias values.
+/// stay in environment. The containing profile supplies alias values, and the model and
+/// effort of agents created without a [`ModelChoice`].
 #[derive(Clone)]
 pub struct LaunchContext {
     pub global_config: PathBuf,
@@ -191,6 +241,9 @@ impl Space {
         warnings: &mut Vec<String>,
     ) -> Result<Self, String> {
         validate_name(&form.name)?;
+        if let Some(choice) = &form.model {
+            validate_model(choice)?;
+        }
         let profile = fs::canonicalize(profile).map_err(storage)?;
         fs::create_dir_all(profile.join("agent-spaces")).map_err(storage)?;
         let root = catalogue(&profile)?;
@@ -415,6 +468,10 @@ impl Space {
                 .map(str::to_owned)
                 .ok_or_else(|| format!("agent session requires explicit {key}"))
         };
+        let (model, effort) = match &self.form.model {
+            Some(choice) => (choice.model.clone(), choice.effort.clone()),
+            None => (required("default-model")?, Some(required("effort")?)),
+        };
         let mut behavior = context.settings.clone();
         let env = behavior
             .as_object_mut()
@@ -434,8 +491,8 @@ impl Space {
             } else {
                 Instructions::Replace(self.instructions.clone())
             },
-            model: required("default-model")?,
-            effort: required("effort")?,
+            model,
+            effort,
             permission_mode: "auto".into(),
             plugins: context.plugins.clone(),
             settings: behavior,

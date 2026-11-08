@@ -812,6 +812,10 @@ final class TestBridge {
 			"name": dialog.name,
 			"focus": "\(dialog.focus)",
 			"keepCodingInstructions": dialog.keepCodingInstructions,
+			"model": dialog.model,
+			"effort": dialog.effort ?? NSNull(),
+			"effortLevels": dialog.effortLevels,
+			"spacePath": dialog.spacePath ?? NSNull(),
 			"preview": dialog.preview.map { preview -> Any in
 				switch preview {
 				case .text(let text): ["text": text]
@@ -833,12 +837,17 @@ final class TestBridge {
 		] as [String: Any]
 	}
 
-	/// Fills in and clicks what the New Agent dialog draws: `setName` and `setField` (with `key`) type a `value`, `toggleRepo` (with `name`), `save` (with `key`), `create` and `cancel`.
+	/// Fills in and clicks what the New Agent dialog draws: `setName`, `setModel` and `setField` (with `key`) type a `value`, `setEffort` slides to a `value` (null for Claude Code's default), `toggleRepo` (with `name`), `save` (with `key`), `create` and `cancel`.
 	private func newAgentAction(_ body: [String: Any]) throws {
 		guard let dialog = surfaces.newAgent else { throw BridgeError(status: 409, "the New Agent dialog isn't open") }
 		switch body["action"] as? String {
 		case "setName": dialog.name = body["value"] as? String ?? ""
 		case "setKeepCodingInstructions": dialog.keepCodingInstructions = body["value"] as? Bool ?? true
+		case "setModel": dialog.model = body["value"] as? String ?? ""
+		case "setEffort":
+			let effort = body["value"] as? String
+			guard effort.map(dialog.effortLevels.contains) ?? true else { throw BridgeError(status: 400, "no such effort") }
+			dialog.chooseEffort(effort)
 		case "setField":
 			guard let key = body["key"] as? String else { throw BridgeError(status: 400, "missing key") }
 			dialog.edits[key] = body["value"] as? String ?? ""
