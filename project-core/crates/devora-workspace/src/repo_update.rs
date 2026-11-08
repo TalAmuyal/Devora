@@ -501,7 +501,18 @@ mod tests {
                 .contains("cancelled on shutdown"));
         });
         stop.store(false, Ordering::Release);
-        assert!(fetch(&f.repo, &stop, Duration::ZERO)
+        // Cancellation can retain Git locks, so timeout gets an independent clone.
+        let timeout_fixture = Fixture::new("main");
+        git_output(
+            &timeout_fixture.repo,
+            &[
+                "config",
+                "remote.origin.uploadpack",
+                script.to_str().unwrap(),
+            ],
+        )
+        .unwrap();
+        assert!(fetch(&timeout_fixture.repo, &stop, Duration::ZERO)
             .unwrap_err()
             .contains("timed out after 0 seconds"));
     }
