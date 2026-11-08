@@ -37,7 +37,8 @@ check true bundler/macos-ember/bundle-fingerprint.sh
 check true bundler/macos-sapphire/bundle-sapphire.sh
 check true project-status-line/main.go
 check true project-code-cleanup/cc-plugin/plugin.json
-check true base-icon-ember.png
+check true base-icon-sapphire.png
+check false base-icon-ember.png
 check false .github/workflows/cd.yml
 if [ "$failures" -gt 0 ]; then exit 1; fi
 echo "sapphire-affected: all cases pass"
