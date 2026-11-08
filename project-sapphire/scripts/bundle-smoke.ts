@@ -36,7 +36,9 @@ try {
     const suffixFile = path.join(resources, 'INSTALL_SUFFIX');
     const suffix = fs.existsSync(suffixFile) ? fs.readFileSync(suffixFile, 'utf8').trim() : '';
     assert.ok(fs.existsSync(path.join(home, 'Library/Application Support', `Devora Sapphire${suffix ? ` ${suffix}` : ''}`, 'state.db')), 'Install suffix must reach the real state directory');
-    const displayName = execFileSync('/usr/libexec/PlistBuddy', ['-c', 'Print :CFBundleDisplayName', path.join(app, 'Contents/Info.plist')], { encoding: 'utf8' }).trim();
+    const plistValue = (key: string) => execFileSync('/usr/libexec/PlistBuddy', ['-c', `Print :${key}`, path.join(app, 'Contents/Info.plist')], { encoding: 'utf8' }).trim();
+    assert.equal(plistValue('CFBundleIdentifier'), 'dev.devora.sapphire', 'The distribution keeps the published bundle id, not the development build\'s');
+    const displayName = plistValue('CFBundleDisplayName');
     assert.equal(displayName, `Devora Sapphire${suffix ? `-${suffix}` : version.includes('-dev.') ? `-${version}` : ''}`);
     await launched.bridge.clearWindowSurfaces();
     await launched.bridge.dispatch({ command: 'openShell' });

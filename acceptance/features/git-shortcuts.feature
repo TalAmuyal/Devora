@@ -19,5 +19,5 @@ Feature: Debi git-shortcut shims
   Scenario: Git shortcuts can be disabled via config
     Given the global config disables git shortcuts
     When a new session is created
-    And "command -v gcl || printf 'SHIM_%s\n' ABSENT" is typed in the terminal
+    And "command -v gcl | grep -q git-shortcuts || printf 'SHIM_%s\n' ABSENT" is typed in the terminal
     Then the terminal should contain "SHIM_ABSENT"

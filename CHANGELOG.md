@@ -61,6 +61,7 @@ Types of changes:
 
 ### Changed
 
+- Devora Sapphire's development and test build has its own bundle id (`dev.devora.sapphire.dev`), so running its XCUITests no longer quits an installed Devora Sapphire
 - Devora Sapphire has its own app icon: the Devora "D" in Catppuccin's sapphire, where Ember's is mauve
 - Devora Sapphire's minimum macOS is temporarily 26.6, so it can run on Macs that can't upgrade to macOS 27 yet; it is still built and tested only on macOS 27
 - App log timestamps are formatted in-process instead of spawning `date` for every line, preserving the local time and existing line and file-name formats
