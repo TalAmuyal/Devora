@@ -108,9 +108,6 @@ export interface ProfileFormState {
 /** Fills in a field of the open profile form, as typing into it does, or clicks one of its buttons. */
 export type ProfileFormAction =
   | { action: 'setName'; value: string }
-  | { action: 'setKeepCodingInstructions'; value: boolean }
-  | { action: 'setModel'; value: string }
-  | { action: 'setEffort'; value: string | null }
   | { action: 'setPath'; value: string }
   | { action: 'submit' }
   | { action: 'cancel' };
@@ -274,6 +271,9 @@ export type AgentHubAction = { action: 'newAgent' } | { action: 'open' | 'delete
 export type NewAgentAction =
   | { action: 'setName'; value: string }
   | { action: 'setField'; key: string; value: string }
+  | { action: 'setKeepCodingInstructions'; value: boolean }
+  | { action: 'setModel'; value: string }
+  | { action: 'setEffort'; value: string | null }
   | { action: 'toggleRepo'; name: string }
   | { action: 'save'; key: string }
   | { action: 'create' | 'cancel' };
