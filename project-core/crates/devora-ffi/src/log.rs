@@ -13,6 +13,7 @@ use crate::CoreError;
 #[uniffi::remote(Enum)]
 #[uniffi(name = "LogLevel")]
 pub enum Level {
+    Info,
     Error,
     Warn,
 }

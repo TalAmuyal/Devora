@@ -216,7 +216,7 @@ private struct ScopeCards: View {
 
 	var body: some View {
 		if let claude = scope.claude { ClaudeSettingsCard(model: claude) }
-		ForEach(ConfigCard.all, id: \.title) { card in
+		ForEach(ConfigCard.all.filter { $0.fields.contains(where: scope.isVisible) }, id: \.title) { card in
 			SettingsCard(title: card.title) {
 				if scope.settings == nil {
 					Text("Loading...").foregroundStyle(.secondary)

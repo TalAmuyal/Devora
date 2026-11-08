@@ -187,7 +187,10 @@ extension Store {
 	/// Pauses every agent, waiting until each has stopped and saved its session; it calls the core directly, so it can run while the main actor is busy, as it is during a quit.
 	public func agentShutdown() -> (@Sendable () async -> Void)? {
 		guard let core else { return nil }
-		return { try? await core.shutdownAgents() }
+		return {
+			try? core.shutdownRepoUpdates()
+			try? await core.shutdownAgents()
+		}
 	}
 
 	/// The restored tabs fold on a later frame, so the launch reads them from the core.

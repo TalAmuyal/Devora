@@ -20,6 +20,8 @@ Types of changes:
 
 ### Added
 
+- Sapphire can periodically update clean, detached parent clones across profiles, with User Defaults controls, a manual palette action and graceful Global Pause integration.
+
 - Devora Sapphire has Global Pause in the title bar and command palette, holding agents after their current turn, preserving drafts and the hold across relaunch, with a shared core subscription for background integrations
 
 - Debi has `repo list` and `repo add <repo> [--postfix <postfix>]` for profile-aware worktree management in workspaces and Agent Spaces, with streamed progress and Ctrl+C rollback

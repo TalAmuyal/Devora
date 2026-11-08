@@ -478,6 +478,7 @@ enum ConfigFieldKind {
     /// Text concatenated verbatim onto other text (e.g. a PR title prefix), so surrounding whitespace is significant and kept.
     Fragment,
     Bool,
+    PositiveInteger,
     Enum(&'static [&'static str]),
 }
 
@@ -486,6 +487,7 @@ enum ConfigFieldKind {
 enum BuiltinDefault {
     None,
     Bool(bool),
+    Integer(u32),
 }
 
 struct ConfigFieldSpec {
@@ -496,6 +498,16 @@ struct ConfigFieldSpec {
 }
 
 const CONFIG_FIELDS: &[ConfigFieldSpec] = &[
+    ConfigFieldSpec {
+        key: "repo-update.enabled",
+        kind: ConfigFieldKind::Bool,
+        builtin_default: BuiltinDefault::None,
+    },
+    ConfigFieldSpec {
+        key: "repo-update.interval-minutes",
+        kind: ConfigFieldKind::PositiveInteger,
+        builtin_default: BuiltinDefault::Integer(crate::repo_update::INTERVAL_MINUTES),
+    },
     ConfigFieldSpec {
         key: "agent.enter-sends",
         kind: ConfigFieldKind::Bool,
@@ -566,6 +578,7 @@ fn builtin_default_value(d: &BuiltinDefault) -> Option<Value> {
     match d {
         BuiltinDefault::None => None,
         BuiltinDefault::Bool(b) => Some(Value::Bool(*b)),
+        BuiltinDefault::Integer(n) => Some(Value::from(*n)),
     }
 }
 
@@ -575,6 +588,11 @@ fn stored_config_value(cfg: Option<&Value>, spec: &ConfigFieldSpec) -> Option<Va
     let val = get_value_by_dot_path(cfg?, spec.key)?;
     match spec.kind {
         ConfigFieldKind::Bool => val.as_bool().map(Value::Bool),
+        ConfigFieldKind::PositiveInteger => val
+            .as_u64()
+            .and_then(|n| u32::try_from(n).ok())
+            .filter(|n| *n > 0)
+            .map(Value::from),
         ConfigFieldKind::Text | ConfigFieldKind::Fragment | ConfigFieldKind::Enum(_) => {
             val.as_str().map(|s| Value::String(s.to_string()))
         }
@@ -627,6 +645,9 @@ pub fn read_config_settings_in(
     let mut stored = serde_json::Map::new();
     let mut resolved = serde_json::Map::new();
     for spec in CONFIG_FIELDS {
+        if profile_path.is_some() && crate::repo_update::is_key(spec.key) {
+            continue;
+        }
         if let Some(v) = stored_config_value(own_cfg, spec) {
             stored.insert(spec.key.to_string(), v);
         }
@@ -643,6 +664,13 @@ pub fn read_config_settings_in(
 fn coerce_config_value(spec: &ConfigFieldSpec, value: Option<&str>) -> Result<Value, String> {
     let raw = value.unwrap_or("");
     match spec.kind {
+        ConfigFieldKind::PositiveInteger => raw
+            .trim()
+            .parse::<u32>()
+            .ok()
+            .filter(|n| *n > 0)
+            .map(Value::from)
+            .ok_or_else(|| format!("{} must be a positive integer number of minutes", spec.key)),
         ConfigFieldKind::Bool => match raw {
             "true" => Ok(Value::Bool(true)),
             "false" => Ok(Value::Bool(false)),
@@ -696,6 +724,9 @@ pub fn write_config_setting_in(
 ) -> Result<(), String> {
     let _write = lock_config_writes();
     let spec = config_field(key).ok_or_else(|| format!("unknown config key: {key}"))?;
+    if profile_path.is_some() && crate::repo_update::is_key(key) {
+        return Err(format!("{key} belongs to User Defaults"));
+    }
 
     let config_path = match profile_path {
         Some(p) => profile_config_path(p),

@@ -5,3 +5,5 @@ pub mod profile;
 
 /// Profile-scoped Agent Space creation defaults.
 pub mod agent;
+
+pub mod repo_update;

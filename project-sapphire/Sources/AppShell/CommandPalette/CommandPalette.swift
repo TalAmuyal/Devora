@@ -6,7 +6,7 @@ import SwiftUI
 struct PaletteCommand: Identifiable {
 	enum Action: Equatable {
 		case agentHub, workspaceHub, newShell, repurpose, addRepo, cloneRepo, duplicate, closeSession
-		case health, newProfile, settings, switchProfile(String), toggleGlobalPause
+		case health, newProfile, settings, switchProfile(String), toggleGlobalPause, runRepoUpdates
 	}
 	let id: String
 	let title: String
@@ -25,6 +25,7 @@ struct PaletteCommand: Identifiable {
 			Self(id: "duplicate-session", title: "Duplicate Current Session", description: "Open the New Task dialog pre-filled to copy the current workspace", icon: "⧉", action: .duplicate),
 			Self(id: "close-session", title: "Close Current Session", description: "Close the active session tab", icon: "×", action: .closeSession),
 			Self(id: "health-hub", title: "Health Hub", description: "Check Devora dependencies, credentials, and setup", icon: "✚", action: .health),
+			Self(id: "repo-updates", title: "Run Repo Updates", description: "Update clean, detached parent clones in every profile", icon: "↻", action: .runRepoUpdates),
 			Self(id: "global-pause", title: globalPaused ? "Resume Devora" : "Pause Devora", description: "Hold background work at its next graceful boundary", icon: globalPaused ? "▶️" : "⏸️", action: .toggleGlobalPause),
 			Self(id: "new-profile", title: "New Profile", description: "Create or register a profile root directory", icon: "＋", action: .newProfile),
 			Self(id: "agent-hub", title: "Agent Hub", description: "List, create and open agents", icon: "◎", action: .agentHub, shortcut: .hubs),

@@ -19,6 +19,7 @@ mod creation;
 mod health;
 mod log;
 mod profiles;
+mod repo_updater;
 mod repos;
 mod settings;
 mod terminal;
@@ -151,6 +152,7 @@ pub struct DevoraCore {
     /// The app state (ADR-008).
     state: Arc<state::Store>,
     agents: devora_core::agents::Agents,
+    updater: std::sync::Mutex<Option<devora_core::repo_updater::RepoUpdater>>,
     ipc: std::sync::OnceLock<devora_core::ipc::IpcServer>,
     log: Arc<AppLog>,
     creations: creation::Creations,
@@ -181,6 +183,7 @@ impl DevoraCore {
             config_path,
             state,
             agents,
+            updater: Default::default(),
             ipc: Default::default(),
             log,
             creations: Default::default(),

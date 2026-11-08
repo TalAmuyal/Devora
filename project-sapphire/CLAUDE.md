@@ -210,6 +210,16 @@ Sapphire follows Ember's error reporting (ADR-002).
 - `scripts/build-core.sh`: `devora-ffi` → static library → bindings → `build/DevoraCoreFFI.xcframework`.
 - `build/` and `vendor/` (gitignored): the xcframeworks, DerivedData, and the Ghostty checkout.
 
+## Repository Updates
+
+The Repository Updates card appears only in User Defaults.
+It edits the shared core's enabled flag and positive interval in minutes, with Sapphire's enabled default shown in the inherited hint.
+Interval values are edited as text and stored as JSON numbers by the core.
+Run Repo Updates in the palette requests a manual round even with the periodic switch off.
+It uses the same Global Pause boundary as automatic rounds.
+The launch starts the single core worker, and the off-main termination closure shuts it down before awaiting the agents.
+Operational outcomes go to the app log without banners.
+
 ## Commands
 
 - `mise run bundle` (or root `sapphire-bundle`) builds the signed distribution with the shared tool/plugin/resource manifest into `build/bundle/Devora Sapphire.app`. Root `sapphire-install --path <directory> --suffix <name>` installs it; the suffix changes the visible name and core state directory. Plain `build` remains the development app, without the distribution resources. Health retains the core's PATH fallback and the guide retains its checkout fallback there.
