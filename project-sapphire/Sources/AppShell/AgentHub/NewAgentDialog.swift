@@ -15,13 +15,14 @@ final class NewAgentDialogModel {
 	enum Focus: Hashable {
 		case name
 		case field(String)
+		case model
 		case filter
 		case cancel
 		case create
 
 		var isTextField: Bool {
 			switch self {
-			case .name, .field, .filter: true
+			case .name, .field, .model, .filter: true
 			case .cancel, .create: false
 			}
 		}
@@ -47,6 +48,12 @@ final class NewAgentDialogModel {
 	}
 	/// Whether the instructions keep Claude Code's own coding instructions, appended to them, or replace them.
 	var keepCodingInstructions = true
+	/// The model every launch of the agent uses: free text, so an alias or a full model name both work. Empty until the core's default arrives.
+	var model = ""
+	/// The effort every launch uses; `nil` leaves it to Claude Code.
+	private(set) var effort: String?
+	/// The efforts the slider offers after "Claude Code default", low → max.
+	private(set) var effortLevels: [String] = []
 	/// The instructions as creation would render them now, or why it would fail.
 	private(set) var preview: AgentPreview?
 	/// The fields whose value was saved to its source, for their button's label.
@@ -61,11 +68,29 @@ final class NewAgentDialogModel {
 	@ObservationIgnored private let clearFocus: () -> Void
 	@ObservationIgnored private var fieldsTask: Task<Void, Never>?
 	@ObservationIgnored private var previewTask: Task<Void, Never>?
+	/// Set once the user moves the effort slider, so a late default doesn't override it.
+	@ObservationIgnored private var effortChosen = false
 
 	init(store: Store, repos: [RepoInfo], clearFocus: @escaping () -> Void) {
 		self.store = store
 		self.repos = repos
 		self.clearFocus = clearFocus
+		Task { [weak self, store] in
+			guard let defaults = await store.agentModelDefaults() else { return }
+			self?.applyModelDefaults(defaults)
+		}
+	}
+
+	private func applyModelDefaults(_ defaults: AgentModelDefaults) {
+		effortLevels = defaults.effortLevels
+		if model.isEmpty { model = defaults.choice.model }
+		if !effortChosen { effort = defaults.choice.effort }
+	}
+
+	/// The user's effort choice, which a late default no longer overrides.
+	func chooseEffort(_ effort: String?) {
+		effortChosen = true
+		self.effort = effort
 	}
 
 	var visibleRepos: [RepoInfo] { repos.matching(filter) }
@@ -76,13 +101,22 @@ final class NewAgentDialogModel {
 	}
 
 	var editableFields: [AgentField] { fields.filter { $0.source != .derived } }
-	var derivedFields: [AgentField] { fields.filter { $0.source == .derived } }
+	/// The derived fields worth showing: the name is the Name field itself, and the space's path shows under it.
+	var derivedFields: [AgentField] {
+		fields.filter { $0.source == .derived && !["agent.name", "space.path"].contains($0.key) }
+	}
+
+	/// Where the agent's space will be created, shown under its name.
+	var spacePath: String? {
+		guard !trimmedName.isEmpty, let profile = store.selectedProfilePath else { return nil }
+		return ((profile as NSString).appendingPathComponent("agent-spaces/\(trimmedName)") as NSString).abbreviatingWithTildeInPath
+	}
 
 	func value(of field: AgentField) -> String { edits[field.key] ?? field.value ?? "" }
 
-	/// A name, and a value for every field only the form can fill; a pre-filled field may be empty, as an unset optional section is.
+	/// A name, a model, and a value for every field only the form can fill; a pre-filled field may be empty, as an unset optional section is.
 	var canCreate: Bool {
-		!trimmedName.isEmpty && editableFields.allSatisfy { $0.source != nil || !value(of: $0).trimmingCharacters(in: .whitespaces).isEmpty }
+		!trimmedName.isEmpty && !trimmedModel.isEmpty && editableFields.allSatisfy { $0.source != nil || !value(of: $0).trimmingCharacters(in: .whitespaces).isEmpty }
 	}
 
 	/// Where "Save" writes a field: back to the global config when it came from there, otherwise to the profile.
@@ -103,7 +137,8 @@ final class NewAgentDialogModel {
 	/// Lists the fields again for the current name and repos, which the derived ones show; the edits stay.
 	func refreshFields() {
 		fieldsTask?.cancel()
-		let form = AgentCreationForm(name: trimmedName, role: nil, repos: selectedRepoPaths, inputs: [:], keepCodingInstructions: keepCodingInstructions)
+		let form = AgentCreationForm(
+			name: trimmedName, role: nil, repos: selectedRepoPaths, inputs: [:], keepCodingInstructions: keepCodingInstructions, model: nil)
 		fieldsTask = Task { [weak self, store] in
 			guard let fields = await store.agentCreationFields(form), !Task.isCancelled else { return }
 			self?.fields = fields
@@ -160,6 +195,7 @@ final class NewAgentDialogModel {
 		var order: [Focus] = [.name]
 		order += editableFields.map { .field($0.key) }
 		if !repos.isEmpty { order.append(.filter) }
+		order.append(.model)
 		order += [.cancel, .create]
 		let index = order.firstIndex(of: focus) ?? 0
 		focus = order[(index + (backward ? order.count - 1 : 1)) % order.count]
@@ -199,12 +235,14 @@ final class NewAgentDialogModel {
 	}
 
 	private var trimmedName: String { name.trimmingCharacters(in: .whitespaces) }
+	private var trimmedModel: String { model.trimmingCharacters(in: .whitespaces) }
 
 	/// The form as it stands: the editable fields' values over their listed ones.
 	private var currentForm: AgentCreationForm {
 		let inputs = Dictionary(uniqueKeysWithValues: editableFields.map { ($0.key, value(of: $0)) })
 		return AgentCreationForm(
-			name: trimmedName, role: nil, repos: selectedRepoPaths, inputs: inputs, keepCodingInstructions: keepCodingInstructions)
+			name: trimmedName, role: nil, repos: selectedRepoPaths, inputs: inputs, keepCodingInstructions: keepCodingInstructions,
+			model: AgentModelChoice(model: trimmedModel, effort: effort))
 	}
 
 	private var selectedRepoPaths: [String] { repos.map(\.path).filter(selected.contains) }
@@ -264,12 +302,21 @@ struct NewAgentDialogView: View {
 			.textFieldStyle(.roundedBorder)
 			.focused($field, equals: .name)
 			.accessibilityIdentifier("new-agent-name")
+		if let spacePath = model.spacePath {
+			Text("Creates \(spacePath)")
+				.font(.caption)
+				.foregroundStyle(.secondary)
+				.lineLimit(1)
+				.truncationMode(.middle)
+				.textSelection(.enabled)
+				.accessibilityIdentifier("new-agent-space-path")
+		}
 		ForEach(model.editableFields, id: \.key) { agentField in
 			fieldRow(agentField)
 		}
 		ForEach(model.derivedFields, id: \.key) { agentField in
 			HStack(alignment: .firstTextBaseline) {
-				label(agentField.key)
+				label(AgentFieldLabel.text(for: agentField.key))
 				Text(agentField.value ?? "from the name")
 					.font(.callout.monospaced())
 					.foregroundStyle(.secondary)
@@ -291,6 +338,12 @@ struct NewAgentDialogView: View {
 				identifierPrefix: "new-agent-repo-")
 				.frame(maxHeight: 140)
 		}
+		label("Model")
+		TextField("e.g. opus, sonnet or a full model name", text: $model.model)
+			.textFieldStyle(.roundedBorder)
+			.focused($field, equals: .model)
+			.accessibilityIdentifier("new-agent-model")
+		effortSlider
 		Toggle("Include coding instructions", isOn: $model.keepCodingInstructions)
 			.help("On: the instructions are appended to Claude Code's own system prompt, with its coding instructions. Off: they replace it.")
 			.accessibilityIdentifier("new-agent-keep-coding-instructions")
@@ -329,11 +382,35 @@ struct NewAgentDialogView: View {
 		.accessibilityIdentifier("new-agent-preview")
 	}
 
+	/// "Claude Code default", then each effort level, as one stepped slider.
+	private var effortSlider: some View {
+		let levels = model.effortLevels
+		let index = Binding<Double>(
+			get: { Double(model.effort.flatMap { levels.firstIndex(of: $0) }.map { $0 + 1 } ?? 0) },
+			set: { position in
+				let step = Int(position.rounded())
+				model.chooseEffort(step == 0 ? nil : levels[step - 1])
+			})
+		return VStack(alignment: .leading, spacing: 2) {
+			HStack {
+				label("Effort")
+				Spacer()
+				Text(model.effort ?? "Claude Code default")
+					.font(.caption)
+					.foregroundStyle(.secondary)
+					.accessibilityIdentifier("new-agent-effort-value")
+			}
+			Slider(value: index, in: 0...Double(max(levels.count, 1)), step: 1)
+				.disabled(levels.isEmpty)
+				.accessibilityIdentifier("new-agent-effort")
+				.accessibilityValue(model.effort ?? "Claude Code default")
+		}
+	}
+
 	private func fieldRow(_ agentField: AgentField) -> some View {
 		VStack(alignment: .leading, spacing: 4) {
 			HStack {
-				label(agentField.key)
-				Text(sourceLabel(agentField.source)).font(.caption2).foregroundStyle(.tertiary)
+				label(AgentFieldLabel.text(for: agentField.key))
 				Spacer()
 				Button(saveLabel(agentField)) { model.save(agentField) }
 					.buttonStyle(.borderless)
@@ -348,6 +425,9 @@ struct NewAgentDialogView: View {
 				.lineLimit(1...4)
 				.focused($field, equals: .field(agentField.key))
 				.accessibilityIdentifier("new-agent-field-\(agentField.key)")
+			Text(["{{\(agentField.key)}}", sourceLabel(agentField.source)].filter { !$0.isEmpty }.joined(separator: " · "))
+				.font(.caption2.monospaced())
+				.foregroundStyle(.tertiary)
 		}
 	}
 
@@ -397,5 +477,26 @@ private struct AgentCreationProgress: View {
 			}
 		}
 		.accessibilityIdentifier("new-agent-progress")
+	}
+}
+
+/// User-facing labels for template placeholders: the built-in ones by name, any other key from its words ("repo.notes" reads "Repo notes").
+enum AgentFieldLabel {
+	static let known = [
+		"agent.name": "Name",
+		"agent.role": "Role",
+		"role.details": "Role details",
+		"user.details": "About you",
+		"extra.details": "Extra details",
+		"custom.sections": "Custom sections",
+		"space.path": "Space path",
+		"memory.path": "Memory path",
+		"space.repos": "Repositories",
+	]
+
+	static func text(for key: String) -> String {
+		if let known = known[key] { return known }
+		let words = key.split(whereSeparator: { $0 == "." || $0 == "_" }).joined(separator: " ")
+		return words.prefix(1).uppercased() + words.dropFirst()
 	}
 }

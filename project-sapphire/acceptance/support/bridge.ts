@@ -109,6 +109,8 @@ export interface ProfileFormState {
 export type ProfileFormAction =
   | { action: 'setName'; value: string }
   | { action: 'setKeepCodingInstructions'; value: boolean }
+  | { action: 'setModel'; value: string }
+  | { action: 'setEffort'; value: string | null }
   | { action: 'setPath'; value: string }
   | { action: 'submit' }
   | { action: 'cancel' };
@@ -259,6 +261,10 @@ export interface NewAgentState {
   repos: { name: string; selected: boolean }[];
   progress: { steps: string[]; outcome: string | null } | null;
   keepCodingInstructions: boolean;
+  model: string;
+  effort: string | null;
+  effortLevels: string[];
+  spacePath: string | null;
   /** The rendered instructions, or why creation would fail. */
   preview: { text?: string; error?: string } | null;
 }

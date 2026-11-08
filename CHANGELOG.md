@@ -20,6 +20,7 @@ Types of changes:
 
 ### Added
 
+- Devora Sapphire's New Agent dialog chooses each agent's model (free text, `opus` by default) and effort (a slider from Claude Code's own default to max, starting at the effort set in the Settings Hub), kept for every launch; its fields have user-facing labels, and the agent's space path shows under its name
 - Devora Sapphire has Global Pause in the title bar and command palette, holding agents after their current turn, preserving drafts and the hold across relaunch, with a shared core subscription for background integrations
 
 - Debi has `repo list` and `repo add <repo> [--postfix <postfix>]` for profile-aware worktree management in workspaces and Agent Spaces, with streamed progress and Ctrl+C rollback

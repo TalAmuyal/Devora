@@ -161,10 +161,45 @@ Then('the New Agent preview should contain {string}', async function (this: Sapp
   await waitForDialog(this, `the preview to contain ${text}`, (dialog) => dialog.preview?.text?.includes(text) === true);
 });
 
+/** The arguments of the first Claude launch, which the fake CLI reports (`app.ts` puts its report beside the config). */
+function firstLaunchArgs(world: SapphireWorld): string[] {
+  const report = fs.readFileSync(path.join(path.dirname(world.testConfigPath), 'fake-claude.jsonl'), 'utf8');
+  return report.split('\n').filter(Boolean).map((line) => JSON.parse(line)).find((entry) => entry.kind === 'start').args;
+}
+
+/** The value after `flag` in `args`, or undefined when the flag is absent. */
+function flagValue(args: string[], flag: string): string | undefined {
+  const index = args.indexOf(flag);
+  return index === -1 ? undefined : args[index + 1];
+}
+
 Then('Claude should have been launched with the instructions as its whole system prompt', function (this: SapphireWorld) {
-  // The fake CLI reports each launch's arguments (`app.ts` puts its report beside the config).
-  const report = fs.readFileSync(path.join(path.dirname(this.testConfigPath), 'fake-claude.jsonl'), 'utf8');
-  const start = report.split('\n').filter(Boolean).map((line) => JSON.parse(line)).find((entry) => entry.kind === 'start');
-  assert.ok(start.args.includes('--system-prompt'), JSON.stringify(start.args));
-  assert.ok(!start.args.includes('--append-system-prompt'));
+  const args = firstLaunchArgs(this);
+  assert.ok(args.includes('--system-prompt'), JSON.stringify(args));
+  assert.ok(!args.includes('--append-system-prompt'));
+});
+
+Then('the New Agent dialog should start with the model {string} and Claude Code\'s default effort', async function (this: SapphireWorld, model: string) {
+  await waitForDialog(this, `model ${model}, default effort`, (dialog) => dialog.model === model && dialog.effort === null && dialog.effortLevels.length > 0);
+});
+
+Then('the New Agent dialog should say the space is created at {string} in the profile', async function (this: SapphireWorld, relative: string) {
+  await waitForDialog(this, `the space path ending in ${relative}`, (dialog) => dialog.spacePath?.endsWith(`/${relative}`) === true);
+});
+
+When('the user sets the new agent\'s model to {string} and its effort to {string}', async function (this: SapphireWorld, model: string, effort: string) {
+  await this.bridge.newAgent({ action: 'setModel', value: model });
+  await this.bridge.newAgent({ action: 'setEffort', value: effort });
+});
+
+Then('Claude should have been launched with the model {string} and the effort {string}', function (this: SapphireWorld, model: string, effort: string) {
+  const args = firstLaunchArgs(this);
+  assert.equal(flagValue(args, '--model'), model, JSON.stringify(args));
+  assert.equal(flagValue(args, '--effort'), effort, JSON.stringify(args));
+});
+
+Then('Claude should have been launched with the model {string} and no effort', function (this: SapphireWorld, model: string) {
+  const args = firstLaunchArgs(this);
+  assert.equal(flagValue(args, '--model'), model, JSON.stringify(args));
+  assert.ok(!args.includes('--effort'), JSON.stringify(args));
 });

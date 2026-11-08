@@ -44,7 +44,7 @@ impl Fixture {
             working_directory: self.root.path().into(),
             instructions: Instructions::Append("Caller instructions".into()),
             model: "haiku".into(),
-            effort: "high".into(),
+            effort: Some("high".into()),
             permission_mode: "auto".into(),
             plugins: vec![
                 Plugin {

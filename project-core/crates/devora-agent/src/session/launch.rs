@@ -44,7 +44,8 @@ pub struct SessionOptions {
     pub working_directory: PathBuf,
     pub instructions: Instructions,
     pub model: String,
-    pub effort: String,
+    /// `None` leaves the effort to Claude Code's own default.
+    pub effort: Option<String>,
     pub permission_mode: String,
     pub plugins: Vec<Plugin>,
     /// Explicit behavioral settings, including authoritative configured tool env.
@@ -66,8 +67,11 @@ impl SessionOptions {
     ) -> Result<LaunchSpec, String> {
         uuid::Uuid::parse_str(session_id)
             .map_err(|error| format!("invalid session ID: {error}"))?;
-        if model.is_empty() || self.effort.is_empty() || permission_mode.is_empty() {
-            return Err("model, effort and permission mode must be supplied by the caller".into());
+        if model.is_empty()
+            || self.effort.as_ref().is_some_and(String::is_empty)
+            || permission_mode.is_empty()
+        {
+            return Err("model and permission mode must be supplied by the caller, and an effort must not be empty".into());
         }
         let mut settings = self
             .settings
@@ -103,12 +107,13 @@ impl SessionOptions {
             permission_mode,
             "--model",
             model,
-            "--effort",
-            &self.effort,
         ]
         .into_iter()
         .map(Into::into)
         .collect::<Vec<_>>();
+        if let Some(effort) = &self.effort {
+            args.extend(["--effort".into(), effort.into()]);
+        }
         args.extend([
             "--settings".into(),
             serde_json::to_string(&settings)
