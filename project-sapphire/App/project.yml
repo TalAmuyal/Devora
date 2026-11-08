@@ -33,7 +33,8 @@ targets:
       base:
         PRODUCT_NAME: Devora Sapphire
         PRODUCT_MODULE_NAME: DevoraSapphire
-        PRODUCT_BUNDLE_IDENTIFIER: dev.devora.sapphire
+        # The development and test build's own fixed id: XCUITest quits every running instance of its target's bundle id, so it must differ from the installed app's (`populate-app-resources.sh` stamps `dev.devora.sapphire` on the distribution).
+        PRODUCT_BUNDLE_IDENTIFIER: dev.devora.sapphire.dev
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: Devora Sapphire
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.developer-tools

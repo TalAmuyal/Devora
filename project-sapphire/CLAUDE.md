@@ -230,6 +230,7 @@ Operational outcomes go to the app log without banners.
 - From the repository root, `mise run lint` checks handwritten Swift for tab indentation (including new, nonignored files) as well as Rust formatting and clippy. Generated bindings and ignored build/vendor files are excluded.
 
 - `mise run build`: the core, the bindings, the Xcode project and `build/DerivedData/Build/Products/Release/Devora Sapphire.app`; it builds GhosttyKit first if `build/GhosttyKit.xcframework` is missing.
+	The development app's bundle id is `dev.devora.sapphire.dev`, so the XCUITests, which quit every running instance of their target's bundle id, never quit an installed Sapphire (`dev.devora.sapphire`, stamped by `populate-app-resources.sh` and checked by `test-bundle`'s smoke).
 - `mise run run`: launches the app through LaunchServices (`open -n`); arguments are `--flag value` pairs, since a bare argument makes AppKit open no window.
 	`--open-workspace <path>` opens a workspace of the selected profile in a new tab; `--surface workspace-hub` opens the Workspace Hub.
 	`--snapshot <out.png>` types a command into the first shell tab, if there is one, captures the window to `<out.png>` and the active tab's text to `<out.png>.txt`, then quits.
