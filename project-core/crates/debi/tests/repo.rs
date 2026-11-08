@@ -220,6 +220,7 @@ fn add_to_an_open_agent_space_preserves_its_instruction_layout() {
             repos: vec![],
             inputs: BTreeMap::new(),
             keep_coding_instructions: true,
+            model: None,
         },
         BTreeMap::new(),
         &f.global,

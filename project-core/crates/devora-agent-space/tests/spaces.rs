@@ -1,7 +1,9 @@
 use devora_agent::protocol::{KnownMessage, Message};
 use devora_agent::session::SessionEvent;
 use devora_agent::transcript::{SystemKind, TranscriptChange, TranscriptContent};
-use devora_agent_space::{template, CreationForm, LaunchContext, Space, SpaceEvent};
+use devora_agent_space::{
+    model_defaults, template, CreationForm, LaunchContext, ModelChoice, Space, SpaceEvent,
+};
 use devora_app::log::Log;
 use devora_workspace::creation::{CreationHandle, EventSink};
 use serde_json::json;
@@ -37,6 +39,7 @@ impl Fixture {
             repos: vec![],
             inputs: BTreeMap::new(),
             keep_coding_instructions: true,
+            model: None,
         }
     }
     fn create(&self, form: CreationForm) -> Result<Space, String> {
@@ -285,7 +288,7 @@ fn frozen_rendering_merges_inputs_and_survives_template_removal() {
     assert_eq!(reopened.form().inputs["value"], "form {{literal}}");
     let options = reopened.session_options(&fixture.context()).unwrap();
     assert_eq!(options.model, "sonnet");
-    assert_eq!(options.effort, "low");
+    assert_eq!(options.effort.as_deref(), Some("low"));
     assert!(
         matches!(options.instructions,devora_agent::session::Instructions::Append(text) if text.contains("form role"))
     );
@@ -563,6 +566,74 @@ fn profile_model_aliases_reach_inline_settings_and_explicit_host_values_win() {
         .get("DEVORA_CCC_PERMISSION_MODE")
         .is_none());
     assert_eq!(options.permission_mode, "auto");
+}
+
+#[test]
+fn a_chosen_model_and_effort_outlive_profile_changes_and_no_effort_leaves_it_to_claude_code() {
+    let fixture = Fixture::new();
+    let choose = |name: &str, effort: Option<&str>| {
+        let mut form = fixture.form(name);
+        form.model = Some(ModelChoice {
+            model: "sonnet".into(),
+            effort: effort.map(Into::into),
+        });
+        fixture.create(form).unwrap();
+    };
+    choose("Delta", Some("high"));
+    choose("Echo", None);
+    std::fs::write(
+        fixture.profile.join("config.json"),
+        r#"{"claude":{"default-model":"haiku","effort":"low"}}"#,
+    )
+    .unwrap();
+    let options = |name: &str| {
+        Space::open(&fixture.profile, name)
+            .unwrap()
+            .session_options(&fixture.context())
+            .unwrap()
+    };
+    let delta = options("Delta");
+    assert_eq!(
+        (delta.model.as_str(), delta.effort.as_deref()),
+        ("sonnet", Some("high"))
+    );
+    assert_eq!(options("Echo").effort, None);
+
+    let mut form = fixture.form("Foxtrot");
+    form.model = Some(ModelChoice {
+        model: " ".into(),
+        effort: Some("extreme".into()),
+    });
+    assert!(fixture.create(form).is_err());
+}
+
+#[test]
+fn the_form_starts_with_opus_and_only_an_effort_the_user_set() {
+    let fixture = Fixture::new();
+    let defaults = || model_defaults(&fixture.global, &fixture.profile).unwrap();
+    // The built-in effort default doesn't count as the user's choice.
+    assert_eq!(
+        defaults(),
+        ModelChoice {
+            model: "opus".into(),
+            effort: None
+        }
+    );
+    std::fs::write(&fixture.global, r#"{"claude":{"effort":"medium"}}"#).unwrap();
+    assert_eq!(defaults().effort.as_deref(), Some("medium"));
+    std::fs::write(
+        fixture.profile.join("config.json"),
+        r#"{"claude":{"effort":"max"}}"#,
+    )
+    .unwrap();
+    assert_eq!(defaults().effort.as_deref(), Some("max"));
+    // A profile that clears the effort leaves it to Claude Code, over User Defaults.
+    std::fs::write(
+        fixture.profile.join("config.json"),
+        r#"{"claude":{"effort":null}}"#,
+    )
+    .unwrap();
+    assert_eq!(defaults().effort, None);
 }
 
 #[test]

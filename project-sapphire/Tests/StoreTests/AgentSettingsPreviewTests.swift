@@ -16,7 +16,7 @@ struct AgentSettingsPreviewTests {
 			.write(to: URL(filePath: other).appending(path: "config.json"), atomically: true, encoding: .utf8)
 		let store = Store(configPath: fixture.configPath, state: .inMemory, log: try fixture.log())
 		await store.load(selecting: active)
-		let form = AgentCreationForm(name: "", role: nil, repos: [], inputs: [:], keepCodingInstructions: true)
+		let form = AgentCreationForm(name: "", role: nil, repos: [], inputs: [:], keepCodingInstructions: true, model: nil)
 		let preview = await store.agentCreationPreview(form, profilePath: other)
 		guard case .text(let text) = preview else {
 			Issue.record("Expected the inactive profile's saved template")

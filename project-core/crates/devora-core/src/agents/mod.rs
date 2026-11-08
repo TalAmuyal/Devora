@@ -9,7 +9,9 @@ mod operations;
 use devora_agent::session::SessionEvent;
 pub use devora_agent::session::{PermissionAnswer, Plugin};
 use devora_agent_space::Space;
-pub use devora_agent_space::{CreationForm, Entry as SpaceEntry, Field, LaunchContext, Source};
+pub use devora_agent_space::{
+    CreationForm, Entry as SpaceEntry, Field, LaunchContext, ModelChoice, Source,
+};
 use devora_agent_space::{SpaceEvent, SpaceHandle};
 use devora_app::log::Log;
 pub use devora_config::agent::Scope;
@@ -478,6 +480,15 @@ impl Agents {
         form: &CreationForm,
     ) -> Result<String, String> {
         devora_agent_space::preview(profile, global_config, launch_inputs, form)
+    }
+
+    /// The model and effort the New Agent form starts with.
+    pub fn model_defaults(
+        &self,
+        profile: &Path,
+        global_config: &Path,
+    ) -> Result<ModelChoice, String> {
+        devora_agent_space::model_defaults(global_config, profile)
     }
 
     /// Saves a creation-form value to the global or profile config, so later

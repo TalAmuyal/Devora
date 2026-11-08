@@ -64,3 +64,22 @@ Feature: Agent Hub
     And the user creates the agent
     Then the agent "Echo" should be idle
     And Claude should have been launched with the instructions as its whole system prompt
+
+  Scenario: The New Agent dialog starts with opus and leaves the effort to Claude Code when none is set
+    Given the Agent Hub is open
+    When the user opens the New Agent dialog
+    And the user names the new agent "Echo"
+    Then the New Agent dialog should start with the model "opus" and Claude Code's default effort
+    And the New Agent dialog should say the space is created at "agent-spaces/Echo" in the profile
+    When the user creates the agent
+    Then the agent "Echo" should be idle
+    And Claude should have been launched with the model "opus" and no effort
+
+  Scenario: A chosen model and effort are what Claude is launched with
+    Given the Agent Hub is open
+    When the user opens the New Agent dialog
+    And the user names the new agent "Echo"
+    And the user sets the new agent's model to "sonnet" and its effort to "high"
+    And the user creates the agent
+    Then the agent "Echo" should be idle
+    And Claude should have been launched with the model "sonnet" and the effort "high"

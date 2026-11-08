@@ -91,6 +91,12 @@ extension Store {
 		})
 	}
 
+	/// What the New Agent form's model and effort start with, and the efforts it offers.
+	public func agentModelDefaults() async -> AgentModelDefaults? {
+		guard let core, let profile = selectedProfilePath else { return nil }
+		return try? await call("agent_model_defaults", { try core.agentModelDefaults(profilePath: profile) })
+	}
+
 	/// The instructions `form` would create, or why creation would fail; a failure is the form's to show, not a banner.
 	public func agentCreationPreview(_ form: AgentCreationForm, profilePath: String? = nil) async -> AgentPreview? {
 		guard let core, let profile = profilePath ?? selectedProfilePath else { return nil }
