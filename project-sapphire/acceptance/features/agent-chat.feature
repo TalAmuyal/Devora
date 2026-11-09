@@ -52,6 +52,15 @@ Feature: Agent chat panel
     And Sapphire is quit and relaunched
     Then the first agent history item is restored at the top
 
+  @native-transcript
+  Scenario: The native transcript loads older history without moving the visible row and restores it on relaunch
+    Given the agent chat has 90 completed test turns
+    When the user scrolls up for older agent history
+    Then earlier agent history loads without moving the visible row
+    When the user scrolls to the first agent history item
+    And Sapphire is quit and relaunched
+    Then the first agent history item is restored at the top
+
   Scenario: Thinking and tool details start collapsed and the Judgess badge is shown
     When the user sends the agent prompt "chat-fixture"
     Then the agent transcript has a "chat-thinking" item

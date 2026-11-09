@@ -14,6 +14,10 @@ final class AgentPanelModel {
 	var rendererError: String?
 	@ObservationIgnored weak var editor: NSTextView?
 	@ObservationIgnored weak var webView: WKWebView?
+	@ObservationIgnored weak var transcript: TranscriptScrollView?
+	/// Whether this panel shows the native transcript (ADR-014) rather than the web one: the hidden
+	/// `DevoraNativeTranscript` default, until the native transcript is the only one.
+	let nativeTranscript = UserDefaults.standard.bool(forKey: "DevoraNativeTranscript")
 	@ObservationIgnored var onEditorReady: (() -> Void)?
 	@ObservationIgnored let theme: [String: String]
 
@@ -157,7 +161,12 @@ struct AgentChatPanel: View {
 				}
 				.padding(12).foregroundStyle(.orange)
 			}
-			if model.prepared {
+			if model.prepared && model.nativeTranscript {
+				TranscriptView(
+					items: model.chat.items, hasOlder: model.chat.hasOlder, anchor: model.chat.anchor,
+					onScroll: { model.chat.saveScroll($0) }, onNeedsOlder: { Task { await model.chat.older() } },
+					onView: { model.transcript = $0 })
+			} else if model.prepared {
 				WebContentView(
 					content: { ("", model.theme) },
 					onError: { model.rendererError = Store.describe($0) },

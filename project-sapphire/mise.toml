@@ -74,7 +74,14 @@ run = "npm run build --prefix ../web-renderer -- --outDir ../project-sapphire/bu
 [tasks.generate]
 depends = ["web-renderer"]
 description = "Generate the thin app target's Xcode project with XcodeGen"
-run = "node ./scripts/check-web-renderer.mjs && xcodegen generate --quiet --spec App/project.yml"
+run = """
+set -euo pipefail
+node ./scripts/check-web-renderer.mjs
+xcodegen generate --quiet --spec App/project.yml
+# The app target resolves the package's dependencies itself: give it the package's pins, so it builds the same versions as `swift build`.
+mkdir -p App/DevoraSapphire.xcodeproj/project.xcworkspace/xcshareddata/swiftpm
+cp Package.resolved App/DevoraSapphire.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+"""
 
 [tasks.build]
 description = "Build Devora Sapphire.app (builds GhosttyKit first if it is missing)"

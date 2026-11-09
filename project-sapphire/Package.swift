@@ -7,6 +7,8 @@ let package = Package(
 	products: [
 		.library(name: "AppShell", targets: ["AppShell"]),
 	],
+	// The native agent transcript's Markdown parser (ADR-014).
+	dependencies: [.package(url: "https://github.com/swiftlang/swift-markdown.git", exact: "0.9.0")],
 	targets: [
 		// Built by `mise run core` and `mise run ghostty-build`; neither is checked in.
 		.binaryTarget(name: "DevoraCoreFFI", path: "build/DevoraCoreFFI.xcframework"),
@@ -23,7 +25,10 @@ let package = Package(
 		.target(name: "Store", dependencies: ["CoreBindings"]),
 		// The layer system (ADR-003): the stacks, the key router and the presets; it knows no surface and no domain.
 		.target(name: "Layers"),
-		.target(name: "AppShell", dependencies: ["Store", "TerminalKit", "Layers"]),
+		.target(
+			name: "AppShell",
+			dependencies: ["Store", "TerminalKit", "Layers", .product(name: "Markdown", package: "swift-markdown")]
+		),
 
 		.testTarget(name: "StoreTests", dependencies: ["Store", "CoreBindings"]),
 		.testTarget(name: "TerminalKitTests", dependencies: ["TerminalKit"]),

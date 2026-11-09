@@ -24,7 +24,7 @@ export interface LaunchedApp {
  *
  * The bridge comes up once the launch is done, or early when the app state couldn't be opened, so that the scenario can answer the startup problem.
  */
-export async function launch(configPath: string, stateDir: string | undefined, options: { binary?: string; home?: string; environment?: Record<string, string> } = {}): Promise<LaunchedApp> {
+export async function launch(configPath: string, stateDir: string | undefined, options: { binary?: string; home?: string; environment?: Record<string, string>; arguments?: string[] } = {}): Promise<LaunchedApp> {
   // Only what a login session would provide, so the developer's environment (and a Devora app around the test run) doesn't leak into the app's terminals.
   const env: Record<string, string> = {};
   for (const key of ['HOME', 'SHELL', 'TMPDIR', 'USER', 'LANG']) {
@@ -37,7 +37,8 @@ export async function launch(configPath: string, stateDir: string | undefined, o
   if (options.home) env.HOME = options.home;
 
   // Launched directly rather than through `open`, so the harness owns the process and its stderr; Sapphire takes no bare arguments, so a window opens.
-  const app = spawn(options.binary ?? APP_BINARY, [], {
+  // `arguments` are `-Default value` pairs, which AppKit reads as user defaults for this launch only.
+  const app = spawn(options.binary ?? APP_BINARY, options.arguments ?? [], {
     env: {
       ...env,
       DEVORA_TEST_CLAUDE_PROGRAM: FAKE_CLAUDE,

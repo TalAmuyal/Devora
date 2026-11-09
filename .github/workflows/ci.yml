@@ -191,6 +191,14 @@ jobs:
           key: sapphire-rust-${{ hashFiles('project-core/Cargo.lock', 'mise.toml') }}
           restore-keys: sapphire-rust-
 
+      # The Swift packages the app depends on (swift-markdown, swift-cmark): SwiftPM's shared clone cache, used by both `swift build` and `xcodebuild`.
+      - name: Cache Swift packages
+        uses: actions/cache@v5
+        with:
+          path: ~/Library/Caches/org.swift.swiftpm
+          key: sapphire-swiftpm-${{ hashFiles('project-sapphire/Package.resolved') }}
+          restore-keys: sapphire-swiftpm-
+
       # Building libghostty is slow and needs the Metal Toolchain (missing from the image, actions/runner-images#14548), so it only happens on a cache miss.
       - name: Install GhosttyKit prerequisites
         if: steps.cache-ghostty.outputs.cache-hit != 'true'
