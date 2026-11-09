@@ -103,7 +103,8 @@ Drafts and sequence/offset anchors use the canonical profile and space name, so 
 Stop interrupts with no keyboard binding.
 Pause reserves a stop after the running turn, rejects new sends while pending, and leaves permission answers available.
 The facade queues `SpaceHandle::pause_after_turn` before returning, and the space actor makes the pause-versus-compaction decision.
-`AgentContextBar` uses the actor's typed context usage, window and threshold, showing the threshold marker and keeping an unknown window explicit.
+`AgentWidgetBar`, below the editor, holds the widgets at their natural size on the left and Send on the right, whose tooltip and accessibility hint carry the Enter hint.
+Its `AgentContextWidget` shows the actor's typed context usage as a percentage of the window and a ring, starting at 9 o'clock, that fills as the usage nears the compaction threshold, with the full numbers in its tooltip and the user's locale for both; an unknown usage or window grays it out and its tooltip says which is missing.
 Retry and Resume reopen the existing tab against its owning profile.
 
 

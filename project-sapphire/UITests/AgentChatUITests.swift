@@ -38,6 +38,7 @@ final class AgentChatUITests: XCTestCase {
 		app.buttons["Create"].click()
 		let editor = app.textViews["agent-prompt"]
 		XCTAssertTrue(editor.waitForExistence(timeout: 15), "Creating an agent must open its editor")
+		capture(app, "Agent chat before its first turn")
 		editor.click()
 		editor.typeText("first")
 		editor.typeKey(.return, modifierFlags: [])
@@ -57,6 +58,19 @@ final class AgentChatUITests: XCTestCase {
 		let finished = XCTNSPredicateExpectation(predicate: ready, object: nil)
 		XCTAssertEqual(XCTWaiter.wait(for: [finished], timeout: 15), .completed,
 			"The preceding turn must finish before the permission prompt is sent. \(app.debugDescription)")
+		let context = app.descendants(matching: .any)["agent-context"]
+		// The value holds "<used> / <window> tokens" once the finished turn has reported both.
+		expectation(for: NSPredicate(format: "value CONTAINS %@", " / "), evaluatedWith: context)
+		waitForExpectations(timeout: 10)
+		capture(app, "Agent chat with a known context")
+		let window = app.windows.firstMatch
+		let corner = window.coordinate(withNormalizedOffset: CGVector(dx: 1, dy: 1)).withOffset(CGVector(dx: -2, dy: -2))
+		corner.click(forDuration: 0.1, thenDragTo: corner.withOffset(CGVector(dx: -2000, dy: 0)))
+		XCTAssertLessThan(window.frame.width, 1000, "Dragging the corner must shrink the window to its minimum width")
+		let send = app.buttons["Send"]
+		XCTAssertTrue(send.isHittable, "Send must stay visible in the narrowest chat")
+		XCTAssertLessThanOrEqual(send.frame.maxX, window.frame.maxX, "Send must stay inside the narrowest chat")
+		capture(app, "Agent chat at its narrowest")
 		app.typeKey(.return, modifierFlags: .control)
 		XCTAssertTrue(app.buttons["Allow ⌘Y"].waitForExistence(timeout: 10), "The permission turn must request approval")
 		editor.click()
@@ -70,5 +84,13 @@ final class AgentChatUITests: XCTestCase {
 		app.launch()
 		XCTAssertTrue(editor.waitForExistence(timeout: 15), "Relaunch must restore the agent tab")
 		XCTAssertEqual(editor.value as? String, "keep this unsent")
+	}
+
+	@MainActor
+	private func capture(_ app: XCUIApplication, _ name: String) {
+		let screenshot = XCTAttachment(screenshot: app.windows.firstMatch.screenshot())
+		screenshot.name = name
+		screenshot.lifetime = .keepAlways
+		add(screenshot)
 	}
 }

@@ -167,13 +167,13 @@ struct AgentChatPanel: View {
 				ProgressView("Opening agent…").frame(maxWidth: .infinity, maxHeight: .infinity)
 			}
 			Divider()
-			AgentContextBar(context: model.chat.chat?.context)
 			if model.chat.globallyPaused {
 				Text("Globally paused — resume Devora to send")
 					.font(.caption).foregroundStyle(.secondary)
+					.padding(.vertical, 4)
 					.accessibilityIdentifier("global-pause-send-hint")
+				Divider()
 			}
-			Divider()
 			AgentPrompt(
 				text: Binding(get: { model.chat.draft }, set: { model.chat.draft = $0 }),
 				enterSends: model.chat.enterSends, onSend: { Task { await model.chat.send() } },
@@ -183,17 +183,14 @@ struct AgentChatPanel: View {
 				}
 			)
 			.frame(minHeight: 85, idealHeight: 110, maxHeight: 180).padding(8)
-			HStack {
-				Text(
-					model.chat.enterSends
-						? "Enter sends · Shift+Enter newline"
-						: "⌘Enter / Ctrl+Enter sends · Enter newline"
-				).font(.caption).foregroundStyle(.secondary)
-				Spacer()
-				Button("Send") { Task { await model.chat.send() } }.disabled(!model.chat.canSend)
-			}.padding(.horizontal, 12).padding(.bottom, 10)
+			AgentWidgetBar(
+				context: model.chat.chat?.context, enterSends: model.chat.enterSends,
+				canSend: model.chat.canSend, onSend: { Task { await model.chat.send() } }
+			)
+			.padding(.horizontal, 12).padding(.bottom, 10)
 		}
 		.background(.windowBackground)
+		.accessibilityElement(children: .contain)
 		.accessibilityIdentifier(Self.layerName)
 		.task(id: model.chat.chat?.phase) {
 			guard let phase = model.chat.chat?.phase, phase != .opening else { return }
@@ -267,62 +264,88 @@ final class PromptTextView: NSTextView {
 	}
 }
 
-/// Context metrics and the compaction threshold come from the space actor.
-struct AgentContextBar: View {
+/// The row below the prompt: the widgets on the left, in order and each at its natural size, and Send on the right.
+struct AgentWidgetBar: View {
 	let context: ChatContext?
+	let enterSends: Bool
+	let canSend: Bool
+	let onSend: () -> Void
 
-	var fraction: Double {
-		guard let context, context.windowTokens > 0 else { return 0 }
-		return min(1, Double(context.usedTokens) / Double(context.windowTokens))
-	}
-
-	var summary: String {
-		guard let context else { return "Waiting for context usage" }
-		guard context.windowTokens > 0 else {
-			return "\(context.usedTokens.formatted()) tokens · window pending"
-		}
-		return "\(context.usedTokens.formatted()) / \(context.windowTokens.formatted()) tokens"
-	}
-
-	var thresholdLabel: String {
-		context.map { "Compaction at \($0.thresholdPercent)%" } ?? "Waiting for compaction threshold"
+	var sendHint: String {
+		enterSends ? "Enter sends · Shift+Enter newline" : "⌘Enter / Ctrl+Enter sends · Enter newline"
 	}
 
 	var body: some View {
-		VStack(alignment: .leading, spacing: 4) {
-			HStack {
-				Text("Context")
-				Spacer()
-				Text(summary).monospacedDigit()
-			}
-			GeometryReader { geometry in
-				ZStack(alignment: .leading) {
-					Capsule().fill(.quaternary)
-					Capsule().fill(.tint).frame(width: geometry.size.width * fraction)
-					if let context {
-						Rectangle().fill(.orange).frame(width: 2)
-							.offset(
-								x: max(
-									0,
-									min(
-										geometry.size.width - 2,
-										geometry.size.width
-											* Double(
-												context.thresholdPercent
-											) / 100 - 1)))
-					}
-				}
-			}
-			.frame(height: 6)
-			.accessibilityHidden(true)
-			Text(thresholdLabel).foregroundStyle(.secondary)
+		HStack(spacing: 12) {
+			AgentContextWidget(context: context)
+			Spacer(minLength: 12)
+			Button("Send", action: onSend).disabled(!canSend)
+				.help(sendHint)
+				.accessibilityHint(sendHint)
 		}
-		.font(.caption)
-		.padding(.horizontal, 12)
-		.padding(.vertical, 6)
+	}
+}
+
+/// The context usage and the compaction threshold reported by the space actor, as a percentage and a ring, with the full numbers in the tooltip.
+struct AgentContextWidget: View {
+	let context: ChatContext?
+	/// Formats the percentage and the token counts alike; the user's, following changes to their settings.
+	var locale: Locale = .autoupdatingCurrent
+
+	/// The used share of the window, at most 1; nil while the usage or the window size is unknown.
+	var fraction: Double? {
+		guard let context, context.windowTokens > 0 else { return nil }
+		return min(1, Double(context.usedTokens) / Double(context.windowTokens))
+	}
+
+	/// How far the usage has come to the compaction threshold, which fills the ring; 0 while it is unknown.
+	var ringFraction: Double {
+		guard let fraction, let context, context.thresholdPercent > 0 else { return fraction ?? 0 }
+		return min(1, fraction * 100 / Double(context.thresholdPercent))
+	}
+
+	var text: String {
+		guard let fraction else { return "Context unknown" }
+		// The number in the user's format, with the % sign right after it, as in "15.1%" (some locales put a space before it).
+		let percent = (fraction * 100).formatted(.number.precision(.fractionLength(1)).locale(locale))
+		return "Context \(percent)%"
+	}
+
+	var tooltip: String {
+		guard let context else { return "Waiting for context usage" }
+		let used = context.usedTokens.formatted(.number.locale(locale))
+		guard context.windowTokens > 0 else { return "\(used) tokens · window size not known yet" }
+		let window = context.windowTokens.formatted(.number.locale(locale))
+		return "\(used) / \(window) tokens · compaction at \(context.thresholdPercent)%"
+	}
+
+	var body: some View {
+		HStack(spacing: 6) {
+			Text(text).monospacedDigit()
+			ContextRing(fraction: ringFraction).frame(width: 20, height: 20)
+		}
+		.font(.callout)
+		.foregroundStyle(fraction == nil ? .secondary : .primary)
+		.fixedSize()
+		.help(tooltip)
 		.accessibilityElement(children: .combine)
 		.accessibilityLabel("Agent context")
-		.accessibilityValue(summary + ", " + thresholdLabel)
+		.accessibilityValue(tooltip)
 		.accessibilityIdentifier("agent-context")
+	}
+}
+
+/// A ring filling clockwise from 9 o'clock (a circle's trim starts at 3 o'clock, hence the half turn).
+struct ContextRing: View {
+	let fraction: Double
+	private let lineWidth: CGFloat = 3
+
+	var body: some View {
+		ZStack {
+			Circle().stroke(.quaternary, lineWidth: lineWidth)
+			Circle().trim(from: 0, to: fraction).stroke(.tint, lineWidth: lineWidth)
+		}
+		.rotationEffect(.degrees(180))
+		.padding(lineWidth / 2)
 	}
 }
