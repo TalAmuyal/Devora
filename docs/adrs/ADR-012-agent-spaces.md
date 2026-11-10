@@ -60,6 +60,7 @@ This ADR decides what an agent is in Devora, where it lives, and how the user wo
 	- An Agent Space's tab has a **chat panel** as its main panel.
 		Terminal, preview, and web panels can be opened beside it for work beyond the chat.
 	- The transcript renders through the shared web renderer that previews and the User Guide use, with a native renderer as the fallback if that proves better.
+		Superseded by ADR-014: the transcript becomes native.
 	- The prompt editor starts as a plain multi-line text box.
 		An embedded Neovim editor (ADR-010) comes later as an alternative, and the plain editor remains a setting.
 	- In the prompt editor, `Enter` and `Shift+Enter` insert a newline, and `⌘Enter` and `Ctrl+Enter` send.

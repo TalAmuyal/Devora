@@ -127,8 +127,18 @@ final class TestBridge {
 				try hubAction(request.json())
 				return .init(status: 200, body: [:])
 			case ("GET", "/test/agent-chat"):
-				guard let tab = store.app.window.activeTab, let panel = surfaces.agentPanels[tab], let view = panel.webView else { throw BridgeError(status: 409, "agent chat is not ready") }
-				let dom = try await view.evaluateJavaScript("""
+				guard let tab = store.app.window.activeTab, let panel = surfaces.agentPanels[tab] else { throw BridgeError(status: 409, "agent chat is not ready") }
+				// The native transcript (ADR-014) answers the fields it has from its view; the rest still read the web page.
+				let dom: Any?
+				if panel.nativeTranscript {
+					guard let transcript = panel.transcript else { throw BridgeError(status: 409, "agent chat is not ready") }
+					var observation = transcript.observation()
+					observation["text"] = (observation["rows"] as? [[String: Any]] ?? []).compactMap { $0["text"] as? String }.joined(separator: "\n")
+					observation["native"] = true
+					dom = observation
+				} else {
+					guard let view = panel.webView else { throw BridgeError(status: 409, "agent chat is not ready") }
+					dom = try await view.evaluateJavaScript("""
 					(() => {
 					  const content = document.getElementById('content');
 					  const rows = [...document.querySelectorAll('article[data-sequence]')];
@@ -149,6 +159,7 @@ final class TestBridge {
 					  };
 					})()
 					""")
+				}
 				var observation: [String: Any] = ["dom": dom ?? [:], "draft": panel.chat.draft, "canSend": panel.chat.canSend]
 				observation["phase"] = panel.chat.chat.map { String(describing: $0.phase) } ?? "opening"
 				observation["context"] = panel.chat.chat?.context.map { ["used": String($0.usedTokens), "window": String($0.windowTokens), "threshold": $0.thresholdPercent] as [String: Any] } ?? NSNull()
@@ -172,7 +183,12 @@ final class TestBridge {
 				case "older": await panel.chat.older()
 				case "toggleThinking": _ = try await panel.webView?.evaluateJavaScript("document.querySelector('.chat-thinking summary')?.click()")
 				case "toggleTool": _ = try await panel.webView?.evaluateJavaScript("document.querySelector('.chat-tool summary')?.click()")
-				case "scrollTop": _ = try await panel.webView?.evaluateJavaScript("document.getElementById('content').scrollTo({top:0})")
+				case "scrollTop":
+					if panel.nativeTranscript {
+						panel.transcript?.scrollToTop()
+					} else {
+						_ = try await panel.webView?.evaluateJavaScript("document.getElementById('content').scrollTo({top:0})")
+					}
 				default: throw BridgeError(status: 400, "unknown chat action")
 				}
 				return .init(status: 200, body: [:])

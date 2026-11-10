@@ -80,7 +80,7 @@ The Agent Spaces of the selected profile (ADR-012, `Sources/AppShell/AgentHub/`)
 - Opening an agent (`Store.openAgentSpace`) asks the core for the launch (`resolve_agent_launch`, the user's login shell), then `open_agent_space`, which opens its tab or activates the one it has.
 	A launch resumes the agents of restored tabs in the background (`restore_agent_spaces`), and quitting pauses every agent first (`AppTermination.pauseAgents`, from `applicationShouldTerminate`).
 - An agent's tab shows its status emoji (`AgentStatusEmoji`: ⚙️ working, turning slowly unless Reduce Motion is on or the window inactive, ❓ waiting for the user, 💤 idle, ⏸️ pausing, ⚠️ failed), folded off the main actor from the core's chat events into `Store.agentStatuses`.
-	Its tab's stack holds `AgentChatPanel`, with the shared local web renderer above an AppKit plain multi-line editor.
+	Its tab's stack holds `AgentChatPanel`, with the transcript (the shared local web renderer, or the native one behind its switch, see Agent chat) above an AppKit plain multi-line editor.
 
 ## Agent chat
 
@@ -92,6 +92,16 @@ Kind dots distinguish user, assistant, tool, thinking and system items, and each
 Permission buttons are host-created DOM controls and send the observed generation and request ID through the restricted WKWebView bridge.
 The facade validates that generation and the question's continued existence.
 Command+Y, Command+N and Command+Shift+Y answer the first active question through the tab layer, from the editor or transcript.
+
+The native transcript (ADR-014, `Sources/AppShell/AgentHub/Transcript/`) replaces the web one when the hidden `DevoraNativeTranscript` default is on (`defaults write <bundle id> DevoraNativeTranscript -bool YES`, or `-DevoraNativeTranscript YES` as launch arguments, which the XCUITests and `@native-transcript` scenarios use); the web transcript stays the default until it is the only one.
+`TranscriptScrollView` is an `NSTableView` of `TranscriptCell`s hosting SwiftUI `TranscriptRow`s, fed `AgentChat.items`; `TranscriptChange` turns each update into a prepend, changes in place with rows added or dropped at either end, or a reload.
+It follows the bottom while the reader is within 24 pt of it, keeps the top visible row in place otherwise, asks for an older page within 80 pt of the top (saving the anchor first, so the chat stops trimming to its tail), and reports the anchor 250 ms after the reader's scrolls, with the web transcript's sequence/offset meaning; its own adjustments don't count as the reader's.
+`RowHeights` holds the heights: exact for a row measured at its content and width, otherwise an estimate (its last height, or a guess from its kind and text calibrated by the measurements so far), so `NSTableView` never waits for a measurement.
+The visible rows are measured at once; the rest on idle frames, nearest first, 2 ms a frame, after which the display link stops; a width change makes every height an estimate again; every height change applies without animation and keeps the bottom in place, or else the first visible row that was already exact (so a row scrolled into view settles toward the side not yet seen), or a restored position's row.
+Links open only `http` and `https` URLs, as in the web transcript.
+Wide code blocks scroll sideways; a mostly vertical scroll gesture over the transcript scrolls the transcript wherever it starts, a code block included, decided once per gesture and kept through its momentum (`WheelRouting`, through a local scroll-wheel monitor that takes only events whose hit test lands in the transcript, so not over a background tab or a layer drawn over it).
+Assistant rows' Markdown is parsed once per content by `MarkdownDocument` (`swift-markdown`) into plain blocks and inline runs that `MarkdownView` draws; Mermaid is still a code block, and thinking and tool rows don't expand yet.
+The bridge's `GET /test/agent-chat` answers `rows`, `top` and `topSequence` from the native view, and `scrollTop` scrolls it as the reader would; its other transcript fields and actions still read the web page.
 
 Enter and Shift+Enter insert newlines by default.
 Command+Enter and Control+Enter send, and `agent.enter-sends` in the Settings Hub additionally enables unmodified Enter.
