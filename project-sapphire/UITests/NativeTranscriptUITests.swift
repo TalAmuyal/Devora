@@ -77,17 +77,19 @@ final class NativeTranscriptUITests: XCTestCase {
 		var scrolls = 0
 		while view.rows == tail && scrolls < 150 {
 			beforeLoad = view
-			// Big steps until the oldest loaded turn is near, then steps much smaller than the visible area, so that only a
-			// jump (not the step itself) could take the row the reader looks at out of view.
-			let near = view.oldestTurn.map { oldest in view.topTurn.map { $0.number - oldest <= 3 } ?? false } ?? false
-			transcript.scroll(byDeltaX: 0, deltaY: near ? 30 : 400)
+			// Big steps while one can't reach the top 80 pt, where the older page loads; then half the visible area, so
+			// that the row on top before the step that loads stays in view after it, unless the view jumps.
+			let step = view.distanceFromTop > 400 + 120 ? 400 : view.visibleArea.height / 2
+			transcript.scroll(byDeltaX: 0, deltaY: step)
 			view = try TranscriptSnapshot(transcript)
 			scrolls += 1
 		}
 		capture(app, "Native transcript after loading older history")
 		XCTAssertGreaterThan(view.rows, tail, "Scrolling to the top must load older history")
 		let anchor = try XCTUnwrap(beforeLoad.topTurn?.text)
-		XCTAssertTrue(view.shows(anchor), "\(anchor) must still be in view once older history loads")
+		XCTAssertTrue(
+			view.shows(anchor),
+			"\(anchor) must still be in view once older history loads (in view before: \(beforeLoad.inViewSummary); after: \(view.inViewSummary))")
 		XCTAssertFalse(view.shows("History turn 0"), "Loading older history must not jump to its top")
 	}
 
@@ -136,6 +138,8 @@ private struct TranscriptSnapshot {
 	let visibleArea: CGRect
 	let turns: [Turn]
 	let rows: Int
+	/// How far the visible area's top is below the first row's, the transcript's top (every row is in the snapshot).
+	let distanceFromTop: CGFloat
 
 	@MainActor
 	init(_ scrollView: XCUIElement) throws {
@@ -143,8 +147,12 @@ private struct TranscriptSnapshot {
 		visibleArea = snapshot.frame
 		var turns: [Turn] = []
 		var rows = 0
+		var contentTop = CGFloat.infinity
 		func walk(_ element: XCUIElementSnapshot) {
-			if element.elementType == .tableRow { rows += 1 }
+			if element.elementType == .tableRow {
+				rows += 1
+				contentTop = min(contentTop, element.frame.minY)
+			}
 			let text = element.label.isEmpty ? (element.value as? String ?? "") : element.label
 			if element.elementType == .staticText && text.hasPrefix("History turn ") {
 				turns.append(Turn(text: text, frame: element.frame))
@@ -154,6 +162,7 @@ private struct TranscriptSnapshot {
 		walk(snapshot)
 		self.turns = turns
 		self.rows = rows
+		distanceFromTop = contentTop.isFinite ? visibleArea.minY - contentTop : 0
 	}
 
 	private func inView(_ turn: Turn) -> Bool {
@@ -167,8 +176,8 @@ private struct TranscriptSnapshot {
 	/// The top of `text` in view, or nil when it isn't.
 	func top(of text: String) -> CGFloat? { turnsInView.first { $0.text == text }?.top }
 
-	/// The oldest turn the transcript has loaded.
-	var oldestTurn: Int? { turns.map(\.number).min() }
+	/// The turns in view, top to bottom, as `<number>@<top>`: what a failure shows.
+	var inViewSummary: String { turnsInView.sorted { $0.top < $1.top }.map { "\($0.number)@\(Int($0.top))" }.joined(separator: ", ") }
 
 	/// The topmost turn in view.
 	var topTurn: Turn? { turnsInView.min { $0.top < $1.top } }
