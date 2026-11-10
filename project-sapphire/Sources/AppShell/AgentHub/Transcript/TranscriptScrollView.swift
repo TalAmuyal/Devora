@@ -26,6 +26,8 @@ final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NSTableVi
 
 	private var heights = RowHeights()
 	private var documents: [UInt64: (text: String, document: MarkdownDocument)] = [:]
+	/// The thinking and tool rows the reader expanded, by sequence: kept through updates, cell reuse and older pages.
+	private var expanded: Set<UInt64> = []
 	private var pending = IndexSet()
 	private let measurer = NSHostingView(rootView: AnyView(EmptyView()))
 	private var idle: CADisplayLink?
@@ -162,30 +164,73 @@ final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NSTableVi
 	func numberOfRows(in tableView: NSTableView) -> Int { items.count }
 
 	func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {
-		heights.height(items[row], width: width)
+		heights.height(items[row], expanded: isExpanded(row), width: width)
 	}
 
 	func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
 		let identifier = NSUserInterfaceItemIdentifier("transcript-row")
 		let cell = tableView.makeView(withIdentifier: identifier, owner: nil) as? TranscriptCell ?? TranscriptCell(identifier: identifier)
-		cell.show(model(row))
+		let sequence = items[row].sequence
+		cell.show(model(row)) { [weak self] in self?.toggle(sequence) }
 		return cell
+	}
+
+	func tableView(_ tableView: NSTableView, didRemove rowView: NSTableRowView, forRow row: Int) {
+		// A row that scrolled away keeps its cell for reuse; until it shows another row, it shows (and exposes) nothing.
+		(rowView.view(atColumn: 0) as? TranscriptCell)?.clear()
 	}
 
 	func tableView(_ tableView: NSTableView, shouldSelectRow row: Int) -> Bool { false }
 
+	private func isExpanded(_ row: Int) -> Bool { expanded.contains(items[row].sequence) }
+
 	private func model(_ row: Int) -> TranscriptRowModel {
 		let item = items[row]
-		guard case .assistant(let text) = item.content else { return TranscriptRowModel(item, document: nil) }
-		if let cached = documents[item.sequence], cached.text == text { return TranscriptRowModel(item, document: cached.document) }
+		let expanded = isExpanded(row)
+		// A collapsed thought shows only its summary, so it isn't parsed until it opens.
+		guard let text = TranscriptRowModel.markdown(of: item.content), expanded || RowHeights.Kind(item) != .thinking else {
+			return TranscriptRowModel(item, document: nil, expanded: expanded)
+		}
+		if let cached = documents[item.sequence], cached.text == text {
+			return TranscriptRowModel(item, document: cached.document, expanded: expanded)
+		}
 		let document = MarkdownDocument(text)
 		documents[item.sequence] = (text, document)
-		return TranscriptRowModel(item, document: document)
+		return TranscriptRowModel(item, document: document, expanded: expanded)
 	}
 
 	private func findPending() {
 		let width = width
-		pending = IndexSet(items.indices.filter { !heights.isExact(items[$0], width: width) })
+		pending = IndexSet(items.indices.filter { !heights.isExact(items[$0], expanded: isExpanded($0), width: width) })
+	}
+
+	// MARK: Expansion
+
+	/// Expands or collapses a thinking or tool row, keeping its top where it is: its body opens or closes below it.
+	func toggle(_ sequence: UInt64) {
+		guard let row = items.firstIndex(where: { $0.sequence == sequence }), model(row).collapsible else { return }
+		if expanded.remove(sequence) == nil { expanded.insert(sequence) }
+		// The row the reader clicked stays put, even at the bottom: its body opens below it, and following the bottom
+		// resumes only if the bottom is still in view.
+		let anchor = pin(row)
+		following = false
+		pending.insert(row)
+		table.reloadData(forRowIndexes: [row], columnIndexes: [0])
+		// The table has the other state's height, whatever the cache estimated for this one.
+		_ = measure([row])
+		noteHeights([row], keeping: anchor)
+		following = distanceFromBottom < Self.followSlack
+		reportScrollLater()
+	}
+
+	/// Whether the first row of `kind` is expanded (the test bridge's `thinkingOpen` and `toolOpen`).
+	func isFirstExpanded(_ kind: TranscriptRowModel.Kind) -> Bool {
+		items.indices.first { model($0).kind == kind }.map(isExpanded) ?? false
+	}
+
+	/// Toggles the first row of `kind`, as clicking its summary does (the test bridge's `toggleThinking` and `toggleTool`).
+	func toggleFirst(_ kind: TranscriptRowModel.Kind) {
+		if let row = items.indices.first(where: { model($0).kind == kind }) { toggle(items[row].sequence) }
 	}
 
 	/// Measures `rows` that aren't exact yet, and returns those whose height changed, for the table to be told.
@@ -194,11 +239,12 @@ final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NSTableVi
 		var changed = IndexSet()
 		for row in rows where pending.contains(row) {
 			let item = items[row]
-			let before = heights.height(item, width: width)
+			let expanded = isExpanded(row)
+			let before = heights.height(item, expanded: expanded, width: width)
 			measurer.rootView = AnyView(TranscriptRow(model: model(row)).frame(width: width))
 			measurements += 1
 			let height = max(1, ceil(measurer.fittingSize.height))
-			heights.record(item, width: width, height: height)
+			heights.record(item, expanded: expanded, width: width, height: height)
 			pending.remove(row)
 			if height != before { changed.insert(row) }
 		}
@@ -415,25 +461,34 @@ final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NSTableVi
 		adjusting = wasAdjusting
 	}
 
-	/// What the test bridge reads: every row's sequence, text and top relative to the visible area's top.
+	/// What the test bridge reads: every row's sequence, kind (the web transcript's `chat-<kind>` class), text and top
+	/// relative to the visible area's top, and the web transcript's other fields. Nothing native runs a row's content,
+	/// so there are no scripts or unsafe attributes to count.
 	func observation() -> [String: Any] {
 		let top = contentView.bounds.minY
+		let models = items.indices.map(model)
 		let rows = items.indices.map { row -> [String: Any] in
-			["sequence": String(items[row].sequence), "text": model(row).plainText, "offset": Int((table.rect(ofRow: row).minY - top).rounded())]
+			[
+				"sequence": String(items[row].sequence), "kind": "chat-item chat-\(models[row].kind.rawValue)",
+				"text": models[row].plainText, "offset": Int((table.rect(ofRow: row).minY - top).rounded()),
+			]
 		}
+		let verdict = items.lazy.compactMap { item -> String? in
+			if case .tool(_, _, _, let verdict?, _) = item.content { return "Judgess \(verdict.kind)" }
+			return nil
+		}.first
 		return [
-			"rows": rows, "cards": 0, "thinkingOpen": false, "toolOpen": false, "verdict": "",
+			"rows": rows, "cards": 0, "thinkingOpen": isFirstExpanded(.thinking), "toolOpen": isFirstExpanded(.tool),
+			"verdict": verdict ?? "", "scripts": 0, "unsafe": 0,
 			"top": Int(top.rounded()), "topSequence": visibleAnchor.map { String($0.sequence) as Any } ?? NSNull(),
 			"settled": isSettled, "measurements": measurements,
 		]
 	}
 }
 
-/// A recycled table cell hosting one SwiftUI row.
+/// A recycled table cell hosting one SwiftUI row, or nothing while it waits to be reused.
 final class TranscriptCell: NSTableCellView {
-	private let host = NSHostingView(rootView: TranscriptRow(model: TranscriptRowModel(
-		TranscriptItem(sequence: 0, cliSession: "", parentToolUseId: nil, state: .complete, content: .assistant(text: "")),
-		document: nil)))
+	private let host = NSHostingView<TranscriptRow?>(rootView: nil)
 	private var shown: TranscriptRowModel?
 
 	init(identifier: NSUserInterfaceItemIdentifier) {
@@ -449,10 +504,19 @@ final class TranscriptCell: NSTableCellView {
 
 	required init?(coder: NSCoder) { fatalError("not used") }
 
-	func show(_ model: TranscriptRowModel) {
+	/// Whether the cell shows a row (rather than waiting for reuse).
+	var isShowing: Bool { shown != nil }
+
+	func show(_ model: TranscriptRowModel, toggle: @escaping () -> Void) {
 		guard model != shown else { return }
 		shown = model
-		host.rootView = TranscriptRow(model: model)
+		host.rootView = TranscriptRow(model: model, toggle: toggle)
+	}
+
+	/// Shows nothing, so that a cell waiting for reuse exposes no stale row to accessibility.
+	func clear() {
+		shown = nil
+		host.rootView = nil
 	}
 }
 

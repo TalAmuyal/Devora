@@ -128,7 +128,7 @@ final class TestBridge {
 				return .init(status: 200, body: [:])
 			case ("GET", "/test/agent-chat"):
 				guard let tab = store.app.window.activeTab, let panel = surfaces.agentPanels[tab] else { throw BridgeError(status: 409, "agent chat is not ready") }
-				// The native transcript (ADR-014) answers the fields it has from its view; the rest still read the web page.
+				// The native transcript (ADR-014) answers from its view; the web one from its page.
 				let dom: Any?
 				if panel.nativeTranscript {
 					guard let transcript = panel.transcript else { throw BridgeError(status: 409, "agent chat is not ready") }
@@ -181,8 +181,18 @@ final class TestBridge {
 				case "pause": panel.chat.pause()
 				case "retry": await panel.chat.retry()
 				case "older": await panel.chat.older()
-				case "toggleThinking": _ = try await panel.webView?.evaluateJavaScript("document.querySelector('.chat-thinking summary')?.click()")
-				case "toggleTool": _ = try await panel.webView?.evaluateJavaScript("document.querySelector('.chat-tool summary')?.click()")
+				case "toggleThinking":
+					if panel.nativeTranscript {
+						panel.transcript?.toggleFirst(.thinking)
+					} else {
+						_ = try await panel.webView?.evaluateJavaScript("document.querySelector('.chat-thinking summary')?.click()")
+					}
+				case "toggleTool":
+					if panel.nativeTranscript {
+						panel.transcript?.toggleFirst(.tool)
+					} else {
+						_ = try await panel.webView?.evaluateJavaScript("document.querySelector('.chat-tool summary')?.click()")
+					}
 				case "scrollTop":
 					if panel.nativeTranscript {
 						panel.transcript?.scrollToTop()

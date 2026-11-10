@@ -114,7 +114,7 @@ node --import tsx scripts/bundle-smoke.ts
 
 [tasks.test]
 description = "Run unit tests, pinned Claude contracts, acceptance, real-input UI and signed bundle smoke"
-run = [{ task = "test-unit" }, { task = "test-agent-cli" }, { task = "test-acceptance" }, { task = "test-ui" }, { task = "test-bundle" }]
+run = [{ task = "test-unit" }, { task = "test-agent-cli" }, { task = "test-acceptance" }, { task = "test-acceptance-native" }, { task = "test-ui" }, { task = "test-bundle" }]
 
 [tasks.test-agent-cli]
 description = "Verify the CI-pinned Claude CLI against the offline agent backend"
@@ -152,6 +152,12 @@ cp ../project-core/target/release/debi build/test-tools/ccc
 description = "Run development-app Gherkin scenarios (bundled-tools run in test-bundle); arguments go to cucumber-js"
 depends = ["build", "npm-install", "test-tools"]
 run = "node --import tsx ./node_modules/.bin/cucumber-js acceptance/features/ ../acceptance/features/ --tags 'not @ember-only and not @bundled-tools' --import 'acceptance/steps/*.ts' --import 'acceptance/support/*.ts' --format progress"
+
+[tasks.test-acceptance-native]
+description = "Run the agent chat scenarios again on the native transcript (ADR-014), until it is the only one; permission cards join it with their native rows"
+depends = ["build", "npm-install", "test-tools"]
+env = { SAPPHIRE_NATIVE_TRANSCRIPT = "1" }
+run = "node --import tsx ./node_modules/.bin/cucumber-js acceptance/features/agent-chat.feature --tags 'not @permission-card' --import 'acceptance/steps/*.ts' --import 'acceptance/support/*.ts' --format progress"
 
 [tasks.test-ui]
 description = "Run the XCUITests, which drive the app with real input; skipped, with the reason, where they can't run"

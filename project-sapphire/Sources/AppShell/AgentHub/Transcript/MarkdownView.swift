@@ -77,7 +77,6 @@ private struct CodeBlockView: View {
 		ScrollView(.horizontal) {
 			Text(text).font(.system(.callout, design: .monospaced)).fixedSize(horizontal: true, vertical: false).padding(8)
 		}
-		.accessibilityIdentifier("transcript-code-block")
 		.background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 6))
 	}
 }

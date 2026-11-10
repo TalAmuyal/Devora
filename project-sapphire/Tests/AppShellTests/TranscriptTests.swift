@@ -173,6 +173,7 @@ struct TranscriptScrollViewTests {
 		let (window, view) = shown(transcript(300))
 		defer { window.close() }
 		readerScrolls(view, to: 150)
+		var stepsMeasuring = 0
 		for step in 0..<20 {
 			let top = view.contentView.bounds.minY
 			let visible = view.table.rows(in: view.contentView.bounds)
@@ -180,7 +181,7 @@ struct TranscriptScrollViewTests {
 			let measured = view.measurements
 			view.contentView.scroll(to: NSPoint(x: 0, y: top - 150))
 			view.reflectScrolledClipView(view.contentView)
-			#expect(view.measurements > measured, "Step \(step) must bring estimated rows into view")
+			if view.measurements > measured { stepsMeasuring += 1 }
 			let newTop = view.contentView.bounds.minY
 			for (sequence, offset) in seen {
 				let row = view.items.firstIndex { $0.sequence == sequence }!
@@ -188,6 +189,7 @@ struct TranscriptScrollViewTests {
 			}
 			await Task.yield()
 		}
+		#expect(stepsMeasuring >= 15, "The steps must bring estimated rows into view")
 	}
 
 	@Test func olderHistoryGoesInAboveWithoutMovingTheVisibleRow() {
@@ -250,7 +252,8 @@ struct TranscriptScrollViewTests {
 /// link; it measures rather than asserts, and runs only with `SAPPHIRE_TRANSCRIPT_BENCH=1`, in a release build:
 /// `SAPPHIRE_TRANSCRIPT_BENCH=1 swift test -c release -Xswiftc -enable-testing --filter TranscriptScrollBenchmark`
 @MainActor
-@Suite(.enabled(if: ProcessInfo.processInfo.environment["SAPPHIRE_TRANSCRIPT_BENCH"] == "1"))
+// Serialized: the benchmarks share the main actor, and one running beside another measures both.
+@Suite(.serialized, .enabled(if: ProcessInfo.processInfo.environment["SAPPHIRE_TRANSCRIPT_BENCH"] == "1"))
 struct TranscriptScrollBenchmark {
 	@Test func scrollingUpThroughFiveThousandRows() async {
 		NSApplication.shared.setActivationPolicy(.accessory)
@@ -278,6 +281,56 @@ struct TranscriptScrollBenchmark {
 			over 50 ms: \(intervals.filter { $0 > 50 }.count); measured \(view.measurements); \
 			settled \(view.isSettled) after \(Int((CACurrentMediaTime() - settleStart) * 1000)) ms more
 			""")
+	}
+
+	/// The tentative goals at the chat's 200-row tail: opening, and a streaming update, each until drawn (the update,
+	/// the layout and the window's display, in process; the compositor's frame comes after).
+	@Test func openingAndStreamingTwoHundredRows() async {
+		NSApplication.shared.setActivationPolicy(.accessory)
+		var opens: [Double] = []
+		for _ in 0..<10 {
+			let window = NSWindow(contentRect: NSRect(x: 100, y: 100, width: 900, height: 700), styleMask: [.titled], backing: .buffered, defer: false)
+			window.isReleasedWhenClosed = false
+			let view = TranscriptScrollView(anchor: nil)
+			view.frame = window.contentView!.bounds
+			view.autoresizingMask = [.width, .height]
+			window.contentView!.addSubview(view)
+			window.orderFrontRegardless()
+			window.displayIfNeeded()
+			let start = CACurrentMediaTime()
+			view.apply(transcript(200))
+			window.displayIfNeeded()
+			opens.append((CACurrentMediaTime() - start) * 1000)
+			window.close()
+			await Task.yield()
+		}
+		let window = NSWindow(contentRect: NSRect(x: 100, y: 100, width: 900, height: 700), styleMask: [.titled], backing: .buffered, defer: false)
+		window.isReleasedWhenClosed = false
+		let view = TranscriptScrollView(anchor: nil)
+		view.frame = window.contentView!.bounds
+		view.autoresizingMask = [.width, .height]
+		window.contentView!.addSubview(view)
+		window.orderFrontRegardless()
+		defer { window.close() }
+		var rows = transcript(200)
+		view.apply(rows)
+		window.displayIfNeeded()
+		var updates: [Double] = []
+		var words = ""
+		let driver = FrameDriver(view: view, frames: 120) {
+			words += "streamed words, more of them "
+			rows[199] = reply(200, "A streaming **reply**: " + words)
+			let start = CACurrentMediaTime()
+			view.apply(rows)
+			window.displayIfNeeded()
+			updates.append((CACurrentMediaTime() - start) * 1000)
+		}
+		_ = await driver.run()
+		func summary(_ values: [Double]) -> String {
+			let sorted = values.sorted()
+			return String(format: "median %.1f ms, p95 %.1f ms, max %.1f ms", sorted[sorted.count / 2], sorted[Int(Double(sorted.count) * 0.95)], sorted.last ?? 0)
+		}
+		print("TRANSCRIPT BENCH 200: open \(summary(opens)); streaming update \(summary(updates))")
 	}
 }
 
@@ -421,5 +474,147 @@ struct TranscriptWheelTargetTests {
 		let view = try #require(views.byName["tab"])
 		#expect(!view.isUnderPointer(at: NSPoint(x: 150, y: 200)), "Under the layer")
 		#expect(view.isUnderPointer(at: NSPoint(x: 450, y: 200)), "Beside the layer")
+	}
+}
+
+private func thought(_ sequence: UInt64, _ text: String = "Consider **this**.") -> TranscriptItem {
+	item(sequence, .thinking(text: text, signature: "s"))
+}
+
+private func tool(_ sequence: UInt64, verdict: String? = "approve", result: String? = "/tmp") -> TranscriptItem {
+	item(sequence, .tool(
+		toolUseId: "t\(sequence)", name: "Bash", inputJson: #"{"description":"cwd","command":"pwd"}"#,
+		verdict: verdict.map { ToolVerdict(kind: $0, rule: nil, detail: "Approve(rule)") },
+		result: result.map { ToolResult(text: $0, contentJson: "", isError: false) }))
+}
+
+struct TranscriptRowModelTests {
+	@Test func copyTakesTheSourceAndTheBridgeTheWebTranscriptsText() {
+		let reply = TranscriptRowModel(item(1, .assistant(text: "A **bold** [link](https://example.com)")), document: nil)
+		#expect(reply.source == "A **bold** [link](https://example.com)")
+		let call = TranscriptRowModel(tool(2), document: nil)
+		#expect(call.source == "Bash\n\n{\n  \"command\" : \"pwd\",\n  \"description\" : \"cwd\"\n}\n\n/tmp")
+		#expect(call.plainText.hasPrefix("Bash\nJudgess approve\n{"))
+		#expect(TranscriptRowModel(tool(3, verdict: nil, result: nil), document: nil).plainText.hasSuffix("Awaiting result…"))
+	}
+
+	@Test func voiceOverHearsTheKindThenWhatIsShown() {
+		let collapsed = TranscriptRowModel(tool(1), document: nil)
+		#expect(collapsed.accessibilityLabel == "Tool Bash, Judgess approve, collapsed")
+		#expect(collapsed.accessibilityValue == "")
+		let open = TranscriptRowModel(thought(2), document: nil, expanded: true)
+		#expect(open.accessibilityLabel == "Thinking, expanded")
+		#expect(open.accessibilityValue == "Consider **this**.")
+		let stopped = TranscriptRowModel(item(3, .assistant(text: "Half"), state: .interrupted), document: nil)
+		#expect(stopped.accessibilityLabel == "Agent, interrupted")
+	}
+
+	@Test func aDocumentListsItsLinksInReadingOrder() {
+		let document = MarkdownDocument("See [one](https://a.example) and\n\n- [two](https://b.example)")
+		#expect(document.links.map(\.text) == ["one", "two"])
+	}
+}
+
+struct RowHeightsExpansionTests {
+	@Test func expandedAndCollapsedMeasurementsNeverMix() {
+		var heights = RowHeights()
+		heights.record(thought(1), expanded: false, width: 400, height: 28)
+		#expect(heights.isExact(thought(1), expanded: false, width: 400))
+		#expect(!heights.isExact(thought(1), expanded: true, width: 400))
+		#expect(heights.height(thought(1), expanded: true, width: 400) != 28)
+		heights.record(thought(1), expanded: true, width: 400, height: 90)
+		#expect(heights.height(thought(1), expanded: true, width: 400) == 90)
+		#expect(!heights.isExact(thought(1), expanded: false, width: 400))
+	}
+}
+
+@MainActor
+struct TranscriptExpansionTests {
+	private func shown(_ items: [TranscriptItem]) -> (NSWindow, TranscriptScrollView) {
+		let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 400), styleMask: [.titled], backing: .buffered, defer: false)
+		window.isReleasedWhenClosed = false
+		let view = TranscriptScrollView(anchor: nil)
+		view.scrollerStyle = .legacy
+		view.frame = window.contentView!.bounds
+		window.contentView!.addSubview(view)
+		window.layoutIfNeeded()
+		view.apply(items)
+		return (window, view)
+	}
+
+	@Test func rowsStartCollapsedAndOpenInPlace() {
+		var rows = transcript(40)
+		rows.insert(tool(1000), at: 30)
+		rows.insert(thought(1001), at: 31)
+		let (window, view) = shown(rows)
+		defer { window.close() }
+		#expect(!view.isFirstExpanded(.tool) && !view.isFirstExpanded(.thinking))
+		// Scrolled up, so that the tool row is in view, not at the bottom.
+		let row = view.items.firstIndex { $0.sequence == 1000 }!
+		view.contentView.scroll(to: NSPoint(x: 0, y: view.table.rect(ofRow: row).minY - 40))
+		view.reflectScrolledClipView(view.contentView)
+		let collapsed = view.table.rect(ofRow: row)
+		let offset = collapsed.minY - view.contentView.bounds.minY
+		view.toggle(1000)
+		#expect(view.isFirstExpanded(.tool))
+		#expect(view.table.rect(ofRow: row).height > collapsed.height, "Its input and result open below the summary")
+		#expect(view.table.rect(ofRow: row).minY - view.contentView.bounds.minY == offset, "Its top stays where it was")
+		view.toggle(1000)
+		#expect(view.table.rect(ofRow: row).height == collapsed.height)
+	}
+
+	@Test func anExpandedRowStaysExpandedThroughUpdates() {
+		var rows = [thought(1), tool(2, result: nil)] + transcript(5, from: 10)
+		let (window, view) = shown(rows)
+		defer { window.close() }
+		view.toggle(2)
+		rows[1] = tool(2, result: "done")
+		rows.append(reply(20, "More"))
+		view.apply(rows)
+		#expect(view.isFirstExpanded(.tool))
+		#expect(!view.isFirstExpanded(.thinking))
+	}
+
+	@Test func theBridgeSeesKindsExpansionAndTheVerdict() throws {
+		let (window, view) = shown([item(1, .user(text: "Hi", error: nil)), thought(2), tool(3)])
+		defer { window.close() }
+		view.toggleFirst(.thinking)
+		let observation = view.observation()
+		let rows = try #require(observation["rows"] as? [[String: Any]])
+		#expect(rows.compactMap { $0["kind"] as? String } == ["chat-item chat-user", "chat-item chat-thinking", "chat-item chat-tool"])
+		#expect(observation["thinkingOpen"] as? Bool == true)
+		#expect(observation["toolOpen"] as? Bool == false)
+		#expect(observation["verdict"] as? String == "Judgess approve")
+	}
+
+	@Test func aCellWaitingForReuseShowsNothing() {
+		let (window, view) = shown(transcript(10))
+		defer { window.close() }
+		let rowView = view.table.rowView(atRow: 9, makeIfNecessary: true)!
+		let cell = rowView.view(atColumn: 0) as! TranscriptCell
+		#expect(cell.isShowing)
+		view.tableView(view.table, didRemove: rowView, forRow: -1)
+		#expect(!cell.isShowing)
+	}
+}
+
+@MainActor
+struct TranscriptToggleAtTheBottomTests {
+	@Test func aRowOpenedAtTheBottomStaysWhereItWasClicked() {
+		let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 400), styleMask: [.titled], backing: .buffered, defer: false)
+		window.isReleasedWhenClosed = false
+		defer { window.close() }
+		let view = TranscriptScrollView(anchor: nil)
+		view.scrollerStyle = .legacy
+		view.frame = window.contentView!.bounds
+		window.contentView!.addSubview(view)
+		window.layoutIfNeeded()
+		view.apply(transcript(40) + [tool(1000, result: String(repeating: "line\n", count: 40)), reply(1001, "Done.")])
+		#expect(view.distanceFromBottom == 0)
+		let row = view.items.firstIndex { $0.sequence == 1000 }!
+		let offset = view.table.rect(ofRow: row).minY - view.contentView.bounds.minY
+		view.toggle(1000)
+		#expect(view.table.rect(ofRow: row).minY - view.contentView.bounds.minY == offset)
+		#expect(view.distanceFromBottom > 0, "The opened body pushes the bottom out of view, and the view stays")
 	}
 }

@@ -14,6 +14,29 @@ struct MarkdownDocument: Equatable {
 		self.blocks = blocks
 	}
 
+	/// Every link, with its text, in reading order.
+	var links: [(text: String, url: URL)] {
+		var found: [(text: String, url: URL)] = []
+		func runs(_ runs: [InlineRun]) {
+			for run in runs { if let link = run.link { found.append((run.text, link)) } }
+		}
+		func walk(_ blocks: [MarkdownBlock]) {
+			for block in blocks {
+				switch block {
+				case .heading(_, let inline), .paragraph(let inline): runs(inline)
+				case .list(_, let items): items.forEach(walk)
+				case .table(_, let header, let rows):
+					header.forEach(runs)
+					rows.forEach { $0.forEach(runs) }
+				case .quote(let inner): walk(inner)
+				case .code, .thematicBreak: break
+				}
+			}
+		}
+		walk(blocks)
+		return found
+	}
+
 	private static func blocks(_ children: MarkupChildren) -> [MarkdownBlock] {
 		children.map { block($0) }
 	}

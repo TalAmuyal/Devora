@@ -81,7 +81,7 @@ final class AgentPanelModel {
 			case .thinking(let text, _): row.merge(["kind": "thinking", "text": text]) { _, new in new }
 			case .tool(_, let name, let input, let verdict, let result):
 				row.merge([
-					"kind": "tool", "text": "", "name": name, "input": pretty(input),
+					"kind": "tool", "text": "", "name": name, "input": prettyJSON(input),
 					"result": result?.text ?? "Awaiting result…",
 					"verdict": verdict?.kind ?? "",
 					"verdictDetail": verdict?.detail ?? "",
@@ -90,7 +90,7 @@ final class AgentPanelModel {
 				row.merge(["kind": "system", "text": text.isEmpty ? String(describing: kind) : text]) {
 					_, new in new
 				}
-			case .unknown(let json): row.merge(["kind": "system", "text": pretty(json)]) { _, new in new }
+			case .unknown(let json): row.merge(["kind": "system", "text": prettyJSON(json)]) { _, new in new }
 			}
 			return row
 		}
@@ -101,9 +101,9 @@ final class AgentPanelModel {
 			}?.sequence
 			var row: [String: Any] = [
 				"id": question.requestId, "tool": question.toolName,
-				"input": pretty(question.inputJson),
+				"input": prettyJSON(question.inputJson),
 				"reason": question.decisionReason ?? "Permission requested",
-				"rules": question.suggestedRulesJson.map(pretty) ?? "",
+				"rules": question.suggestedRulesJson.map { prettyJSON($0) } ?? "",
 				"always": question.canAlwaysAllow, "generation": String(chat.chat?.generation ?? 0),
 			]
 			if let sequence { row["sequence"] = String(sequence) }
@@ -113,15 +113,6 @@ final class AgentPanelModel {
 			chat.anchor.map { ["sequence": String($0.sequence), "offset": $0.offset] as [String: Any] }
 			?? NSNull()
 		return ["items": items, "questions": questions, "anchor": anchor, "hasOlder": chat.hasOlder]
-	}
-
-	private func pretty(_ value: String) -> String {
-		guard let data = value.data(using: .utf8),
-			let json = try? JSONSerialization.jsonObject(with: data, options: .fragmentsAllowed),
-			let formatted = try? JSONSerialization.data(
-				withJSONObject: json, options: [.prettyPrinted, .sortedKeys, .fragmentsAllowed])
-		else { return value }
-		return String(decoding: formatted, as: UTF8.self)
 	}
 }
 

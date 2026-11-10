@@ -43,14 +43,27 @@ final class NativeTranscriptUITests: XCTestCase {
 		// The fake agent answers `history:240` with 240 replies, "History turn 0" to "History turn 239": past the chat's
 		// 200-row tail, so older history exists, in one turn rather than hundreds of typed prompts.
 		send("history:240", from: editor, in: app)
+		// The rows reach accessibility a frame or more after they are drawn, so the snapshot is retaken until it catches up.
 		var view = try TranscriptSnapshot(transcript)
-		XCTAssertTrue(view.shows("History turn 239"), "Following the bottom shows the newest reply")
+		_ = poll(timeout: 5) {
+			guard let next = try? TranscriptSnapshot(transcript) else { return false }
+			view = next
+			return next.shows("History turn 239")
+		}
+		if !view.shows("History turn 239") {
+			let dump = XCTAttachment(string: transcript.debugDescription)
+			dump.name = "Transcript accessibility tree"
+			dump.lifetime = .keepAlways
+			add(dump)
+		}
+		XCTAssertTrue(view.shows("History turn 239"), "Following the bottom shows the newest reply, not \(view.inViewSummary)")
 		capture(app, "Native transcript following the bottom")
 
 		// Over a code block, which scrolls only sideways, the wheel still scrolls the transcript up and down, and the block
 		// sideways.
 		send("wide-code", from: editor, in: app)
-		let code = app.scrollViews["transcript-code-block"].firstMatch
+		// A row is one accessibility element (its kind, then its text), so the code block is found by its row's text.
+		let code = transcript.staticTexts.matching(NSPredicate(format: "value BEGINSWITH %@", "Wide code:")).firstMatch
 		XCTAssertTrue(code.waitForExistence(timeout: 10), "The wide code block must be in the transcript")
 		let codeTop = code.frame.minY
 		code.scroll(byDeltaX: 0, deltaY: 300)
@@ -85,6 +98,12 @@ final class NativeTranscriptUITests: XCTestCase {
 			scrolls += 1
 		}
 		capture(app, "Native transcript after loading older history")
+		// After hundreds of rows scrolled through and an older page: `NSTableView` exposes every row, in view or not, so that
+		// VoiceOver can reach it; what a reused cell must not leave behind is a row's text twice, or at another row's place.
+		XCTAssertEqual(Set(view.turns.map(\.text)).count, view.turns.count, "No row text twice: \(view.turns.map(\.number).sorted())")
+		let byNumber = view.turns.sorted { $0.number < $1.number }
+		let misplaced = zip(byNumber, byNumber.dropFirst()).filter { $0.top >= $1.top }
+		XCTAssertTrue(misplaced.isEmpty, "Every row's element at its row's place: \(misplaced.map { "\($0.number)@\(Int($0.top)) above \($1.number)@\(Int($1.top))" })")
 		XCTAssertGreaterThan(view.rows, tail, "Scrolling to the top must load older history")
 		let anchor = try XCTUnwrap(beforeLoad.topTurn?.text)
 		XCTAssertTrue(
@@ -153,8 +172,9 @@ private struct TranscriptSnapshot {
 				rows += 1
 				contentTop = min(contentTop, element.frame.minY)
 			}
-			let text = element.label.isEmpty ? (element.value as? String ?? "") : element.label
-			if element.elementType == .staticText && text.hasPrefix("History turn ") {
+			// A row is one element: its kind as the label, its text as the value.
+			let text = element.value as? String ?? element.label
+			if text.hasPrefix("History turn ") {
 				turns.append(Turn(text: text, frame: element.frame))
 			}
 			element.children.forEach(walk)
