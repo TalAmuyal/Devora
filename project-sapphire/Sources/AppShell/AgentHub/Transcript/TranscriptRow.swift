@@ -113,6 +113,8 @@ struct TranscriptRow: View {
 			.accessibilityElement(children: .ignore)
 			.accessibilityLabel(model.accessibilityLabel)
 			.accessibilityValue(model.accessibilityValue)
+			// Without a role that has a value, macOS drops the value and VoiceOver reads only the kind.
+			.accessibilityAddTraits(.isStaticText)
 			.accessibilityActions {
 				if model.collapsible { Button(model.expanded ? "Collapse" : "Expand", action: toggle) }
 				ForEach(Array(links.enumerated()), id: \.offset) { _, link in
