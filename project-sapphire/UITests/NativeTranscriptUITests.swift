@@ -66,7 +66,9 @@ final class NativeTranscriptUITests: XCTestCase {
 		send("History turn 240", from: editor, in: app)
 		let after = try TranscriptSnapshot(transcript)
 		XCTAssertFalse(after.shows("History turn 240"), "Scrolled up, a new turn must not pull the view down")
-		XCTAssertEqual(after.top(of: reading.text) ?? .nan, reading.top, accuracy: 1, "The row in view must stay put")
+		XCTAssertEqual(
+			after.top(of: reading.text) ?? .nan, reading.top, accuracy: 1,
+			"The row in view must stay put (\(reading.text) in the snapshot at \(after.turns.filter { $0.text == reading.text }.map(\.top)))")
 
 		// At the top, the older page loads above, and the reader stays on the rows they were reading.
 		let tail = after.rows
@@ -119,14 +121,18 @@ final class NativeTranscriptUITests: XCTestCase {
 
 /// The transcript as one accessibility snapshot: reading each element's frame separately costs a round trip per element,
 /// which over hundreds of rows takes minutes.
+///
+/// A text can be in the snapshot more than once (a row's stale copy outside the visible area), so every occurrence is
+/// kept, and the one in view is the one that counts.
 private struct TranscriptSnapshot {
 	struct Turn {
 		let text: String
-		let top: CGFloat
+		let frame: CGRect
+		var top: CGFloat { frame.minY }
 		var number: Int { Int(text.dropFirst("History turn ".count)) ?? 0 }
 	}
 
-	/// The transcript's visible area, and the prompts it has (in view or not), with their tops.
+	/// The transcript's visible area, and the turns it has (in view or not), with their frames.
 	let visibleArea: CGRect
 	let turns: [Turn]
 	let rows: Int
@@ -137,34 +143,33 @@ private struct TranscriptSnapshot {
 		visibleArea = snapshot.frame
 		var turns: [Turn] = []
 		var rows = 0
-		var frames: [String: CGRect] = [:]
 		func walk(_ element: XCUIElementSnapshot) {
 			if element.elementType == .tableRow { rows += 1 }
 			let text = element.label.isEmpty ? (element.value as? String ?? "") : element.label
 			if element.elementType == .staticText && text.hasPrefix("History turn ") {
-				turns.append(Turn(text: text, top: element.frame.minY))
-				frames[text] = element.frame
+				turns.append(Turn(text: text, frame: element.frame))
 			}
 			element.children.forEach(walk)
 		}
 		walk(snapshot)
 		self.turns = turns
 		self.rows = rows
-		self.frames = frames
 	}
 
-	private let frames: [String: CGRect]
-
-	func shows(_ text: String) -> Bool {
-		guard let frame = frames[text] else { return false }
-		return visibleArea.contains(CGPoint(x: frame.midX, y: frame.midY))
+	private func inView(_ turn: Turn) -> Bool {
+		visibleArea.contains(CGPoint(x: turn.frame.midX, y: turn.frame.midY))
 	}
 
-	func top(of text: String) -> CGFloat? { frames[text]?.minY }
+	private var turnsInView: [Turn] { turns.filter(inView) }
+
+	func shows(_ text: String) -> Bool { turnsInView.contains { $0.text == text } }
+
+	/// The top of `text` in view, or nil when it isn't.
+	func top(of text: String) -> CGFloat? { turnsInView.first { $0.text == text }?.top }
 
 	/// The oldest turn the transcript has loaded.
 	var oldestTurn: Int? { turns.map(\.number).min() }
 
-	/// The topmost prompt in view.
-	var topTurn: Turn? { turns.filter { shows($0.text) }.min { $0.top < $1.top } }
+	/// The topmost turn in view.
+	var topTurn: Turn? { turnsInView.min { $0.top < $1.top } }
 }
