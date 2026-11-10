@@ -317,14 +317,23 @@ final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NSTableVi
 	}
 
 	private func takeWheel(_ event: NSEvent) -> Bool {
-		guard let window, event.windowNumber == window.windowNumber,
-			  visibleRect.contains(convert(event.locationInWindow, from: nil)) else { return false }
+		guard let window, event.windowNumber == window.windowNumber, isUnderPointer(at: event.locationInWindow) else { return false }
 		let toTranscript = wheelRouting.toTranscript(
 			phase: event.phase, momentumPhase: event.momentumPhase,
 			deltaX: event.scrollingDeltaX, deltaY: event.scrollingDeltaY)
 		guard toTranscript else { return false }
 		scrollWheel(with: event)
 		return true
+	}
+
+	/// Whether the window, hit-testing `point` (in its coordinates), lands in this transcript. Not when another tab is
+	/// active (every tab stays in the view tree, invisible and not hit-testable), nor under a layer drawn over it (a hub,
+	/// the palette): being inside its frame isn't enough.
+	func isUnderPointer(at point: NSPoint) -> Bool {
+		guard let content = window?.contentView else { return false }
+		// `hitTest` takes a point in the receiver's superview's coordinates.
+		let hit = content.hitTest(content.superview?.convert(point, from: nil) ?? point)
+		return hit?.isDescendant(of: self) ?? false
 	}
 
 	// MARK: Width

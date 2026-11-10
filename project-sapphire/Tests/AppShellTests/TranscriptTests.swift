@@ -1,6 +1,7 @@
 import AppKit
 import CoreBindings
 import Foundation
+import SwiftUI
 import Testing
 
 @testable import AppShell
@@ -359,5 +360,66 @@ struct WheelRoutingTests {
 	@Test func aMouseWheelTickIsDecidedOnItsOwn() {
 		// Shift with a mouse wheel scrolls sideways.
 		#expect(routes([([], [], 0, -10), ([], [], -10, 0)]) == [true, false])
+	}
+}
+
+/// Which transcript the wheel monitor gives a scroll to, in SwiftUI windows laid out as the app's: the tabs in a `ZStack`,
+/// with only the active one visible and hit-testable (`TabContent`), and window layers in an overlay over them.
+@MainActor
+struct TranscriptWheelTargetTests {
+	private final class Views {
+		var byName: [String: TranscriptScrollView] = [:]
+	}
+
+	private func view(_ name: String, into views: Views) -> TranscriptView {
+		TranscriptView(items: transcript(50), hasOlder: false, anchor: nil, onScroll: { _ in }, onNeedsOlder: {}, onView: { views.byName[name] = $0 })
+	}
+
+	private func shown(_ content: some View) async -> NSWindow {
+		let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 400), styleMask: [.titled], backing: .buffered, defer: false)
+		window.isReleasedWhenClosed = false
+		window.contentView = NSHostingView(rootView: content.frame(width: 600, height: 400))
+		for _ in 0..<5 {
+			window.layoutIfNeeded()
+			await Task.yield()
+		}
+		return window
+	}
+
+	@Test func onlyTheActiveTabsTranscriptTakesTheWheel() async throws {
+		let views = Views()
+		let window = await shown(ZStack {
+			ForEach(["hidden", "active"], id: \.self) { name in
+				view(name, into: views).opacity(name == "active" ? 1 : 0).allowsHitTesting(name == "active")
+			}
+		})
+		defer { window.close() }
+		let middle = NSPoint(x: 300, y: 200)
+		#expect(try #require(views.byName["active"]).isUnderPointer(at: middle))
+		#expect(try !#require(views.byName["hidden"]).isUnderPointer(at: middle))
+	}
+
+	@Test func aCodeBlocksOwnScrollViewIsPartOfTheTranscript() async throws {
+		let views = Views()
+		let lines = (0..<30).map { "line \($0): " + String(repeating: "wide ", count: 80) }.joined(separator: "\n")
+		let code = TranscriptItem(sequence: 1, cliSession: "s", parentToolUseId: nil, state: .complete, content: .assistant(text: "```\n\(lines)\n```"))
+		let window = await shown(TranscriptView(items: [code], hasOlder: false, anchor: nil, onScroll: { _ in }, onNeedsOlder: {}, onView: { views.byName["code"] = $0 }))
+		defer { window.close() }
+		let view = try #require(views.byName["code"])
+		let point = NSPoint(x: 300, y: 200)
+		let hit = try #require(window.contentView?.hitTest(window.contentView!.superview!.convert(point, from: nil)))
+		#expect(hit !== view && hit !== view.table, "The point must be over a row's content, not the bare table")
+		#expect(view.isUnderPointer(at: point))
+	}
+
+	@Test func aLayerOverTheTabKeepsTheWheel() async throws {
+		let views = Views()
+		let window = await shown(view("tab", into: views).overlay(alignment: .leading) {
+			Color.gray.frame(width: 300)
+		})
+		defer { window.close() }
+		let view = try #require(views.byName["tab"])
+		#expect(!view.isUnderPointer(at: NSPoint(x: 150, y: 200)), "Under the layer")
+		#expect(view.isUnderPointer(at: NSPoint(x: 450, y: 200)), "Beside the layer")
 	}
 }
