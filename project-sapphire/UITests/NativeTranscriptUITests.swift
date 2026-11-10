@@ -43,8 +43,14 @@ final class NativeTranscriptUITests: XCTestCase {
 		// The fake agent answers `history:240` with 240 replies, "History turn 0" to "History turn 239": past the chat's
 		// 200-row tail, so older history exists, in one turn rather than hundreds of typed prompts.
 		send("history:240", from: editor, in: app)
+		// The rows' accessibility follows the drawing by a frame or more, so the snapshot is retaken until it catches up.
 		var view = try TranscriptSnapshot(transcript)
-		XCTAssertTrue(view.shows("History turn 239"), "Following the bottom shows the newest reply")
+		_ = poll(timeout: 5) {
+			guard let next = try? TranscriptSnapshot(transcript) else { return false }
+			view = next
+			return next.shows("History turn 239")
+		}
+		XCTAssertTrue(view.shows("History turn 239"), "Following the bottom shows the newest reply, not \(view.inViewSummary)")
 		capture(app, "Native transcript following the bottom")
 
 		// Over a code block, which scrolls only sideways, the wheel still scrolls the transcript up and down, and the block
