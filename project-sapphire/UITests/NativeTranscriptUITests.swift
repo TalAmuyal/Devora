@@ -40,19 +40,20 @@ final class NativeTranscriptUITests: XCTestCase {
 		XCTAssertTrue(transcript.waitForExistence(timeout: 15), "The native transcript must replace the web one")
 		editor.click()
 
-		// Three rows a turn (the prompt, the reply, the result): 70 turns pass the 200-row tail, so older history exists.
-		for turn in 0..<70 { send("History turn \(turn)", from: editor, in: app) }
+		// The fake agent answers `history:240` with 240 replies, "History turn 0" to "History turn 239": past the chat's
+		// 200-row tail, so older history exists, in one turn rather than hundreds of typed prompts.
+		send("history:240", from: editor, in: app)
 		var view = try TranscriptSnapshot(transcript)
-		XCTAssertTrue(view.shows("History turn 69"), "Following the bottom shows the newest turn")
+		XCTAssertTrue(view.shows("History turn 239"), "Following the bottom shows the newest reply")
 		capture(app, "Native transcript following the bottom")
 
 		// Scrolled up, a new turn arrives below without moving what the reader looks at.
 		transcript.scroll(byDeltaX: 0, deltaY: 600)
 		view = try TranscriptSnapshot(transcript)
-		let reading = try XCTUnwrap(view.topTurn, "A turn must be in view after scrolling up")
-		send("History turn 70", from: editor, in: app)
+		let reading = try XCTUnwrap(view.topTurn, "A reply must be in view after scrolling up")
+		send("History turn 240", from: editor, in: app)
 		let after = try TranscriptSnapshot(transcript)
-		XCTAssertFalse(after.shows("History turn 70"), "Scrolled up, a new turn must not pull the view down")
+		XCTAssertFalse(after.shows("History turn 240"), "Scrolled up, a new turn must not pull the view down")
 		XCTAssertEqual(after.top(of: reading.text) ?? .nan, reading.top, accuracy: 1, "The row in view must stay put")
 
 		// At the top, the older page loads above, and the reader stays on the rows they were reading.
@@ -84,8 +85,7 @@ final class NativeTranscriptUITests: XCTestCase {
 		XCTAssertTrue(poll { (editor.value as? String) == "" && !app.buttons["■ Stop"].exists }, "\(prompt) must complete")
 	}
 
-	/// Polls `condition` every 50 ms for up to `timeout` seconds; XCTest's own expectations poll about once a second,
-	/// which would make the 70 turns here take minutes.
+	/// Polls `condition` every 50 ms for up to `timeout` seconds; XCTest's own expectations poll about once a second.
 	@MainActor
 	private func poll(timeout: TimeInterval = 15, _ condition: () -> Bool) -> Bool {
 		let deadline = Date().addingTimeInterval(timeout)

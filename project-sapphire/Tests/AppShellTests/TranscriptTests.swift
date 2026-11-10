@@ -92,11 +92,14 @@ struct RowHeightsTests {
 
 @MainActor
 struct TranscriptScrollViewTests {
-	/// A transcript in an offscreen window, laid out at 600 by 400 points.
+	/// A transcript in an offscreen window, laid out at 600 by 400 points, with legacy scrollers (which take width), as
+	/// with a mouse and on CI. The system's preferred style is resolved lazily, a moment into the process, and switches
+	/// every scroll view to it; starting with legacy ones, the width can't change under a test, whatever the Mac has.
 	private func shown(_ items: [TranscriptItem], anchor: ChatScrollAnchor? = nil) -> (NSWindow, TranscriptScrollView) {
 		let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 400), styleMask: [.titled], backing: .buffered, defer: false)
 		window.isReleasedWhenClosed = false
 		let view = TranscriptScrollView(anchor: anchor)
+		view.scrollerStyle = .legacy
 		view.frame = window.contentView!.bounds
 		view.autoresizingMask = [.width, .height]
 		window.contentView!.addSubview(view)
@@ -163,6 +166,27 @@ struct TranscriptScrollViewTests {
 		rows[299] = reply(300, String(repeating: "streamed words ", count: 200))
 		view.apply(rows)
 		#expect(view.visibleAnchor == anchor)
+	}
+
+	@Test func scrollingUpThroughEstimatedRowsMovesTheSeenRowsByTheScrollOnly() async {
+		let (window, view) = shown(transcript(300))
+		defer { window.close() }
+		readerScrolls(view, to: 150)
+		for step in 0..<20 {
+			let top = view.contentView.bounds.minY
+			let visible = view.table.rows(in: view.contentView.bounds)
+			let seen = (visible.location..<(visible.location + visible.length)).map { (view.items[$0].sequence, view.table.rect(ofRow: $0).minY - top) }
+			let measured = view.measurements
+			view.contentView.scroll(to: NSPoint(x: 0, y: top - 150))
+			view.reflectScrolledClipView(view.contentView)
+			#expect(view.measurements > measured, "Step \(step) must bring estimated rows into view")
+			let newTop = view.contentView.bounds.minY
+			for (sequence, offset) in seen {
+				let row = view.items.firstIndex { $0.sequence == sequence }!
+				#expect(view.table.rect(ofRow: row).minY - newTop == offset + 150, "Row \(sequence) moved at step \(step)")
+			}
+			await Task.yield()
+		}
 	}
 
 	@Test func olderHistoryGoesInAboveWithoutMovingTheVisibleRow() {
@@ -287,6 +311,21 @@ private final class FrameDriver: NSObject {
 			link.invalidate()
 			done?.resume(returning: times)
 			done = nil
+		}
+	}
+}
+
+struct TranscriptLinkTests {
+	@Test func onlyWebLinksOpen() {
+		for link in ["https://example.com/a", "http://example.com", "HTTPS://EXAMPLE.COM"] {
+			#expect(TranscriptRow.opensLink(URL(string: link)!), "\(link) must open")
+		}
+		let refused = [
+			"file:///Applications/Calculator.app", "x-apple.systempreferences:com.apple.preference.security",
+			"vscode://file/etc/passwd", "mailto:someone@example.com", "javascript:alert(1)", "relative/path",
+		]
+		for link in refused {
+			#expect(!TranscriptRow.opensLink(URL(string: link)!), "\(link) must not open")
 		}
 	}
 }

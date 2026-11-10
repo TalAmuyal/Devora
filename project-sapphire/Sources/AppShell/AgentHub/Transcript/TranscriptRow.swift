@@ -34,6 +34,13 @@ struct TranscriptRow: View {
 			.padding(.horizontal, 16).padding(.vertical, 6)
 			.textSelection(.enabled)
 			.help("#\(model.item.sequence)")
+			.environment(\.openURL, OpenURLAction { Self.opensLink($0) ? .systemAction : .discarded })
+	}
+
+	/// The agent's output is untrusted (it can repeat what a fetched page injected), so a link opens only on the web, as
+	/// in the web transcript: never a file, a settings pane or another app's scheme.
+	static func opensLink(_ url: URL) -> Bool {
+		["http", "https"].contains(url.scheme?.lowercased() ?? "")
 	}
 
 	@ViewBuilder private var content: some View {

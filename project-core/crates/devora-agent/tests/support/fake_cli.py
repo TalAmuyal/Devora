@@ -102,6 +102,14 @@ for line in sys.stdin:
             emit({"type":"control_request","request_id":"visual-hook","request":{
                 "subtype":"hook_callback","callback_id":"devora-judgess","tool_use_id":"visual-tool",
                 "input":{"tool_name":"Bash","tool_input":{"command":"pwd"},"cwd":os.getcwd()}}})
+        elif text.startswith("history:"):
+            # A long transcript in one turn: one assistant message per "History turn <n>".
+            for turn in range(int(text[8:])):
+                assistant = recorded("assistant")
+                assistant["message"]["id"] = f"history-{turn}"
+                assistant["message"]["content"] = [{"type":"text","text":f"History turn {turn}"}]
+                emit(assistant)
+            result()
         elif text.startswith("hook:"):
             emit({"type":"control_request","request_id":"hook","request":{
                 "subtype":"hook_callback","callback_id":"devora-judgess","tool_use_id":"tool-1",

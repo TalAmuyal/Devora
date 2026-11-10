@@ -83,10 +83,22 @@ final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NSTableVi
 
 	/// The first row whose bottom is below the visible area's top, and how far its top is from that top.
 	var visibleAnchor: ChatScrollAnchor? {
-		let top = contentView.bounds.minY
-		let row = table.row(at: NSPoint(x: 1, y: top + 0.5))
-		guard row >= 0, row < items.count else { return nil }
-		return ChatScrollAnchor(sequence: items[row].sequence, offset: Int32((table.rect(ofRow: row).minY - top).rounded()))
+		visiblePin.map { ChatScrollAnchor(sequence: $0.sequence, offset: Int32($0.offset.rounded())) }
+	}
+
+	/// A row kept in place across an update, with its exact offset: a rounded one would drift with every correction.
+	private struct Pin {
+		let sequence: UInt64
+		let offset: CGFloat
+	}
+
+	private func pin(_ row: Int) -> Pin {
+		Pin(sequence: items[row].sequence, offset: table.rect(ofRow: row).minY - contentView.bounds.minY)
+	}
+
+	private var visiblePin: Pin? {
+		let row = table.row(at: NSPoint(x: 1, y: contentView.bounds.minY + 0.5))
+		return row >= 0 && row < items.count ? pin(row) : nil
 	}
 
 	/// Whether every row has its measured height (the idle measurement has nothing left to do).
@@ -97,7 +109,7 @@ final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NSTableVi
 	func apply(_ new: [TranscriptItem]) {
 		let change = TranscriptChange(from: items, to: new)
 		guard change != .none else { return }
-		let anchor = following ? nil : visibleAnchor
+		let anchor = following ? nil : visiblePin
 		let firstLoad = items.isEmpty
 		items = new
 		let sequences = Set(new.map(\.sequence))
@@ -128,13 +140,16 @@ final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NSTableVi
 		}
 		heights.keep(only: sequences)
 		findPending()
+		var kept: Pin?
 		if firstLoad, let saved = restoring {
 			// The saved position, once: at its row if the transcript has it, otherwise at the bottom, as the web one does.
+			// Its row stays put while the rows around it are measured.
 			restoring = nil
 			following = !items.contains { $0.sequence == saved.sequence }
-			settle(following ? nil : saved)
+			kept = following ? nil : Pin(sequence: saved.sequence, offset: CGFloat(saved.offset))
+			settle(kept)
 		}
-		measureVisible()
+		measureVisible(keeping: kept)
 		settle(anchor)
 		scheduleIdle()
 	}
@@ -170,8 +185,7 @@ final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NSTableVi
 		pending = IndexSet(items.indices.filter { !heights.isExact(items[$0], width: width) })
 	}
 
-	/// Measures `rows` that aren't exact yet, and tells the table about the heights that changed.
-	@discardableResult
+	/// Measures `rows` that aren't exact yet, and returns those whose height changed, for the table to be told.
 	private func measure(_ rows: some Sequence<Int>) -> IndexSet {
 		let width = width
 		var changed = IndexSet()
@@ -188,20 +202,34 @@ final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NSTableVi
 		return changed
 	}
 
-	/// Makes the visible rows exact, at once: the reader never sees an estimated row settle.
-	private func measureVisible() {
+	/// Makes the visible rows exact, at once: the reader never sees an estimated row settle. The corrections keep `kept`
+	/// in place, or else the rows the reader already saw.
+	private func measureVisible(keeping kept: Pin? = nil) {
 		guard !pending.isEmpty else { return }
 		for _ in 0..<3 {
-			let visible = table.rows(in: contentView.bounds)
-			let changed = measure(visible.location..<(visible.location + visible.length))
+			let visible = visibleRows
+			let fresh = visible.intersection(pending)
+			let anchor = kept ?? seenPin(visible, besides: fresh)
+			let changed = measure(fresh)
 			guard !changed.isEmpty else { return }
-			noteHeights(changed)
+			noteHeights(changed, keeping: anchor)
 		}
 	}
 
-	/// Applies new heights without moving what the reader sees: the bottom while following, the top row otherwise.
-	private func noteHeights(_ rows: IndexSet) {
-		let anchor = following ? nil : visibleAnchor
+	private var visibleRows: IndexSet {
+		let visible = table.rows(in: contentView.bounds)
+		return IndexSet(integersIn: visible.location..<(visible.location + visible.length))
+	}
+
+	/// The first visible row that was exact before `fresh` were measured, so a correction grows toward the side the reader
+	/// hasn't seen: scrolling up, the row that just came into view at the top settles upward, and the rows below it stay.
+	/// With no such row (a jump to rows never seen), the top visible row.
+	private func seenPin(_ visible: IndexSet, besides fresh: IndexSet) -> Pin? {
+		visible.subtracting(fresh).first.map(pin) ?? visiblePin
+	}
+
+	/// Applies new heights without moving what the reader sees: the bottom while following, otherwise `anchor`.
+	private func noteHeights(_ rows: IndexSet, keeping anchor: Pin?) {
 		adjusting = true
 		withoutAnimation { table.noteHeightOfRows(withIndexesChanged: rows) }
 		settle(anchor)
@@ -217,13 +245,13 @@ final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NSTableVi
 		}
 	}
 
-	private func settle(_ anchor: ChatScrollAnchor?) {
+	private func settle(_ anchor: Pin?) {
 		// Only the geometry: the rows' rects and the table's height. The cells lay out when they draw.
 		table.tile()
 		if following {
 			scrollToBottom()
-		} else if let anchor {
-			scroll(to: anchor)
+		} else if let anchor, let row = items.firstIndex(where: { $0.sequence == anchor.sequence }) {
+			setTop(table.rect(ofRow: row).minY - anchor.offset)
 		}
 	}
 
@@ -244,13 +272,14 @@ final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NSTableVi
 	@objc func measureIdle() {
 		guard !pending.isEmpty, !inLiveResize else { return stopIdle() }
 		let start = CACurrentMediaTime()
-		let visible = table.rows(in: contentView.bounds)
-		let center = visible.location + visible.length / 2
+		let visible = visibleRows
+		let anchor = seenPin(visible, besides: visible.intersection(pending))
+		let center = ((visible.first ?? 0) + (visible.last ?? 0)) / 2
 		var changed = IndexSet()
 		while CACurrentMediaTime() - start < Self.measureBudget, let row = nearestPending(to: center) {
 			changed.formUnion(measure([row]))
 		}
-		if !changed.isEmpty { noteHeights(changed) }
+		if !changed.isEmpty { noteHeights(changed, keeping: anchor) }
 		if pending.isEmpty { stopIdle() }
 	}
 
@@ -272,17 +301,18 @@ final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NSTableVi
 	// MARK: Width
 
 	@objc private func frameChanged() {
-		guard width != laidOutWidth, !items.isEmpty else { return }
+		guard width != laidOutWidth else { return }
 		laidOutWidth = width
+		guard !items.isEmpty else { return }
 		// Every height is stale at a new width: estimates (the old heights) for all, measurements for the visible
 		// rows now, and the rest after a live resize ends.
-		let anchor = following ? nil : visibleAnchor
+		let anchor = following ? nil : visiblePin
 		findPending()
 		adjusting = true
 		withoutAnimation { table.noteHeightOfRows(withIndexesChanged: IndexSet(items.indices)) }
 		settle(anchor)
 		adjusting = false
-		measureVisible()
+		measureVisible(keeping: anchor)
 		scheduleIdle()
 	}
 
@@ -328,14 +358,6 @@ final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NSTableVi
 
 	func scrollToBottom() {
 		setTop(table.bounds.height - contentView.bounds.height)
-	}
-
-	/// Puts `anchor`'s row at its offset below the visible area's top; false if the row isn't in the transcript.
-	@discardableResult
-	func scroll(to anchor: ChatScrollAnchor) -> Bool {
-		guard let row = items.firstIndex(where: { $0.sequence == anchor.sequence }) else { return false }
-		setTop(table.rect(ofRow: row).minY - CGFloat(anchor.offset))
-		return true
 	}
 
 	/// Scrolls as the reader would, to the very top (the test bridge's `scrollTop`).
