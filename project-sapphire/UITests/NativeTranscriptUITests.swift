@@ -47,6 +47,18 @@ final class NativeTranscriptUITests: XCTestCase {
 		XCTAssertTrue(view.shows("History turn 239"), "Following the bottom shows the newest reply")
 		capture(app, "Native transcript following the bottom")
 
+		// Over a code block, which scrolls only sideways, the wheel still scrolls the transcript up and down, and the block
+		// sideways.
+		send("wide-code", from: editor, in: app)
+		let code = app.scrollViews["transcript-code-block"].firstMatch
+		XCTAssertTrue(code.waitForExistence(timeout: 10), "The wide code block must be in the transcript")
+		let codeTop = code.frame.minY
+		code.scroll(byDeltaX: 0, deltaY: 300)
+		XCTAssertGreaterThan(code.frame.minY, codeTop + 100, "A vertical scroll over a code block must scroll the transcript")
+		let movedTop = code.frame.minY
+		code.scroll(byDeltaX: -300, deltaY: 0)
+		XCTAssertEqual(code.frame.minY, movedTop, accuracy: 1, "A sideways scroll over a code block must not scroll the transcript")
+
 		// Scrolled up, a new turn arrives below without moving what the reader looks at.
 		transcript.scroll(byDeltaX: 0, deltaY: 600)
 		view = try TranscriptSnapshot(transcript)

@@ -37,6 +37,8 @@ final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NSTableVi
 	private var scrollReport: Task<Void, Never>?
 	private var laidOutWidth: CGFloat = 0
 	private var lastTop: CGFloat = 0
+	private var wheelRouting = WheelRouting()
+	private var wheelMonitor: Any?
 	private(set) var measurements = 0
 
 	init(anchor: ChatScrollAnchor?) {
@@ -75,6 +77,7 @@ final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NSTableVi
 	isolated deinit {
 		idle?.invalidate()
 		scrollReport?.cancel()
+		if let wheelMonitor { NSEvent.removeMonitor(wheelMonitor) }
 	}
 
 	var width: CGFloat { max(200, contentView.bounds.width) }
@@ -296,6 +299,32 @@ final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NSTableVi
 	override func viewDidMoveToWindow() {
 		super.viewDidMoveToWindow()
 		if window == nil { stopIdle() } else { scheduleIdle() }
+		watchWheel()
+	}
+
+	// MARK: Wheel
+
+	/// Takes the vertical scroll gestures over the transcript before what is under the pointer (a code block) can
+	/// swallow them (`WheelRouting`).
+	private func watchWheel() {
+		if let wheelMonitor { NSEvent.removeMonitor(wheelMonitor) }
+		wheelMonitor = nil
+		guard window != nil else { return }
+		wheelMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
+			let taken = MainActor.assumeIsolated { self?.takeWheel(event) ?? false }
+			return taken ? nil : event
+		}
+	}
+
+	private func takeWheel(_ event: NSEvent) -> Bool {
+		guard let window, event.windowNumber == window.windowNumber,
+			  visibleRect.contains(convert(event.locationInWindow, from: nil)) else { return false }
+		let toTranscript = wheelRouting.toTranscript(
+			phase: event.phase, momentumPhase: event.momentumPhase,
+			deltaX: event.scrollingDeltaX, deltaY: event.scrollingDeltaY)
+		guard toTranscript else { return false }
+		scrollWheel(with: event)
+		return true
 	}
 
 	// MARK: Width

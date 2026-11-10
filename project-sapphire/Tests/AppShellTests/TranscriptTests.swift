@@ -329,3 +329,35 @@ struct TranscriptLinkTests {
 		}
 	}
 }
+
+struct WheelRoutingTests {
+	private typealias Wheel = (phase: NSEvent.Phase, momentum: NSEvent.Phase, dx: CGFloat, dy: CGFloat)
+
+	/// Whether each event of a gesture goes to the transcript.
+	private func routes(_ events: [Wheel]) -> [Bool] {
+		var routing = WheelRouting()
+		return events.map { routing.toTranscript(phase: $0.phase, momentumPhase: $0.momentum, deltaX: $0.dx, deltaY: $0.dy) }
+	}
+
+	@Test func aVerticalSwipeScrollsTheTranscriptThroughItsMomentum() {
+		let swipe: [Wheel] = [
+			(.mayBegin, [], 0, 0), (.began, [], 1, -4),
+			(.changed, [], 6, -1),  // drifting sideways mid-gesture
+			(.ended, [], 0, 0), ([], .began, 3, -1), ([], .ended, 0, 0),
+		]
+		#expect(routes(swipe) == [false, true, true, true, true, true])
+	}
+
+	@Test func aHorizontalSwipeStaysWithWhatIsUnderThePointerAndTheNextGestureDecidesAgain() {
+		let swipes: [Wheel] = [
+			(.began, [], -5, 1), (.changed, [], -1, 4), ([], .changed, -2, 0),
+			(.mayBegin, [], 0, 0), (.began, [], 0, 3),
+		]
+		#expect(routes(swipes) == [false, false, false, false, true])
+	}
+
+	@Test func aMouseWheelTickIsDecidedOnItsOwn() {
+		// Shift with a mouse wheel scrolls sideways.
+		#expect(routes([([], [], 0, -10), ([], [], -10, 0)]) == [true, false])
+	}
+}

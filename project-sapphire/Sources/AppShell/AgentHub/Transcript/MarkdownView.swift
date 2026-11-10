@@ -4,10 +4,6 @@ import SwiftUI
 struct MarkdownView: View {
 	let blocks: [MarkdownBlock]
 
-	/// Whether a long code line wraps or scrolls sideways, which depends on a vertical trackpad swipe over a code block
-	/// still scrolling the transcript.
-	static let wrapsCode = false
-
 	var body: some View {
 		VStack(alignment: .leading, spacing: 6) {
 			ForEach(blocks.indices, id: \.self) { index in
@@ -77,14 +73,11 @@ private struct CodeBlockView: View {
 	let text: String
 
 	var body: some View {
-		let code = Text(text).font(.system(.callout, design: .monospaced))
-		Group {
-			if MarkdownView.wrapsCode {
-				code.padding(8).frame(maxWidth: .infinity, alignment: .leading)
-			} else {
-				ScrollView(.horizontal) { code.fixedSize(horizontal: true, vertical: false).padding(8) }
-			}
+		// Sideways, never wrapped: the transcript takes the vertical scrolls over it (`WheelRouting`).
+		ScrollView(.horizontal) {
+			Text(text).font(.system(.callout, design: .monospaced)).fixedSize(horizontal: true, vertical: false).padding(8)
 		}
+		.accessibilityIdentifier("transcript-code-block")
 		.background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 6))
 	}
 }

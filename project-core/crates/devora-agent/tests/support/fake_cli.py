@@ -110,6 +110,14 @@ for line in sys.stdin:
                 assistant["message"]["content"] = [{"type":"text","text":f"History turn {turn}"}]
                 emit(assistant)
             result()
+        elif text == "wide-code":
+            # A code block much wider than any transcript, for scrolling over it.
+            lines = "\n".join(f"line {n}: " + "wide " * 80 for n in range(15))
+            assistant = recorded("assistant")
+            assistant["message"]["id"] = "wide-code"
+            assistant["message"]["content"] = [{"type":"text","text":f"Wide code:\n\n```\n{lines}\n```"}]
+            emit(assistant)
+            result()
         elif text.startswith("hook:"):
             emit({"type":"control_request","request_id":"hook","request":{
                 "subtype":"hook_callback","callback_id":"devora-judgess","tool_use_id":"tool-1",
