@@ -17,7 +17,7 @@ export class SapphireWorld extends World {
   app!: ChildProcess;
   /** Bundled-tools scenarios use the signed distribution and an isolated login HOME. */
   bundledTools = false;
-  /** Whether the app shows the native agent transcript (ADR-014), for `@native-transcript` scenarios. */
+  /** Whether the app shows the native agent transcript (ADR-014): `SAPPHIRE_NATIVE_TRANSCRIPT=1`, for `test-acceptance-native`. */
   nativeTranscript = false;
   home?: string;
   bridge!: Bridge;

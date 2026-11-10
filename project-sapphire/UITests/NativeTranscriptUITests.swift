@@ -50,7 +50,8 @@ final class NativeTranscriptUITests: XCTestCase {
 		// Over a code block, which scrolls only sideways, the wheel still scrolls the transcript up and down, and the block
 		// sideways.
 		send("wide-code", from: editor, in: app)
-		let code = app.scrollViews["transcript-code-block"].firstMatch
+		// A row is one accessibility element (its kind, then its text), so the code block is found by its row's text.
+		let code = transcript.descendants(matching: .any).matching(NSPredicate(format: "value BEGINSWITH %@", "Wide code:")).firstMatch
 		XCTAssertTrue(code.waitForExistence(timeout: 10), "The wide code block must be in the transcript")
 		let codeTop = code.frame.minY
 		code.scroll(byDeltaX: 0, deltaY: 300)
@@ -85,6 +86,12 @@ final class NativeTranscriptUITests: XCTestCase {
 			scrolls += 1
 		}
 		capture(app, "Native transcript after loading older history")
+		// After hundreds of rows scrolled through and an older page: one element per row near the view, none left behind by
+		// a reused cell (VoiceOver would read it), and no text twice.
+		let near = view.visibleArea.insetBy(dx: 0, dy: -view.visibleArea.height)
+		let far = view.turns.filter { !near.intersects($0.frame) }
+		XCTAssertTrue(far.isEmpty, "No row element far from the view: \(far.map { "\($0.number)@\(Int($0.top))" })")
+		XCTAssertEqual(Set(view.turns.map(\.text)).count, view.turns.count, "No row text twice: \(view.turns.map(\.number).sorted())")
 		XCTAssertGreaterThan(view.rows, tail, "Scrolling to the top must load older history")
 		let anchor = try XCTUnwrap(beforeLoad.topTurn?.text)
 		XCTAssertTrue(
@@ -153,8 +160,9 @@ private struct TranscriptSnapshot {
 				rows += 1
 				contentTop = min(contentTop, element.frame.minY)
 			}
-			let text = element.label.isEmpty ? (element.value as? String ?? "") : element.label
-			if element.elementType == .staticText && text.hasPrefix("History turn ") {
+			// A row is one element: its kind as the label, its text as the value.
+			let text = element.value as? String ?? element.label
+			if text.hasPrefix("History turn ") {
 				turns.append(Turn(text: text, frame: element.frame))
 			}
 			element.children.forEach(walk)
