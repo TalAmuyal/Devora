@@ -133,7 +133,6 @@ final class TestBridge {
 				if panel.nativeTranscript {
 					guard let transcript = panel.transcript else { throw BridgeError(status: 409, "agent chat is not ready") }
 					var observation = transcript.observation()
-					observation["text"] = (observation["rows"] as? [[String: Any]] ?? []).compactMap { $0["text"] as? String }.joined(separator: "\n")
 					observation["native"] = true
 					dom = observation
 				} else {

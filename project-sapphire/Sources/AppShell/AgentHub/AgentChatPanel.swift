@@ -154,8 +154,10 @@ struct AgentChatPanel: View {
 			}
 			if model.prepared && model.nativeTranscript {
 				TranscriptView(
-					items: model.chat.items, hasOlder: model.chat.hasOlder, anchor: model.chat.anchor,
+					items: model.chat.items, questions: model.chat.chat?.questions ?? [],
+					generation: model.chat.chat?.generation ?? 0, hasOlder: model.chat.hasOlder, anchor: model.chat.anchor,
 					onScroll: { model.chat.saveScroll($0) }, onNeedsOlder: { Task { await model.chat.older() } },
+					onAnswer: { id, action, generation in Task { await model.chat.answer(id, action: action, generation: generation) } },
 					onView: { model.transcript = $0 })
 			} else if model.prepared {
 				WebContentView(

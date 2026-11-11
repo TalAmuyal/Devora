@@ -18,11 +18,15 @@ final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NSTableVi
 	static let measureBudget: CFTimeInterval = 0.002
 
 	let table = NSTableView()
-	private(set) var items: [TranscriptItem] = []
+	/// The rows: the chat's items, with a card after each question's tool row (`TranscriptEntry.layout`).
+	private(set) var entries: [TranscriptEntry] = []
+	var items: [TranscriptItem] { entries.compactMap(\.item) }
 	var hasOlder = false
 	/// Where the reader is, 250 ms after a scroll: the top row and its offset, or nil at the bottom.
 	var onScroll: (ChatScrollAnchor?) -> Void = { _ in }
 	var onNeedsOlder: () -> Void = {}
+	/// Answers a card's question: its request id, the action ("allow", "deny", "always") and the card's generation.
+	var onAnswer: (String, String, UInt64) -> Void = { _, _, _ in }
 
 	private var heights = RowHeights()
 	private var documents: [UInt64: (text: String, document: MarkdownDocument)] = [:]
@@ -86,38 +90,46 @@ final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NSTableVi
 
 	var distanceFromBottom: CGFloat { max(0, table.bounds.height - contentView.bounds.maxY) }
 
-	/// The first row whose bottom is below the visible area's top, and how far its top is from that top.
+	/// The first item row whose bottom is below the visible area's top, and how far its top is from that top. A card on
+	/// top counts as the item row above it, since a saved position is an item's: the card is gone when it comes back.
 	var visibleAnchor: ChatScrollAnchor? {
-		visiblePin.map { ChatScrollAnchor(sequence: $0.sequence, offset: Int32($0.offset.rounded())) }
+		guard let top = visibleRow else { return nil }
+		let row = (0...top).reversed().first { entries[$0].item != nil } ?? entries.indices.first { entries[$0].item != nil }
+		guard let row, let item = entries[row].item else { return nil }
+		return ChatScrollAnchor(sequence: item.sequence, offset: Int32((table.rect(ofRow: row).minY - contentView.bounds.minY).rounded()))
 	}
 
 	/// A row kept in place across an update, with its exact offset: a rounded one would drift with every correction.
 	private struct Pin {
-		let sequence: UInt64
+		let key: TranscriptEntry.Key
 		let offset: CGFloat
 	}
 
 	private func pin(_ row: Int) -> Pin {
-		Pin(sequence: items[row].sequence, offset: table.rect(ofRow: row).minY - contentView.bounds.minY)
+		Pin(key: entries[row].key, offset: table.rect(ofRow: row).minY - contentView.bounds.minY)
 	}
 
-	private var visiblePin: Pin? {
+	private var visibleRow: Int? {
 		let row = table.row(at: NSPoint(x: 1, y: contentView.bounds.minY + 0.5))
-		return row >= 0 && row < items.count ? pin(row) : nil
+		return row >= 0 && row < entries.count ? row : nil
 	}
+
+	private var visiblePin: Pin? { visibleRow.map(pin) }
 
 	/// Whether every row has its measured height (the idle measurement has nothing left to do).
 	var isSettled: Bool { pending.isEmpty && idle == nil }
 
 	// MARK: Updates
 
-	func apply(_ new: [TranscriptItem]) {
-		let change = TranscriptChange(from: items, to: new)
+	/// Shows `items`, with a card for each of `questions`, whose answers carry `generation`.
+	func apply(_ items: [TranscriptItem], questions: [PermissionQuestion] = [], generation: UInt64 = 0) {
+		let new = TranscriptEntry.layout(items, questions: questions, generation: generation)
+		let change = TranscriptChange(from: entries, to: new)
 		guard change != .none else { return }
 		let anchor = following ? nil : visiblePin
-		let firstLoad = items.isEmpty
-		items = new
-		let sequences = Set(new.map(\.sequence))
+		let firstLoad = entries.isEmpty
+		entries = new
+		let sequences = Set(items.map(\.sequence))
 		documents = documents.filter { sequences.contains($0.key) }
 		adjusting = true
 		defer { adjusting = false }
@@ -143,15 +155,15 @@ final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NSTableVi
 		case .reloaded:
 			table.reloadData()
 		}
-		heights.keep(only: sequences)
+		heights.keep(only: Set(new.map(\.key)))
 		findPending()
 		var kept: Pin?
 		if firstLoad, let saved = restoring {
 			// The saved position, once: at its row if the transcript has it, otherwise at the bottom, as the web one does.
 			// Its row stays put while the rows around it are measured.
 			restoring = nil
-			following = !items.contains { $0.sequence == saved.sequence }
-			kept = following ? nil : Pin(sequence: saved.sequence, offset: CGFloat(saved.offset))
+			following = !sequences.contains(saved.sequence)
+			kept = following ? nil : Pin(key: .item(saved.sequence), offset: CGFloat(saved.offset))
 			settle(kept)
 		}
 		measureVisible(keeping: kept)
@@ -161,18 +173,29 @@ final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NSTableVi
 
 	// MARK: Heights
 
-	func numberOfRows(in tableView: NSTableView) -> Int { items.count }
+	func numberOfRows(in tableView: NSTableView) -> Int { entries.count }
 
 	func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {
-		heights.height(items[row], expanded: isExpanded(row), width: width)
+		heights.height(entries[row], expanded: isExpanded(row), width: width)
 	}
 
 	func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
 		let identifier = NSUserInterfaceItemIdentifier("transcript-row")
 		let cell = tableView.makeView(withIdentifier: identifier, owner: nil) as? TranscriptCell ?? TranscriptCell(identifier: identifier)
-		let sequence = items[row].sequence
-		cell.show(model(row)) { [weak self] in self?.toggle(sequence) }
+		cell.show(view(row))
 		return cell
+	}
+
+	/// What row `row` draws, with its actions bound to this view.
+	private func view(_ row: Int) -> TranscriptEntryView {
+		switch entries[row] {
+		case .item(let item):
+			let sequence = item.sequence
+			return TranscriptEntryView(model: .row(model(row)), toggle: { [weak self] in self?.toggle(sequence) })
+		case .card(let card):
+			let id = card.question.requestId
+			return TranscriptEntryView(model: .card(card), answer: { [weak self] action in self?.onAnswer(id, action, card.generation) })
+		}
 	}
 
 	func tableView(_ tableView: NSTableView, didRemove rowView: NSTableRowView, forRow row: Int) {
@@ -182,10 +205,11 @@ final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NSTableVi
 
 	func tableView(_ tableView: NSTableView, shouldSelectRow row: Int) -> Bool { false }
 
-	private func isExpanded(_ row: Int) -> Bool { expanded.contains(items[row].sequence) }
+	private func isExpanded(_ row: Int) -> Bool { entries[row].item.map { expanded.contains($0.sequence) } ?? false }
 
+	/// An item row's model (`row` must be an item's).
 	private func model(_ row: Int) -> TranscriptRowModel {
-		let item = items[row]
+		guard let item = entries[row].item else { preconditionFailure("row \(row) is a card") }
 		let expanded = isExpanded(row)
 		// A collapsed thought shows only its summary, so it isn't parsed until it opens.
 		guard let text = TranscriptRowModel.markdown(of: item.content), expanded || RowHeights.Kind(item) != .thinking else {
@@ -201,14 +225,17 @@ final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NSTableVi
 
 	private func findPending() {
 		let width = width
-		pending = IndexSet(items.indices.filter { !heights.isExact(items[$0], expanded: isExpanded($0), width: width) })
+		pending = IndexSet(entries.indices.filter { !heights.isExact(entries[$0], expanded: isExpanded($0), width: width) })
 	}
+
+	/// The item rows, as table rows.
+	private var itemRows: [Int] { entries.indices.filter { entries[$0].item != nil } }
 
 	// MARK: Expansion
 
 	/// Expands or collapses a thinking or tool row, keeping its top where it is: its body opens or closes below it.
 	func toggle(_ sequence: UInt64) {
-		guard let row = items.firstIndex(where: { $0.sequence == sequence }), model(row).collapsible else { return }
+		guard let row = entries.firstIndex(where: { $0.key == .item(sequence) }), model(row).collapsible else { return }
 		if expanded.remove(sequence) == nil { expanded.insert(sequence) }
 		// The row the reader clicked stays put, even at the bottom: its body opens below it, and following the bottom
 		// resumes only if the bottom is still in view.
@@ -225,12 +252,12 @@ final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NSTableVi
 
 	/// Whether the first row of `kind` is expanded (the test bridge's `thinkingOpen` and `toolOpen`).
 	func isFirstExpanded(_ kind: TranscriptRowModel.Kind) -> Bool {
-		items.indices.first { model($0).kind == kind }.map(isExpanded) ?? false
+		itemRows.first { model($0).kind == kind }.map(isExpanded) ?? false
 	}
 
 	/// Toggles the first row of `kind`, as clicking its summary does (the test bridge's `toggleThinking` and `toggleTool`).
 	func toggleFirst(_ kind: TranscriptRowModel.Kind) {
-		if let row = items.indices.first(where: { model($0).kind == kind }) { toggle(items[row].sequence) }
+		if let row = itemRows.first(where: { model($0).kind == kind }), let item = entries[row].item { toggle(item.sequence) }
 	}
 
 	/// Measures `rows` that aren't exact yet, and returns those whose height changed, for the table to be told.
@@ -238,13 +265,13 @@ final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NSTableVi
 		let width = width
 		var changed = IndexSet()
 		for row in rows where pending.contains(row) {
-			let item = items[row]
+			let entry = entries[row]
 			let expanded = isExpanded(row)
-			let before = heights.height(item, expanded: expanded, width: width)
-			measurer.rootView = AnyView(TranscriptRow(model: model(row)).frame(width: width))
+			let before = heights.height(entry, expanded: expanded, width: width)
+			measurer.rootView = AnyView(view(row).frame(width: width))
 			measurements += 1
 			let height = max(1, ceil(measurer.fittingSize.height))
-			heights.record(item, expanded: expanded, width: width, height: height)
+			heights.record(entry, expanded: expanded, width: width, height: height)
 			pending.remove(row)
 			if height != before { changed.insert(row) }
 		}
@@ -299,7 +326,7 @@ final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NSTableVi
 		table.tile()
 		if following {
 			scrollToBottom()
-		} else if let anchor, let row = items.firstIndex(where: { $0.sequence == anchor.sequence }) {
+		} else if let anchor, let row = entries.firstIndex(where: { $0.key == anchor.key }) {
 			setTop(table.rect(ofRow: row).minY - anchor.offset)
 		}
 	}
@@ -387,13 +414,13 @@ final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NSTableVi
 	@objc private func frameChanged() {
 		guard width != laidOutWidth else { return }
 		laidOutWidth = width
-		guard !items.isEmpty else { return }
+		guard !entries.isEmpty else { return }
 		// Every height is stale at a new width: estimates (the old heights) for all, measurements for the visible
 		// rows now, and the rest after a live resize ends.
 		let anchor = following ? nil : visiblePin
 		findPending()
 		adjusting = true
-		withoutAnimation { table.noteHeightOfRows(withIndexesChanged: IndexSet(items.indices)) }
+		withoutAnimation { table.noteHeightOfRows(withIndexesChanged: IndexSet(entries.indices)) }
 		settle(anchor)
 		adjusting = false
 		measureVisible(keeping: anchor)
@@ -461,24 +488,35 @@ final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NSTableVi
 		adjusting = wasAdjusting
 	}
 
-	/// What the test bridge reads: every row's sequence, kind (the web transcript's `chat-<kind>` class), text and top
-	/// relative to the visible area's top, and the web transcript's other fields. Nothing native runs a row's content,
-	/// so there are no scripts or unsafe attributes to count.
+	/// What the test bridge reads: every item row's sequence, kind (the web transcript's `chat-<kind>` class), text and
+	/// top relative to the visible area's top, the cards, every row's text in order, and the web transcript's other
+	/// fields. Nothing native runs a row's content, so there are no scripts or unsafe attributes to count.
 	func observation() -> [String: Any] {
 		let top = contentView.bounds.minY
-		let models = items.indices.map(model)
-		let rows = items.indices.map { row -> [String: Any] in
-			[
-				"sequence": String(items[row].sequence), "kind": "chat-item chat-\(models[row].kind.rawValue)",
-				"text": models[row].plainText, "offset": Int((table.rect(ofRow: row).minY - top).rounded()),
-			]
+		var rows: [[String: Any]] = []
+		var texts: [String] = []
+		var cards = 0
+		for row in entries.indices {
+			switch entries[row] {
+			case .item(let item):
+				let model = model(row)
+				rows.append([
+					"sequence": String(item.sequence), "kind": "chat-item chat-\(model.kind.rawValue)",
+					"text": model.plainText, "offset": Int((table.rect(ofRow: row).minY - top).rounded()),
+				])
+				texts.append(model.plainText)
+			case .card(let card):
+				cards += 1
+				texts.append(card.plainText)
+			}
 		}
 		let verdict = items.lazy.compactMap { item -> String? in
 			if case .tool(_, _, _, let verdict?, _) = item.content { return "Judgess \(verdict.kind)" }
 			return nil
 		}.first
 		return [
-			"rows": rows, "cards": 0, "thinkingOpen": isFirstExpanded(.thinking), "toolOpen": isFirstExpanded(.tool),
+			"rows": rows, "cards": cards, "text": texts.joined(separator: "\n"),
+			"thinkingOpen": isFirstExpanded(.thinking), "toolOpen": isFirstExpanded(.tool),
 			"verdict": verdict ?? "", "scripts": 0, "unsafe": 0,
 			"top": Int(top.rounded()), "topSequence": visibleAnchor.map { String($0.sequence) as Any } ?? NSNull(),
 			"settled": isSettled, "measurements": measurements,
@@ -486,10 +524,28 @@ final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NSTableVi
 	}
 }
 
+/// What one table row draws: an item's row, or a permission card.
+struct TranscriptEntryView: View {
+	enum Model: Equatable {
+		case row(TranscriptRowModel)
+		case card(PermissionCard)
+	}
+
+	let model: Model
+	var toggle: () -> Void = {}
+	var answer: (String) -> Void = { _ in }
+
+	var body: some View {
+		switch model {
+		case .row(let row): TranscriptRow(model: row, toggle: toggle)
+		case .card(let card): PermissionCardView(card: card, answer: answer)
+		}
+	}
+}
+
 /// A recycled table cell hosting one SwiftUI row, or nothing while it waits to be reused.
 final class TranscriptCell: NSTableCellView {
-	private let host = NSHostingView<TranscriptRow?>(rootView: nil)
-	private var shown: TranscriptRowModel?
+	private let host = NSHostingView<TranscriptEntryView?>(rootView: nil)
 
 	init(identifier: NSUserInterfaceItemIdentifier) {
 		super.init(frame: .zero)
@@ -505,17 +561,15 @@ final class TranscriptCell: NSTableCellView {
 	required init?(coder: NSCoder) { fatalError("not used") }
 
 	/// Whether the cell shows a row (rather than waiting for reuse).
-	var isShowing: Bool { shown != nil }
+	var isShowing: Bool { host.rootView != nil }
 
-	func show(_ model: TranscriptRowModel, toggle: @escaping () -> Void) {
-		guard model != shown else { return }
-		shown = model
-		host.rootView = TranscriptRow(model: model, toggle: toggle)
+	func show(_ view: TranscriptEntryView) {
+		guard view.model != host.rootView?.model else { return }
+		host.rootView = view
 	}
 
 	/// Shows nothing, so that a cell waiting for reuse exposes no stale row to accessibility.
 	func clear() {
-		shown = nil
 		host.rootView = nil
 	}
 }
@@ -523,10 +577,13 @@ final class TranscriptCell: NSTableCellView {
 /// The native transcript in SwiftUI: one `TranscriptScrollView` per chat panel.
 struct TranscriptView: NSViewRepresentable {
 	let items: [TranscriptItem]
+	var questions: [PermissionQuestion] = []
+	var generation: UInt64 = 0
 	let hasOlder: Bool
 	let anchor: ChatScrollAnchor?
 	var onScroll: (ChatScrollAnchor?) -> Void
 	var onNeedsOlder: () -> Void
+	var onAnswer: (String, String, UInt64) -> Void = { _, _, _ in }
 	var onView: (TranscriptScrollView) -> Void
 
 	func makeNSView(context: Context) -> TranscriptScrollView {
@@ -536,8 +593,9 @@ struct TranscriptView: NSViewRepresentable {
 	func updateNSView(_ view: TranscriptScrollView, context: Context) {
 		view.onScroll = onScroll
 		view.onNeedsOlder = onNeedsOlder
+		view.onAnswer = onAnswer
 		view.hasOlder = hasOlder
-		view.apply(items)
+		view.apply(items, questions: questions, generation: generation)
 		onView(view)
 	}
 }

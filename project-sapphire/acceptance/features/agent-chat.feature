@@ -21,7 +21,6 @@ Feature: Agent chat panel
     And the user closes and reopens the agent chat "Echo"
     Then the agent prompt draft is "Keep this unsent"
 
-  @permission-card
   Scenario: Permission cards can be answered from the tab and disappear
     When the user sends the agent prompt "permission"
     Then the agent chat shows a permission card
@@ -30,13 +29,11 @@ Feature: Agent chat panel
     Then the agent chat has no permission card
     And the agent "Echo" should be idle
 
-  @permission-card
   Scenario: A withdrawn question disappears
     When the user sends the agent prompt "cancel-permission"
     Then the agent chat has no permission card
     And the agent "Echo" should be idle
 
-  @permission-card
   Scenario: Pause waits for a permission-held turn to finish
     When the user sends the agent prompt "permission"
     Then the agent chat shows a permission card
@@ -76,7 +73,6 @@ Feature: Agent chat panel
     Then the agent prompt draft is ""
     And the agent transcript contains "Send with Enter"
 
-  @permission-card
   Scenario Outline: Permission shortcuts deny or always allow
     When the user sends the agent prompt "permission"
     Then the agent chat shows a permission card
