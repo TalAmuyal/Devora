@@ -43,7 +43,7 @@ final class NativeTranscriptUITests: XCTestCase {
 
 		// Scrolled up, a new turn arrives below without moving what the reader looks at.
 		transcript.scroll(byDeltaX: 0, deltaY: 600)
-		view = try TranscriptSnapshot(transcript)
+		view = try settledSnapshot(of: transcript)
 		let reading = try XCTUnwrap(view.topTurn, "A reply must be in view after scrolling up")
 		send("History turn 240", from: editor, in: app)
 		let after = try TranscriptSnapshot(transcript)
@@ -57,13 +57,15 @@ final class NativeTranscriptUITests: XCTestCase {
 		var beforeLoad = after
 		view = after
 		var scrolls = 0
+		var steps: [String] = []
 		while view.rows == tail && scrolls < 150 {
 			beforeLoad = view
 			// Big steps while one can't reach the top 80 pt, where the older page loads; then half the visible area, so
 			// that the row on top before the step that loads stays in view after it, unless the view jumps.
 			let step = view.distanceFromTop > 400 + 120 ? 400 : view.visibleArea.height / 2
 			transcript.scroll(byDeltaX: 0, deltaY: step)
-			view = try TranscriptSnapshot(transcript)
+			view = try settledSnapshot(of: transcript)
+			steps.append("\(Int(step)) from \(Int(beforeLoad.distanceFromTop)) to \(Int(view.distanceFromTop))")
 			scrolls += 1
 		}
 		capture(app, "Native transcript after loading older history")
@@ -77,7 +79,7 @@ final class NativeTranscriptUITests: XCTestCase {
 		let anchor = try XCTUnwrap(beforeLoad.topTurn?.text)
 		XCTAssertTrue(
 			view.shows(anchor),
-			"\(anchor) must still be in view once older history loads (in view before: \(beforeLoad.inViewSummary); after: \(view.inViewSummary))")
+			"\(anchor) must still be in view once older history loads (in view before: \(beforeLoad.inViewSummary); after: \(view.inViewSummary); last steps, by distance from the top: \(steps.suffix(3).joined(separator: ", ")))")
 		XCTAssertFalse(view.shows("History turn 0"), "Loading older history must not jump to its top")
 	}
 
@@ -138,6 +140,23 @@ final class NativeTranscriptUITests: XCTestCase {
 		XCTAssertTrue(transcript.waitForExistence(timeout: 15), "The native transcript must replace the web one")
 		editor.click()
 		return (app, editor, transcript)
+	}
+
+	/// The transcript once a scroll has landed: the same position and rows in two snapshots 100 ms apart (or after 5 s). A
+	/// snapshot taken at once can come before the scroll is applied, and a step then seems to move twice as far.
+	@MainActor
+	private func settledSnapshot(of transcript: XCUIElement) throws -> TranscriptSnapshot {
+		var last = try TranscriptSnapshot(transcript)
+		var result: TranscriptSnapshot? = nil
+		_ = poll(timeout: 5) {
+			RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+			guard let next = try? TranscriptSnapshot(transcript) else { return false }
+			defer { last = next }
+			guard next.distanceFromTop == last.distanceFromTop, next.rows == last.rows else { return false }
+			result = next
+			return true
+		}
+		return try result ?? TranscriptSnapshot(transcript)
 	}
 
 	/// `element`'s top once it has held still for 250 ms (or after 5 s).

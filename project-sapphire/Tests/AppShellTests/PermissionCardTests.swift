@@ -88,6 +88,16 @@ struct TranscriptEntryLayoutTests {
 		#expect(TranscriptEntry.layout(items, questions: [], generation: 0) == items.map(TranscriptEntry.item))
 	}
 
+	@Test func anOlderPageIsStillAPrependWithACardShowing() {
+		let page = (1...3).map { reply(UInt64($0)) }
+		let tail = [reply(4), toolRow(5)]
+		let asked = [question("q1", tool: "t5")]
+		#expect(
+			TranscriptChange(
+				from: TranscriptEntry.layout(tail, questions: asked, generation: 1),
+				to: TranscriptEntry.layout(page + tail, questions: asked, generation: 1)) == .prepended(count: 3))
+	}
+
 	@Test func cardsChangeTheTableAsRows() {
 		let items = [reply(1), toolRow(2)]
 		let none = TranscriptEntry.layout(items, questions: [], generation: 1)
