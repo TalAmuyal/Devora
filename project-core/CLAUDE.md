@@ -68,6 +68,7 @@ Profile writes are refused.
 Startup waits ten seconds, and each completed round establishes the next deadline.
 A sleep-inclusive continuous clock owns deadlines, and the host forwards wake notifications to re-evaluate them.
 An overdue wake admits one round, interval changes recompute the deadline, and disabling removes the periodic timer.
+Enabled deadline waits are capped at sixty seconds so a missed host wake notification delays overdue admission by at most one minute.
 Manual requests run even when periodic updates are off and coalesce into one pending round.
 A hold finishes the admitted repo and keeps the next repo waiting until release.
 

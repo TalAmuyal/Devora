@@ -1,4 +1,7 @@
-use std::sync::Mutex;
+use crate::background::Background;
+use devora_core::repo_updater::PauseSource;
+use std::sync::{Arc, Mutex};
+use tauri::Emitter;
 
 use tauri::ipc::Channel;
 use tauri::{Manager, State};
@@ -22,7 +25,7 @@ use crate::workspace_creation::{self, WorkspaceCreationManager};
 pub fn create_pty(
     state: State<'_, Mutex<PtyManager>>,
     ipc_server: State<'_, IpcServer>,
-    log: State<'_, Log>,
+    log: State<'_, Arc<Log>>,
     target: terminal::TerminalTarget,
     profile_path: Option<String>,
     cols: u16,
@@ -184,19 +187,60 @@ pub fn set_claude_setting(
 pub fn get_config_settings(
     profile_path: Option<String>,
 ) -> Result<config::ConfigSettingsResponse, String> {
-    config::read_config_settings(profile_path.as_deref())
+    let mut settings = config::read_config_settings(profile_path.as_deref())?;
+    if profile_path.is_none()
+        && settings
+            .resolved
+            .get("repo-update.enabled")
+            .is_none_or(|value| value.is_null())
+    {
+        settings.resolved.insert(
+            "repo-update.enabled".into(),
+            serde_json::Value::Bool(
+                devora_core::repo_update_config::AppKind::Ember.enabled_by_default(),
+            ),
+        );
+    }
+    Ok(settings)
 }
 
 /// Writes one generic config setting at the given scope.
 /// `state`: "value" (store the coerced `value`), "default" (remove the key).
 #[tauri::command]
 pub fn set_config_setting(
+    background: State<'_, Arc<Background>>,
     profile_path: Option<String>,
     key: String,
     state: String,
     value: Option<String>,
 ) -> Result<(), String> {
-    config::write_config_setting(profile_path.as_deref(), &key, &state, value.as_deref())
+    config::write_config_setting(profile_path.as_deref(), &key, &state, value.as_deref())?;
+    if devora_core::repo_update_config::is_key(&key) {
+        background.running()?.configure()?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_global_paused(background: State<'_, Arc<Background>>) -> Result<bool, String> {
+    Ok(background.running()?.pause.paused())
+}
+
+#[tauri::command]
+pub fn toggle_global_paused(
+    app: tauri::AppHandle,
+    background: State<'_, Arc<Background>>,
+) -> Result<bool, String> {
+    let paused = background.running()?.pause.toggle()?;
+    app.emit("global-pause-changed", paused)
+        .map_err(|e| e.to_string())?;
+    Ok(paused)
+}
+
+#[tauri::command]
+pub fn run_repo_updates(background: State<'_, Arc<Background>>) -> Result<(), String> {
+    background.running()?.updater.run_now();
+    Ok(())
 }
 
 /// Whether an Asana API token is currently stored in the OS keychain.
@@ -368,7 +412,7 @@ pub fn save_profiling_report(profile_path: String, report_json: String) -> Resul
 }
 
 #[tauri::command]
-pub fn log_error(state: State<'_, Log>, level: String, message: String) -> Result<(), String> {
+pub fn log_error(state: State<'_, Arc<Log>>, level: String, message: String) -> Result<(), String> {
     state.write(level.parse::<Level>()?, &message);
     Ok(())
 }

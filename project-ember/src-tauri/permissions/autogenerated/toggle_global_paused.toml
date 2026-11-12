@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-toggle-global-paused"
+description = "Enables the toggle_global_paused command without any pre-configured scope."
+commands.allow = ["toggle_global_paused"]
+
+[[permission]]
+identifier = "deny-toggle-global-paused"
+description = "Denies the toggle_global_paused command without any pre-configured scope."
+commands.deny = ["toggle_global_paused"]

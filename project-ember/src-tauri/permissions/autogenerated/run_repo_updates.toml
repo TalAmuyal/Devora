@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-run-repo-updates"
+description = "Enables the run_repo_updates command without any pre-configured scope."
+commands.allow = ["run_repo_updates"]
+
+[[permission]]
+identifier = "deny-run-repo-updates"
+description = "Denies the run_repo_updates command without any pre-configured scope."
+commands.deny = ["run_repo_updates"]

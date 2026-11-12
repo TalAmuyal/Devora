@@ -82,6 +82,19 @@ function lastSetCall(): Record<string, unknown> | undefined {
 }
 
 describe('createConfigCard', () => {
+  it('edits a stored positive integer as text and shows its resolved default', async () => {
+    invokeMock.mockResolvedValue({
+      stored: { 'repo-update.interval-minutes': 15 },
+      resolved: { 'repo-update.interval-minutes': 15 },
+    });
+    const card = await mountCard([{ key: 'repo-update.interval-minutes', label: 'Interval', field: { kind: 'text' } }]);
+    expect(activeSegment(row(card, 0))).toBe('Set');
+    expect(card.querySelector<HTMLInputElement>('input')?.value).toBe('15');
+    clickSegment(row(card, 0), 'Default');
+    await flush();
+    expect(lastSetCall()).toMatchObject({ key: 'repo-update.interval-minutes', state: 'default' });
+  });
+
   it('renders one row per field', async () => {
     const card = await mountCard();
     expect(card.querySelectorAll('.config-row')).toHaveLength(FIELDS.length);

@@ -19,7 +19,7 @@ import { createSegmentedControl } from './SegmentedControl';
 import { createCommitInput, WhitespaceHandling } from './CommitInput';
 
 /** A stored config value (a string, or a bool for `bool` fields). */
-export type ConfigValue = string | boolean;
+export type ConfigValue = string | boolean | number;
 
 interface EnumOption {
   label: string;
@@ -185,9 +185,10 @@ export function createConfigCard(options: ConfigCardOptions): HTMLElement {
     control: HTMLElement,
   ): void => {
     const stored = editor.settings.stored[field.key];
+    const text = typeof stored === 'string' || typeof stored === 'number' ? String(stored) : undefined;
     const mode: TextMode = editor.hasPendingEntry(field.key)
       ? 'set'
-      : typeof stored === 'string'
+      : text !== undefined
         ? 'set'
         : 'default';
 
@@ -201,7 +202,7 @@ export function createConfigCard(options: ConfigCardOptions): HTMLElement {
         onSelect: (next) => {
           if (next === 'set') {
             // Local switch only — nothing is written until the value is committed. Seed the input from the stored value.
-            editor.beginEntry(field.key, typeof stored === 'string' ? stored : undefined);
+            editor.beginEntry(field.key, text);
           } else {
             editor.endEntry(field.key);
             editor.persist(field.key, 'default');
@@ -213,7 +214,7 @@ export function createConfigCard(options: ConfigCardOptions): HTMLElement {
     const value = document.createElement('div');
     value.className = 'config-row-value';
     if (mode === 'set') {
-      const savedValue = typeof stored === 'string' ? stored : '';
+      const savedValue = text ?? '';
       const commitInput = createCommitInput({
         placeholder,
         value: editor.getDraft(field.key) ?? savedValue,

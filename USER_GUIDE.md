@@ -196,12 +196,15 @@ The global hold survives quitting and relaunching Sapphire.
 Restored agent tabs show their history while held, and Resume Devora then starts every open agent tab as normal startup would.
 Each suffixed Sapphire installation keeps its own hold.
 
-## Repository Updates (Sapphire)
+## Repository Updates
 
-Sapphire updates clean, detached parent clones in every profile's `repos/` directory shortly after launch and once per hour by default.
+Sapphire and Ember can update clean, detached parent clones in every profile's `repos/` directory shortly after launch and once per hour.
+Periodic updates default on in Sapphire and off in Ember.
 User Defaults has a Repository Updates card with an on/off setting and an interval in minutes.
 The Run Repo Updates palette command requests a round even when periodic updates are off.
 Global Pause lets the current repo finish and holds the next one until resume.
+In Ember, use Pause Devora or Resume Devora in the palette, and the tab bar shows Paused while held.
+Ember preserves the hold across relaunch.
 Dirty repos, attached branches, active Git operations and leftover Git lock files are skipped, with the reason in the app log.
 Fetch failures are logged and later repos can still update.
 The next periodic interval starts when the round completes.

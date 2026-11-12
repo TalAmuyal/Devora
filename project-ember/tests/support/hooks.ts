@@ -91,32 +91,7 @@ async function waitForReady(port: number, timeoutMs: number): Promise<void> {
   throw new Error(`App did not become ready within ${timeoutMs}ms`);
 }
 
-BeforeAll(async function () {
-  fs.rmSync(STRUCTURED_LOG_BASE_DIR, { recursive: true, force: true });
-  fs.rmSync(FAILURE_CAPTURE_DIR, { recursive: true, force: true });
-
-  fakeClaudeServer = new FakeClaudeServer();
-  await fakeClaudeServer.start();
-
-  testConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ember-config-'));
-  testConfigPath = path.join(testConfigDir, 'config.json');
-  writeTestConfig(testConfigPath, []);
-
-  fs.rmSync(CLAUDE_CONFIG_PATH, { recursive: true, force: true });
-  fs.mkdirSync(path.join(CLAUDE_CONFIG_PATH, 'plans'), { recursive: true });
-  fs.writeFileSync(
-    path.join(CLAUDE_CONFIG_PATH, 'settings.json'),
-    JSON.stringify({ permissions: { defaultMode: 'plan' }, theme: 'dark' }, null, 2),
-  );
-  // Claude Code shows one-time nudge dialogs (e.g. "Make auto mode your default permission mode?") depending on remote cohorts; one appearing mid-test swallows the keys meant for the prompt, so mark them as already seen.
-  fs.writeFileSync(
-    path.join(CLAUDE_CONFIG_PATH, '.claude.json'),
-    JSON.stringify({ hasSeenAutoDefaultNudge: true, hasSeenEffortMediumNudge: true }, null, 2),
-  );
-  // Note: We intentionally do NOT copy .credentials.json here.
-  // Tests use ANTHROPIC_API_KEY (pointed at the fake server) instead of OAuth tokens.
-  // Copying credentials would cause an "auth conflict" warning in Claude Code.
-
+async function launchApp(): Promise<AppDriver> {
   const binary = findAppBinary();
 
   const ALLOWED_ENV_VARS = ['HOME', 'SHELL', 'TMPDIR', 'USER', 'LANG'] as const;
@@ -139,6 +114,7 @@ BeforeAll(async function () {
       ANTHROPIC_BASE_URL: `http://127.0.0.1:${fakeClaudeServer.getPort()}`,
       ANTHROPIC_API_KEY: 'sk-ant-fake-key-for-bdd-tests',
       DEVORA_CONFIG_PATH: testConfigPath,
+      DEVORA_STATE_DIR: path.join(testConfigDir!, 'state'),
       CLAUDE_CONFIG_DIR: CLAUDE_CONFIG_PATH,
       // No feature flags or telemetry from the network, so Claude Code behaves the same on every run.
       CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
@@ -200,6 +176,47 @@ BeforeAll(async function () {
   // Wait until the app exposes its test namespace so the first scenario cannot race app initialization.
   const driver = new AppDriver(testHarnessPort, ipcPort);
   await driver.pollFor("return typeof window.__test !== 'undefined'", true, 30_000);
+  return driver;
+}
+
+/** Restart the real binary with the same config and state directory. */
+export async function restartApp(): Promise<AppDriver> {
+  const previous = appProcess;
+  if (previous && previous.exitCode === null && previous.signalCode === null) {
+    const exited = new Promise<void>(resolve => previous.once('exit', () => resolve()));
+    previous.kill();
+    await exited;
+  }
+  return launchApp();
+}
+
+BeforeAll(async function () {
+  fs.rmSync(STRUCTURED_LOG_BASE_DIR, { recursive: true, force: true });
+  fs.rmSync(FAILURE_CAPTURE_DIR, { recursive: true, force: true });
+
+  fakeClaudeServer = new FakeClaudeServer();
+  await fakeClaudeServer.start();
+
+  testConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ember-config-'));
+  testConfigPath = path.join(testConfigDir, 'config.json');
+  writeTestConfig(testConfigPath, []);
+
+  fs.rmSync(CLAUDE_CONFIG_PATH, { recursive: true, force: true });
+  fs.mkdirSync(path.join(CLAUDE_CONFIG_PATH, 'plans'), { recursive: true });
+  fs.writeFileSync(
+    path.join(CLAUDE_CONFIG_PATH, 'settings.json'),
+    JSON.stringify({ permissions: { defaultMode: 'plan' }, theme: 'dark' }, null, 2),
+  );
+  // Claude Code shows one-time nudge dialogs (e.g. "Make auto mode your default permission mode?") depending on remote cohorts; one appearing mid-test swallows the keys meant for the prompt, so mark them as already seen.
+  fs.writeFileSync(
+    path.join(CLAUDE_CONFIG_PATH, '.claude.json'),
+    JSON.stringify({ hasSeenAutoDefaultNudge: true, hasSeenEffortMediumNudge: true }, null, 2),
+  );
+  // Note: We intentionally do NOT copy .credentials.json here.
+  // Tests use ANTHROPIC_API_KEY (pointed at the fake server) instead of OAuth tokens.
+  // Copying credentials would cause an "auth conflict" warning in Claude Code.
+
+  await launchApp();
 });
 
 AfterStep(async function (this: EmberWorld, { result, pickle, pickleStep }) {

@@ -71,6 +71,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   router.install();
 
   const tabBar = new TabBar(tabBarEl, sessionManager);
+  await listen<boolean>('global-pause-changed', event => tabBar.setPaused(event.payload));
+  try {
+    tabBar.setPaused(await invoke<boolean>('get_global_paused'));
+  } catch (_) {
+    // invoke surfaces the persisted state startup error.
+  }
 
   // Programmatic close (opening a workspace / starting a task): pop the hub layer directly, bypassing the user-dismiss decision.
   const dismissWsHub = () => {
@@ -414,12 +420,24 @@ document.addEventListener('DOMContentLoaded', async () => {
         shortcut: [],
         run: closePaletteThen(() => openSettingsHub('list')),
       },
+      {
+        id: 'run-repo-updates', title: 'Run Repo Updates',
+        description: 'Update clean detached parent clones in every profile', icon: '↻', shortcut: [],
+        run: closePaletteThen(() => { void invokeLogOnly('run_repo_updates').catch(() => {}); }),
+      },
     ],
     // One "Switch Profile: X" entry per non-active profile, re-resolved on every palette open so it tracks registrations and the active profile.
     dynamicCommands: async () => {
       const profiles = await invokeLogOnly<{ name: string; path: string }[]>('list_profiles');
       const activePath = wsHub.getActiveProfilePath();
-      return profiles
+      const paused = await invoke<boolean>('get_global_paused');
+      return [{
+        id: 'toggle-global-pause', title: paused ? 'Resume Devora' : 'Pause Devora',
+        description: 'Hold background work at its next graceful boundary', icon: 'Ⅱ', shortcut: [],
+        run: closePaletteThen(() => {
+          void invoke<boolean>('toggle_global_paused').then(value => tabBar.setPaused(value)).catch(() => {});
+        }),
+      }, ...profiles
         .filter((p) => p.path !== activePath)
         .map((p) => ({
           id: `switch-profile:${p.path}`,
@@ -431,7 +449,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             wsHub.setActiveProfilePath(p.path);
             openWsHub();
           }),
-        }));
+        }))];
     },
   });
 

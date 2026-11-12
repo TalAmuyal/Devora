@@ -213,7 +213,9 @@ impl Drop for RepoUpdater {
 
 async fn wait_deadline(next: Option<Duration>, now: Duration) {
     match next {
-        Some(next) => tokio::time::sleep(next.saturating_sub(now)).await,
+        Some(next) => {
+            tokio::time::sleep(next.saturating_sub(now).min(Duration::from_secs(60))).await
+        }
         None => std::future::pending().await,
     }
 }
@@ -564,6 +566,64 @@ mod tests {
         worker.shutdown();
         assert!(received.try_recv().is_err());
     }
+    #[tokio::test(start_paused = true)]
+    async fn overdue_continuous_deadline_runs_within_a_minute_without_wake_notification() {
+        struct Clock {
+            now: Mutex<Duration>,
+            reads: std::sync::atomic::AtomicUsize,
+        }
+        impl MonotonicClock for Clock {
+            fn now(&self) -> std::io::Result<Duration> {
+                self.reads.fetch_add(1, Ordering::Release);
+                Ok(*self.now.lock().unwrap())
+            }
+        }
+        let (root, config, expected) = fixture();
+        let clock = Arc::new(Clock {
+            now: Mutex::new(Duration::from_secs(100)),
+            reads: std::sync::atomic::AtomicUsize::new(0),
+        });
+        let (updated, mut received) = tokio::sync::mpsc::unbounded_channel();
+        let work = Arc::new(Work {
+            config_path: config,
+            pause: Arc::new(Store::new()),
+            log: Arc::new(Log::open(&root.path().join("deadline.log")).unwrap()),
+            update: Arc::new(move |repo, _| {
+                updated.send(repo.to_owned()).unwrap();
+                Ok(repo_update::Outcome::Updated("test".into()))
+            }),
+            clock: clock.clone(),
+            requested: AtomicBool::new(true),
+            stop: AtomicBool::new(false),
+            wake: Notify::new(),
+            done: (Mutex::new(false), Condvar::new()),
+        });
+        let (_settings, changes) = watch::channel(Settings {
+            enabled: true,
+            interval_minutes: 60,
+        });
+        let run = work.clone();
+        let worker = tokio::spawn(async move { run_worker(run, changes).await });
+        for repo in &expected {
+            assert_eq!(received.recv().await.unwrap(), *repo);
+        }
+        // Completion establishes the hour-long deadline, then the next loop waits.
+        while clock.reads.load(Ordering::Acquire) < 4 {
+            tokio::task::yield_now().await;
+        }
+        *clock.now.lock().unwrap() = Duration::from_secs(7300);
+        let waiting_since = tokio::time::Instant::now();
+        tokio::time::advance(Duration::from_secs(60)).await;
+        for repo in &expected {
+            assert_eq!(received.recv().await.unwrap(), *repo);
+        }
+        assert!(waiting_since.elapsed() <= Duration::from_secs(60));
+        work.stop.store(true, Ordering::Release);
+        work.wake.notify_one();
+        worker.await.unwrap().unwrap();
+        assert!(received.try_recv().is_err());
+    }
+
     #[test]
     fn missing_and_unreadable_profiles_are_logged_without_losing_good_repos() {
         let (root, config, expected) = fixture();
