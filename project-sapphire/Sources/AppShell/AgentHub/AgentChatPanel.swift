@@ -4,20 +4,14 @@ import Layers
 import Observation
 import Store
 import SwiftUI
-import WebKit
 
 @MainActor
 @Observable
 final class AgentPanelModel {
 	let chat: AgentChat
 	var prepared = false
-	var rendererError: String?
 	@ObservationIgnored weak var editor: NSTextView?
-	@ObservationIgnored weak var webView: WKWebView?
 	@ObservationIgnored weak var transcript: TranscriptScrollView?
-	/// Whether this panel shows the native transcript (ADR-014) rather than the web one: the hidden
-	/// `DevoraNativeTranscript` default, until the native transcript is the only one.
-	let nativeTranscript = UserDefaults.standard.bool(forKey: "DevoraNativeTranscript")
 	@ObservationIgnored var onEditorReady: (() -> Void)?
 	@ObservationIgnored let theme: [String: String]
 
@@ -46,73 +40,6 @@ final class AgentPanelModel {
 		}
 		Task { await chat.answer(question.requestId, action: action, generation: current.generation) }
 		return true
-	}
-
-	func message(_ body: [String: Any]) {
-		if let permission = body["permission"] as? [String: String], let id = permission["id"],
-			let action = permission["action"], let raw = permission["generation"],
-			let generation = UInt64(raw)
-		{
-			Task { await chat.answer(id, action: action, generation: generation) }
-		}
-		if body.keys.contains("scroll") {
-			if let anchor = body["scroll"] as? [String: Any], let sequence = anchor["sequence"] as? String,
-				let id = UInt64(sequence), let offset = anchor["offset"] as? Int32
-			{
-				chat.saveScroll(ChatScrollAnchor(sequence: id, offset: offset))
-			} else if body["scroll"] is NSNull {
-				chat.saveScroll(nil)
-			}
-		}
-		if body["older"] as? Bool == true { Task { await chat.older() } }
-	}
-
-	func payload() -> [String: Any] {
-		let items = chat.items.map { item -> [String: Any] in
-			var row: [String: Any] = [
-				"sequence": String(item.sequence), "state": String(describing: item.state),
-			]
-			switch item.content {
-			case .user(let text, let error):
-				row.merge(["kind": "user", "text": text + (error.map { "\n\n\($0)" } ?? "")]) {
-					_, new in new
-				}
-			case .assistant(let text): row.merge(["kind": "assistant", "text": text]) { _, new in new }
-			case .thinking(let text, _): row.merge(["kind": "thinking", "text": text]) { _, new in new }
-			case .tool(_, let name, let input, let verdict, let result):
-				row.merge([
-					"kind": "tool", "text": "", "name": name, "input": prettyJSON(input),
-					"result": result?.text ?? "Awaiting result…",
-					"verdict": verdict?.kind ?? "",
-					"verdictDetail": verdict?.detail ?? "",
-				]) { _, new in new }
-			case .system(let kind, let text, _):
-				row.merge(["kind": "system", "text": text.isEmpty ? String(describing: kind) : text]) {
-					_, new in new
-				}
-			case .unknown(let json): row.merge(["kind": "system", "text": prettyJSON(json)]) { _, new in new }
-			}
-			return row
-		}
-		let questions = (chat.chat?.questions ?? []).map { question -> [String: Any] in
-			let sequence = chat.items.first { item in
-				if case .tool(let id, _, _, _, _) = item.content { return id == question.toolUseId }
-				return false
-			}?.sequence
-			var row: [String: Any] = [
-				"id": question.requestId, "tool": question.toolName,
-				"input": prettyJSON(question.inputJson),
-				"reason": question.decisionReason ?? "Permission requested",
-				"rules": question.suggestedRulesJson.map { prettyJSON($0) } ?? "",
-				"always": question.canAlwaysAllow, "generation": String(chat.chat?.generation ?? 0),
-			]
-			if let sequence { row["sequence"] = String(sequence) }
-			return row
-		}
-		let anchor: Any =
-			chat.anchor.map { ["sequence": String($0.sequence), "offset": $0.offset] as [String: Any] }
-			?? NSNull()
-		return ["items": items, "questions": questions, "anchor": anchor, "hasOlder": chat.hasOlder]
 	}
 }
 
@@ -144,7 +71,7 @@ struct AgentChatPanel: View {
 				}
 			}.padding(12)
 			Divider()
-			if let error = model.chat.chat?.error ?? model.chat.error ?? model.rendererError {
+			if let error = model.chat.chat?.error ?? model.chat.error {
 				HStack {
 					Text(error).textSelection(.enabled)
 					Spacer()
@@ -152,19 +79,13 @@ struct AgentChatPanel: View {
 				}
 				.padding(12).foregroundStyle(.orange)
 			}
-			if model.prepared && model.nativeTranscript {
+			if model.prepared {
 				TranscriptView(
 					items: model.chat.items, questions: model.chat.chat?.questions ?? [],
 					generation: model.chat.chat?.generation ?? 0, theme: model.theme, hasOlder: model.chat.hasOlder, anchor: model.chat.anchor,
 					onScroll: { model.chat.saveScroll($0) }, onNeedsOlder: { Task { await model.chat.older() } },
 					onAnswer: { id, action, generation in Task { await model.chat.answer(id, action: action, generation: generation) } },
 					onView: { model.transcript = $0 })
-			} else if model.prepared {
-				WebContentView(
-					content: { ("", model.theme) },
-					onError: { model.rendererError = Store.describe($0) },
-					onView: { model.webView = $0 }, revision: "chat-\(model.chat.revision)",
-					chat: model.payload, onMessage: model.message)
 			} else {
 				ProgressView("Opening agent…").frame(maxWidth: .infinity, maxHeight: .infinity)
 			}

@@ -21,10 +21,9 @@ Then('the agent transcript contains {string}', async function (this: SapphireWor
 Then('the agent transcript has a {string} item', async function (this: SapphireWorld, kind: string) {
   await this.bridge.waitFor(`transcript kind ${kind}`, () => this.bridge.agentChat(), s => s.dom.rows.some(row => row.kind.includes(kind)));
 });
-Then('the agent transcript has no executable content', async function (this: SapphireWorld) {
-  const { dom } = await this.bridge.agentChat();
-  assert.equal(dom.scripts, 0);
-  assert.equal(dom.unsafe, 0);
+// The native transcript runs nothing: markup an agent or a user writes is drawn as its text.
+Then('the agent transcript shows {string} as text', async function (this: SapphireWorld, markup: string) {
+  await this.bridge.waitFor(`transcript showing ${markup}`, () => this.bridge.agentChat(), s => s.dom.text.includes(markup));
 });
 Then('the agent prompt draft is {string}', async function (this: SapphireWorld, draft: string) {
   await this.bridge.waitFor('the saved draft', () => this.bridge.agentChat(), s => s.draft === draft);

@@ -17,8 +17,6 @@ export class SapphireWorld extends World {
   app!: ChildProcess;
   /** Bundled-tools scenarios use the signed distribution and an isolated login HOME. */
   bundledTools = false;
-  /** Whether the app shows the native agent transcript (ADR-014): `SAPPHIRE_NATIVE_TRANSCRIPT=1`, for `test-acceptance-native`. */
-  nativeTranscript = false;
   home?: string;
   bridge!: Bridge;
   /** The scenario's own directory, holding its config and its app state. */
@@ -55,7 +53,7 @@ export class SapphireWorld extends World {
 
   /** Launches the app on the scenario's config and state; it becomes the app the steps drive. */
   async launch(): Promise<void> {
-    const { app, bridge } = await launch(this.testConfigPath, this.stateDir, { binary: this.bundledTools ? BUNDLED_APP_BINARY : undefined, home: this.home, environment: claudeEnvironment(), arguments: this.nativeTranscript ? ['-DevoraNativeTranscript', 'YES'] : [] });
+    const { app, bridge } = await launch(this.testConfigPath, this.stateDir, { binary: this.bundledTools ? BUNDLED_APP_BINARY : undefined, home: this.home, environment: claudeEnvironment() });
     this.app = app;
     this.bridge = bridge;
   }

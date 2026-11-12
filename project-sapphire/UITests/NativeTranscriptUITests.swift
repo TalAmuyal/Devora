@@ -36,14 +36,15 @@ final class NativeTranscriptUITests: XCTestCase {
 		// read once it holds still.
 		let codeTop = settledTop(of: code)
 		code.scroll(byDeltaX: 0, deltaY: 300)
-		let scrolledTop = settledTop(of: code)
+		let scrolledTop = settledTop(of: code, movedFrom: codeTop)
 		XCTAssertGreaterThan(scrolledTop, codeTop + 100, "A vertical scroll over a code block must scroll the transcript")
 		code.scroll(byDeltaX: -300, deltaY: 0)
 		XCTAssertEqual(settledTop(of: code), scrolledTop, accuracy: 1, "A sideways scroll over a code block must not scroll the transcript")
 
 		// Scrolled up, a new turn arrives below without moving what the reader looks at.
+		let bottom = try TranscriptSnapshot(transcript)
 		transcript.scroll(byDeltaX: 0, deltaY: 600)
-		view = try settledSnapshot(of: transcript)
+		view = try settledSnapshot(of: transcript, after: bottom)
 		let reading = try XCTUnwrap(view.topTurn, "A reply must be in view after scrolling up")
 		send("History turn 240", from: editor, in: app)
 		let after = try TranscriptSnapshot(transcript)
@@ -64,7 +65,7 @@ final class NativeTranscriptUITests: XCTestCase {
 			// that the row on top before the step that loads stays in view after it, unless the view jumps.
 			let step = view.distanceFromTop > 400 + 120 ? 400 : view.visibleArea.height / 2
 			transcript.scroll(byDeltaX: 0, deltaY: step)
-			view = try settledSnapshot(of: transcript)
+			view = try settledSnapshot(of: transcript, after: beforeLoad)
 			steps.append("\(Int(step)) from \(Int(beforeLoad.distanceFromTop)) to \(Int(view.distanceFromTop))")
 			scrolls += 1
 		}
@@ -102,14 +103,13 @@ final class NativeTranscriptUITests: XCTestCase {
 		XCTAssertTrue(poll { !app.buttons["■ Stop"].exists }, "The turn must go on to its end once answered")
 	}
 
-	/// Launches the app on the native transcript, creates the "Echo" agent (the fake CLI) and focuses its editor.
+	/// Launches the app, creates the "Echo" agent (the fake CLI) and focuses its editor.
 	@MainActor
 	private func openAgent() throws -> (app: XCUIApplication, editor: XCUIElement, transcript: XCUIElement) {
 		continueAfterFailure = false
 		let scratch = FileManager.default.temporaryDirectory.appending(path: "sapphire-transcript-uitest-\(UUID().uuidString)")
 		try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
 		let app = XCUIApplication()
-		app.launchArguments = ["-DevoraNativeTranscript", "YES"]
 		app.launchEnvironment["DEVORA_TEST_MODE"] = "1"
 		app.launchEnvironment["DEVORA_CONFIG_PATH"] = try writeConfigWithAProfile(in: scratch).path
 		app.launchEnvironment["DEVORA_STATE_DIR"] = scratch.appending(path: "state").path
@@ -137,15 +137,23 @@ final class NativeTranscriptUITests: XCTestCase {
 		let editor = app.textViews["agent-prompt"]
 		XCTAssertTrue(editor.waitForExistence(timeout: 15), "Creating an agent must open its editor")
 		let transcript = app.scrollViews["agent-transcript-scroll"]
-		XCTAssertTrue(transcript.waitForExistence(timeout: 15), "The native transcript must replace the web one")
+		XCTAssertTrue(transcript.waitForExistence(timeout: 15), "The agent tab must show its transcript")
 		editor.click()
 		return (app, editor, transcript)
 	}
 
-	/// The transcript once a scroll has landed: the same position and rows in two snapshots 100 ms apart (or after 5 s). A
-	/// snapshot taken at once can come before the scroll is applied, and a step then seems to move twice as far.
+	/// The transcript once a scroll from `before` has landed: first moved (its position or its rows differ from `before`,
+	/// unless `before` was already at the top, where a scroll up can't move it), then the same position and rows in two
+	/// snapshots 100 ms apart (or after 5 s each). Holding still alone isn't enough: on a slow machine the view also holds
+	/// still before a scroll starts, and the next step would then carry two scrolls.
 	@MainActor
-	private func settledSnapshot(of transcript: XCUIElement) throws -> TranscriptSnapshot {
+	private func settledSnapshot(of transcript: XCUIElement, after before: TranscriptSnapshot) throws -> TranscriptSnapshot {
+		if before.distanceFromTop > 0 {
+			_ = poll(timeout: 5) {
+				guard let now = try? TranscriptSnapshot(transcript) else { return false }
+				return now.distanceFromTop != before.distanceFromTop || now.rows != before.rows
+			}
+		}
 		var last = try TranscriptSnapshot(transcript)
 		var result: TranscriptSnapshot? = nil
 		_ = poll(timeout: 5) {
@@ -159,9 +167,11 @@ final class NativeTranscriptUITests: XCTestCase {
 		return try result ?? TranscriptSnapshot(transcript)
 	}
 
-	/// `element`'s top once it has held still for 250 ms (or after 5 s).
+	/// `element`'s top once it has held still for 250 ms (or after 5 s); with `movedFrom`, only once it has left that top
+	/// first, since it also holds still before a scroll starts.
 	@MainActor
-	private func settledTop(of element: XCUIElement) -> CGFloat {
+	private func settledTop(of element: XCUIElement, movedFrom start: CGFloat? = nil) -> CGFloat {
+		if let start { _ = poll(timeout: 5) { element.frame.minY != start } }
 		var top = element.frame.minY
 		var still = Date()
 		_ = poll(timeout: 5) {
