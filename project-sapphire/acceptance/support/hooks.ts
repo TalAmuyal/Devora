@@ -23,7 +23,6 @@ Before(async function (this: SapphireWorld, { pickle }) {
   this.stateDir = path.join(this.scenarioDir, 'state');
   writeTestConfig(this.testConfigPath, []);
   this.bundledTools = pickle.tags.some(tag => tag.name === '@bundled-tools');
-  this.nativeTranscript = process.env.SAPPHIRE_NATIVE_TRANSCRIPT === '1';
   if (this.bundledTools) {
     // No injected PATH: devora-terminal must discover the real bundle Resources.
     const resources = path.resolve(path.dirname(BUNDLED_APP_BINARY), '../Resources');

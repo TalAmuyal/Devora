@@ -15,11 +15,12 @@ struct MarkdownView: View {
 
 private struct MarkdownBlockView: View {
 	let block: MarkdownBlock
+	@Environment(\.transcriptTheme) private var theme
 
 	var body: some View {
 		switch block {
 		case .heading(let level, let runs):
-			Text(attributed(runs)).font(level <= 1 ? .title2 : level == 2 ? .title3 : .headline)
+			Text(attributed(runs)).font(level <= 1 ? .title2 : level == 2 ? .title3 : .headline).foregroundStyle(theme.heading)
 		case .paragraph(let runs):
 			Text(attributed(runs))
 		case .list(let start, let items):
@@ -43,7 +44,7 @@ private struct MarkdownBlockView: View {
 							.gridColumnAlignment(horizontal(column < alignments.count ? alignments[column] : .leading))
 					}
 				}
-				Divider()
+				Rectangle().fill(theme.border).frame(height: 1)
 				ForEach(rows.indices, id: \.self) { row in
 					GridRow {
 						ForEach(rows[row].indices, id: \.self) { column in
@@ -54,12 +55,32 @@ private struct MarkdownBlockView: View {
 			}
 		case .quote(let blocks):
 			HStack(alignment: .top, spacing: 8) {
-				RoundedRectangle(cornerRadius: 1).fill(.secondary).frame(width: 3)
-				MarkdownView(blocks: blocks).foregroundStyle(.secondary)
+				RoundedRectangle(cornerRadius: 1).fill(theme.quoteEdge).frame(width: 3)
+				MarkdownView(blocks: blocks).foregroundStyle(theme.secondary)
 			}
 		case .thematicBreak:
-			Divider()
+			Rectangle().fill(theme.border).frame(height: 1)
 		}
+	}
+
+	/// A block's inline runs as one attributed string.
+	private func attributed(_ runs: [InlineRun]) -> AttributedString {
+		var result = AttributedString()
+		for run in runs {
+			var part = AttributedString(run.text)
+			var intent: InlinePresentationIntent = []
+			if run.style.contains(.emphasis) { intent.insert(.emphasized) }
+			if run.style.contains(.strong) { intent.insert(.stronglyEmphasized) }
+			if run.style.contains(.code) {
+				part.font = .system(.body, design: .monospaced)
+				part.backgroundColor = theme.inlineCode
+			}
+			if !intent.isEmpty { part.inlinePresentationIntent = intent }
+			if run.style.contains(.strikethrough) { part.strikethroughStyle = .single }
+			if let link = run.link { part.link = link }
+			result += part
+		}
+		return result
 	}
 
 	private func horizontal(_ alignment: TableAlignment) -> HorizontalAlignment {
@@ -73,34 +94,15 @@ private struct MarkdownBlockView: View {
 
 private struct CodeBlockView: View {
 	let text: String
+	@Environment(\.transcriptTheme) private var theme
 
 	var body: some View {
 		// Sideways, never wrapped: the transcript takes the vertical scrolls over it (`WheelRouting`).
 		ScrollView(.horizontal) {
 			Text(text).font(.system(.callout, design: .monospaced)).fixedSize(horizontal: true, vertical: false).padding(8)
 		}
-		.background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 6))
+		.background(theme.codeBlock, in: RoundedRectangle(cornerRadius: 6))
 	}
-}
-
-/// A block's inline runs as one attributed string.
-func attributed(_ runs: [InlineRun]) -> AttributedString {
-	var result = AttributedString()
-	for run in runs {
-		var part = AttributedString(run.text)
-		var intent: InlinePresentationIntent = []
-		if run.style.contains(.emphasis) { intent.insert(.emphasized) }
-		if run.style.contains(.strong) { intent.insert(.stronglyEmphasized) }
-		if run.style.contains(.code) {
-			part.font = .system(.body, design: .monospaced)
-			part.backgroundColor = .secondary.opacity(0.15)
-		}
-		if !intent.isEmpty { part.inlinePresentationIntent = intent }
-		if run.style.contains(.strikethrough) { part.strikethroughStyle = .single }
-		if let link = run.link { part.link = link }
-		result += part
-	}
-	return result
 }
 
 extension EnvironmentValues {
@@ -114,6 +116,7 @@ extension EnvironmentValues {
 private struct DiagramBlockView: View {
 	let source: String
 	@Environment(\.diagrams) private var diagrams
+	@Environment(\.transcriptTheme) private var theme
 
 	static let placeholderHeight: CGFloat = 120
 
@@ -128,12 +131,12 @@ private struct DiagramBlockView: View {
 				.frame(maxWidth: drawn.image.size.width, alignment: .leading)
 		case .pending:
 			RoundedRectangle(cornerRadius: 6)
-				.fill(.quaternary.opacity(0.5))
+				.fill(theme.codeBlock)
 				.frame(height: Self.placeholderHeight)
 				.overlay { ProgressView().controlSize(.small) }
 		case .failed:
 			VStack(alignment: .leading, spacing: 4) {
-				Text("⚠ Could not render this Mermaid diagram — showing source").font(.caption).foregroundStyle(.secondary)
+				Text("⚠ Could not render this Mermaid diagram — showing source").font(.caption).foregroundStyle(theme.error)
 				CodeBlockView(text: source)
 			}
 		}

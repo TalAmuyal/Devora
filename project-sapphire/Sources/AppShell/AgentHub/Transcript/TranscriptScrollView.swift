@@ -45,17 +45,27 @@ final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NSTableVi
 	private var lastTop: CGFloat = 0
 	private var wheelRouting = WheelRouting()
 	private var wheelMonitor: Any?
-	/// Draws the rows' Mermaid diagrams; its theme is the web renderer's, as the web transcript draws them.
+	/// Draws the rows' Mermaid diagrams, in the web renderer's colors for the theme, as the previews draw them.
 	private let renderer: MermaidRenderer
+	/// The Devora theme's CSS variables: the rows' colors and the page's (`colors`), and the diagrams' theme.
 	var diagramTheme: [String: String] = [:] {
 		didSet {
-			guard diagramTheme != oldValue, !entries.isEmpty else { return }
+			guard diagramTheme != oldValue else { return }
+			colors = TranscriptTheme(diagramTheme)
+			backgroundColor = colors.background ?? .clear
+			drawsBackground = colors.background != nil
+			// What the theme doesn't color (buttons, scrollers, the system's quieter colors) follows a dark or light page.
+			appearance = colors.background.map { NSAppearance(named: $0.isDark ? .darkAqua : .aqua) } ?? nil
+			guard !entries.isEmpty else { return }
+			// The rows showing take the new colors at once; the others as they come into view.
+			table.reloadData(forRowIndexes: IndexSet(integersIn: Range(table.rows(in: table.visibleRect)) ?? 0..<0), columnIndexes: [0])
 			// Every diagram is drawn again in the new colors: their rows' heights are estimates until then.
 			findPending()
 			measureVisible()
 			scheduleIdle()
 		}
 	}
+	private(set) var colors = TranscriptTheme()
 	private var diagramToken: UUID?
 	private(set) var measurements = 0
 
@@ -206,10 +216,10 @@ final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NSTableVi
 		switch entries[row] {
 		case .item(let item):
 			let sequence = item.sequence
-			return TranscriptEntryView(model: .row(model(row)), toggle: { [weak self] in self?.toggle(sequence) })
+			return TranscriptEntryView(model: .row(model(row)), theme: colors, toggle: { [weak self] in self?.toggle(sequence) })
 		case .card(let card):
 			let id = card.question.requestId
-			return TranscriptEntryView(model: .card(card), answer: { [weak self] action in self?.onAnswer(id, action, card.generation) })
+			return TranscriptEntryView(model: .card(card), theme: colors, answer: { [weak self] action in self?.onAnswer(id, action, card.generation) })
 		}
 	}
 
@@ -610,7 +620,7 @@ final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NSTableVi
 		return [
 			"rows": rows, "cards": cards, "text": texts.joined(separator: "\n"), "diagrams": diagrams,
 			"thinkingOpen": isFirstExpanded(.thinking), "toolOpen": isFirstExpanded(.tool),
-			"verdict": verdict ?? "", "scripts": 0, "unsafe": 0,
+			"verdict": verdict ?? "",
 			"top": Int(top.rounded()), "topSequence": visibleAnchor.map { String($0.sequence) as Any } ?? NSNull(),
 			"settled": isSettled, "measurements": measurements,
 		]
@@ -625,14 +635,20 @@ struct TranscriptEntryView: View {
 	}
 
 	let model: Model
+	var theme = TranscriptTheme()
 	var toggle: () -> Void = {}
 	var answer: (String) -> Void = { _ in }
 
 	var body: some View {
-		switch model {
-		case .row(let row): TranscriptRow(model: row, toggle: toggle)
-		case .card(let card): PermissionCardView(card: card, answer: answer)
+		Group {
+			switch model {
+			case .row(let row): TranscriptRow(model: row, toggle: toggle)
+			case .card(let card): PermissionCardView(card: card, answer: answer)
+			}
 		}
+		.environment(\.transcriptTheme, theme)
+		.foregroundStyle(theme.text)
+		.tint(theme.link)
 	}
 }
 
@@ -655,9 +671,11 @@ final class TranscriptCell: NSTableCellView {
 
 	/// Whether the cell shows a row (rather than waiting for reuse).
 	var isShowing: Bool { host.rootView != nil }
+	/// The row it shows, if any.
+	var entry: TranscriptEntryView? { host.rootView }
 
 	func show(_ view: TranscriptEntryView) {
-		guard view.model != host.rootView?.model else { return }
+		guard view.model != host.rootView?.model || view.theme != host.rootView?.theme else { return }
 		host.rootView = view
 	}
 

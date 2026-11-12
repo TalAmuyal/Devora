@@ -17,7 +17,6 @@ public final class AgentChat {
 	public private(set) var hasOlder = true
 	public private(set) var loadingOlder = false
 	public private(set) var sending = false
-	public private(set) var revision: UInt64 = 0
 	public private(set) var enterSends = false
 	public private(set) var error: String?
 	@ObservationIgnored private weak var store: Store?
@@ -49,7 +48,6 @@ public final class AgentChat {
 						self.items.removeFirst(self.items.count - 200)
 						self.hasOlder = true
 					}
-					self.revision &+= 1
 				}
 			} catch { self?.fail(error) }
 		}
@@ -182,7 +180,6 @@ public final class AgentChat {
 		loadingOlder = true
 		defer {
 			loadingOlder = false
-			revision &+= 1
 		}
 		do {
 			let page = try await core.agentHistoryBefore(

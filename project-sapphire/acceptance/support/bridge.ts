@@ -8,13 +8,11 @@ export interface AgentChatState {
     text: string;
     rows: { sequence: string; kind: string; text: string; offset: number }[];
     cards: number;
-    /** Mermaid diagrams drawn and failed (the native transcript also counts pending ones, and those shown as source while streaming). */
-    diagrams: { drawn: number; failed: number; pending?: number; source?: number };
+    /** Mermaid diagrams drawn, failed, still pending, and shown as source while their reply streams. */
+    diagrams: { drawn: number; failed: number; pending: number; source: number };
     thinkingOpen: boolean;
     toolOpen: boolean;
     verdict: string;
-    scripts: number;
-    unsafe: number;
     top: number;
     topSequence: string | null;
   };

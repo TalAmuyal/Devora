@@ -89,15 +89,16 @@ struct PermissionCardView: View {
 	let card: PermissionCard
 	/// Answers the question: "allow", "deny" or "always".
 	var answer: (String) -> Void = { _ in }
+	@Environment(\.transcriptTheme) private var theme
 
 	var body: some View {
 		VStack(alignment: .leading, spacing: 6) {
 			Text(card.question.toolName).bold()
 			Text(prettyJSON(card.question.inputJson)).font(.system(.callout, design: .monospaced))
-			Text(card.reason).foregroundStyle(.secondary)
+			Text(card.reason).foregroundStyle(theme.secondary)
 			if let rules = card.rules {
 				VStack(alignment: .leading, spacing: 2) {
-					Text(card.question.canAlwaysAllow ? "Always allow saves" : "Suggested").font(.caption).foregroundStyle(.secondary)
+					Text(card.question.canAlwaysAllow ? "Always allow saves" : "Suggested").font(.caption).foregroundStyle(theme.secondary)
 					ForEach(rules.indices, id: \.self) { index in Text(rules[index]) }
 				}
 				.help(card.question.suggestedRulesJson.map(prettyJSON) ?? "")

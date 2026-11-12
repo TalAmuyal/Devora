@@ -8,12 +8,12 @@ Feature: Agent chat panel
     And an agent "Echo" was created
     When the user opens the chat for "Echo"
 
-  Scenario: Sending a prompt renders typed rows and sanitizes content
+  Scenario: Sending a prompt renders typed rows and shows markup as text
     When the user sends the agent prompt "Hello <img src=x onerror=alert(1)><script>alert(2)</script>"
     Then the agent transcript contains "Hello"
     And the agent transcript has a "chat-user" item
     And the agent transcript has a "chat-assistant" item
-    And the agent transcript has no executable content
+    And the agent transcript shows "<img src=x onerror=alert(1)><script>alert(2)</script>" as text
     And the agent prompt draft is ""
 
   Scenario: A Mermaid diagram in a reply is drawn, and one that doesn't parse shows its source

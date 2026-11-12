@@ -96,6 +96,7 @@ struct TranscriptRow: View {
 	let model: TranscriptRowModel
 	/// Expands or collapses a thinking or tool row.
 	var toggle: () -> Void = {}
+	@Environment(\.transcriptTheme) private var theme
 
 	var body: some View {
 		content
@@ -131,14 +132,14 @@ struct TranscriptRow: View {
 		case .user(let text, let error):
 			VStack(alignment: .leading, spacing: 4) {
 				markdown(text)
-				if let error { Text(error).foregroundStyle(.red) }
+				if let error { Text(error).foregroundStyle(theme.error) }
 			}
 		case .assistant(let text):
 			markdown(text)
 		case .thinking(let text, _):
 			VStack(alignment: .leading, spacing: 4) {
 				summary { Text("Thinking") }
-				if model.expanded { markdown(text).foregroundStyle(.secondary) }
+				if model.expanded { markdown(text).foregroundStyle(theme.secondary) }
 			}
 		case .tool(_, let name, let input, let verdict, let result):
 			VStack(alignment: .leading, spacing: 4) {
@@ -157,7 +158,7 @@ struct TranscriptRow: View {
 				}
 			}
 		case .system, .unknown:
-			Text(model.plainText).font(.callout).foregroundStyle(.secondary)
+			Text(model.plainText).font(.callout).foregroundStyle(theme.secondary)
 		}
 	}
 
@@ -173,7 +174,7 @@ struct TranscriptRow: View {
 				Image(systemName: model.expanded ? "chevron.down" : "chevron.right").font(.caption2)
 				label()
 			}
-			.foregroundStyle(.secondary)
+			.foregroundStyle(theme.secondary)
 			.contentShape(Rectangle())
 		}
 		.buttonStyle(.plain)

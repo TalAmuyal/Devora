@@ -8,10 +8,8 @@ struct WebContentView: NSViewRepresentable {
 	let onError: (any Error) -> Void
 	let onView: (WKWebView) -> Void
 	var revision: String = "guide"
-	var chat: (() -> [String: Any])? = nil
-	var onMessage: ([String: Any]) -> Void = { _ in }
 
-	func makeCoordinator() -> Coordinator { Coordinator(content: content, onError: onError, revision: revision, chat: chat, onMessage: onMessage) }
+	func makeCoordinator() -> Coordinator { Coordinator(content: content, onError: onError, revision: revision) }
 
 	func makeNSView(context: Context) -> WKWebView {
 		let configuration = WKWebViewConfiguration()
@@ -26,8 +24,6 @@ struct WebContentView: NSViewRepresentable {
 
 	func updateNSView(_ view: WKWebView, context: Context) {
 		context.coordinator.content = content
-		context.coordinator.chat = chat
-		context.coordinator.onMessage = onMessage
 		context.coordinator.revision = revision
 		context.coordinator.render(in: view)
 	}
@@ -42,14 +38,10 @@ struct WebContentView: NSViewRepresentable {
 		var content: () throws -> (String, [String: String])
 		let onError: (any Error) -> Void
 		var revision: String
-		var chat: (() -> [String: Any])?
-		var onMessage: ([String: Any]) -> Void
 		private var ready = false
 		private var rendering = false
 		private var renderedRevision: String?
-		init(content: @escaping () throws -> (String, [String: String]), onError: @escaping (any Error) -> Void, revision: String, chat: (() -> [String: Any])?, onMessage: @escaping ([String: Any]) -> Void) {
-			self.chat = chat
-			self.onMessage = onMessage
+		init(content: @escaping () throws -> (String, [String: String]), onError: @escaping (any Error) -> Void, revision: String) {
 			self.revision = revision
 			self.content = content
 			self.onError = onError
@@ -61,7 +53,7 @@ struct WebContentView: NSViewRepresentable {
 				onError(NSError(domain: "WebContent", code: 1, userInfo: [NSLocalizedDescriptionKey: error]))
 				return
 			}
-			guard body["ready"] as? Bool == true else { onMessage(body); return }
+			guard body["ready"] as? Bool == true else { return }
 			ready = true
 			render(in: webView)
 		}
@@ -72,10 +64,7 @@ struct WebContentView: NSViewRepresentable {
 			do {
 				let (markdown, theme) = try content()
 				rendering = true
-				let script = chat == nil ? "await window.devoraRender(markdown, theme)" : "await window.devoraRenderChat(chat, theme)"
-				var arguments: [String: Any] = ["markdown": markdown, "theme": theme]
-				if let chat { arguments["chat"] = chat() }
-				webView.callAsyncJavaScript(script, arguments: arguments, in: nil, in: .page) { [weak self, weak webView] result in
+				webView.callAsyncJavaScript("await window.devoraRender(markdown, theme)", arguments: ["markdown": markdown, "theme": theme], in: nil, in: .page) { [weak self, weak webView] result in
 					guard let self, let webView else { return }
 					self.rendering = false
 					self.renderedRevision = requested
