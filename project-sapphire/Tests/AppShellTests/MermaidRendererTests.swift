@@ -136,8 +136,19 @@ struct WebDiagramDrawerTests {
 		guard case .drawn(let drawn) = renderer.outcome(diagram) else { return #expect(Bool(false), "The diagram must be drawn") }
 		#expect(drawn.image.size.width > 50 && drawn.image.size.width <= 500, "At most the row's width: \(drawn.image.size)")
 		let pixels = try #require(drawn.image.representations.first).pixelsWide
-		#expect(CGFloat(pixels) >= drawn.image.size.width * 2 - 1, "At the screen's scale: \(pixels) pixels for \(drawn.image.size.width) points")
+		#expect(abs(CGFloat(pixels) - drawn.image.size.width * 2) <= 2, "At the diagram's scale: \(pixels) pixels for \(drawn.image.size.width) points")
 		#expect(renderer.outcome(failing) == .failed, "Source that doesn't parse fails, as on the web")
+	}
+
+	@Test func aDiagramIsDrawnAtItsScaleWhateverTheScreens() async throws {
+		// This Mac's screen is at most 2×, and a CI runner's 1×: 3× is drawn only if the drawer makes it so.
+		let renderer = MermaidRenderer(drawer: WebDiagramDrawer(root: webRenderer), timeout: .seconds(20))
+		let diagram = DiagramKey(source: "flowchart LR\n  A[Client] --> B[Server]", width: 500, scale: 3, theme: [:])
+		renderer.request(diagram, theme: [:])
+		#expect(await eventually(seconds: 30) { renderer.outcome(diagram).map { $0 != .pending } ?? false })
+		guard case .drawn(let drawn) = renderer.outcome(diagram) else { return #expect(Bool(false), "The diagram must be drawn") }
+		let pixels = try #require(drawn.image.representations.first).pixelsWide
+		#expect(abs(CGFloat(pixels) - drawn.image.size.width * 3) <= 3, "\(pixels) pixels for \(drawn.image.size.width) points")
 	}
 }
 

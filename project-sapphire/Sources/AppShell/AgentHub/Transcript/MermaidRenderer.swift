@@ -202,7 +202,16 @@ final class WebDiagramDrawer: NSObject, DiagramDrawer, WKScriptMessageHandler {
 		let configuration = WKSnapshotConfiguration()
 		configuration.rect = rect
 		configuration.afterScreenUpdates = true
-		return try await view.takeSnapshot(configuration: configuration)
+		var image = try await view.takeSnapshot(configuration: configuration)
+		// The snapshot's pixels follow a screen, not the window's scale (a CI runner's screen is 1×), so one at another
+		// scale is drawn again at the width that gives the diagram's.
+		let drawnScale = CGFloat(image.representations.first?.pixelsWide ?? 0) / rect.width
+		if drawnScale > 0, abs(drawnScale - key.scale) > 0.01 {
+			configuration.snapshotWidth = NSNumber(value: Double(rect.width * key.scale / drawnScale))
+			image = try await view.takeSnapshot(configuration: configuration)
+		}
+		image.size = rect.size
+		return image
 	}
 
 	func reset() {
