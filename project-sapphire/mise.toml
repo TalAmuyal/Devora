@@ -154,10 +154,10 @@ depends = ["build", "npm-install", "test-tools"]
 run = "node --import tsx ./node_modules/.bin/cucumber-js acceptance/features/ ../acceptance/features/ --tags 'not @ember-only and not @bundled-tools' --import 'acceptance/steps/*.ts' --import 'acceptance/support/*.ts' --format progress"
 
 [tasks.test-acceptance-native]
-description = "Run the agent chat scenarios again on the native transcript (ADR-014), until it is the only one; permission cards join it with their native rows"
+description = "Run the agent chat scenarios again on the native transcript (ADR-014), until it is the only one"
 depends = ["build", "npm-install", "test-tools"]
 env = { SAPPHIRE_NATIVE_TRANSCRIPT = "1" }
-run = "node --import tsx ./node_modules/.bin/cucumber-js acceptance/features/agent-chat.feature --tags 'not @permission-card' --import 'acceptance/steps/*.ts' --import 'acceptance/support/*.ts' --format progress"
+run = "node --import tsx ./node_modules/.bin/cucumber-js acceptance/features/agent-chat.feature --import 'acceptance/steps/*.ts' --import 'acceptance/support/*.ts' --format progress"
 
 [tasks.test-ui]
 description = "Run the XCUITests, which drive the app with real input; skipped, with the reason, where they can't run"

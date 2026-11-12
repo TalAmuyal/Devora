@@ -93,14 +93,14 @@ struct RowHeightsTests {
 
 @MainActor
 struct TranscriptScrollViewTests {
-	/// A transcript in an offscreen window, laid out at 600 by 400 points, with legacy scrollers (which take width), as
-	/// with a mouse and on CI. The system's preferred style is resolved lazily, a moment into the process, and switches
-	/// every scroll view to it; starting with legacy ones, the width can't change under a test, whatever the Mac has.
+	/// A transcript in an offscreen window, laid out at 600 by 400 points, with no scroller: AppKit switches every scroll
+	/// view to the system's preferred scroller style whenever it applies it again (a web view does, in another test), and
+	/// a legacy scroller takes width, so a test's width would change under it.
 	private func shown(_ items: [TranscriptItem], anchor: ChatScrollAnchor? = nil) -> (NSWindow, TranscriptScrollView) {
 		let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 400), styleMask: [.titled], backing: .buffered, defer: false)
 		window.isReleasedWhenClosed = false
 		let view = TranscriptScrollView(anchor: anchor)
-		view.scrollerStyle = .legacy
+		view.hasVerticalScroller = false
 		view.frame = window.contentView!.bounds
 		view.autoresizingMask = [.width, .height]
 		window.contentView!.addSubview(view)
@@ -534,7 +534,7 @@ struct TranscriptExpansionTests {
 		let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 400), styleMask: [.titled], backing: .buffered, defer: false)
 		window.isReleasedWhenClosed = false
 		let view = TranscriptScrollView(anchor: nil)
-		view.scrollerStyle = .legacy
+		view.hasVerticalScroller = false
 		view.frame = window.contentView!.bounds
 		window.contentView!.addSubview(view)
 		window.layoutIfNeeded()
@@ -605,7 +605,7 @@ struct TranscriptToggleAtTheBottomTests {
 		window.isReleasedWhenClosed = false
 		defer { window.close() }
 		let view = TranscriptScrollView(anchor: nil)
-		view.scrollerStyle = .legacy
+		view.hasVerticalScroller = false
 		view.frame = window.contentView!.bounds
 		window.contentView!.addSubview(view)
 		window.layoutIfNeeded()
