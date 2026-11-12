@@ -12,6 +12,7 @@ struct RowHeights {
 	private struct Entry {
 		let row: TranscriptEntry
 		let expanded: Bool
+		let diagrams: Int
 		let width: CGFloat
 		let height: CGFloat
 	}
@@ -20,13 +21,16 @@ struct RowHeights {
 	/// Per kind and expansion: the sum of measured heights and of the guesses for those same rows.
 	private var calibration: [Shape: (measured: CGFloat, guessed: CGFloat)] = [:]
 
-	func isExact(_ row: TranscriptEntry, expanded: Bool = false, width: CGFloat) -> Bool {
+	/// `diagrams` fingerprints the row's Mermaid diagrams as drawn (none, placeholders, images): an image arriving makes the
+	/// row's height an estimate again.
+	func isExact(_ row: TranscriptEntry, expanded: Bool = false, diagrams: Int = 0, width: CGFloat) -> Bool {
 		guard let entry = entries[row.key] else { return false }
-		return entry.width == width && entry.row == row && entry.expanded == expanded
+		return entry.width == width && entry.row == row && entry.expanded == expanded && entry.diagrams == diagrams
 	}
 
 	func height(_ row: TranscriptEntry, expanded: Bool = false, width: CGFloat) -> CGFloat {
 		if let entry = entries[row.key], entry.expanded == expanded {
+			// A diagram drawn since: the old height is the closest estimate until the row is measured again.
 			if entry.row == row { return entry.height }
 			// Streaming grows a row; its old height is closer than a guess, and the row is measured again soon anyway.
 			if Kind(row) == Kind(entry.row) { return max(entry.height, estimate(row, expanded: expanded, width: width)) }
@@ -34,13 +38,13 @@ struct RowHeights {
 		return estimate(row, expanded: expanded, width: width)
 	}
 
-	mutating func record(_ row: TranscriptEntry, expanded: Bool = false, width: CGFloat, height: CGFloat) {
+	mutating func record(_ row: TranscriptEntry, expanded: Bool = false, diagrams: Int = 0, width: CGFloat, height: CGFloat) {
 		let shape = Shape(row, expanded: expanded)
 		var sums = calibration[shape] ?? (0, 0)
 		sums.measured += height
 		sums.guessed += Self.guess(row, expanded: expanded, width: width)
 		calibration[shape] = sums
-		entries[row.key] = Entry(row: row, expanded: expanded, width: width, height: height)
+		entries[row.key] = Entry(row: row, expanded: expanded, diagrams: diagrams, width: width, height: height)
 	}
 
 	/// Forgets the rows no longer in the transcript.

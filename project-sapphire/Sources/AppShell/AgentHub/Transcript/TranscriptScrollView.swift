@@ -45,13 +45,27 @@ final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NSTableVi
 	private var lastTop: CGFloat = 0
 	private var wheelRouting = WheelRouting()
 	private var wheelMonitor: Any?
+	/// Draws the rows' Mermaid diagrams; its theme is the web renderer's, as the web transcript draws them.
+	private let renderer: MermaidRenderer
+	var diagramTheme: [String: String] = [:] {
+		didSet {
+			guard diagramTheme != oldValue, !entries.isEmpty else { return }
+			// Every diagram is drawn again in the new colors: their rows' heights are estimates until then.
+			findPending()
+			measureVisible()
+			scheduleIdle()
+		}
+	}
+	private var diagramToken: UUID?
 	private(set) var measurements = 0
 
-	init(anchor: ChatScrollAnchor?) {
+	init(anchor: ChatScrollAnchor?, renderer: MermaidRenderer = .shared) {
+		self.renderer = renderer
 		restoring = anchor
 		following = anchor == nil
 		super.init(frame: .zero)
 		measurer.safeAreaRegions = []
+		diagramToken = renderer.observe { [weak self] key in self?.diagramDrawn(key) }
 		let column = NSTableColumn(identifier: .init("row"))
 		column.resizingMask = .autoresizingMask
 		table.addTableColumn(column)
@@ -81,6 +95,7 @@ final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NSTableVi
 	required init?(coder: NSCoder) { fatalError("not used") }
 
 	isolated deinit {
+		if let diagramToken { renderer.stopObserving(diagramToken) }
 		idle?.invalidate()
 		scrollReport?.cancel()
 		if let wheelMonitor { NSEvent.removeMonitor(wheelMonitor) }
@@ -215,17 +230,84 @@ final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NSTableVi
 		guard let text = TranscriptRowModel.markdown(of: item.content), expanded || RowHeights.Kind(item) != .thinking else {
 			return TranscriptRowModel(item, document: nil, expanded: expanded)
 		}
+		let document: MarkdownDocument
 		if let cached = documents[item.sequence], cached.text == text {
-			return TranscriptRowModel(item, document: cached.document, expanded: expanded)
+			document = cached.document
+		} else {
+			document = MarkdownDocument(text)
+			documents[item.sequence] = (text, document)
 		}
-		let document = MarkdownDocument(text)
-		documents[item.sequence] = (text, document)
-		return TranscriptRowModel(item, document: document, expanded: expanded)
+		return TranscriptRowModel(item, document: document, expanded: expanded, diagrams: diagrams(of: item, in: document, requesting: true))
+	}
+
+	// MARK: Diagrams
+
+	/// The width a diagram is drawn at: the row's, inside its margins and kind marker (`TranscriptRow`, `KindMarker`).
+	private var diagramWidth: Int { Int(width - 54) }
+
+	private func diagramKey(_ source: String) -> DiagramKey {
+		DiagramKey(source: source, width: diagramWidth, scale: window?.backingScaleFactor ?? 2, theme: diagramTheme)
+	}
+
+	/// The outcome of each of `document`'s diagrams, asking the renderer for those it hasn't drawn; nil while the item
+	/// streams, since a diagram half written can't be drawn (the web transcript shows its source too).
+	private func diagrams(of item: TranscriptItem, in document: MarkdownDocument, requesting: Bool) -> [String: DiagramOutcome]? {
+		let sources = document.diagrams
+		guard !sources.isEmpty, item.state != .streaming else { return nil }
+		var outcomes: [String: DiagramOutcome] = [:]
+		for source in sources {
+			let key = diagramKey(source)
+			if let outcome = renderer.outcome(key) {
+				outcomes[source] = outcome
+			} else {
+				// A live resize asks for a drawing at every width it passes; it waits for the end of the resize instead.
+				if requesting, !inLiveResize { renderer.request(key, theme: diagramTheme) }
+				outcomes[source] = .pending
+			}
+		}
+		return outcomes
+	}
+
+	/// A fingerprint of what the row's diagrams show, so a measured height is exact only for them; 0 for a row without
+	/// any, or not parsed yet (its measurement parses it).
+	private func diagramPrint(_ row: Int) -> Int {
+		guard let item = entries[row].item, let document = documents[item.sequence]?.document,
+			let outcomes = diagrams(of: item, in: document, requesting: false)
+		else { return 0 }
+		var hasher = Hasher()
+		for source in document.diagrams {
+			switch outcomes[source] {
+			case .drawn(let drawn): hasher.combine(ObjectIdentifier(drawn.image))
+			case .failed: hasher.combine(1)
+			case .pending, nil: hasher.combine(0)
+			}
+		}
+		return hasher.finalize()
+	}
+
+	/// A diagram the renderer finished: the rows showing it are measured again, the visible ones at once, as any height
+	/// correction, keeping the bottom or the rows the reader already saw in place.
+	private func diagramDrawn(_ key: DiagramKey) {
+		guard key.width == diagramWidth, key.theme == DiagramKey.hash(diagramTheme) else { return }
+		let rows = IndexSet(entries.indices.filter { row in
+			guard let item = entries[row].item, item.state != .streaming else { return false }
+			return documents[item.sequence]?.document.diagrams.contains(key.source) ?? false
+		})
+		guard !rows.isEmpty else { return }
+		pending.formUnion(rows)
+		let visible = visibleRows.intersection(rows)
+		if !visible.isEmpty {
+			let anchor = following ? nil : seenPin(visibleRows, besides: visible)
+			table.reloadData(forRowIndexes: visible, columnIndexes: [0])
+			let changed = measure(visible)
+			if !changed.isEmpty { noteHeights(changed, keeping: anchor) }
+		}
+		scheduleIdle()
 	}
 
 	private func findPending() {
 		let width = width
-		pending = IndexSet(entries.indices.filter { !heights.isExact(entries[$0], expanded: isExpanded($0), width: width) })
+		pending = IndexSet(entries.indices.filter { !heights.isExact(entries[$0], expanded: isExpanded($0), diagrams: diagramPrint($0), width: width) })
 	}
 
 	/// The item rows, as table rows.
@@ -271,7 +353,7 @@ final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NSTableVi
 			measurer.rootView = AnyView(view(row).frame(width: width))
 			measurements += 1
 			let height = max(1, ceil(measurer.fittingSize.height))
-			heights.record(entry, expanded: expanded, width: width, height: height)
+			heights.record(entry, expanded: expanded, diagrams: diagramPrint(row), width: width, height: height)
 			pending.remove(row)
 			if height != before { changed.insert(row) }
 		}
@@ -429,6 +511,8 @@ final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NSTableVi
 
 	override func viewDidEndLiveResize() {
 		super.viewDidEndLiveResize()
+		// The visible rows' diagrams, which waited for the resize to end, are drawn at the width it ended at.
+		for row in visibleRows where entries[row].item != nil { _ = model(row) }
 		scheduleIdle()
 	}
 
@@ -489,13 +573,14 @@ final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NSTableVi
 	}
 
 	/// What the test bridge reads: every item row's sequence, kind (the web transcript's `chat-<kind>` class), text and
-	/// top relative to the visible area's top, the cards, every row's text in order, and the web transcript's other
-	/// fields. Nothing native runs a row's content, so there are no scripts or unsafe attributes to count.
+	/// top relative to the visible area's top, the cards, every row's text in order, how many diagrams are drawn, failed,
+	/// pending or shown as their source while streaming, and the web transcript's other fields. Nothing native runs a row's content, so there are no scripts or unsafe attributes to count.
 	func observation() -> [String: Any] {
 		let top = contentView.bounds.minY
 		var rows: [[String: Any]] = []
 		var texts: [String] = []
 		var cards = 0
+		var diagrams = ["drawn": 0, "failed": 0, "pending": 0, "source": 0]
 		for row in entries.indices {
 			switch entries[row] {
 			case .item(let item):
@@ -505,6 +590,14 @@ final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NSTableVi
 					"text": model.plainText, "offset": Int((table.rect(ofRow: row).minY - top).rounded()),
 				])
 				texts.append(model.plainText)
+				for source in model.document?.diagrams ?? [] {
+					switch model.diagrams?[source] {
+					case .drawn: diagrams["drawn", default: 0] += 1
+					case .failed: diagrams["failed", default: 0] += 1
+					case .pending: diagrams["pending", default: 0] += 1
+					case nil: diagrams["source", default: 0] += 1
+					}
+				}
 			case .card(let card):
 				cards += 1
 				texts.append(card.plainText)
@@ -515,7 +608,7 @@ final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NSTableVi
 			return nil
 		}.first
 		return [
-			"rows": rows, "cards": cards, "text": texts.joined(separator: "\n"),
+			"rows": rows, "cards": cards, "text": texts.joined(separator: "\n"), "diagrams": diagrams,
 			"thinkingOpen": isFirstExpanded(.thinking), "toolOpen": isFirstExpanded(.tool),
 			"verdict": verdict ?? "", "scripts": 0, "unsafe": 0,
 			"top": Int(top.rounded()), "topSequence": visibleAnchor.map { String($0.sequence) as Any } ?? NSNull(),
@@ -579,6 +672,7 @@ struct TranscriptView: NSViewRepresentable {
 	let items: [TranscriptItem]
 	var questions: [PermissionQuestion] = []
 	var generation: UInt64 = 0
+	var theme: [String: String] = [:]
 	let hasOlder: Bool
 	let anchor: ChatScrollAnchor?
 	var onScroll: (ChatScrollAnchor?) -> Void
@@ -594,6 +688,7 @@ struct TranscriptView: NSViewRepresentable {
 		view.onScroll = onScroll
 		view.onNeedsOlder = onNeedsOlder
 		view.onAnswer = onAnswer
+		view.diagramTheme = theme
 		view.hasOlder = hasOlder
 		view.apply(items, questions: questions, generation: generation)
 		onView(view)

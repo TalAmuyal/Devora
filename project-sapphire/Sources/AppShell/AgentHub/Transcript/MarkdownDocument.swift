@@ -5,13 +5,31 @@ import Markdown
 /// Syntax it doesn't model (HTML, images, footnotes) keeps its source text, so nothing an agent writes disappears.
 struct MarkdownDocument: Equatable {
 	let blocks: [MarkdownBlock]
+	/// Every Mermaid code block's source, in reading order: found once, since the transcript asks for them on every
+	/// height check.
+	let diagrams: [String]
 
 	init(_ text: String) {
-		blocks = Self.blocks(Document(parsing: text).children)
+		self.init(blocks: Self.blocks(Document(parsing: text).children))
 	}
 
 	init(blocks: [MarkdownBlock]) {
 		self.blocks = blocks
+		diagrams = Self.diagrams(in: blocks)
+	}
+
+	private static func diagrams(in blocks: [MarkdownBlock]) -> [String] {
+		func walk(_ blocks: [MarkdownBlock]) -> [String] {
+			blocks.flatMap { block -> [String] in
+				switch block {
+				case .code(let language, let text): language?.lowercased() == "mermaid" ? [text] : []
+				case .list(_, let items): items.flatMap(walk)
+				case .quote(let inner): walk(inner)
+				case .heading, .paragraph, .table, .thematicBreak: []
+				}
+			}
+		}
+		return walk(blocks)
 	}
 
 	/// Every link, with its text, in reading order.

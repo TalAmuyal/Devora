@@ -118,6 +118,14 @@ for line in sys.stdin:
             assistant["message"]["content"] = [{"type":"text","text":f"Wide code:\n\n```\n{lines}\n```"}]
             emit(assistant)
             result()
+        elif text in ("mermaid", "bad-mermaid"):
+            # A reply with a Mermaid diagram, which renders, or one whose source doesn't parse.
+            diagram = "flowchart LR\n  A[Client] --> B[Server]" if text == "mermaid" else "flowchart LR\n  A[Client --> ((("
+            assistant = recorded("assistant")
+            assistant["message"]["id"] = text
+            assistant["message"]["content"] = [{"type":"text","text":f"A diagram:\n\n```mermaid\n{diagram}\n```"}]
+            emit(assistant)
+            result()
         elif text.startswith("hook:"):
             emit({"type":"control_request","request_id":"hook","request":{
                 "subtype":"hook_callback","callback_id":"devora-judgess","tool_use_id":"tool-1",

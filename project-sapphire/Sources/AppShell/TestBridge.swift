@@ -149,6 +149,7 @@ final class TestBridge {
 					      text: row.textContent, offset: row.offsetTop - content.scrollTop
 					    })),
 					    cards: document.querySelectorAll('.chat-permission').length,
+					    diagrams: { drawn: content.querySelectorAll('.mermaid-diagram svg').length, failed: content.querySelectorAll('pre.mermaid.mermaid-error').length },
 					    thinkingOpen: document.querySelector('.chat-thinking details')?.open ?? false,
 					    toolOpen: document.querySelector('.chat-tool details')?.open ?? false,
 					    verdict: document.querySelector('.chat-verdict')?.textContent ?? '',

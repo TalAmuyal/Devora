@@ -2,17 +2,19 @@ import AppKit
 import CoreBindings
 import SwiftUI
 
-/// What one row draws: its item, the item's Markdown (parsed once per content), and whether a thinking or tool row is
-/// expanded.
+/// What one row draws: its item, the item's Markdown (parsed once per content), whether a thinking or tool row is
+/// expanded, and its Mermaid diagrams (nil while it streams, when they show as their source).
 struct TranscriptRowModel: Equatable {
 	let item: TranscriptItem
 	let document: MarkdownDocument?
 	let expanded: Bool
+	let diagrams: [String: DiagramOutcome]?
 
-	init(_ item: TranscriptItem, document: MarkdownDocument?, expanded: Bool = false) {
+	init(_ item: TranscriptItem, document: MarkdownDocument?, expanded: Bool = false, diagrams: [String: DiagramOutcome]? = nil) {
 		self.item = item
 		self.document = document
 		self.expanded = expanded
+		self.diagrams = diagrams
 	}
 
 	enum Kind: String {
@@ -103,6 +105,7 @@ struct TranscriptRow: View {
 			.textSelection(.enabled)
 			.help("#\(model.item.sequence)")
 			.environment(\.openURL, OpenURLAction { Self.opensLink($0) ? .systemAction : .discarded })
+			.environment(\.diagrams, model.diagrams)
 			.contextMenu {
 				Button("Copy") {
 					NSPasteboard.general.clearContents()
