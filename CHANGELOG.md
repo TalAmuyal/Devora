@@ -20,6 +20,8 @@ Types of changes:
 
 ### Added
 
+- Ember has configurable background repository updates, a Run Repo Updates palette command and a persisted Global Pause control with a Paused hint.
+
 - Sapphire can periodically update clean, detached parent clones across profiles, with User Defaults controls, a manual palette action and graceful Global Pause integration.
 - Devora Sapphire's New Agent dialog chooses each agent's model (free text, `opus` by default) and effort (a slider from Claude Code's own default to max, starting at the effort set in the Settings Hub), kept for every launch; its fields have user-facing labels, and the agent's space path shows under its name
 - Devora Sapphire has Global Pause in the title bar and command palette, holding agents after their current turn, preserving drafts and the hold across relaunch, with a shared core subscription for background integrations

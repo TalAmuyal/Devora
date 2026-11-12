@@ -3,6 +3,7 @@ import { SessionManager } from '../session/SessionManager';
 export class TabBar {
   private containerEl: HTMLElement;
   private sessionManager: SessionManager;
+  private paused = false;
 
   constructor(containerEl: HTMLElement, sessionManager: SessionManager) {
     this.containerEl = containerEl;
@@ -11,6 +12,11 @@ export class TabBar {
 
     // Re-render whenever sessions change
     this.sessionManager.onChange(() => this.render());
+  }
+
+  setPaused(paused: boolean): void {
+    this.paused = paused;
+    this.render();
   }
 
   render(): void {
@@ -57,6 +63,14 @@ export class TabBar {
     const spacer = document.createElement('div');
     spacer.className = 'tab-spacer';
     this.containerEl.appendChild(spacer);
+
+    if (this.paused) {
+      const hint = document.createElement('span');
+      hint.className = 'global-pause-hint';
+      hint.textContent = 'Paused';
+      hint.title = 'Devora is globally paused. Resume Devora from the command palette.';
+      this.containerEl.appendChild(hint);
+    }
 
     // Add button
     const addEl = document.createElement('div');

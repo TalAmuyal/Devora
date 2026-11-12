@@ -1140,3 +1140,10 @@
 .preview-divider:hover {
   background: var(--color-border-active);
 }
+
+.global-pause-hint {
+  align-self: center;
+  padding: 0 10px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}

@@ -1,3 +1,4 @@
+mod background;
 mod commands;
 mod http_util;
 mod logging;
@@ -8,7 +9,8 @@ mod workspace_creation;
 // The non-UI modules live in the shared core (`project-core/`, ADR-007); importing them here keeps their `crate::` paths stable.
 use devora_core::{bundle, config, credentials, health, ipc, profile, pty, terminal, workspace};
 
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use tauri::webview::WebviewWindowBuilder;
 use tauri::{Emitter, Manager};
 
@@ -19,6 +21,8 @@ fn is_test_mode() -> bool {
 pub fn run() {
     let log = logging::init();
 
+    let shutting_down = Arc::new(AtomicBool::new(false));
+    let shutdown_done = Arc::new(AtomicBool::new(false));
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(Mutex::new(pty::PtyManager::new()))
@@ -29,6 +33,25 @@ pub fn run() {
         .setup(|app| {
             let handle = app.handle().clone();
             logging::listen_for_errors(&handle);
+            let background = (|| {
+                let state_dir = std::env::var_os("DEVORA_STATE_DIR")
+                    .filter(|path| !path.is_empty())
+                    .map(std::path::PathBuf::from)
+                    .map(Ok)
+                    .unwrap_or_else(|| {
+                        app.path().app_local_data_dir().map_err(|e| e.to_string())
+                    })?;
+                background::Running::open(
+                    config::global_config_path()?,
+                    state_dir,
+                    app.state::<Arc<logging::Log>>().inner().clone(),
+                )
+            })();
+            if let Err(error) = &background {
+                app.state::<Arc<logging::Log>>()
+                    .write(logging::Level::Warn, error);
+            }
+            app.manage(Arc::new(background::Background(background)));
 
             let window_config = app
                 .config()
@@ -94,6 +117,9 @@ pub fn run() {
             commands::get_claude_settings,
             commands::set_claude_setting,
             commands::get_config_settings,
+            commands::get_global_paused,
+            commands::toggle_global_paused,
+            commands::run_repo_updates,
             commands::set_config_setting,
             commands::get_asana_token_status,
             commands::set_asana_token,
@@ -114,6 +140,23 @@ pub fn run() {
             theme::get_theme,
             commands::__test_report,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running devora ember");
+        .build(tauri::generate_context!())
+        .expect("error while building devora ember")
+        .run(move |app, event| {
+            if let tauri::RunEvent::ExitRequested { api, code, .. } = event {
+                if !shutdown_done.load(Ordering::Acquire) {
+                    api.prevent_exit();
+                    if !shutting_down.swap(true, Ordering::AcqRel) {
+                        let background = app.state::<Arc<background::Background>>().inner().clone();
+                        let done = shutdown_done.clone();
+                        let app = app.clone();
+                        std::thread::spawn(move || {
+                            background.shutdown();
+                            done.store(true, Ordering::Release);
+                            app.exit(code.unwrap_or(0));
+                        });
+                    }
+                }
+            }
+        });
 }

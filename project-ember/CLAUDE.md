@@ -121,3 +121,18 @@ Factory functions that return `HTMLElement` (or a handle object for stateful com
 
 - `mise test-unit` (one-time)
 - `mise test-unit-watch` (watch mode)
+
+## Repository updates and Global Pause
+
+`src-tauri/src/background.rs` owns Ember's shared `RepoUpdater` and `PauseSource` adapter.
+Its single boolean in `global-paused.json` lives in the app-local data directory, replaced by `DEVORA_STATE_DIR` in tests.
+A missing file starts running.
+The saved hold loads before the updater starts, and a toggle atomically replaces the file before publishing committed changes under the same registration lock.
+Persistence errors use the normal frontend invoke error path.
+The User Defaults Repository Updates card uses core validation, defaults off with a sixty-minute interval, and reconfigures the live worker after a successful write.
+Run Repo Updates runs manually even while periodic updates are disabled.
+Pause Devora and Resume Devora share this hold, projected as the tab bar's Paused hint.
+The shared worker checks continuous-clock deadlines at least every minute while enabled.
+Quit holds the exit request while a background thread runs the core's bounded shutdown, then exits with the requested code.
+Acceptance launches use an isolated state directory and can restart the real app while retaining it.
+Updater scenarios restore periodic updates off and resume the hold before teardown.

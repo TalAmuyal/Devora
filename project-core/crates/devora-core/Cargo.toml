@@ -21,3 +21,6 @@ devora-state.workspace = true
 devora-terminal.workspace = true
 devora-theme.workspace = true
 devora-workspace.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }

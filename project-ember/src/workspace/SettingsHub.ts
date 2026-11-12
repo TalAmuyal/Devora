@@ -526,6 +526,15 @@ export class SettingsHub {
     container.appendChild(
       createConfigCard({ title: 'Pull Requests', profilePath, fields: PR_FIELDS }),
     );
+    if (profilePath === null) {
+      container.appendChild(createConfigCard({
+        title: 'Repository Updates', profilePath,
+        fields: [
+          { key: 'repo-update.enabled', label: 'Periodic updates', field: { kind: 'bool' } },
+          { key: 'repo-update.interval-minutes', label: 'Interval (minutes)', field: { kind: 'text', placeholder: '60' } },
+        ],
+      }));
+    }
     container.appendChild(createTaskTrackerCard(profilePath));
   }
 
