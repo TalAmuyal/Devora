@@ -123,7 +123,7 @@ run = "node --import tsx scripts/test-agent-cli.ts"
 
 [tasks.test-unit]
 description = "Run the Swift tests against the real core"
-depends = ["core"]
+depends = ["core", "web-renderer"]
 run = """
 set -euo pipefail
 [ -d build/GhosttyKit.xcframework ] || mise run ghostty-build

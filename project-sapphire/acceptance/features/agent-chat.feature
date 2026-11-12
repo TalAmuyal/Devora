@@ -16,6 +16,12 @@ Feature: Agent chat panel
     And the agent transcript has no executable content
     And the agent prompt draft is ""
 
+  Scenario: A Mermaid diagram in a reply is drawn, and one that doesn't parse shows its source
+    When the user sends the agent prompt "mermaid"
+    Then the agent transcript draws its Mermaid diagram
+    When the user sends the agent prompt "bad-mermaid"
+    Then the agent transcript shows the Mermaid source "A[Client --> (((" with a warning
+
   Scenario: Unsent prompts survive closing and reopening the agent
     When the user drafts the agent prompt "Keep this unsent"
     And the user closes and reopens the agent chat "Echo"

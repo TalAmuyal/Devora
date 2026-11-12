@@ -127,3 +127,9 @@ When('the user stops the agent turn', async function (this: SapphireWorld) { awa
 Then('the agent context bar has a known window and threshold {int}', async function (this: SapphireWorld, threshold: number) {
   await this.bridge.waitFor('typed context metrics', () => this.bridge.agentChat(), s => s.context !== null && BigInt(s.context.window) > 0n && BigInt(s.context.used) > 0n && s.context.threshold === threshold);
 });
+Then('the agent transcript draws its Mermaid diagram', async function (this: SapphireWorld) {
+  await this.bridge.waitFor('Mermaid diagram drawn', () => this.bridge.agentChat(), s => s.dom.diagrams.drawn === 1 && s.dom.diagrams.failed === 0);
+});
+Then('the agent transcript shows the Mermaid source {string} with a warning', async function (this: SapphireWorld, source: string) {
+  await this.bridge.waitFor('Mermaid diagram failed', () => this.bridge.agentChat(), s => s.dom.diagrams.failed === 1 && s.dom.text.includes(source));
+});

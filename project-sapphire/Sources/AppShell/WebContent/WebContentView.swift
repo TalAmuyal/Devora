@@ -105,11 +105,16 @@ struct WebContentView: NSViewRepresentable {
 	}
 }
 
-/// Serves only files inside the bundled renderer, with one local origin for module imports.
-private final class RendererSchemeHandler: NSObject, WKURLSchemeHandler {
+/// Serves only files inside the bundled renderer (or `root`, in tests), with one local origin for module imports.
+final class RendererSchemeHandler: NSObject, WKURLSchemeHandler {
+	private let root: URL?
+
+	init(root: URL? = Bundle.main.resourceURL?.appending(path: "web-renderer", directoryHint: .isDirectory)) {
+		self.root = root?.resolvingSymlinksInPath().standardizedFileURL
+	}
+
 	func webView(_ webView: WKWebView, start task: any WKURLSchemeTask) {
-		guard let url = task.request.url, url.host == "app",
-			let root = Bundle.main.resourceURL?.appending(path: "web-renderer", directoryHint: .isDirectory).resolvingSymlinksInPath().standardizedFileURL else {
+		guard let url = task.request.url, url.host == "app", let root else {
 			task.didFailWithError(CocoaError(.fileNoSuchFile)); return
 		}
 		let path = root.appending(path: String(url.path.dropFirst())).resolvingSymlinksInPath().standardizedFileURL
