@@ -2,8 +2,10 @@ import CoreBindings
 import Foundation
 import Store
 import Testing
+import TestSupport
 
 @MainActor
+@Suite(.timeLimit(.minutes(2)))
 struct ProfileTests {
 	@Test func registeringANewProfileCreatesItAndSelectsIt() async throws {
 		let fixture = try Fixture()

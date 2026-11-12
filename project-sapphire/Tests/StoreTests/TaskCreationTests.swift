@@ -2,6 +2,7 @@ import CoreBindings
 import Foundation
 import Store
 import Testing
+import TestSupport
 
 extension Fixture {
 	/// A selected profile `work` whose one repo, `repo`, has a bare origin with a commit on `main`, as a creation needs; `prepare` is its prepare-command.
@@ -33,6 +34,7 @@ extension Fixture {
 
 /// Task creation through the store, against the real core and real git repos.
 @MainActor
+@Suite(.timeLimit(.minutes(2)))
 struct TaskCreationTests {
 	private func loadedStore(_ fixture: borrowing Fixture) async throws -> Store {
 		let store = Store(configPath: fixture.configPath, state: .inMemory, log: try fixture.log())
@@ -149,6 +151,7 @@ struct TaskCreationTests {
 }
 
 /// The progress page's fold of the creation events, as Ember's `TaskCreationProgress` shows them.
+@Suite(.timeLimit(.minutes(2)))
 struct CreationProgressTests {
 	@Test func eachStepFinishesTheOneBeforeAndDoneFinishesTheLast() {
 		var progress = CreationProgress()

@@ -1,9 +1,12 @@
 import Foundation
 import Testing
+import TestSupport
 import WebKit
 @testable import AppShell
 
+// The waits are for looks, not times; the limit only catches a hang.
 @MainActor
+@Suite(.timeLimit(.minutes(1)))
 struct HTMLPreviewTests {
 	@Test func setupFailureNeverReadsOrLoadsTheDocument() {
 		var reads = 0
@@ -50,12 +53,9 @@ struct HTMLPreviewTests {
 		#expect(errors.isEmpty)
 	}
 
-	private func heading(_ expected: String, in view: WKWebView) async throws {
-		let deadline = Date.now.addingTimeInterval(10)
-		while Date.now < deadline {
-			if let value = try? await view.evaluateJavaScript("document.querySelector('h1')?.textContent"), value as? String == expected { return }
-			try await Task.sleep(for: .milliseconds(50))
+	private func heading(_ expected: String, in view: WKWebView, sourceLocation: SourceLocation = #_sourceLocation) async throws {
+		try await eventually(looks: 1_000, sourceLocation: sourceLocation) {
+			(try? await view.evaluateJavaScript("document.querySelector('h1')?.textContent")) as? String == expected
 		}
-		Issue.record("HTML heading did not become \(expected)")
 	}
 }

@@ -2,9 +2,11 @@
 import CoreBindings
 import Layers
 import Testing
+import TestSupport
 
 /// The profile form's validation and keys, as Ember's `ProfileForm` behaves.
 @MainActor
+@Suite(.timeLimit(.minutes(2)))
 struct ProfileFormTests {
 	final class Calls {
 		var validated: [String] = []
@@ -119,8 +121,8 @@ struct ProfileFormTests {
 		try await eventually { model.canSubmit }
 
 		#expect(model.handleKey(enter))
-		try await Task.sleep(for: .milliseconds(50))
-
+		// A submit marks the form as submitting before its registration starts, so none started.
+		#expect(!model.submitting)
 		#expect(calls.registered.isEmpty)
 	}
 
@@ -153,14 +155,4 @@ struct ProfileFormTests {
 		#expect(model.handleKey(space))
 		#expect(calls.cancelled)
 	}
-}
-
-/// Polls until `condition` holds, for what the core answers asynchronously (the profile form's validation, a repo operation).
-@MainActor
-func eventually(_ condition: () -> Bool) async throws {
-	for _ in 0..<200 {
-		if condition() { return }
-		try await Task.sleep(for: .milliseconds(10))
-	}
-	Issue.record("the condition never held")
 }

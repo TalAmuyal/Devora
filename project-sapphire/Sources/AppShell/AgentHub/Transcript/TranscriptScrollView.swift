@@ -255,7 +255,7 @@ final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NSTableVi
 	/// The width a diagram is drawn at: the row's, inside its margins and kind marker (`TranscriptRow`, `KindMarker`).
 	private var diagramWidth: Int { Int(width - 54) }
 
-	private func diagramKey(_ source: String) -> DiagramKey {
+	func diagramKey(_ source: String) -> DiagramKey {
 		DiagramKey(source: source, width: diagramWidth, scale: window?.backingScaleFactor ?? 2, theme: diagramTheme)
 	}
 

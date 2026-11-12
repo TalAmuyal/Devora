@@ -2,9 +2,11 @@ import CoreBindings
 import Foundation
 import Store
 import Testing
+import TestSupport
 
 /// The core's tab state, folded from its event stream on the Swift side.
 @MainActor
+@Suite(.timeLimit(.minutes(2)))
 struct AppStateTests {
 	@Test func foldingTheEventsReproducesTheCoresState() async throws {
 		let fixture = try Fixture()
@@ -78,20 +80,5 @@ struct AppStateTests {
 		store.dispatch(.closeTab(id: tabs[1].id))
 		try await eventually { store.app.window.tabs.count == 1 }
 		#expect(store.app.window.activeTab == tabs[0].id)
-	}
-}
-
-/// Polls instead of sleeping a fixed time: events reach the store asynchronously.
-///
-/// The condition is checked once more after the deadline: the tests share the main actor, so a poll can wake past the deadline with the fold it waits for queued just before it.
-@MainActor
-func eventually(timeout: Duration = .seconds(5), sourceLocation: SourceLocation = #_sourceLocation, _ condition: () -> Bool) async throws {
-	let deadline = ContinuousClock.now + timeout
-	while !condition() {
-		guard ContinuousClock.now < deadline else {
-			Issue.record("condition not met within \(timeout)", sourceLocation: sourceLocation)
-			return
-		}
-		try await Task.sleep(for: .milliseconds(10))
 	}
 }

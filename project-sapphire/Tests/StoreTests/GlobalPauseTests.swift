@@ -1,10 +1,12 @@
 import CoreBindings
 import Foundation
 import Testing
+import TestSupport
 
 @testable import Store
 
 @MainActor
+@Suite(.timeLimit(.minutes(2)))
 struct GlobalPauseTests {
 	@Test func globalPauseFoldsAndKeepsARefusedPromptInTheDraft() async throws {
 		let fixture = try Fixture()

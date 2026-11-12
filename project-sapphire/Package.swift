@@ -30,9 +30,11 @@ let package = Package(
 			dependencies: ["Store", "TerminalKit", "Layers", .product(name: "Markdown", package: "swift-markdown")]
 		),
 
-		.testTarget(name: "StoreTests", dependencies: ["Store", "CoreBindings"]),
+		// What the test targets share: how they wait for asynchronous work (`eventually`).
+		.target(name: "TestSupport", path: "Tests/TestSupport"),
+		.testTarget(name: "StoreTests", dependencies: ["Store", "CoreBindings", "TestSupport"]),
 		.testTarget(name: "TerminalKitTests", dependencies: ["TerminalKit"]),
 		.testTarget(name: "LayersTests", dependencies: ["Layers"]),
-		.testTarget(name: "AppShellTests", dependencies: ["AppShell", "Layers", "Store", "CoreBindings"]),
+		.testTarget(name: "AppShellTests", dependencies: ["AppShell", "Layers", "Store", "CoreBindings", "TestSupport"]),
 	]
 )
