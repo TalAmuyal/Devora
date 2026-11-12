@@ -1144,6 +1144,8 @@
 .global-pause-hint {
   align-self: center;
   padding: 0 10px;
-  color: var(--text-secondary);
+  color: var(--color-fg-secondary);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-sm);
   white-space: nowrap;
 }
