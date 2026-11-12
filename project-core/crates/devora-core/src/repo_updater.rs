@@ -612,10 +612,12 @@ mod tests {
             tokio::task::yield_now().await;
         }
         *clock.now.lock().unwrap() = Duration::from_secs(7300);
+        let waiting_since = tokio::time::Instant::now();
         tokio::time::advance(Duration::from_secs(60)).await;
         for repo in &expected {
             assert_eq!(received.recv().await.unwrap(), *repo);
         }
+        assert!(waiting_since.elapsed() <= Duration::from_secs(60));
         work.stop.store(true, Ordering::Release);
         work.wake.notify_one();
         worker.await.unwrap().unwrap();
