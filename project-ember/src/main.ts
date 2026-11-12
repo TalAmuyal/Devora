@@ -331,11 +331,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     onRequestClose: () => dismissPalette(),
     commands: [
       {
-        id: 'run-repo-updates', title: 'Run Repo Updates',
-        description: 'Update clean detached parent clones in every profile', icon: '↻', shortcut: [],
-        run: closePaletteThen(() => { void invokeLogOnly('run_repo_updates').catch(() => {}); }),
-      },
-      {
         id: 'workspace-hub',
         title: 'Workspace Hub',
         description: 'List, filter and open workspaces',
@@ -424,6 +419,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         icon: '⚙',
         shortcut: [],
         run: closePaletteThen(() => openSettingsHub('list')),
+      },
+      {
+        id: 'run-repo-updates', title: 'Run Repo Updates',
+        description: 'Update clean detached parent clones in every profile', icon: '↻', shortcut: [],
+        run: closePaletteThen(() => { void invokeLogOnly('run_repo_updates').catch(() => {}); }),
       },
     ],
     // One "Switch Profile: X" entry per non-active profile, re-resolved on every palette open so it tracks registrations and the active profile.
