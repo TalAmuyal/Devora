@@ -40,7 +40,9 @@ Then('the focused profile should be {string}', async function (this: SapphireWor
 When('the user opens the {string} settings detail', async function (this: SapphireWorld, label: string) {
   await waitForSettings(this, 'the Settings Hub', (settings) => settings.loaded);
   await this.bridge.settings({ action: 'selectRow', label });
-  await waitForSettings(this, `the ${label} settings`, (settings) => settings.focused === label && settings.scope?.loaded === true);
+  await waitForSettings(this, `the ${label} settings`, (settings) =>
+    settings.focused === label && settings.scope?.loaded === true && settings.scope.agent?.loaded === true,
+  );
 });
 
 Then('the profile directory {string} should still exist on disk', function (this: SapphireWorld, name: string) {
