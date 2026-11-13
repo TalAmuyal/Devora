@@ -3,6 +3,7 @@ import CoreBindings
 import Layers
 import Store
 import Testing
+import TestSupport
 import Foundation
 
 /// One scope's config, in memory: writes land in `stored`, and a read resolves each key over `inherited`, as the core's profile → User Defaults → built-in resolution does.
@@ -39,6 +40,7 @@ final class FakeScope {
 
 /// The Settings Hub's commit rules for a text input, as Ember's `CommitInput` and `settingsEditor`.
 @MainActor
+@Suite(.timeLimit(.minutes(2)))
 struct ConfigCommitTests {
 	let scope = FakeScope()
 
@@ -136,6 +138,7 @@ struct ConfigCommitTests {
 
 /// What the cards show for a scope: each control's segment, the inherited hint beside Default, and the Asana settings.
 @MainActor
+@Suite(.timeLimit(.minutes(2)))
 struct ConfigDisplayTests {
 	let scope = FakeScope()
 
@@ -189,6 +192,7 @@ struct ConfigDisplayTests {
 
 /// The Settings Hub's master list keys, which a field's typing must never reach.
 @MainActor
+@Suite(.timeLimit(.minutes(2)))
 struct SettingsHubKeyTests {
 	let j = KeyPress(keyCode: 0x26, characters: "j")
 	let d = KeyPress(keyCode: 0x02, characters: "d")

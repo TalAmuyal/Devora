@@ -57,6 +57,8 @@ final class MermaidRenderer {
 
 	private let drawer: any DiagramDrawer
 	private let timeout: Duration
+	/// Waits out `timeout`; tests replace it, so that only the test of the timeout itself depends on one.
+	private let sleep: @MainActor (Duration) async throws -> Void
 	private let limit: Int
 	private var cache: [DiagramKey: (outcome: DiagramOutcome, bytes: Int)] = [:]
 	/// The cache's keys, least recently used first.
@@ -68,9 +70,13 @@ final class MermaidRenderer {
 	private var observers: [UUID: (DiagramKey) -> Void] = [:]
 	private(set) var draws = 0
 
-	init(drawer: any DiagramDrawer, timeout: Duration = .seconds(5), limit: Int = 48 << 20) {
+	init(
+		drawer: any DiagramDrawer, timeout: Duration = .seconds(5), limit: Int = 48 << 20,
+		sleep: @escaping @MainActor (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
+	) {
 		self.drawer = drawer
 		self.timeout = timeout
+		self.sleep = sleep
 		self.limit = limit
 	}
 
@@ -124,7 +130,7 @@ final class MermaidRenderer {
 				if race.finish() { continuation.resume(returning: outcome) }
 			}
 			Task {
-				try? await Task.sleep(for: timeout)
+				do { try await sleep(timeout) } catch { return }
 				guard race.finish() else { return }
 				// The page may never answer: the next diagram gets a fresh one rather than waiting behind it.
 				drawer.reset()

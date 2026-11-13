@@ -2,8 +2,10 @@
 import CoreBindings
 import Store
 import Testing
+import TestSupport
 
 @MainActor
+@Suite(.timeLimit(.minutes(2)))
 struct AgentSettingsTests {
 	func settings(stored: AgentSettingValue? = nil) -> AgentSettings {
 		AgentSettings(fields: [

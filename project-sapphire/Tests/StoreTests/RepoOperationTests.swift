@@ -2,9 +2,11 @@ import CoreBindings
 import Foundation
 import Store
 import Testing
+import TestSupport
 
 /// Add Repo and Clone Repo through the store, against the real core and real git repos.
 @MainActor
+@Suite(.timeLimit(.minutes(2)))
 struct RepoOperationTests {
 	/// A store on the origin-backed profile, with a task whose workspace, `ws-1`, has the profile's repo; its tab is the active one.
 	private func storeWithATask(_ fixture: borrowing Fixture, prepare: String?) async throws -> (Store, profile: String, repo: String) {
@@ -12,7 +14,7 @@ struct RepoOperationTests {
 		let store = Store(configPath: fixture.configPath, state: .inMemory, log: try fixture.log())
 		await store.dispatch(.load).value
 		await store.dispatch(.createTask(title: "Main work", repoPaths: [repo], sourceWorkspacePath: nil)).value
-		try await eventually(timeout: .seconds(30)) {
+		try await eventually(looks: 3_000) {
 			guard case .workspace? = store.app.window.tabs.first?.session.kind else { return false }
 			return true
 		}
@@ -60,10 +62,10 @@ struct RepoOperationTests {
 		let run = store.startRepoOperation(.addRepo(workspacePath: workspace, sourceRepoPath: repo, worktreeDirName: "repo-ref")) {
 			outcome = $0
 		}
-		try await eventually(timeout: .seconds(30)) { run.progress.output.contains("preparing") }
+		try await eventually(looks: 3_000) { run.progress.output.contains("preparing") }
 		run.cancel()
 
-		try await eventually(timeout: .seconds(20)) { outcome != nil }
+		try await eventually(looks: 2_000) { outcome != nil }
 		#expect(outcome == .cancelled)
 		#expect(!FileManager.default.fileExists(atPath: "\(workspace)/repo-ref"))
 		#expect(FileManager.default.fileExists(atPath: "\(workspace)/repo/file.txt"))

@@ -225,6 +225,7 @@ Sapphire follows Ember's error reporting (ADR-002).
 - `Tests/StoreTests`: the store and the event fold against the real core, over a fixture config, task creation, Add Repo and Clone Repo over real git repos, and the creation progress's fold.
 - `Tests/TerminalKitTests`: the command line libghostty runs.
 - `Tests/LayersTests`: the routing and focus rules, on stand-in layers.
+- `Tests/TestSupport`: what the test targets share, how they wait for asynchronous work (`eventually`; see Waiting in tests).
 - `Tests/AppShellTests`: which key-downs are app-wide shortcuts, the Workspace Hub's list, cursor, scrolling and keys, the Remove Task decision, the confirmation dialog's keys, the New Task dialog's selection, filter and keys, the repo dialogs' forms, keys and clone hint, the profile form's validation and keys, and the Settings Hub's commit rules, inherited hints and list keys.
 - `acceptance/`: the acceptance scenarios' Cucumber.js harness (steps, hooks, the bridge client) and Sapphire-only features; `../acceptance/features/` holds those shared with Ember.
 - `UITests/`: the XCUITests, a UI-test target in `App/project.yml`.
@@ -291,3 +292,14 @@ Real input (key events, focus, the IME, libghostty's key path) is what the bridg
 - The store tests run in parallel on the one main actor, where the store folds its events, so a test that blocks it (a `waitUntilExit()`, a synchronous wait) stalls every other test's `eventually`; their fixtures await git through `runGit` instead.
 	Opening a state another store holds blocks it for the core's busy timeout (1 s), which only `aStateHeldByAnotherStoreIsInUse` does.
 	The acceptance scenarios need an unlocked screen too: with the screen locked, the display link doesn't fire, so the app's events never fold.
+
+### Waiting in tests
+
+A test that waits decides on what it waits for, never on the clock: the unit tests share the one main actor with every other suite running at once, so on a busy machine (a CI runner) a suite can wait seconds for a turn, and a deadline in time expires with the work still queued behind it.
+
+- Await the event when there is one: an observer's callback, a continuation, an async result. `MermaidRendererTests`' `Announced` turns the renderer's `observe` into awaitable "done" states, and their `Gate` holds a fake's work open until the test releases it.
+- Otherwise use `eventually` (`Tests/TestSupport`, shared by the test targets; one overload takes an async condition): its budget is a number of looks, 10 ms apart while the main actor is free, so a busy machine only makes the looks come later.
+- Never `Task.sleep` to let work happen, nor to show that something doesn't: assert the synchronous state that would show it (nothing asked for, nothing queued), or wait for a later event that would have come after it.
+- Code under test that times out takes its wait as a parameter (`MermaidRenderer`'s `sleep`), so a test fires the timeout when it says (`TimeoutClock`), and other tests never time out on their own.
+- A suite that waits has a `.timeLimit`, which is what catches a real hang.
+- Load reproduces CI's contention: `taskpolicy -c background swift test --filter AppShellTests` runs on the efficiency cores only, where a wall-clock wait fails within a run or two.

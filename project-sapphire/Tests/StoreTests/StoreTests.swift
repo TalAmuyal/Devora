@@ -2,6 +2,7 @@ import CoreBindings
 import Foundation
 import Store
 import Testing
+import TestSupport
 
 /// A global config with its profiles and workspaces in a temporary directory, laid out as Devora creates them.
 struct Fixture: ~Copyable {
@@ -74,6 +75,7 @@ func runGit(_ arguments: [String], in directory: String) async throws {
 }
 
 @MainActor
+@Suite(.timeLimit(.minutes(2)))
 struct StoreTests {
 	@Test func loadsProfilesAndTheFirstProfilesWorkspaces() async throws {
 		let fixture = try Fixture()

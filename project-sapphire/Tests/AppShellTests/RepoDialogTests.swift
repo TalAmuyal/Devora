@@ -4,9 +4,11 @@ import Foundation
 import Layers
 import Store
 import Testing
+import TestSupport
 
 /// The Add Repo and Clone Repo dialogs' forms, keys and progress phase, as Ember's `AddRepoDialog` and `CloneRepoDialog` behave, over a store on the real core.
 @MainActor
+@Suite(.timeLimit(.minutes(2)))
 struct RepoDialogTests {
 	final class Calls {
 		var closed = 0

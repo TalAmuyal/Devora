@@ -2,9 +2,11 @@ import CoreBindings
 import Foundation
 import Store
 import Testing
+import TestSupport
 
 /// The store on an app state kept in a file: what a launch restores, and the problems it can meet opening it.
 @MainActor
+@Suite(.timeLimit(.minutes(2)))
 struct PersistenceTests {
 	@Test func droppingAStoreWithPendingEventsReleasesItsDatabase() throws {
 		let fixture = try Fixture()
