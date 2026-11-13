@@ -13,6 +13,13 @@ func writeConfigWithAProfile(in dir: URL) throws -> URL {
 }
 
 extension XCUIApplication {
+	/// Has the app take two lone Shift taps as a double tap however far apart they arrive (`DEVORA_TEST_SHIFT_TAP_WINDOW`), for a test that taps Shift-Shift; set before launching.
+	/// XCUITest's synthesized taps can arrive seconds apart on a busy machine, past the 0.5 s a keyboard's double tap gets, which `ShiftDoubleTapTests` check on exact timestamps.
+	@MainActor
+	func allowSlowShiftDoubleTaps() {
+		launchEnvironment["DEVORA_TEST_SHIFT_TAP_WINDOW"] = "60"
+	}
+
 	/// The Workspace Hub, which a launch with no tabs to restore opens.
 	@MainActor
 	var hubHeader: XCUIElement {

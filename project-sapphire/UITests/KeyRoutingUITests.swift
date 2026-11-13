@@ -20,6 +20,7 @@ final class KeyRoutingUITests: XCTestCase {
 	private func launch() throws {
 		let config = try writeConfigWithAProfile(in: scratch)
 		app = XCUIApplication()
+		app.allowSlowShiftDoubleTaps()
 		app.launchEnvironment["DEVORA_CONFIG_PATH"] = config.path
 		app.launchEnvironment["DEVORA_STATE_DIR"] = scratch.appending(path: "state").path
 		app.launchEnvironment["UITEST_OUT"] = scratch.path
