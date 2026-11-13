@@ -21,14 +21,12 @@ final class UserGuideUITests: XCTestCase {
 		app.typeKey(.F1, modifierFlags: [])
 		let guide = app.descendants(matching: .any)["user-guide"].firstMatch
 		XCTAssertTrue(guide.waitForExistence(timeout: 5))
-		let body = app.webViews.firstMatch.staticTexts.matching(NSPredicate(format: "value CONTAINS %@", "Work in Devora")).firstMatch
-		let rendered = body.waitForExistence(timeout: 15)
+		let rendered = app.webViews.firstMatch.waitForText("Work in Devora", timeout: 15, "the actual Markdown content renders")
 		if !rendered {
 			let capture = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
 			capture.lifetime = .keepAlways
 			add(capture)
 		}
-		XCTAssertTrue(rendered, "the actual Markdown content renders")
 		app.typeKey(.escape, modifierFlags: [])
 		XCTAssertTrue(guide.waitForNonExistence(timeout: 5))
 		XCTAssertTrue(dialog.exists)
