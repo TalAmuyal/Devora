@@ -8,8 +8,8 @@ final class AgentSettingsUITests: XCTestCase {
 		try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
 		let config = try writeConfigWithAProfile(in: scratch)
 		let profileConfig = scratch.appending(path: "Work/config.json")
-		let template = scratch.appending(path: "agent-template.md")
-		try "You are {{agent.name}}.".write(to: template, atomically: true, encoding: .utf8)
+		// Made by scripts/test-ui.sh in a small directory, so the picker's tree stays small: in the runner's container, Go to Folder would list all of ~/Library on the way.
+		let template = URL(fileURLWithPath: try XCTUnwrap(ProcessInfo.processInfo.environment["SAPPHIRE_AGENT_TEMPLATE"]))
 		let app = XCUIApplication()
 		app.launchEnvironment["DEVORA_TEST_MODE"] = "1"
 		app.launchEnvironment["DEVORA_CONFIG_PATH"] = config.path
@@ -62,14 +62,14 @@ final class AgentSettingsUITests: XCTestCase {
 		app.typeKey("g", modifierFlags: [.command, .shift])
 		app.typeText(template.path)
 		app.typeKey(.return, modifierFlags: [])
-		let file = picker.textFields.matching(NSPredicate(format: "value == %@", template.lastPathComponent)).firstMatch
-		let choose = picker.buttons["Choose Template"]
-		let ready = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-			file.exists && file.isSelected && choose.isEnabled
-		}, object: nil)
-		XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 10), .completed,
-			"Go to Folder must select the target file and enable confirmation. \(picker.debugDescription)")
-		choose.click()
+		picker.waitForSnapshot(timeout: 10, "Go to Folder must select the template and enable Choose Template", describe: { panel in
+			let selected = panel.descendants.filter { $0.elementType == .textField && $0.isSelected }.compactMap { $0.value as? String }
+			return "selected \(selected), Choose Template \(panel.chooseTemplate?.isEnabled == true ? "enabled" : "disabled or missing")"
+		}) { panel in
+			panel.descendants.contains { $0.elementType == .textField && $0.isSelected && $0.value as? String == template.lastPathComponent }
+				&& panel.chooseTemplate?.isEnabled == true
+		}
+		picker.buttons["Choose Template"].click()
 		XCTAssertTrue(picker.waitForNonExistence(timeout: 5), "Choosing the ready file closes the picker")
 		let selected = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
 			app.textFields["agent-input-template-file"].value as? String == template.path
@@ -86,5 +86,12 @@ final class AgentSettingsUITests: XCTestCase {
 	private func agentConfig(_ file: URL) throws -> [String: Any] {
 		let root = try JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any]
 		return root?["agent"] as? [String: Any] ?? [:]
+	}
+}
+
+private extension XCUIElementSnapshot {
+	/// The open panel's confirmation button, titled by the panel's prompt.
+	var chooseTemplate: XCUIElementSnapshot? {
+		descendants.first { $0.elementType == .button && $0.title == "Choose Template" }
 	}
 }

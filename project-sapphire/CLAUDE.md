@@ -294,7 +294,7 @@ Real input (key events, focus, the IME, libghostty's key path) is what the bridg
 - Scenarios shared with Ember live in `../acceptance/features/` (see `../acceptance/CLAUDE.md`); Sapphire's steps use the same phrases as Ember's, and reuse Ember's fixture helpers (`project-ember/tests/support/fixture-helper.ts`).
 - The XCUITests launch the app themselves, each on a state directory of its own; `scripts/test-ui.sh` skips them, saying why, when the screen is locked or `SAPPHIRE_SKIP_UI_TESTS=1`.
 	Those that close the launch's hub register a profile first (`writeConfigWithAProfile`), since the first-run welcome can't be closed.
-	Their runner is sandboxed, where git can't run, so `scripts/test-ui.sh` makes the git repo they copy into their fixtures (`SAPPHIRE_GIT_REPO`).
+	Their runner is sandboxed, where git can't run, so `scripts/test-ui.sh` makes the git repo they copy into their fixtures (`SAPPHIRE_GIT_REPO`), and the template the Agent settings test chooses in the open panel (`SAPPHIRE_AGENT_TEMPLATE`).
 - The store tests run in parallel on the one main actor, where the store folds its events, so a test that blocks it (a `waitUntilExit()`, a synchronous wait) stalls every other test's `eventually`; their fixtures await git through `runGit` instead.
 	Opening a state another store holds blocks it for the core's busy timeout (1 s), which only `aStateHeldByAnotherStoreIsInUse` does.
 	The acceptance scenarios need an unlocked screen too: with the screen locked, the display link doesn't fire, so the app's events never fold.
@@ -309,4 +309,5 @@ A test that waits decides on what it waits for, never on the clock: the unit tes
 - Code under test that times out takes its wait as a parameter (`MermaidRenderer`'s `sleep`), so a test fires the timeout when it says (`TimeoutClock`), and other tests never time out on their own.
 - A suite that waits has a `.timeLimit`, which is what catches a real hang.
 - Load reproduces CI's contention: `taskpolicy -c background swift test --filter AppShellTests` runs on the efficiency cores only, where a wall-clock wait fails within a run or two.
-- In the XCUITests, a web view's text is found with `waitForText` (`UITests/WebText.swift`), never a `value` predicate: WebKit puts a heading's text in its `value` on older macOS, and on newer ones in its `title`, with its level as a number in `value`, which makes `value CONTAINS` throw.
+- In the XCUITests, a web view's text is found with `waitForText` (`UITests/Snapshots.swift`), never a `value` predicate: WebKit puts a heading's text in its `value` on older macOS, and on newer ones in its `title`, with its level as a number in `value`, which makes `value CONTAINS` throw.
+- Every XCUITest action and query resolves through a snapshot of the app's accessibility tree, which is slow when the tree is big (an open panel listing a big directory has thousands of elements). Keep what a test shows small, with fixtures in `build/ui-test-fixtures` (made by `scripts/test-ui.sh`) rather than the runner's container, and check several things in one snapshot (`waitForSnapshot`) rather than one query each.
