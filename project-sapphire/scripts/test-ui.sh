@@ -23,6 +23,11 @@ rm -rf "$git_repo"
 git init -q -b main "$git_repo"
 git -C "$git_repo" -c user.name=uitest -c user.email=uitest@localhost -c commit.gpgsign=false commit -q --allow-empty -m init
 export TEST_RUNNER_SAPPHIRE_GIT_REPO="$git_repo"
+# The Agent settings test chooses this template in the open panel. In the runner's container, Go to Folder would take the panel through all of ~/Library, whose rows make every snapshot of the panel slow.
+agent_template="$PWD/build/ui-test-fixtures/agent-template/agent-template.md"
+mkdir -p "$(dirname "$agent_template")"
+printf 'You are {{agent.name}}.' >"$agent_template"
+export TEST_RUNNER_SAPPHIRE_AGENT_TEMPLATE="$agent_template"
 export TEST_RUNNER_DEVORA_TEST_CLAUDE_PROGRAM="$PWD/../project-core/crates/devora-agent/tests/support/fake_cli.py"
 export TEST_RUNNER_DEVORA_FAKE_FIXTURES="$PWD/../project-core/crates/devora-agent/tests/fixtures/claude-2.1.312"
 export TEST_RUNNER_SAPPHIRE_TEST_DEBI="$PWD/build/test-tools/debi"
