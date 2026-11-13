@@ -8,6 +8,7 @@ final class RepoUpdatesUITests: XCTestCase {
 		try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
 		let config = try writeConfigWithAProfile(in: scratch)
 		let app = XCUIApplication()
+		app.allowSlowShiftDoubleTaps()
 		app.launchEnvironment["DEVORA_CONFIG_PATH"] = config.path
 		app.launchEnvironment["DEVORA_STATE_DIR"] = scratch.appending(path: "state").path
 		app.launch()

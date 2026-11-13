@@ -82,7 +82,7 @@ final class AppShortcuts {
 	let hubs: () -> Void
 	let openUserGuide: () -> Void
 	var openCommandPalette: () -> Void = {}
-	private var shiftTap = ShiftDoubleTap()
+	private var shiftTap = ShiftDoubleTap(window: ShiftDoubleTap.window(from: ProcessInfo.processInfo.environment))
 	private var flagsMonitor: Any?
 
 	init(store: Store, windowStack: LayerStack, hubs: @escaping () -> Void, openUserGuide: @escaping () -> Void) {
