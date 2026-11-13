@@ -9,10 +9,11 @@ struct AgentPausePresentation {
 	let pauseRequested: Bool
 	let globallyPaused: Bool
 	let globallyHeld: Bool
+	var keepPausedSelected = false
 
 	var label: String {
 		if globallyPaused {
-			return globallyHeld && phase != .paused ? "Pausing…" : "Devora paused"
+			return globallyHeld && phase != .paused && phase != .failed ? "Pausing…" : "Paused"
 		}
 		if phase == .paused { return "Resume" }
 		return isPausing ? "Pausing…" : "Pause"
@@ -25,9 +26,8 @@ struct AgentPausePresentation {
 	}
 
 	var keepPaused: Bool { globallyPaused && globallyHeld }
-	var keptPaused: Bool { globallyPaused && !globallyHeld && (phase == .paused || isPausing) }
+	var keptPaused: Bool { globallyPaused && (keepPausedSelected || (!globallyHeld && (phase == .paused || isPausing))) }
 	var isPausing: Bool { pauseRequested || phase == .pausing }
-	var isPaused: Bool { globallyPaused || phase == .paused || isPausing }
 	var icon: String { phase == .paused && !globallyPaused ? "play.fill" : "pause.fill" }
 
 	var accessibilityLabel: String {
@@ -43,23 +43,26 @@ struct AgentPausePresentation {
 	}
 
 	var accessibilityValue: String {
+		if globallyPaused && globallyHeld && phase != .paused && phase != .failed { return "Pausing after this turn" }
 		if keptPaused { return "Agent kept paused when Devora resumes" }
-		if globallyPaused && globallyHeld && phase != .paused { return "Pausing after this turn" }
 		return tooltip
 	}
 }
 
 struct AgentPauseWidget: View {
 	let presentation: AgentPausePresentation
-	let theme: TranscriptTheme
 	let onPause: () -> Void
 	let onResume: () -> Void
+	let onKeepPaused: (Bool) -> Void
 
 	var body: some View {
 		HStack(spacing: 8) {
 			Group {
 				if presentation.globallyPaused {
-					Label(presentation.label, systemImage: presentation.icon)
+					Text(presentation.label).foregroundStyle(.secondary)
+						.padding(.horizontal, 8).padding(.vertical, 3)
+						.background(.quaternary, in: Capsule())
+						.overlay(Capsule().strokeBorder(Color(nsColor: .separatorColor), lineWidth: 1))
 				} else {
 					Button {
 						switch presentation.action {
@@ -70,61 +73,26 @@ struct AgentPauseWidget: View {
 					} label: {
 						Label(presentation.label, systemImage: presentation.icon)
 					}
+					.buttonStyle(.bordered)
 					.disabled(presentation.action == .none)
 				}
 			}
 			.accessibilityLabel(presentation.accessibilityLabel)
 			.accessibilityValue(presentation.accessibilityValue)
 			.accessibilityIdentifier(presentation.globallyPaused ? "agent-global-pause-status" : "agent-pause-control")
-			.foregroundStyle(presentation.isPaused ? theme.link : theme.text)
-			.padding(.horizontal, 8).padding(.vertical, 4)
-			.background {
-				RoundedRectangle(cornerRadius: 6)
-					.fill(Color(nsColor: theme.background ?? .controlBackgroundColor))
-					.overlay {
-						RoundedRectangle(cornerRadius: 6)
-							.fill(presentation.isPaused ? theme.link.opacity(0.1) : .clear)
-					}
-			}
+			.help(presentation.tooltip)
 			if presentation.keepPaused || presentation.keptPaused {
-				Button(action: onPause) {
-					Label("Keep paused", systemImage: presentation.keptPaused ? "checkmark" : "pause.fill")
-				}
-				.buttonStyle(KeepPausedButtonStyle(theme: theme, selected: presentation.keptPaused))
-				.disabled(presentation.keptPaused)
-				.help("Keep this agent paused when Devora resumes")
-				.accessibilityValue(presentation.keptPaused ? "On. Agent kept paused when Devora resumes" : "Off")
-				.accessibilityAddTraits(presentation.keptPaused ? .isSelected : [])
-				.accessibilityIdentifier("agent-keep-paused")
+				Toggle("Keep paused", isOn: Binding(get: { presentation.keptPaused }, set: onKeepPaused))
+					.toggleStyle(.switch)
+					.disabled(!presentation.globallyHeld || presentation.phase == .failed)
+					.help(presentation.globallyHeld
+						? "Keep this agent paused when Devora resumes"
+						: "This agent was individually paused. Resume it after Devora resumes.")
+					.accessibilityIdentifier("agent-keep-paused")
 			}
 		}
-		.buttonStyle(.plain)
+		.controlSize(.small)
 		.font(.callout)
 		.fixedSize()
-		.help(presentation.tooltip)
-	}
-}
-
-/// A separate action surface that stays inset once the individual hold is chosen.
-private struct KeepPausedButtonStyle: ButtonStyle {
-	let theme: TranscriptTheme
-	let selected: Bool
-
-	func makeBody(configuration: Configuration) -> some View {
-		let pressed = selected || configuration.isPressed
-		configuration.label
-			.foregroundStyle(pressed ? theme.link : theme.text)
-			.padding(.horizontal, 8).padding(.vertical, 4)
-			.background {
-				RoundedRectangle(cornerRadius: 6)
-					.fill(Color(nsColor: theme.background ?? .controlBackgroundColor)
-						.shadow(.inner(color: .black.opacity(pressed ? 0.55 : 0), radius: 2, x: 0, y: 2)))
-			}
-			.overlay {
-				RoundedRectangle(cornerRadius: 6)
-					.stroke(pressed ? theme.link.opacity(0.7) : theme.border, lineWidth: 1)
-			}
-			.shadow(color: .black.opacity(pressed ? 0 : 0.2), radius: 1, x: 0, y: 1)
-			.offset(y: pressed ? 1 : 0)
 	}
 }

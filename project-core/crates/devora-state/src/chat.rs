@@ -40,6 +40,7 @@ pub struct Chat {
     pub turn_running: bool,
     pub pause_requested: bool,
     pub globally_held: bool,
+    pub keep_paused: bool,
     pub session_id: Option<String>,
     pub items: Vec<TranscriptItem>,
     pub error: Option<String>,
@@ -51,6 +52,7 @@ pub struct Chat {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ChatUpdate {
     GlobalHold { held: bool },
+    KeepPaused { keep_paused: bool },
     PauseRequested { requested: bool },
     Turn { running: bool },
     Generation { generation: u64 },
@@ -110,6 +112,7 @@ pub(crate) fn apply(chats: &mut Vec<Chat>, command: ChatCommand) -> Result<ChatE
                 turn_running: false,
                 pause_requested: false,
                 globally_held: false,
+                keep_paused: false,
                 session_id: None,
                 items: vec![],
                 error: None,
@@ -136,6 +139,7 @@ pub(crate) fn apply(chats: &mut Vec<Chat>, command: ChatCommand) -> Result<ChatE
                 .ok_or(StateError::UnknownTab { tab })?;
             match &update {
                 ChatUpdate::GlobalHold { held } => chat.globally_held = *held,
+                ChatUpdate::KeepPaused { keep_paused } => chat.keep_paused = *keep_paused,
                 ChatUpdate::PauseRequested { requested } => chat.pause_requested = *requested,
                 ChatUpdate::Turn { running } => chat.turn_running = *running,
                 ChatUpdate::Generation { generation } => {

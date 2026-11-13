@@ -44,15 +44,32 @@ Feature: Global Pause
     And the agent "Echo" should be idle
     And the agent prompt draft is "After relaunch"
 
+  Scenario: Keep paused survives relaunch and can be reversed before Devora resumes
+    When the user globally pauses Devora
+    Then the agent chat is paused
+    When the user keeps this agent paused through Global Pause
+    And the current agent CLI launch count is recorded
+    And Sapphire is quit and relaunched
+    Then Devora is globally paused
+    And the Keep paused switch is on
+    And the agent CLI launch count is unchanged
+    When the user lets this agent resume with Devora
+    And the user toggles Global Pause from the palette
+    Then Devora is globally running
+    And the agent "Echo" should be idle
+    And the pause widget shows "Pause"
+
   Scenario: Keep paused retains the individual hold after Devora resumes
     When the user sends the agent prompt "permission"
     Then the agent chat shows a permission card
     When the user globally pauses Devora
     Then the pause widget shows "Pausing…"
     When the user keeps this agent paused through Global Pause
+    And the user lets this agent resume with Devora
+    And the user keeps this agent paused through Global Pause
     And the user allows the agent permission with Command+Y
     Then the agent chat is paused
-    And the pause widget shows "Devora paused"
+    And the pause widget shows "Paused"
     When the user toggles Global Pause from the palette
     Then Devora is globally running
     And the agent chat is paused

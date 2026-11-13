@@ -154,6 +154,9 @@ final class TestBridge {
 				case "send": await panel.chat.send()
 				case "stop": await panel.chat.stop()
 				case "pause": panel.chat.pause()
+				case "keepPaused":
+					guard let keep = body["value"] as? Bool else { throw BridgeError(status: 400, "missing Keep paused value") }
+					panel.chat.setKeepPaused(keep)
 				case "retry": await panel.chat.retry()
 				case "older": await panel.chat.older()
 				case "toggleThinking": panel.transcript?.toggleFirst(.thinking)

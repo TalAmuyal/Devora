@@ -48,6 +48,7 @@ struct Owner {
     pause: watch::Sender<bool>,
     pause_requested: bool,
     globally_held: bool,
+    keep_paused: bool,
     done: watch::Sender<bool>,
 }
 
@@ -148,7 +149,7 @@ impl Agents {
                 }
                 let waiting = inner.owners.get(&key).filter(|owner| !*owner.done.borrow());
                 if let Some(owner) = waiting {
-                    if !*owner.pause.borrow() && !owner.pause_requested {
+                    if !*owner.pause.borrow() && !owner.pause_requested && !owner.keep_paused {
                         let tab = owner.tab.ok_or("agent has no tab")?;
                         self.state
                             .dispatch(Command::ActivateTab { tab })
@@ -172,6 +173,11 @@ impl Agents {
                             pause,
                             pause_requested: false,
                             globally_held: false,
+                            keep_paused: self.state.snapshot().agent_views.iter().any(|view| {
+                                view.profile_path == key.profile.to_string_lossy()
+                                    && view.name == key.name
+                                    && view.keep_paused
+                            }),
                             done,
                         },
                     );
@@ -290,6 +296,51 @@ impl Agents {
             owner.tab = None;
             owner.pause.send_replace(true);
         }
+        Ok(())
+    }
+
+    /// Change only the release choice of an owner held by Global Pause.
+    pub fn set_keep_paused(
+        &self,
+        tab: u64,
+        generation: u64,
+        keep_paused: bool,
+    ) -> Result<(), String> {
+        let mut inner = lock(&self.inner);
+        if inner.closing {
+            return Err("agents are shutting down".into());
+        }
+        if !self.state.global_paused() {
+            return Err("Keep paused requires an active global hold".into());
+        }
+        let (key, owner) = inner
+            .owners
+            .iter_mut()
+            .find(|(_, owner)| owner.tab == Some(tab))
+            .ok_or("agent is not open")?;
+        if owner.generation != generation || *owner.pause.borrow() || *owner.done.borrow() {
+            return Err("agent generation is stale or pausing".into());
+        }
+        if !owner.globally_held || owner.pause_requested {
+            return Err("agent is not globally held".into());
+        }
+        if owner.keep_paused == keep_paused {
+            return Ok(());
+        }
+        self.state
+            .dispatch(Command::SetAgentKeepPaused {
+                profile_path: key.profile.to_string_lossy().into_owned(),
+                name: key.name.clone(),
+                keep_paused,
+            })
+            .map_err(|error| error.to_string())?;
+        owner.keep_paused = keep_paused;
+        events::update(
+            &self.state,
+            tab,
+            generation,
+            ChatUpdate::KeepPaused { keep_paused },
+        );
         Ok(())
     }
 
@@ -814,7 +865,7 @@ async fn run_session(
     let globally_paused =
         global_pause::check(inner.clone(), state.clone(), key.clone(), generation);
     publish(inner, state, key, generation, SpaceEvent::Restored(history));
-    while globally_paused() && !*pause.borrow() {
+    while globally_paused() && state.global_paused() && !*pause.borrow() {
         if let Some(owner) = lock(inner).owners.get(key) {
             phase(state, owner, ChatPhase::Paused);
         }
@@ -824,6 +875,13 @@ async fn run_session(
         }
     }
     if *pause.borrow() {
+        return Ok(());
+    }
+    if lock(inner)
+        .owners
+        .get(key)
+        .is_some_and(|owner| owner.keep_paused)
+    {
         return Ok(());
     }
     if let Some(owner) = lock(inner).owners.get_mut(key) {

@@ -76,13 +76,21 @@ final class AgentPauseUITests: XCTestCase {
 		waitFor("The widget shows the draining global hold") {
 			global.exists && (global.value as? String) == "Pausing after this turn"
 		}
-		let keep = app.buttons["agent-keep-paused"]
+		let keep = app.descendants(matching: .any)["agent-keep-paused"].firstMatch
+		func keepValue() -> Int? {
+			if let value = keep.value as? NSNumber { return value.intValue }
+			return (keep.value as? String).flatMap(Int.init)
+		}
 		XCTAssertTrue(keep.isHittable)
 		XCTAssertTrue(app.buttons["agent-stop"].isHittable)
 		XCTAssertLessThanOrEqual(app.buttons["agent-stop"].frame.maxX, window.frame.maxX)
 		keep.click()
-		waitFor("Keep paused becomes selected") { keep.isSelected && !keep.isEnabled }
-		XCTAssertTrue((keep.value as? String)?.contains("On.") == true)
+		waitFor("Keep paused becomes selected and stays reversible") { keepValue() == 1 && keep.isEnabled }
+		keep.click()
+		waitFor("Keep paused can be switched off") { keepValue() == 0 }
+		keep.click()
+		waitFor("Keep paused can be selected again") { keepValue() == 1 }
+		XCTAssertEqual(global.value as? String, "Pausing after this turn")
 		app.buttons["Allow ⌘Y"].click()
 		XCTAssertTrue(app.buttons["agent-stop"].waitForNonExistence(timeout: 10))
 		XCTAssertFalse(pause.exists, "An individual Resume action is unavailable while globally held")

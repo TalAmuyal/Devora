@@ -23,7 +23,8 @@ final class AgentPanelModel {
 	var pausePresentation: AgentPausePresentation {
 		AgentPausePresentation(
 			phase: chat.chat?.phase, pauseRequested: chat.chat?.pauseRequested == true,
-			globallyPaused: chat.globallyPaused, globallyHeld: chat.chat?.globallyHeld == true)
+			globallyPaused: chat.globallyPaused, globallyHeld: chat.chat?.globallyHeld == true,
+			keepPausedSelected: chat.chat?.keepPaused == true)
 	}
 
 	func focus() {
@@ -86,10 +87,11 @@ struct AgentChatPanel: View {
 			AgentWidgetBar(
 				context: model.chat.chat?.context, enterSends: model.chat.enterSends,
 				pause: model.pausePresentation,
-				theme: TranscriptTheme(model.theme), turnRunning: model.chat.chat?.turnRunning == true,
+				turnRunning: model.chat.chat?.turnRunning == true,
 				canSend: model.chat.canSend, onSend: { Task { await model.chat.send() } },
 				onStop: { Task { await model.chat.stop() } },
-				onPause: { model.chat.pause() }, onResume: { Task { await model.chat.retry() } }
+				onPause: { model.chat.pause() }, onResume: { Task { await model.chat.retry() } },
+				onKeepPaused: { model.chat.setKeepPaused($0) }
 			)
 			.padding(.horizontal, 12).padding(.bottom, 10)
 		}
@@ -173,13 +175,13 @@ struct AgentWidgetBar: View {
 	let context: ChatContext?
 	let enterSends: Bool
 	let pause: AgentPausePresentation
-	let theme: TranscriptTheme
 	let turnRunning: Bool
 	let canSend: Bool
 	let onSend: () -> Void
 	let onStop: () -> Void
 	let onPause: () -> Void
 	let onResume: () -> Void
+	let onKeepPaused: (Bool) -> Void
 
 	var sendHint: String {
 		enterSends ? "Enter sends · Shift+Enter newline" : "⌘Enter / Ctrl+Enter sends · Enter newline"
@@ -188,7 +190,7 @@ struct AgentWidgetBar: View {
 	var body: some View {
 		HStack(spacing: 12) {
 			AgentContextWidget(context: context)
-			AgentPauseWidget(presentation: pause, theme: theme, onPause: onPause, onResume: onResume)
+			AgentPauseWidget(presentation: pause, onPause: onPause, onResume: onResume, onKeepPaused: onKeepPaused)
 			Spacer(minLength: 12)
 			if turnRunning {
 				Button("■ Stop", action: onStop)

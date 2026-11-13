@@ -41,8 +41,8 @@ struct AgentPauseTests {
 			(.opening, "Pausing…", "Pausing after this turn"),
 			(.running, "Pausing…", "Pausing after this turn"),
 			(.pausing, "Pausing…", "Pausing after this turn"),
-			(.paused, "Devora paused", "Resume Devora to send"),
-			(.failed, "Pausing…", "Pausing after this turn"),
+			(.paused, "Paused", "Resume Devora to send"),
+			(.failed, "Paused", "Resume Devora to send"),
 		]
 		for (phase, label, value) in cases {
 			for requested in [false, true] {
@@ -71,12 +71,29 @@ struct AgentPauseTests {
 		for (phase, requested, kept) in cases {
 			let state = AgentPausePresentation(
 				phase: phase, pauseRequested: requested, globallyPaused: true, globallyHeld: false)
-			#expect(state.label == "Devora paused")
+			#expect(state.label == "Paused")
 			#expect(state.action == .none)
 			#expect(!state.keepPaused)
 			#expect(state.keptPaused == kept)
 			#expect(state.tooltip == "Resume Devora to send")
 		}
+	}
+
+	@Test func keepChoiceChangesWithoutConvertingTheGlobalHold() {
+		for selected in [false, true, false] {
+			let state = AgentPausePresentation(
+				phase: .paused, pauseRequested: false, globallyPaused: true, globallyHeld: true,
+				keepPausedSelected: selected)
+			#expect(state.keepPaused)
+			#expect(state.keptPaused == selected)
+			#expect(state.label == "Paused")
+			#expect(state.action == .none)
+		}
+		let draining = AgentPausePresentation(
+			phase: .running, pauseRequested: true, globallyPaused: true, globallyHeld: true,
+			keepPausedSelected: true)
+		#expect(draining.label == "Pausing…")
+		#expect(draining.accessibilityValue == "Pausing after this turn")
 	}
 
 	@Test func keepingPausedThenResumingDevoraOffersOnlyIndividualResume() {

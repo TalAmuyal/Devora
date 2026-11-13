@@ -125,13 +125,16 @@ impl Pane {
     }
 }
 
-/// Durable chat presentation state, retained when its tab is closed.
+/// Durable agent view state and global-hold release choice, retained when its tab is closed.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AgentViewState {
     pub profile_path: String,
     pub name: String,
     pub draft: String,
     pub anchor: Option<ChatScrollAnchor>,
+    /// Remain individually paused when the current global hold releases.
+    #[serde(default)]
+    pub keep_paused: bool,
 }
 
 /// The top visible transcript item and its offset, or None for following output.

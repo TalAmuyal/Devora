@@ -9,31 +9,39 @@ pub(super) fn check(
 ) -> devora_agent_space::GlobalPauseCheck {
     Arc::new(move || {
         let paused = state.global_paused();
-        if paused {
-            let mut inner = lock(&inner);
-            if let Some(owner) = inner
-                .owners
-                .get_mut(&key)
-                .filter(|owner| owner.run_id == run_id)
-            {
-                if !owner.pause_requested && !owner.globally_held && !*owner.pause.borrow() {
-                    owner.globally_held = true;
-                    if let Some(tab) = owner.tab {
-                        events::update(
-                            &state,
-                            tab,
-                            owner.generation,
-                            ChatUpdate::GlobalHold { held: true },
-                        );
-                        events::update(
-                            &state,
-                            tab,
-                            owner.generation,
-                            ChatUpdate::PauseRequested { requested: true },
-                        );
-                    }
+        let mut inner = lock(&inner);
+        if let Some(owner) = inner
+            .owners
+            .get_mut(&key)
+            .filter(|owner| owner.run_id == run_id)
+        {
+            if paused && !owner.pause_requested && !owner.globally_held && !*owner.pause.borrow() {
+                owner.globally_held = true;
+                if let Some(tab) = owner.tab {
+                    events::update(
+                        &state,
+                        tab,
+                        owner.generation,
+                        ChatUpdate::GlobalHold { held: true },
+                    );
+                    events::update(
+                        &state,
+                        tab,
+                        owner.generation,
+                        ChatUpdate::PauseRequested { requested: true },
+                    );
+                    events::update(
+                        &state,
+                        tab,
+                        owner.generation,
+                        ChatUpdate::KeepPaused {
+                            keep_paused: owner.keep_paused,
+                        },
+                    );
                 }
             }
+            // A release cannot cancel the graceful boundary selected by Keep paused.
+            return paused || (owner.globally_held && owner.keep_paused);
         }
         paused
     })
@@ -49,7 +57,7 @@ pub(super) async fn wait_for_release(
     let changes = state.subscribe_global_pause();
     loop {
         {
-            let inner = lock(inner);
+            let mut inner = lock(inner);
             let eligible = inner.owners.get(key).is_some_and(|owner| {
                 owner.run_id == run_id
                     && owner.tab.is_some()
@@ -61,6 +69,21 @@ pub(super) async fn wait_for_release(
                 return false;
             }
             if !state.global_paused() {
+                let owner = inner.owners.get_mut(key).expect("eligible owner");
+                if owner.keep_paused {
+                    owner.pause_requested = true;
+                    owner.globally_held = false;
+                    owner.pause.send_replace(true);
+                    if let Some(tab) = owner.tab {
+                        events::update(
+                            state,
+                            tab,
+                            owner.generation,
+                            ChatUpdate::GlobalHold { held: false },
+                        );
+                    }
+                    return false;
+                }
                 return true;
             }
         }
@@ -89,9 +112,9 @@ pub(super) fn changed(
             if let Some(owner) = inner
                 .owners
                 .get_mut(&key)
-                .filter(|owner| owner.run_id == run_id)
+                .filter(|owner| owner.run_id == run_id && owner.handle.is_some())
             {
-                if !stopping {
+                if !stopping && !owner.keep_paused {
                     owner.globally_held = false;
                 }
                 if let Some(tab) = owner.tab {
@@ -100,7 +123,7 @@ pub(super) fn changed(
                         tab,
                         owner.generation,
                         ChatUpdate::PauseRequested {
-                            requested: owner.pause_requested,
+                            requested: owner.pause_requested || owner.keep_paused,
                         },
                     );
                     events::update(

@@ -12,6 +12,11 @@ pub enum Command {
     SetGlobalPaused {
         paused: bool,
     },
+    SetAgentKeepPaused {
+        profile_path: String,
+        name: String,
+        keep_paused: bool,
+    },
     ClearAgentDraft {
         profile_path: String,
         name: String,
@@ -152,6 +157,7 @@ pub enum Event {
 /// Why a command was rejected; a rejected command changes nothing.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum StateError {
+    GlobalPauseRequired,
     InvalidPreviewWidth {
         width: u32,
     },
@@ -185,6 +191,7 @@ pub enum StateError {
 impl fmt::Display for StateError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::GlobalPauseRequired => f.write_str("Keep paused requires an active global hold"),
             Self::InvalidPreviewWidth { width } => write!(
                 f,
                 "preview width {width} is outside {}..={}",
@@ -241,8 +248,48 @@ pub(crate) fn apply(
                 vec![]
             } else {
                 app.global_paused = paused;
-                vec![Event::GlobalPauseChanged { paused }]
+                let mut events = vec![];
+                if !paused {
+                    for view in &mut app.agent_views {
+                        if view.keep_paused {
+                            view.keep_paused = false;
+                            events.push(Event::AgentViewChanged {
+                                profile_path: view.profile_path.clone(),
+                                name: view.name.clone(),
+                                view: Some(view.clone()),
+                            });
+                        }
+                    }
+                }
+                events.push(Event::GlobalPauseChanged { paused });
+                events
             }
+        }
+        Command::SetAgentKeepPaused {
+            profile_path,
+            name,
+            keep_paused,
+        } => {
+            if !app.global_paused {
+                return Err(StateError::GlobalPauseRequired);
+            }
+            if !keep_paused
+                && !app.agent_views.iter().any(|view| {
+                    view.profile_path == profile_path && view.name == name && view.keep_paused
+                })
+            {
+                return Ok(vec![]);
+            }
+            let view = agent_view(app, &profile_path, &name);
+            if view.keep_paused == keep_paused {
+                return Ok(vec![]);
+            }
+            view.keep_paused = keep_paused;
+            vec![Event::AgentViewChanged {
+                profile_path,
+                name,
+                view: Some(view.clone()),
+            }]
         }
         Command::ClearAgentDraft {
             profile_path,

@@ -354,6 +354,10 @@ export class Bridge {
     await this.request('POST', '/test/agent-chat', { action, text });
   }
 
+  async setKeepPaused(value: boolean): Promise<void> {
+    await this.request('POST', '/test/agent-chat', { action: 'keepPaused', value });
+  }
+
   guide(): Promise<{ text: string; error: string | null }> {
     return this.request('GET', '/test/guide');
   }

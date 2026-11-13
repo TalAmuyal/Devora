@@ -47,6 +47,7 @@ const MIGRATIONS: &[&str] = &[
      CREATE UNIQUE INDEX preview_order ON previews(tab_id, position);",
     "CREATE TABLE agent_views (profile_path TEXT NOT NULL, name TEXT NOT NULL, draft TEXT NOT NULL, anchor_sequence INTEGER, anchor_offset INTEGER, PRIMARY KEY(profile_path, name));",
     "ALTER TABLE meta ADD COLUMN global_paused INTEGER NOT NULL DEFAULT 0;",
+    "ALTER TABLE agent_views ADD COLUMN keep_paused INTEGER NOT NULL DEFAULT 0;",
 ];
 
 pub(crate) struct Db {
@@ -342,7 +343,7 @@ fn load(conn: &Connection) -> Result<State, Error> {
     }
 
     let mut query = conn.prepare(
-        "SELECT profile_path, name, draft, anchor_sequence, anchor_offset
+        "SELECT profile_path, name, draft, anchor_sequence, anchor_offset, keep_paused
          FROM agent_views ORDER BY profile_path, name",
     )?;
     let agent_views = query
@@ -357,6 +358,7 @@ fn load(conn: &Connection) -> Result<State, Error> {
                     sequence,
                     offset: offset.unwrap_or(0),
                 }),
+                keep_paused: row.get(5)?,
             })
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -377,13 +379,14 @@ fn write(conn: &mut Connection, state: &State) -> rusqlite::Result<()> {
     tx.execute("DELETE FROM agent_views", [])?;
     for view in &state.app.agent_views {
         tx.execute(
-            "INSERT INTO agent_views VALUES (?1, ?2, ?3, ?4, ?5)",
+            "INSERT INTO agent_views VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             params![
                 view.profile_path,
                 view.name,
                 view.draft,
                 view.anchor.as_ref().map(|a| a.sequence),
-                view.anchor.as_ref().map(|a| a.offset)
+                view.anchor.as_ref().map(|a| a.offset),
+                view.keep_paused
             ],
         )?;
     }
@@ -1066,6 +1069,46 @@ mod tests {
 mod agent_view_tests {
     use super::*;
     use crate::{ChatScrollAnchor, Command, Store};
+
+    #[test]
+    fn keep_paused_survives_held_restart_and_clears_on_release() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("state.db");
+        let store = Store::open(&path).unwrap();
+        store
+            .dispatch(Command::SetGlobalPaused { paused: true })
+            .unwrap();
+        for keep_paused in [true, false, true] {
+            store
+                .dispatch(Command::SetAgentKeepPaused {
+                    profile_path: "/profile".into(),
+                    name: "Delta".into(),
+                    keep_paused,
+                })
+                .unwrap();
+            assert_eq!(store.snapshot().agent_views[0].keep_paused, keep_paused);
+        }
+        drop(store);
+        let store = Store::open(&path).unwrap();
+        assert!(store.snapshot().global_paused);
+        assert!(store.snapshot().agent_views[0].keep_paused);
+        store
+            .dispatch(Command::SetGlobalPaused { paused: false })
+            .unwrap();
+        assert!(!store.snapshot().agent_views[0].keep_paused);
+        let before = store.snapshot();
+        assert_eq!(
+            store.dispatch(Command::SetAgentKeepPaused {
+                profile_path: "/profile".into(),
+                name: "Delta".into(),
+                keep_paused: true,
+            }),
+            Err(StateError::GlobalPauseRequired)
+        );
+        assert_eq!(store.snapshot(), before);
+        drop(store);
+        assert!(!Store::open(&path).unwrap().snapshot().agent_views[0].keep_paused);
+    }
 
     #[test]
     fn drafts_and_scroll_survive_close_and_restart_and_can_be_cleared() {

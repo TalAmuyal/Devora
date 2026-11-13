@@ -122,9 +122,10 @@ Pause reserves a stop after the running turn, rejects new sends while pending, a
 The facade queues `SpaceHandle::pause_after_turn` before returning, and the space actor makes the pause-versus-compaction decision.
 `AgentWidgetBar`, below the editor, holds the content-sized Context and Pause widgets on the left and Send on the right, whose tooltip and accessibility hint carry the Enter hint.
 A running turn replaces Send with Stop in that position.
-`AgentPauseWidget` maps the typed phase and pause flags through `AgentPausePresentation` into Pause, disabled Pausing…, Resume, or Devora paused, with the global resume hint in its tooltip.
-Keep paused converts a global hold to an individual pause, shown by the separate Keep paused button remaining selected and inset until Devora resumes and the widget offers Resume.
-The widget uses the transcript theme's colors and exposes each state and its available actions to accessibility.
+`AgentPauseWidget` maps the typed phase and pause flags through `AgentPausePresentation` into Pause, disabled Pausing…, Resume, or a system-colored Paused capsule, with the global resume hint in its tooltip and accessibility description.
+Keep paused is a native reversible switch that selects whether this globally held agent remains paused when Devora resumes.
+The widget uses native macOS controls and system colors, and exposes each state and its available actions to accessibility.
+Agents individually paused before the global hold show the switch on and disabled until Devora resumes.
 Its `AgentContextWidget` shows the actor's typed context usage as a percentage of the window and a ring, starting at 9 o'clock, that fills as the usage nears the compaction threshold, with the full numbers in its tooltip and the user's locale for both; an unknown usage or window grays it out and its tooltip says which is missing.
 Retry and Resume reopen the existing tab against its owning profile.
 
@@ -138,8 +139,9 @@ An agent tab shows Pausing… until its current turn ends and Paused afterward, 
 `AgentChat.globallyPaused` disables sending and exposes the resume hint while drafts keep their normal persistence.
 The core also refuses sends during the hold.
 Permission responses and Stop remain available for a draining turn.
-The chat's Keep Paused action converts a global hold into an individual pause for that run.
-The core-owned chat `globallyHeld` projection selects this action.
+The chat's Keep paused switch sets the core-owned, generation-scoped release choice without changing the held worker.
+The typed `globallyHeld` and `keepPaused` chat projections control its availability and selection.
+The choice survives a relaunch while globally paused and can be reversed before Devora resumes.
 The initial restored snapshot carries the global hold before agent restore launches work.
 
 ## Profiles and the first run

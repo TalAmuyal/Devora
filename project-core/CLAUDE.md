@@ -51,7 +51,12 @@ A released hold cancels its pending boundary request, or resumes through the own
 Resume eligibility ends on individual pause or tab close, and stays in memory.
 The registry retains each held owner through process reaping and uses a new generation when its runtime restarts.
 A fresh process restores all open agent tabs under the saved hold, showing history before any CLI launch, and releases all of them on global resume.
-Only the global bool persists across app restarts.
+Keep paused is a reversible release choice on a globally held owner, changed through a generation-scoped setter while the authoritative global hold is active.
+It changes no worker or process while held.
+On release, a selected owner completes its current turn and stays individually paused; its admission check retains that boundary even if release arrives before the turn ends.
+The choice persists beside the agent's draft and scroll state so a held restore publishes it before any CLI launch.
+Releasing the global hold clears those durable choices in the same transaction; the existing owner retains its selected pause intent until stopped.
+An agent individually paused before the global hold retains its individual pause and cannot change this release choice.
 
 ## Periodic repository updates
 

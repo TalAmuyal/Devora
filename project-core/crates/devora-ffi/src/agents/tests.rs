@@ -668,6 +668,204 @@ fn deletion_retry_finishes_presentation_cleanup_after_the_directory_is_gone() {
 }
 
 #[test]
+fn global_pause_keep_choice_is_reversible_and_release_during_a_turn_honors_it() {
+    for keep in [false, true] {
+        let f = Fixture::new(false);
+        let events = f.core.subscribe_agent_chats().unwrap();
+        f.create("Choice");
+        let tab = f.open("Choice");
+        let chat = f.wait(&events, |c| c.tab == tab && c.phase == ChatPhase::Running);
+        let generation = chat.generation;
+        block_on(f.core.send_agent_turn(tab, generation, "permission".into())).unwrap();
+        f.wait(&events, |c| c.tab == tab && !c.questions.is_empty());
+        f.core
+            .dispatch(Command::SetGlobalPaused { paused: true })
+            .unwrap();
+        f.wait(&events, |c| c.tab == tab && c.globally_held);
+        for choice in [true, false, true, keep, keep] {
+            f.core
+                .set_agent_keep_paused(tab, generation, choice)
+                .unwrap();
+            let chat = f
+                .core
+                .agent_chat_snapshot()
+                .unwrap()
+                .into_iter()
+                .find(|c| c.tab == tab)
+                .unwrap();
+            assert!(chat.globally_held);
+            assert_eq!(chat.keep_paused, choice);
+            assert_eq!(chat.phase, ChatPhase::Running);
+        }
+        assert!(f
+            .core
+            .set_agent_keep_paused(tab, generation + 1, !keep)
+            .is_err());
+        f.core
+            .dispatch(Command::SetGlobalPaused { paused: false })
+            .unwrap();
+        assert!(f
+            .core
+            .set_agent_keep_paused(tab, generation, !keep)
+            .is_err());
+        let mut resume = keep.then(|| {
+            Box::pin(
+                f.core
+                    .open_agent_space(f.profile.path_string(), "Choice".into(), f.launch()),
+            )
+        });
+        if let Some(resume) = resume.as_mut() {
+            assert!(
+                block_on(poll_once(resume.as_mut())).is_none(),
+                "Resume must wait for the kept owner's graceful stop"
+            );
+        }
+        block_on(f.core.answer_agent_permission(
+            tab,
+            generation,
+            "question".into(),
+            PermissionAnswer::Allow,
+        ))
+        .unwrap();
+        f.wait(&events, |c| {
+            c.tab == tab
+                && has_message(c, "result")
+                && c.phase
+                    == if keep {
+                        ChatPhase::Paused
+                    } else {
+                        ChatPhase::Running
+                    }
+        });
+        let report = fs::read_to_string(f.profile.root.path().join("report.jsonl")).unwrap();
+        assert_eq!(
+            report
+                .lines()
+                .filter(
+                    |line| serde_json::from_str::<serde_json::Value>(line).unwrap()["kind"]
+                        == "start"
+                )
+                .count(),
+            1
+        );
+        if let Some(resume) = resume {
+            assert_eq!(block_on(resume).unwrap(), tab);
+            f.wait(&events, |c| {
+                c.tab == tab && c.phase == ChatPhase::Running && c.generation > generation
+            });
+        }
+        f.core.close_agent_space(tab).unwrap();
+        assert!(f.core.set_agent_keep_paused(tab, generation, true).is_err());
+        block_on(f.core.shutdown_agents()).unwrap();
+    }
+}
+
+#[test]
+fn global_pause_keep_choice_can_change_after_drain_and_before_any_launch() {
+    let f = Fixture::new(false);
+    let events = f.core.subscribe_agent_chats().unwrap();
+    f.core
+        .dispatch(Command::SetGlobalPaused { paused: true })
+        .unwrap();
+    f.create("Held");
+    let tab = f.open("Held");
+    let chat = f.wait(&events, |c| {
+        c.tab == tab && c.globally_held && c.phase == ChatPhase::Paused
+    });
+    for keep in [true, false, true, false] {
+        f.core
+            .set_agent_keep_paused(tab, chat.generation, keep)
+            .unwrap();
+    }
+    assert!(!f.profile.root.path().join("report.jsonl").exists());
+    f.core
+        .dispatch(Command::SetGlobalPaused { paused: false })
+        .unwrap();
+    f.wait(&events, |c| c.tab == tab && c.phase == ChatPhase::Running);
+    f.core
+        .dispatch(Command::SetGlobalPaused { paused: true })
+        .unwrap();
+    let held = f.wait(&events, |c| {
+        c.tab == tab && c.globally_held && c.phase == ChatPhase::Paused
+    });
+    for keep in [true, false, true] {
+        f.core
+            .set_agent_keep_paused(tab, held.generation, keep)
+            .unwrap();
+    }
+    block_on(f.core.shutdown_agents()).unwrap();
+    assert!(f
+        .core
+        .set_agent_keep_paused(tab, held.generation, false)
+        .is_err());
+}
+
+#[test]
+fn global_pause_keep_choice_restores_before_launch_and_close_wins_over_changes() {
+    let mut f = Fixture::new(true);
+    let events = f.core.subscribe_agent_chats().unwrap();
+    f.core
+        .dispatch(Command::SetGlobalPaused { paused: true })
+        .unwrap();
+    f.create("RestoreChoice");
+    let tab = f.open("RestoreChoice");
+    let held = f.wait(&events, |c| {
+        c.tab == tab && c.globally_held && c.phase == ChatPhase::Paused
+    });
+    f.core
+        .set_agent_keep_paused(tab, held.generation, true)
+        .unwrap();
+    block_on(f.core.shutdown_agents()).unwrap();
+    events.close().unwrap();
+    let old = std::mem::replace(
+        &mut f.core,
+        DevoraCore::new(Some(f.config.clone()), None, crate::log::test_log()).unwrap(),
+    );
+    drop(old);
+    f.core = DevoraCore::new(
+        Some(f.config.clone()),
+        Some(
+            f.profile
+                .root
+                .path()
+                .join("state.db")
+                .to_string_lossy()
+                .into_owned(),
+        ),
+        crate::log::test_log(),
+    )
+    .unwrap();
+    block_on(f.core.restore_agent_spaces(f.launch())).unwrap();
+    let events = f.core.subscribe_agent_chats().unwrap();
+    let restored = f.wait(&events, |c| {
+        c.tab == tab && c.globally_held && c.keep_paused && c.phase == ChatPhase::Paused
+    });
+    assert!(!f.profile.root.path().join("report.jsonl").exists());
+    f.core
+        .set_agent_keep_paused(tab, restored.generation, false)
+        .unwrap();
+    f.core
+        .dispatch(Command::SetGlobalPaused { paused: false })
+        .unwrap();
+    f.wait(&events, |c| c.tab == tab && c.phase == ChatPhase::Running);
+    f.core
+        .dispatch(Command::SetGlobalPaused { paused: true })
+        .unwrap();
+    let held = f.wait(&events, |c| {
+        c.tab == tab && c.globally_held && c.phase == ChatPhase::Paused
+    });
+    f.core
+        .set_agent_keep_paused(tab, held.generation, true)
+        .unwrap();
+    f.core.close_agent_space(tab).unwrap();
+    assert!(f
+        .core
+        .set_agent_keep_paused(tab, held.generation, false)
+        .is_err());
+    block_on(f.core.shutdown_agents()).unwrap();
+}
+
+#[test]
 fn global_pause_drains_active_and_idle_agents_and_preserves_individual_pause() {
     let f = Fixture::new(false);
     let config = f.profile.path.join("config.json");

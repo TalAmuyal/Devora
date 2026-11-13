@@ -263,6 +263,7 @@ pub struct Chat {
     pub turn_running: bool,
     pub pause_requested: bool,
     pub globally_held: bool,
+    pub keep_paused: bool,
     pub session_id: Option<String>,
     pub items: Vec<TranscriptItem>,
     pub error: Option<String>,
@@ -279,6 +280,7 @@ pub struct ChatContext {
 #[uniffi::remote(Enum)]
 pub enum ChatUpdate {
     GlobalHold { held: bool },
+    KeepPaused { keep_paused: bool },
     PauseRequested { requested: bool },
     Turn { running: bool },
     Generation { generation: u64 },
@@ -476,6 +478,15 @@ impl DevoraCore {
     }
     pub fn pause_agent_after_turn(&self, tab: u64, generation: u64) -> Result<(), CoreError> {
         self.agents.pause_after_turn(tab, generation)?;
+        Ok(())
+    }
+    pub fn set_agent_keep_paused(
+        &self,
+        tab: u64,
+        generation: u64,
+        keep_paused: bool,
+    ) -> Result<(), CoreError> {
+        self.agents.set_keep_paused(tab, generation, keep_paused)?;
         Ok(())
     }
     pub async fn pause_agent_space(&self, tab: u64) -> Result<(), CoreError> {
