@@ -3,6 +3,7 @@
 export interface AgentChatState {
   globallyPaused: boolean;
   globallyHeld: boolean;
+  pauseWidget: { label: string; tooltip: string; enabled: boolean; keepPaused: boolean; keptPaused: boolean };
   context: { used: string; window: string; threshold: number } | null;
   dom: {
     text: string;

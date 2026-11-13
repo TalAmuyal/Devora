@@ -43,3 +43,20 @@ Feature: Global Pause
     Then Devora is globally running
     And the agent "Echo" should be idle
     And the agent prompt draft is "After relaunch"
+
+  Scenario: Keep paused retains the individual hold after Devora resumes
+    When the user sends the agent prompt "permission"
+    Then the agent chat shows a permission card
+    When the user globally pauses Devora
+    Then the pause widget shows "Pausing…"
+    When the user keeps this agent paused through Global Pause
+    And the user allows the agent permission with Command+Y
+    Then the agent chat is paused
+    And the pause widget shows "Devora paused"
+    When the user toggles Global Pause from the palette
+    Then Devora is globally running
+    And the agent chat is paused
+    And the agent resume action is available
+    When the user resumes the agent chat
+    Then the agent "Echo" should be idle
+    And the pause widget shows "Pause"

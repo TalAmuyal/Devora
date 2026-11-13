@@ -137,6 +137,11 @@ final class TestBridge {
 				observation["globallyPaused"] = panel.chat.globallyPaused
 				observation["globallyHeld"] = panel.chat.chat?.globallyHeld ?? false
 				observation["running"] = panel.chat.chat?.turnRunning ?? false
+				let pause = panel.pausePresentation
+				observation["pauseWidget"] = [
+					"label": pause.label, "tooltip": pause.tooltip,
+					"enabled": pause.action != .none, "keepPaused": pause.keepPaused, "keptPaused": pause.keptPaused,
+				] as [String: Any]
 				observation["anchor"] = panel.chat.anchor.map { String($0.sequence) as Any } ?? NSNull()
 				observation["questions"] = panel.chat.chat?.questions.count ?? 0
 				observation["error"] = panel.chat.error.map { $0 as Any } ?? NSNull()

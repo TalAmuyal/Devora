@@ -190,7 +190,9 @@ The hold also prevents the next save-memory or compaction turn from starting.
 Sending during the hold shows a hint to resume Devora and keeps the prompt as a saved draft.
 Resume Devora releases agents held by Global Pause.
 Agents paused individually before or during the hold stay paused during that run.
-Use Keep Paused on a globally held agent to preserve its individual pause when the global hold is released.
+The Pause widget beside Context controls the individual agent's pause and shows the global hold.
+Use Keep paused there to preserve its individual pause when the global hold is released.
+Stop takes Send's place while a turn runs.
 
 The global hold survives quitting and relaunching Sapphire.
 Restored agent tabs show their history while held, and Resume Devora then starts every open agent tab as normal startup would.

@@ -120,7 +120,11 @@ Drafts and sequence/offset anchors use the canonical profile and space name, so 
 Stop interrupts with no keyboard binding.
 Pause reserves a stop after the running turn, rejects new sends while pending, and leaves permission answers available.
 The facade queues `SpaceHandle::pause_after_turn` before returning, and the space actor makes the pause-versus-compaction decision.
-`AgentWidgetBar`, below the editor, holds the widgets at their natural size on the left and Send on the right, whose tooltip and accessibility hint carry the Enter hint.
+`AgentWidgetBar`, below the editor, holds the content-sized Context and Pause widgets on the left and Send on the right, whose tooltip and accessibility hint carry the Enter hint.
+A running turn replaces Send with Stop in that position.
+`AgentPauseWidget` maps the typed phase and pause flags through `AgentPausePresentation` into Pause, disabled Pausing…, Resume, or Devora paused, with the global resume hint in its tooltip.
+Keep paused converts a global hold to an individual pause, shown by the separate Keep paused button remaining selected and inset until Devora resumes and the widget offers Resume.
+The widget uses the transcript theme's colors and exposes each state and its available actions to accessibility.
 Its `AgentContextWidget` shows the actor's typed context usage as a percentage of the window and a ring, starting at 9 o'clock, that fills as the usage nears the compaction threshold, with the full numbers in its tooltip and the user's locale for both; an unknown usage or window grays it out and its tooltip says which is missing.
 Retry and Resume reopen the existing tab against its owning profile.
 
