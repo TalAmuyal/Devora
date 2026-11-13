@@ -20,6 +20,13 @@ final class AgentPanelModel {
 		theme = (try? store.userGuideContent(resourceDir: Bundle.main.resourcePath ?? "").1) ?? [:]
 	}
 
+	var pausePresentation: AgentPausePresentation {
+		AgentPausePresentation(
+			phase: chat.chat?.phase, pauseRequested: chat.chat?.pauseRequested == true,
+			globallyPaused: chat.globallyPaused, globallyHeld: chat.chat?.globallyHeld == true,
+			keepPausedSelected: chat.chat?.keepPaused == true)
+	}
+
 	func focus() {
 		Task { await chat.refreshSettings() }
 		if let editor { editor.window?.makeFirstResponder(editor) }
@@ -49,28 +56,6 @@ struct AgentChatPanel: View {
 
 	var body: some View {
 		VStack(spacing: 0) {
-			HStack {
-				Text(model.chat.name).font(.headline)
-				Spacer()
-				if model.chat.chat?.turnRunning == true {
-					Button("■ Stop") { Task { await model.chat.stop() } }
-				}
-				if model.chat.globallyPaused && model.chat.chat?.globallyHeld == true {
-					Text(model.chat.chat?.phase == .paused ? "Paused" : "Pausing…").font(.caption)
-						.accessibilityIdentifier("agent-global-pause-status")
-					Button("Keep Paused") { model.chat.pause() }
-				} else if model.chat.chat?.phase == .paused {
-					Button("Resume") { Task { await model.chat.retry() } }.disabled(model.chat.globallyPaused)
-				} else {
-					Button(model.chat.chat?.pauseRequested == true ? "⏸️ Pausing…" : "Pause") {
-						model.chat.pause()
-					}
-					.disabled(
-						model.chat.chat?.phase != .running
-							|| model.chat.chat?.pauseRequested == true)
-				}
-			}.padding(12)
-			Divider()
 			if let error = model.chat.chat?.error ?? model.chat.error {
 				HStack {
 					Text(error).textSelection(.enabled)
@@ -90,13 +75,6 @@ struct AgentChatPanel: View {
 				ProgressView("Opening agent…").frame(maxWidth: .infinity, maxHeight: .infinity)
 			}
 			Divider()
-			if model.chat.globallyPaused {
-				Text("Globally paused — resume Devora to send")
-					.font(.caption).foregroundStyle(.secondary)
-					.padding(.vertical, 4)
-					.accessibilityIdentifier("global-pause-send-hint")
-				Divider()
-			}
 			AgentPrompt(
 				text: Binding(get: { model.chat.draft }, set: { model.chat.draft = $0 }),
 				enterSends: model.chat.enterSends, onSend: { Task { await model.chat.send() } },
@@ -108,7 +86,12 @@ struct AgentChatPanel: View {
 			.frame(minHeight: 85, idealHeight: 110, maxHeight: 180).padding(8)
 			AgentWidgetBar(
 				context: model.chat.chat?.context, enterSends: model.chat.enterSends,
-				canSend: model.chat.canSend, onSend: { Task { await model.chat.send() } }
+				pause: model.pausePresentation,
+				turnRunning: model.chat.chat?.turnRunning == true,
+				canSend: model.chat.canSend, onSend: { Task { await model.chat.send() } },
+				onStop: { Task { await model.chat.stop() } },
+				onPause: { model.chat.pause() }, onResume: { Task { await model.chat.retry() } },
+				onKeepPaused: { model.chat.setKeepPaused($0) }
 			)
 			.padding(.horizontal, 12).padding(.bottom, 10)
 		}
@@ -187,12 +170,18 @@ final class PromptTextView: NSTextView {
 	}
 }
 
-/// The row below the prompt: the widgets on the left, in order and each at its natural size, and Send on the right.
+/// The row below the prompt, with content-sized widgets and the current turn action on the right.
 struct AgentWidgetBar: View {
 	let context: ChatContext?
 	let enterSends: Bool
+	let pause: AgentPausePresentation
+	let turnRunning: Bool
 	let canSend: Bool
 	let onSend: () -> Void
+	let onStop: () -> Void
+	let onPause: () -> Void
+	let onResume: () -> Void
+	let onKeepPaused: (Bool) -> Void
 
 	var sendHint: String {
 		enterSends ? "Enter sends · Shift+Enter newline" : "⌘Enter / Ctrl+Enter sends · Enter newline"
@@ -201,10 +190,17 @@ struct AgentWidgetBar: View {
 	var body: some View {
 		HStack(spacing: 12) {
 			AgentContextWidget(context: context)
+			AgentPauseWidget(presentation: pause, onPause: onPause, onResume: onResume, onKeepPaused: onKeepPaused)
 			Spacer(minLength: 12)
-			Button("Send", action: onSend).disabled(!canSend)
-				.help(sendHint)
-				.accessibilityHint(sendHint)
+			if turnRunning {
+				Button("■ Stop", action: onStop)
+					.help("Interrupt the current turn")
+					.accessibilityIdentifier("agent-stop")
+			} else {
+				Button("Send", action: onSend).disabled(!canSend)
+					.help(sendHint)
+					.accessibilityHint(sendHint)
+			}
 		}
 	}
 }

@@ -84,6 +84,7 @@ public final class AgentChat {
 			switch update {
 			case .pauseRequested(let requested): value.pauseRequested = requested
 			case .globalHold(let held): value.globallyHeld = held
+			case .keepPaused(let keep): value.keepPaused = keep
 			case .generation(let next):
 				value.generation = next
 				value.questions = []
@@ -244,6 +245,11 @@ public final class AgentChat {
 	public func pause() {
 		guard let generation = chat?.generation else { return }
 		do { try core.pauseAgentAfterTurn(tab: tab, generation: generation) } catch { fail(error) }
+	}
+
+	public func setKeepPaused(_ keepPaused: Bool) {
+		guard let generation = chat?.generation else { return }
+		do { try core.setAgentKeepPaused(tab: tab, generation: generation, keepPaused: keepPaused) } catch { fail(error) }
 	}
 
 	public func retry() async {

@@ -26,6 +26,8 @@ Then('the global pause send hint is shown', async function (this: SapphireWorld)
   const chat = await this.bridge.agentChat();
   assert.equal(chat.globallyPaused, true);
   assert.equal(chat.canSend, false);
+  assert.equal(chat.pauseWidget.label, 'Paused');
+  assert.equal(chat.pauseWidget.tooltip, 'Resume Devora to send');
 });
 When('the user toggles Global Pause from the palette', async function (this: SapphireWorld) {
   const state = await this.bridge.state();
@@ -43,3 +45,24 @@ function launchCount(world: SapphireWorld): number {
 }
 When('the current agent CLI launch count is recorded', function (this: SapphireWorld) { launches.set(this, launchCount(this)); });
 Then('the agent CLI launch count is unchanged', function (this: SapphireWorld) { assert.equal(launchCount(this), launches.get(this)); });
+
+When('the user keeps this agent paused through Global Pause', async function (this: SapphireWorld) {
+  await this.bridge.waitFor('the Keep paused action', () => this.bridge.agentChat(), s => s.pauseWidget.keepPaused);
+  await this.bridge.setKeepPaused(true);
+  await this.bridge.waitFor('the selected Keep paused switch', () => this.bridge.agentChat(), s => s.globallyHeld && s.pauseWidget.keptPaused);
+});
+When('the user lets this agent resume with Devora', async function (this: SapphireWorld) {
+  await this.bridge.setKeepPaused(false);
+  await this.bridge.waitFor('the cleared Keep paused switch', () => this.bridge.agentChat(), s => s.globallyHeld && !s.pauseWidget.keptPaused);
+});
+Then('the Keep paused switch is on', async function (this: SapphireWorld) {
+  await this.bridge.waitFor('the selected Keep paused switch', () => this.bridge.agentChat(), s => s.globallyHeld && s.pauseWidget.keptPaused);
+});
+Then('the pause widget shows {string}', async function (this: SapphireWorld, label: string) {
+  await this.bridge.waitFor(`pause widget ${label}`, () => this.bridge.agentChat(), s => s.pauseWidget.label === label);
+});
+Then('the agent resume action is available', async function (this: SapphireWorld) {
+  const chat = await this.bridge.agentChat();
+  assert.equal(chat.pauseWidget.label, 'Resume');
+  assert.equal(chat.pauseWidget.enabled, true);
+});

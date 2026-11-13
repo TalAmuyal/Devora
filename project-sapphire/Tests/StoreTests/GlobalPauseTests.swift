@@ -15,7 +15,7 @@ struct GlobalPauseTests {
 		try core.dispatch(command: .openSession(title: "Draft", kind: .shell, profilePath: "/profile"))
 		let tab = try #require(core.snapshot().window.tabs.first)
 		let model = try AgentChat(store: store, core: core, tab: tab, name: "Draft")
-		model.apply(.started(chat: Chat(tab: tab.id, generation: 1, phase: .running, turnRunning: false, pauseRequested: false, globallyHeld: false, sessionId: "cli", items: [], error: nil, questions: [], usageJson: nil, context: nil)))
+		model.apply(.started(chat: Chat(tab: tab.id, generation: 1, phase: .running, turnRunning: false, pauseRequested: false, globallyHeld: false, keepPaused: false, sessionId: "cli", items: [], error: nil, questions: [], usageJson: nil, context: nil)))
 		model.draft = "Keep this prompt"
 		await store.dispatch(.setGlobalPaused(true)).value
 		try await eventually { store.app.globalPaused }

@@ -63,6 +63,8 @@ Types of changes:
 
 ### Changed
 
+- Sapphire chat puts native Pause controls and a reversible Keep paused switch in the Widget Bar, preserves the switch during held relaunches, replaces Send with Stop during a turn, and shows the agent name in its tab.
+
 - Devora Sapphire's agent chat renders natively, in the theme's colors: faster to open and scroll and lighter on memory, with Mermaid diagrams drawn as images and permission rules written as sentences
 - Devora Sapphire's agent chat has a compact Widget Bar below the prompt: a Context widget (the usage as a percentage and a ring that fills up to the compaction threshold, with the full numbers in its tooltip) and Send, whose tooltip carries the Enter hint
 - Devora Sapphire has its own app icon: the Devora "D" in Catppuccin's sapphire, where Ember's is mauve
