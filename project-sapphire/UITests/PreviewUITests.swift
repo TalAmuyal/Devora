@@ -70,8 +70,7 @@ final class PreviewUITests: XCTestCase {
 		add(capture)
 		app.buttons.matching(identifier: "Close preview").element(boundBy: 0).click()
 		waitUntil { app.buttons.matching(identifier: "Close preview").count == 1 }
-		let heading = app.webViews.firstMatch.staticTexts.matching(NSPredicate(format: "value CONTAINS %@", "Second pane")).firstMatch
-		XCTAssertTrue(heading.waitForExistence(timeout: 15))
+		app.webViews.firstMatch.waitForText("Second pane", timeout: 15)
 		app.typeText("printf '%s' $$ >'\(stacked.path)'\n")
 		waitUntil { FileManager.default.fileExists(atPath: stacked.path) }
 		XCTAssertEqual(try String(contentsOf: restored, encoding: .utf8), try String(contentsOf: stacked, encoding: .utf8))
@@ -105,8 +104,7 @@ final class PreviewUITests: XCTestCase {
 		app.typeText("'\(debi)' preview '\(file.path)'\n")
 		let close = app.buttons["Close preview"].firstMatch
 		XCTAssertTrue(close.waitForExistence(timeout: 10))
-		let heading = app.webViews.firstMatch.staticTexts.matching(NSPredicate(format: "value CONTAINS %@", "Preview document")).firstMatch
-		XCTAssertTrue(heading.waitForExistence(timeout: 15), "the \(format) heading is rendered before capture")
+		app.webViews.firstMatch.waitForText("Preview document", timeout: 15, "the \(format) heading is rendered before capture")
 		let capture = XCTAttachment(screenshot: app.screenshot())
 		capture.name = "\(format) preview beside terminal"
 		capture.lifetime = .keepAlways

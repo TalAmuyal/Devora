@@ -309,3 +309,4 @@ A test that waits decides on what it waits for, never on the clock: the unit tes
 - Code under test that times out takes its wait as a parameter (`MermaidRenderer`'s `sleep`), so a test fires the timeout when it says (`TimeoutClock`), and other tests never time out on their own.
 - A suite that waits has a `.timeLimit`, which is what catches a real hang.
 - Load reproduces CI's contention: `taskpolicy -c background swift test --filter AppShellTests` runs on the efficiency cores only, where a wall-clock wait fails within a run or two.
+- In the XCUITests, a web view's text is found with `waitForText` (`UITests/WebText.swift`), never a `value` predicate: WebKit puts a heading's text in its `value` on older macOS, and on newer ones in its `title`, with its level as a number in `value`, which makes `value CONTAINS` throw.
