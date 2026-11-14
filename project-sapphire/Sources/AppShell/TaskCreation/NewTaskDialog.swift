@@ -74,9 +74,14 @@ final class NewTaskDialogModel {
 		if selected.remove(repo.path) == nil { selected.insert(repo.path) }
 	}
 
-	/// A click on a row toggles it and makes it the active one, as Ember's does.
+	/// A click on a repo's checkbox or name toggles it and makes it the active one, as Ember's does.
 	func click(_ repo: RepoInfo) {
 		toggle(repo)
+		activate(repo)
+	}
+
+	/// Makes `repo` the active row, as selecting it in the list does, without toggling it.
+	func activate(_ repo: RepoInfo) {
 		if let index = visibleRepos.firstIndex(of: repo) { cursor.select(index) }
 	}
 
@@ -171,9 +176,9 @@ struct NewTaskDialogView: View {
 						.focused($field, equals: .filter)
 						.accessibilityIdentifier("new-task-filter")
 					RepoListView(
-						repos: model.visibleRepos, active: model.activeRepo, mode: .multi,
-						isSelected: { model.selected.contains($0.path) }, click: model.click,
-						identifierPrefix: "new-task-repo-")
+						repos: model.visibleRepos, filter: model.filter, active: model.activeRepo, mode: .multi,
+						isSelected: { model.selected.contains($0.path) }, click: model.click, activate: model.activate,
+						identifierPrefix: "new-task-repo-", height: 180)
 				}
 				HStack(spacing: 10) {
 					Spacer()

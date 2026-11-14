@@ -144,8 +144,9 @@ struct AddRepoDialogView: View {
 			.accessibilityIdentifier("add-repo-filter")
 		let selected = model.selectedRepo
 		RepoListView(
-			repos: model.visibleRepos, active: selected, mode: .single,
-			isSelected: { $0 == selected }, click: model.click, identifierPrefix: "add-repo-repo-")
+			repos: model.visibleRepos, filter: model.filter, active: selected, mode: .single,
+			isSelected: { $0 == selected }, click: model.click, activate: model.click, identifierPrefix: "add-repo-repo-",
+			height: 180)
 		dialogFieldLabel("Name postfix (optional)")
 		TextField("e.g. ref", text: $model.postfix)
 			.textFieldStyle(.roundedBorder)

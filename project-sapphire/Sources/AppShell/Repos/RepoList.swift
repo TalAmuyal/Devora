@@ -10,7 +10,9 @@ extension [RepoInfo] {
 	}
 }
 
-/// The rows of Ember's `RepoList`, shared by the New Task dialog (checkboxes, any number selected) and the Add Repo dialog (radio buttons, the active row being the one selected); the dialog owns the filter field and the selection.
+/// The repo picker of the New Agent, New Task and Add Repo dialogs, as a native list: the active row is the list's
+/// selection, and in `.multi` each repo is a checkbox (any number chosen), while in `.single` the selection is the
+/// choice. The dialog owns the filter field, the cursor and what is chosen.
 struct RepoListView: View {
 	enum Mode {
 		case multi
@@ -18,54 +20,64 @@ struct RepoListView: View {
 	}
 
 	let repos: [RepoInfo]
+	/// What the filter field holds, which the empty list names.
+	let filter: String
 	let active: RepoInfo?
 	let mode: Mode
 	let isSelected: (RepoInfo) -> Bool
+	/// A click on a checkbox or its repo's name (`.multi`).
 	let click: (RepoInfo) -> Void
+	/// Selecting a row in the list, by a click or the list's own arrow keys.
+	let activate: (RepoInfo) -> Void
 	/// Each row's accessibility identifier is this followed by the repo's name.
 	let identifierPrefix: String
+	let height: CGFloat
 
 	var body: some View {
 		ScrollViewReader { proxy in
-			ScrollView {
-				LazyVStack(alignment: .leading, spacing: 2) {
-					if repos.isEmpty {
-						Text("No matching repos").foregroundStyle(.secondary).padding(8)
-					}
-					ForEach(repos, id: \.path) { repo in
-						let selected = isSelected(repo)
-						HStack(spacing: 8) {
-							Image(systemName: icon(selected: selected))
-								.foregroundStyle(selected ? Color.accentColor : .secondary)
-							Text(repo.name)
-							Spacer(minLength: 0)
-						}
-						.padding(.horizontal, 8)
-						.padding(.vertical, 5)
-						.background(repo == active ? AnyShapeStyle(.selection) : AnyShapeStyle(.clear), in: .rect(cornerRadius: 6))
-						.contentShape(.rect)
-						.onTapGesture { click(repo) }
-						.id(repo.path)
-						.accessibilityElement(children: .combine)
-						.accessibilityAddTraits(.isButton)
-						.accessibilityValue(selected ? "selected" : "")
-						.accessibilityIdentifier("\(identifierPrefix)\(repo.name)")
-					}
-				}
-				.padding(4)
+			List(repos, id: \.path, selection: selection) { repo in
+				row(repo)
+					.id(repo.path)
 			}
-			.frame(height: 180)
-			.background(.quaternary.opacity(0.4), in: .rect(cornerRadius: 8))
+			.listStyle(.bordered)
+			.overlay {
+				if repos.isEmpty {
+					ContentUnavailableView.search(text: filter.trimmingCharacters(in: .whitespaces))
+				}
+			}
+			.frame(height: height)
 			.onChange(of: active?.path) { _, path in
 				if let path { proxy.scrollTo(path) }
 			}
 		}
 	}
 
-	private func icon(selected: Bool) -> String {
-		switch mode {
-		case .multi: selected ? "checkmark.square.fill" : "square"
-		case .single: selected ? "largecircle.fill.circle" : "circle"
+	private var selection: Binding<String?> {
+		Binding(
+			get: { active?.path },
+			set: { path in
+				if let repo = repos.first(where: { $0.path == path }) { activate(repo) }
+			})
+	}
+
+	@ViewBuilder private func row(_ repo: RepoInfo) -> some View {
+		let selected = isSelected(repo)
+		Group {
+			switch mode {
+			case .multi:
+				Toggle(isOn: Binding(get: { selected }, set: { _ in click(repo) })) { name(repo) }
+					.toggleStyle(.checkbox)
+			case .single:
+				name(repo)
+			}
 		}
+		.frame(maxWidth: .infinity, alignment: .leading)
+		.listRowSeparator(.hidden)
+		.help(repo.name)
+		.accessibilityIdentifier("\(identifierPrefix)\(repo.name)")
+	}
+
+	private func name(_ repo: RepoInfo) -> some View {
+		Text(repo.name).lineLimit(1).truncationMode(.middle)
 	}
 }

@@ -63,6 +63,7 @@ Types of changes:
 
 ### Changed
 
+- Devora Sapphire's repo picker (New Agent, New Task and Add Repo) is a native Mac list, with checkboxes, the system selection highlight, one-line names truncated in the middle and a native "No Results" view; New Agent's list no longer overlaps the fields around it
 - Sapphire chat puts native Pause controls and a reversible Keep paused switch in the Widget Bar, preserves the switch during held relaunches, replaces Send with Stop during a turn, and shows the agent name in its tab.
 
 - Devora Sapphire's agent chat renders natively, in the theme's colors: faster to open and scroll and lighter on memory, with Mermaid diagrams drawn as images and permission rules written as sentences

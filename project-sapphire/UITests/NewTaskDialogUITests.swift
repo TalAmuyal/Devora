@@ -59,9 +59,9 @@ final class NewTaskDialogUITests: XCTestCase {
 		let web = element("new-task-repo-web")
 		XCTAssertFalse(element("new-task-repo-api").exists, "the filter hides the repos it doesn't match")
 		app.typeKey(.return, modifierFlags: [])
-		XCTAssertEqual(web.value as? String, "selected", "Enter in the filter toggles the active repo")
+		XCTAssertEqual(web.value as? Int, 1, "Enter in the filter checks the active repo")
 		app.typeKey(.return, modifierFlags: [])
-		XCTAssertEqual(web.value as? String ?? "", "")
+		XCTAssertEqual(web.value as? Int, 0, "and Enter again unchecks it")
 		XCTAssertTrue(dialog.exists)
 
 		// Filter, Cancel, Create, then back to the title, whose text a field selects when tabbed into: the focus never leaves the dialog.
@@ -126,7 +126,7 @@ final class NewTaskDialogUITests: XCTestCase {
 		XCTAssertTrue(clone.waitForNonExistence(timeout: 30), "the clone closes its dialog once done")
 		let cloned = element("new-task-repo-repo")
 		XCTAssertTrue(cloned.waitForExistence(timeout: 5))
-		XCTAssertEqual(cloned.value as? String, "selected")
+		XCTAssertEqual(cloned.value as? Int, 1, "the clone is checked")
 		XCTAssertTrue(FileManager.default.fileExists(atPath: scratch.appending(path: "Work/repos/repo/.git").path))
 	}
 
