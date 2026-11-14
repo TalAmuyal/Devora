@@ -29,6 +29,9 @@ final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NSTableVi
 	var onAnswer: (String, String, UInt64) -> Void = { _, _, _ in }
 
 	private var heights = RowHeights()
+	/// The height the table was last given for each row, which is what it lays the row out at: an estimate can change
+	/// after the table took it (the calibration learns from every measurement), so a measurement is compared with this.
+	private(set) var tableHeights: [TranscriptEntry.Key: CGFloat] = [:]
 	private var documents: [UInt64: (text: String, document: MarkdownDocument)] = [:]
 	/// The thinking and tool rows the reader expanded, by sequence: kept through updates, cell reuse and older pages.
 	private var expanded: Set<UInt64> = []
@@ -158,11 +161,13 @@ final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NSTableVi
 		documents = documents.filter { sequences.contains($0.key) }
 		adjusting = true
 		defer { adjusting = false }
+		let inserted: Range<Int>
 		switch change {
 		case .none: return
 		case .prepended(let count):
 			olderRequested = false
 			table.insertRows(at: IndexSet(0..<count), withAnimation: [])
+			inserted = 0..<count
 		case .updated(let changed, let removedFromTop, let appended, let removedFromBottom):
 			let oldCount = table.numberOfRows
 			table.beginUpdates()
@@ -175,12 +180,17 @@ final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NSTableVi
 				withoutAnimation { table.noteHeightOfRows(withIndexesChanged: rows) }
 				table.reloadData(forRowIndexes: rows, columnIndexes: [0])
 			}
-			if appended > 0 { table.insertRows(at: IndexSet((new.count - appended)..<new.count), withAnimation: []) }
+			inserted = (new.count - appended)..<new.count
+			if appended > 0 { table.insertRows(at: IndexSet(inserted), withAnimation: []) }
 			table.endUpdates()
 		case .reloaded:
 			table.reloadData()
+			inserted = new.indices
 		}
-		heights.keep(only: Set(new.map(\.key)))
+		layOut(inserted)
+		let keys = Set(new.map(\.key))
+		heights.keep(only: keys)
+		tableHeights = tableHeights.filter { keys.contains($0.key) }
 		findPending()
 		var kept: Pin?
 		if firstLoad, let saved = restoring {
@@ -201,7 +211,18 @@ final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NSTableVi
 	func numberOfRows(in tableView: NSTableView) -> Int { entries.count }
 
 	func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {
-		heights.height(entries[row], expanded: isExpanded(row), width: width)
+		let height = heights.height(entries[row], expanded: isExpanded(row), width: width)
+		tableHeights[entries[row].key] = height
+		return height
+	}
+
+	/// Has the table take the inserted rows' heights now. After some batch updates `NSTableView` asks for only part of the
+	/// inserted rows' heights and estimates the rest itself; when it asks for them later, at a layout of its own, the rows
+	/// below move outside `settle`, and the hosted rows' accessibility frames stay where the rows were. Asking for a row's
+	/// rect makes the table ask for its height; `noteHeightOfRows` doesn't, it estimates again. AppKit doesn't document
+	/// either, so `TranscriptScrollViewTests` pins it.
+	private func layOut(_ rows: Range<Int>) {
+		for row in rows { _ = table.rect(ofRow: row) }
 	}
 
 	func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
@@ -359,13 +380,12 @@ final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NSTableVi
 		for row in rows where pending.contains(row) {
 			let entry = entries[row]
 			let expanded = isExpanded(row)
-			let before = heights.height(entry, expanded: expanded, width: width)
 			measurer.rootView = AnyView(view(row).frame(width: width))
 			measurements += 1
 			let height = max(1, ceil(measurer.fittingSize.height))
 			heights.record(entry, expanded: expanded, diagrams: diagramPrint(row), width: width, height: height)
 			pending.remove(row)
-			if height != before { changed.insert(row) }
+			if height != tableHeights[entry.key] { changed.insert(row) }
 		}
 		return changed
 	}
