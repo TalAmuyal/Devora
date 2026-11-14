@@ -48,7 +48,8 @@ description = "Create a Devora Ember DMG from the built Ember .app bundle (run b
 
 [tasks.test-rust]
 dir = "src-tauri"
-run = "cargo test"
+# --locked: a Cargo.lock that is out of date with the manifests fails here, rather than being rewritten during the run.
+run = "cargo test --locked"
 description = "Run Rust tests"
 
 [tasks.lint-rust]
@@ -70,7 +71,10 @@ description = "Run frontend unit tests in watch mode"
 raw = true
 
 [tasks.test-all]
-depends = ["test-rust", "test-unit"]
+# One after the other, not as parallel `depends`: the unit tests fingerprint the real working tree
+# (scripts/__tests__/bundle-fingerprint.test.ts, app-bundle.test.ts), and a cargo build beside them both slows them past
+# their timeout and can change the files they hash.
+run = [{ task = "test-rust" }, { task = "test-unit" }]
 description = "Run all tests (Rust + frontend unit)"
 
 [tasks._cucumber]
