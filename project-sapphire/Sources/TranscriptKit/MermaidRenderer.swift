@@ -1,5 +1,6 @@
 import AppKit
 import WebKit
+import WebRendering
 
 /// A Mermaid diagram to draw: its source, at a width in points and a screen scale, in a theme (its colors' hash).
 struct DiagramKey: Hashable {

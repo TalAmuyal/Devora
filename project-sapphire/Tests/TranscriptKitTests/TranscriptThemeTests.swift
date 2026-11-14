@@ -3,7 +3,7 @@ import CoreBindings
 import SwiftUI
 import Testing
 
-@testable import AppShell
+@testable import TranscriptKit
 
 /// Colors from Catppuccin Macchiato, Devora's default theme.
 private let macchiato = [

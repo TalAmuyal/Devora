@@ -4,7 +4,7 @@ import Foundation
 import Testing
 import TestSupport
 
-@testable import AppShell
+@testable import TranscriptKit
 
 /// A drawer that answers on the main actor's next turn, or once its `gate` opens; fails the sources it is told to,
 /// never answers for the `hanging` ones, and records how many draws ran at once. Nothing in it takes time.

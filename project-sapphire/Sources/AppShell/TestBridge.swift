@@ -5,6 +5,7 @@ import Layers
 import Network
 import WebKit
 import SwiftUI
+import TranscriptKit
 import Store
 import TerminalKit
 
