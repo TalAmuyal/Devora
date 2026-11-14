@@ -246,6 +246,50 @@ struct TranscriptScrollViewTests {
 		await settle(view)
 		#expect(view.visibleAnchor == anchor)
 	}
+
+	/// The batches of one long turn past the chat's 200-row tail: the prompt, then replies, then more replies that push
+	/// the oldest rows out of the tail.
+	private func longTurn(_ view: TranscriptScrollView) {
+		let prompt = item(1, .user(text: "history:240", error: nil))
+		let replies = (0..<241).map { reply(UInt64($0 + 2), "History turn \($0)") }
+		view.apply([prompt])
+		view.apply([prompt] + replies.prefix(120))
+		view.apply(Array(([prompt] + replies).suffix(200)))
+	}
+
+	/// The heights the table asked the transcript for, by row; nil for a row it never asked about.
+	private func heightsGiven(_ view: TranscriptScrollView) -> [CGFloat?] {
+		view.entries.map { view.tableHeights[$0.key] }
+	}
+
+	@Test func aBatchThatPushesRowsOutOfTheTailLaysOutEveryRowAtItsHeight() {
+		let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 900, height: 300), styleMask: [.titled], backing: .buffered, defer: false)
+		window.isReleasedWhenClosed = false
+		defer { window.close() }
+		let view = TranscriptScrollView(anchor: nil)
+		view.frame = window.contentView!.bounds
+		view.autoresizingMask = [.width, .height]
+		window.contentView!.addSubview(view)
+		window.layoutIfNeeded()
+		longTurn(view)
+		// Read before anything asks for the rows' rects, which is what makes the table take their heights: a table that
+		// estimated some rows itself would move them later, outside `settle`.
+		let laidOut = view.table.rect(ofRow: view.table.numberOfRows - 1).maxY
+		let given = heightsGiven(view)
+		#expect(given.allSatisfy { $0 != nil })
+		#expect(laidOut == given.reduce(0) { $0 + ($1 ?? 0) })
+	}
+
+	@Test func settledRowsAreLaidOutAtTheirMeasuredHeights() async {
+		let (window, view) = shown([])
+		defer { window.close() }
+		longTurn(view)
+		await settle(view)
+		// A row the table took at an estimate that changed since (the calibration learns from every measurement) must
+		// still be told its measured height.
+		let wrong = (0..<view.table.numberOfRows).filter { view.table.rect(ofRow: $0).height != view.tableView(view.table, heightOfRow: $0) }
+		#expect(wrong.isEmpty)
+	}
 }
 
 /// The scroll benchmark for the native transcript's target (no frame over 50 ms scrolling 5,000 rows), on a real window and display

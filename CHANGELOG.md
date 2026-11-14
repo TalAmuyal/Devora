@@ -94,6 +94,7 @@ Types of changes:
 
 ### Fixed
 
+- Devora Sapphire's agent transcript lays every row out at its measured height: rows no longer keep an outdated estimated height that is too tall or too short for their content, and VoiceOver no longer reports a row away from where it is drawn after the transcript scrolls itself to the bottom
 - Config updates replace files atomically, so readers do not see partially written JSON
 
 - Sapphire recovers interrupted workspace creations on restart, removing incomplete fresh workspaces and releasing reused workspaces while preserving completed or re-claimed workspaces
