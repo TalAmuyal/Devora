@@ -21,17 +21,20 @@ final class PreviewUITests: XCTestCase {
 		let first = scratch.appending(path: "first.md"), second = scratch.appending(path: "second.md")
 		try "# First pane\n".write(to: first, atomically: true, encoding: .utf8)
 		try "# Second pane\n".write(to: second, atomically: true, encoding: .utf8)
-		let debi = try XCTUnwrap(ProcessInfo.processInfo.environment["SAPPHIRE_TEST_DEBI"])
 		let app = XCUIApplication()
 		app.launchEnvironment["DEVORA_CONFIG_PATH"] = config.path
 		app.launchEnvironment["DEVORA_STATE_DIR"] = scratch.appending(path: "state").path
+		// The shell expands these, so a command names its files without typing their long paths: XCUITest types each
+		// character, and a path costs seconds.
+		app.launchEnvironment["UITEST_OUT"] = scratch.path
+		app.launchEnvironment["UITEST_DEBI"] = try XCTUnwrap(ProcessInfo.processInfo.environment["SAPPHIRE_TEST_DEBI"])
 		app.launch()
 		defer { app.terminate() }
 		app.openFirstShell()
 		let before = scratch.appending(path: "pid-before"), after = scratch.appending(path: "pid-after")
-		app.typeText("printf '%s' $$ >'\(before.path)'\n")
+		app.typeText("printf %s $$ >\"$UITEST_OUT/pid-before\"\n")
 		waitUntil { FileManager.default.fileExists(atPath: before.path) }
-		app.typeText("'\(debi)' preview '\(first.path)'\n")
+		app.typeText("\"$UITEST_DEBI\" preview \"$UITEST_OUT/first.md\"\n")
 		let divider = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "preview-divider-")).firstMatch
 		XCTAssertTrue(divider.waitForExistence(timeout: 15))
 		let window = app.windows.firstMatch
@@ -46,7 +49,7 @@ final class PreviewUITests: XCTestCase {
 		add(dragCapture)
 		waitUntil { divider.frame.midX - window.frame.minX < original - 40 }
 		let resized = divider.frame.midX - window.frame.minX
-		app.typeText("printf '%s' $$ >'\(after.path)'\n")
+		app.typeText("printf %s $$ >\"$UITEST_OUT/pid-after\"\n")
 		waitUntil { FileManager.default.fileExists(atPath: after.path) }
 		XCTAssertEqual(try String(contentsOf: before, encoding: .utf8), try String(contentsOf: after, encoding: .utf8), "opening and dragging must preserve the shell process")
 		app.terminate()
@@ -60,9 +63,9 @@ final class PreviewUITests: XCTestCase {
 			thenDragTo: window.coordinate(withNormalizedOffset: CGVector(dx: 0.99, dy: 0.5)))
 		waitUntil { abs(window.frame.maxX - divider.frame.maxX - 200) < 5 }
 		let restored = scratch.appending(path: "pid-restored"), stacked = scratch.appending(path: "pid-stacked")
-		app.typeText("printf '%s' $$ >'\(restored.path)'\n")
+		app.typeText("printf %s $$ >\"$UITEST_OUT/pid-restored\"\n")
 		waitUntil { FileManager.default.fileExists(atPath: restored.path) }
-		app.typeText("'\(debi)' preview --stack '\(second.path)'\n")
+		app.typeText("\"$UITEST_DEBI\" preview --stack \"$UITEST_OUT/second.md\"\n")
 		waitUntil { app.buttons.matching(identifier: "Close preview").count == 2 }
 		let capture = XCTAttachment(screenshot: app.screenshot())
 		capture.name = "Stacked previews after divider drag"
@@ -71,7 +74,7 @@ final class PreviewUITests: XCTestCase {
 		app.buttons.matching(identifier: "Close preview").element(boundBy: 0).click()
 		waitUntil { app.buttons.matching(identifier: "Close preview").count == 1 }
 		app.webViews.firstMatch.waitForText("Second pane", timeout: 15)
-		app.typeText("printf '%s' $$ >'\(stacked.path)'\n")
+		app.typeText("printf %s $$ >\"$UITEST_OUT/pid-stacked\"\n")
 		waitUntil { FileManager.default.fileExists(atPath: stacked.path) }
 		XCTAssertEqual(try String(contentsOf: restored, encoding: .utf8), try String(contentsOf: stacked, encoding: .utf8))
 		app.buttons["Close preview"].firstMatch.click()
@@ -97,11 +100,12 @@ final class PreviewUITests: XCTestCase {
 		let app = XCUIApplication()
 		app.launchEnvironment["DEVORA_CONFIG_PATH"] = config.path
 		app.launchEnvironment["DEVORA_STATE_DIR"] = scratch.appending(path: "state").path
+		app.launchEnvironment["UITEST_OUT"] = scratch.path
+		app.launchEnvironment["UITEST_DEBI"] = try XCTUnwrap(ProcessInfo.processInfo.environment["SAPPHIRE_TEST_DEBI"])
 		app.launch()
 		defer { app.terminate() }
 		app.openFirstShell()
-		let debi = try XCTUnwrap(ProcessInfo.processInfo.environment["SAPPHIRE_TEST_DEBI"])
-		app.typeText("'\(debi)' preview '\(file.path)'\n")
+		app.typeText("\"$UITEST_DEBI\" preview \"$UITEST_OUT/preview.\(suffix)\"\n")
 		let close = app.buttons["Close preview"].firstMatch
 		XCTAssertTrue(close.waitForExistence(timeout: 10))
 		app.webViews.firstMatch.waitForText("Preview document", timeout: 15, "the \(format) heading is rendered before capture")
@@ -112,7 +116,7 @@ final class PreviewUITests: XCTestCase {
 		close.click()
 		XCTAssertTrue(close.waitForNonExistence(timeout: 5))
 		let output = scratch.appending(path: "focused")
-		app.typeText("printf focused >'\(output.path)'\n")
+		app.typeText("printf focused >\"$UITEST_OUT/focused\"\n")
 		let deadline = Date.now.addingTimeInterval(10)
 		while !FileManager.default.fileExists(atPath: output.path), Date.now < deadline { Thread.sleep(forTimeInterval: 0.1) }
 		XCTAssertEqual(try String(contentsOf: output, encoding: .utf8), "focused")
