@@ -37,6 +37,18 @@ struct NewTaskDialogTests {
 		#expect(model.selected == ["/repos/api"])
 	}
 
+	@Test func selectingARowMovesTheCursorWithoutCheckingItWhileAClickOnItsCheckboxDoesBoth() {
+		let model = dialog()
+
+		model.activate(model.repos[2])
+		#expect(model.activeRepo?.name == "web-admin")
+		#expect(model.selected.isEmpty)
+
+		model.click(model.repos[1])
+		#expect(model.activeRepo?.name == "web")
+		#expect(model.selected == ["/repos/web"])
+	}
+
 	@Test func enterInTheFilterTogglesTheActiveRepoAndEnterElsewhereCreatesWithTheSelectionInListOrder() {
 		let model = dialog(title: "  Fix login ")
 		model.focus = .filter

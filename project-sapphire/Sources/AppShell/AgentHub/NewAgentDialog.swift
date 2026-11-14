@@ -129,8 +129,14 @@ final class NewAgentDialogModel {
 		refreshFields()
 	}
 
+	/// A click on a repo's checkbox or name toggles it and makes it the active one.
 	func click(_ repo: RepoInfo) {
 		toggle(repo)
+		activate(repo)
+	}
+
+	/// Makes `repo` the active row, as selecting it in the list does, without toggling it.
+	func activate(_ repo: RepoInfo) {
 		if let index = visibleRepos.firstIndex(of: repo) { cursor.select(index) }
 	}
 
@@ -333,10 +339,9 @@ struct NewAgentDialogView: View {
 				.focused($field, equals: .filter)
 				.accessibilityIdentifier("new-agent-filter")
 			RepoListView(
-				repos: model.visibleRepos, active: model.activeRepo, mode: .multi,
-				isSelected: { model.selected.contains($0.path) }, click: model.click,
-				identifierPrefix: "new-agent-repo-")
-				.frame(maxHeight: 140)
+				repos: model.visibleRepos, filter: model.filter, active: model.activeRepo, mode: .multi,
+				isSelected: { model.selected.contains($0.path) }, click: model.click, activate: model.activate,
+				identifierPrefix: "new-agent-repo-", height: 140)
 		}
 		label("Model")
 		TextField("e.g. opus, sonnet or a full model name", text: $model.model)
