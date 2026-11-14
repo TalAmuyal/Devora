@@ -198,6 +198,9 @@ Ember's non-blocking task creation (`Sources/AppShell/TaskCreation/`): the New T
 
 Ember's Add Repo and Clone Repo dialogs (`Sources/AppShell/Repos/`), modal layers over the window, each with its form, then the operation's progress in its place (`RepoOperationPhase`, as Ember's `driveCreationDialog`).
 
+The repo picker of the New Agent, New Task and Add Repo dialogs is one native list (`RepoListView`, a bordered SwiftUI `List`): the cursor row is the list's selection, the dialog passes its height, long names truncate in the middle with the full name as the tooltip, and no match shows the system's empty-search view.
+In New Agent and New Task each repo is a checkbox: the box or its name toggles it and makes it the cursor row, and a click on the row's empty area only moves the cursor (`activate`); in Add Repo the selection is the chosen repo.
+
 - Clone Repo (`CloneRepoDialogModel`, `Surfaces.openCloneRepoDialog`) opens from the New Task dialog's "+ Clone Repo", cloning into the selected profile; its "Clones to:" hint is the core's `clone_destination`, which parses the URL as the clone does.
 	Once cloned, the New Task dialog lists the profile's repos again with the clone selected, keeping its title and selection (`NewTaskDialogModel.reposChanged`, Ember's `refreshAfterClone`).
 - Add Repo (`AddRepoDialogModel`, `Surfaces.openAddRepoDialog`) adds a worktree of one of the profile's repos to a workspace, as `<repo>` or `<repo>-<postfix>` (`AddRepoTarget.worktreeDirName`); the core rejects a name the workspace has or one that leaves it, as the add's failure.
