@@ -36,8 +36,11 @@ export TEST_RUNNER_DEVORA_HEALTH_FIXTURE_JSON="$(cat ../acceptance/fixtures/heal
 
 results=build/ui-tests.xcresult
 rm -rf "$results"
+# Each test gets at most 5 minutes (the slowest passing one takes about 1): one that hangs fails by name, with its screenshot (and a spindump, where the runner may take one) in the result bundle, and the run goes on.
 if ! xcodebuild -project App/DevoraSapphire.xcodeproj -scheme DevoraSapphire -configuration Release \
-	-derivedDataPath build/DerivedData -destination 'platform=macOS,arch=arm64' -resultBundlePath "$results" test -quiet; then
+	-derivedDataPath build/DerivedData -destination 'platform=macOS,arch=arm64' -resultBundlePath "$results" \
+	-test-timeouts-enabled YES -default-test-execution-time-allowance 300 \
+	-maximum-test-execution-time-allowance 300 test -quiet; then
 	# `-quiet` names the failing tests but not why they failed; the result bundle has the messages.
 	xcrun xcresulttool get test-results summary --path "$results" --compact |
 		jq -r '.testFailures[] | "\(.testIdentifierString): \(.failureText)"' || true
