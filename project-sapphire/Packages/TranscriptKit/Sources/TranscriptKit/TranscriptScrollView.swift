@@ -422,6 +422,7 @@ public final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NS
 	/// Applies new heights without moving what the reader sees: the bottom while following, otherwise `anchor`.
 	private func noteHeights(_ rows: IndexSet, keeping anchor: Pin?) {
 		assert(!notingHeights, "noteHeightOfRows must not be called while the table applies heights")
+		let wasAdjusting = adjusting
 		adjusting = true
 		notingHeights = true
 		withoutAnimation { table.noteHeightOfRows(withIndexesChanged: rows) }
@@ -431,7 +432,7 @@ public final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NS
 			boundsChanged()
 		}
 		settle(anchor)
-		adjusting = false
+		adjusting = wasAdjusting
 	}
 
 	/// `noteHeightOfRows` animates the rows to their new heights unless told not to; a correction must not show.
