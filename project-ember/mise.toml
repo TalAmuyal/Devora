@@ -3,6 +3,8 @@ experimental = true # Required for the 'deps' feature
 
 [tools]
 node = "22"
+# Tauri's official prebuilt release binary (aqua: tauri-apps/tauri/cargo-tauri, checksum-verified), for `cargo tauri build`.
+tauri-cli = "2.11.1"
 
 [deps.npm_deps]
 auto = true
