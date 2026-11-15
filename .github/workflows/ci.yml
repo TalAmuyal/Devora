@@ -293,11 +293,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p evidence
-          pr=$(scripts/ci/reuse-verdict.sh collect "$GITHUB_REPOSITORY" "$GITHUB_SHA" evidence)
-          evidence=evidence/reuse-evidence.json
-          [ -s "$evidence" ] || evidence=none
-          scripts/ci/reuse-verdict.sh decide "$(git rev-parse 'HEAD^{tree}')" "$pr" "$evidence" |
-            jq --arg sha "$GITHUB_SHA" --arg pr "$pr" '{sha: $sha, pr: $pr, verdicts: .}' | tee reuse-verdict.json
+          read -r pr status < <(scripts/ci/reuse-verdict.sh collect "$GITHUB_REPOSITORY" "$GITHUB_SHA" evidence)
+          scripts/ci/reuse-verdict.sh decide "$(git rev-parse 'HEAD^{tree}')" "$pr" "$status" evidence/reuse-evidence.json |
+            jq --arg sha "$GITHUB_SHA" --arg pr "$pr" --arg evidence "$status" '{sha: $sha, pr: $pr, evidence: $evidence, verdicts: .}' | tee reuse-verdict.json
           {
             echo "### Reuse of the pull request's results (measurement only)"
             jq -r '.verdicts[] | "- `\(.job)`: \(.verdict) (\(.reason))"' reuse-verdict.json
