@@ -1,12 +1,30 @@
 import CoreBindings
 import Foundation
-import Store
+@testable import Store
 import Testing
 import TestSupport
 
 @MainActor
 @Suite(.timeLimit(.minutes(2)))
 struct ProfileTests {
+	/// The core's initial snapshot replaces the whole state when it folds, so a selection folded before it would be undone until the core's own event arrived: the selection waits for it, folding it at once rather than on a frame.
+	@Test func theSelectionComesAfterTheInitialSnapshotEvenWithoutFrames() async throws {
+		let fixture = try Fixture()
+		let work = try fixture.makeProfile("work")
+		try fixture.registerProfiles([work])
+		let store = Store(configPath: fixture.configPath, state: .inMemory, log: try fixture.log())
+		// No frame ever comes, as for a hidden window: nothing folds unless the store folds it itself.
+		store.requestFrame = {}
+		await store.dispatch(.load).value
+
+		#expect(store.hasFoldedInitialState)
+		#expect(store.selectedProfilePath == work)
+		// What arrived since, the core's own event of the selection included, keeps it.
+		store.foldPending()
+		#expect(store.selectedProfilePath == work)
+		#expect(store.scrapeErrors() == [])
+	}
+
 	@Test func registeringANewProfileCreatesItAndSelectsIt() async throws {
 		let fixture = try Fixture()
 		let work = try fixture.makeProfile("work")

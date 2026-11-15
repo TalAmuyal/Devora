@@ -91,6 +91,9 @@ public final class Store {
 	@ObservationIgnored var core: DevoraCore?
 	@ObservationIgnored private let inbox = Inbox()
 	@ObservationIgnored private var stateEvents: Task<Void, Never>?
+	/// Whether `app` has folded the subscription's first event, the core's snapshot; an early fold must come after it, or the snapshot would undo it.
+	@ObservationIgnored private(set) var hasFoldedInitialState = false
+	@ObservationIgnored private var initialStateWaiters: [CheckedContinuation<Void, Never>] = []
 	@ObservationIgnored private var reportedErrors: Task<Void, Never>?
 	/// Bumped by each selection, so that a later selection wins over a slower, earlier one.
 	@ObservationIgnored private var selectionGeneration = 0
@@ -208,6 +211,19 @@ public final class Store {
 			}
 		}
 		self.app = app
+		if !hasFoldedInitialState, events.contains(where: { if case .snapshot = $0 { true } else { false } }) {
+			hasFoldedInitialState = true
+			for waiter in initialStateWaiters { waiter.resume() }
+			initialStateWaiters = []
+		}
+	}
+
+	/// Returns once `app` has folded the core's initial snapshot, folding at once rather than on the next frame, so that a hidden window's stopped display link can't hold it up.
+	private func untilInitialState() async {
+		guard stateEvents != nil, !hasFoldedInitialState else { return }
+		foldPending()
+		guard !hasFoldedInitialState else { return }
+		await withCheckedContinuation { initialStateWaiters.append($0) }
 	}
 
 	/// The launch spec of the terminal with this id, from its tab's session.
@@ -558,7 +574,7 @@ public final class Store {
 	}
 
 	private func eventsArrived() {
-		if let requestFrame { requestFrame() } else { foldPending() }
+		if let requestFrame, initialStateWaiters.isEmpty { requestFrame() } else { foldPending() }
 	}
 
 	/// The core already wrote the errors it reports to the log, so they only need their banners; they are rare, so each batch hops to the main actor as it comes.
@@ -604,6 +620,7 @@ public final class Store {
 		profilesListed = true
 		let active = try? await call("snapshot", { try core.snapshot().activeProfile })
 		let selected = (profiles.first { $0.path == active } ?? profiles.first)?.path
+		await untilInitialState()
 		if selected != selectedProfilePath { setActiveProfile(selected) }
 		return true
 	}
@@ -613,6 +630,7 @@ public final class Store {
 		_ path: String?, core: DevoraCore, started: ContinuousClock.Instant = .now,
 		listProfiles: LoadingLatencies.Phase = .zero
 	) async -> Bool {
+		await untilInitialState()
 		setActiveProfile(path)
 		let generation = selectionGeneration
 		guard let path else {
