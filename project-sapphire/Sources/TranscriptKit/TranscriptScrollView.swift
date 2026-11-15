@@ -1,5 +1,4 @@
 import AppKit
-import CoreBindings
 import SwiftUI
 
 /// The native agent transcript (ADR-014): an `NSTableView` of hosted SwiftUI rows, fed `AgentChat`'s items.
