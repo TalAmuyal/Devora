@@ -247,3 +247,64 @@ jobs:
       - name: Disk usage
         if: always()
         run: df -h . && du -sh project-sapphire/build project-sapphire/vendor project-sapphire/.build project-core/target 2>/dev/null || true
+
+  # Measuring how often a push to master repeats what its pull request's run already tested green (step 1 of reusing PR
+  # results; nothing reads it yet). These two jobs only record and report: neither is a required check, both continue on
+  # error, and nothing depends on them, so they can't change a run's result.
+  # On a pull request: what the run tested (the merge commit's tree) and each job's result.
+  reuse-evidence:
+    if: always() && github.event_name == 'pull_request'
+    needs: [test, test-ember, e2e-ember, sapphire-changes, sapphire]
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Record what this run tested
+        env:
+          PR: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          NEEDS: ${{ toJSON(needs) }}
+        run: scripts/ci/reuse-evidence.sh | tee reuse-evidence.json
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: reuse-evidence
+          path: reuse-evidence.json
+          retention-days: 30
+
+  # On a push to master: per job, whether its pull request's run would let it be reused, or why it must run.
+  reuse-verdict:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Check the verdict rules
+        run: scripts/ci/reuse-verdict.test.sh
+
+      - name: Decide per job
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p evidence
+          pr=$(scripts/ci/reuse-verdict.sh collect "$GITHUB_REPOSITORY" "$GITHUB_SHA" evidence)
+          evidence=evidence/reuse-evidence.json
+          [ -s "$evidence" ] || evidence=none
+          scripts/ci/reuse-verdict.sh decide "$(git rev-parse 'HEAD^{tree}')" "$pr" "$evidence" |
+            jq --arg sha "$GITHUB_SHA" --arg pr "$pr" '{sha: $sha, pr: $pr, verdicts: .}' | tee reuse-verdict.json
+          {
+            echo "### Reuse of the pull request's results (measurement only)"
+            jq -r '.verdicts[] | "- `\(.job)`: \(.verdict) (\(.reason))"' reuse-verdict.json
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: reuse-verdict
+          path: reuse-verdict.json
+          retention-days: 45
