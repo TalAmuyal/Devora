@@ -25,16 +25,21 @@ let package = Package(
 		.target(name: "Store", dependencies: ["CoreBindings"]),
 		// The layer system (ADR-003): the stacks, the key router and the presets; it knows no surface and no domain.
 		.target(name: "Layers"),
+		// The bundled web renderer's local scheme, shared by the web views and the transcript's diagram drawer.
+		.target(name: "WebRendering"),
+		// The native agent transcript (ADR-014); its view entry point is `TranscriptView`.
 		.target(
-			name: "AppShell",
-			dependencies: ["Store", "TerminalKit", "Layers", .product(name: "Markdown", package: "swift-markdown")]
+			name: "TranscriptKit",
+			dependencies: ["CoreBindings", "WebRendering", .product(name: "Markdown", package: "swift-markdown")]
 		),
+		.target(name: "AppShell", dependencies: ["Store", "TerminalKit", "Layers", "TranscriptKit", "WebRendering"]),
 
 		// What the test targets share: how they wait for asynchronous work (`eventually`).
 		.target(name: "TestSupport", path: "Tests/TestSupport"),
 		.testTarget(name: "StoreTests", dependencies: ["Store", "CoreBindings", "TestSupport"]),
 		.testTarget(name: "TerminalKitTests", dependencies: ["TerminalKit"]),
 		.testTarget(name: "LayersTests", dependencies: ["Layers"]),
+		.testTarget(name: "TranscriptKitTests", dependencies: ["TranscriptKit", "CoreBindings", "TestSupport"]),
 		.testTarget(name: "AppShellTests", dependencies: ["AppShell", "Layers", "Store", "CoreBindings", "TestSupport"]),
 	]
 )

@@ -4,7 +4,7 @@ import SwiftUI
 
 /// What one row draws: its item, the item's Markdown (parsed once per content), whether a thinking or tool row is
 /// expanded, and its Mermaid diagrams (nil while it streams, when they show as their source).
-struct TranscriptRowModel: Equatable {
+public struct TranscriptRowModel: Equatable {
 	let item: TranscriptItem
 	let document: MarkdownDocument?
 	let expanded: Bool
@@ -17,7 +17,7 @@ struct TranscriptRowModel: Equatable {
 		self.diagrams = diagrams
 	}
 
-	enum Kind: String {
+	public enum Kind: String {
 		case user, assistant, thinking, tool, system
 	}
 

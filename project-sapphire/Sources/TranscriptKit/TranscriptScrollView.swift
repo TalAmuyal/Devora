@@ -1,6 +1,5 @@
 import AppKit
 import CoreBindings
-import Store
 import SwiftUI
 
 /// The native agent transcript (ADR-014): an `NSTableView` of hosted SwiftUI rows, fed `AgentChat`'s items.
@@ -10,7 +9,7 @@ import SwiftUI
 /// web transcript does. Row heights are estimated until measured (`RowHeights`): the visible rows are measured at once,
 /// and the rest a few milliseconds per frame, nearest first, until every row is exact; then the display link stops.
 @MainActor
-final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NSTableViewDelegate {
+public final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NSTableViewDelegate {
 	/// Distance from the bottom within which the reader is following it, and from the top that asks for older history.
 	static let followSlack: CGFloat = 24
 	static let olderSlack: CGFloat = 80
@@ -208,9 +207,9 @@ final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NSTableVi
 
 	// MARK: Heights
 
-	func numberOfRows(in tableView: NSTableView) -> Int { entries.count }
+	public func numberOfRows(in tableView: NSTableView) -> Int { entries.count }
 
-	func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {
+	public func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {
 		let height = heights.height(entries[row], expanded: isExpanded(row), width: width)
 		tableHeights[entries[row].key] = height
 		return height
@@ -225,7 +224,7 @@ final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NSTableVi
 		for row in rows { _ = table.rect(ofRow: row) }
 	}
 
-	func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
+	public func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
 		let identifier = NSUserInterfaceItemIdentifier("transcript-row")
 		let cell = tableView.makeView(withIdentifier: identifier, owner: nil) as? TranscriptCell ?? TranscriptCell(identifier: identifier)
 		cell.show(view(row))
@@ -244,12 +243,12 @@ final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NSTableVi
 		}
 	}
 
-	func tableView(_ tableView: NSTableView, didRemove rowView: NSTableRowView, forRow row: Int) {
+	public func tableView(_ tableView: NSTableView, didRemove rowView: NSTableRowView, forRow row: Int) {
 		// A row that scrolled away keeps its cell for reuse; until it shows another row, it shows (and exposes) nothing.
 		(rowView.view(atColumn: 0) as? TranscriptCell)?.clear()
 	}
 
-	func tableView(_ tableView: NSTableView, shouldSelectRow row: Int) -> Bool { false }
+	public func tableView(_ tableView: NSTableView, shouldSelectRow row: Int) -> Bool { false }
 
 	private func isExpanded(_ row: Int) -> Bool { entries[row].item.map { expanded.contains($0.sequence) } ?? false }
 
@@ -369,7 +368,7 @@ final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NSTableVi
 	}
 
 	/// Toggles the first row of `kind`, as clicking its summary does (the test bridge's `toggleThinking` and `toggleTool`).
-	func toggleFirst(_ kind: TranscriptRowModel.Kind) {
+	public func toggleFirst(_ kind: TranscriptRowModel.Kind) {
 		if let row = itemRows.first(where: { model($0).kind == kind }), let item = entries[row].item { toggle(item.sequence) }
 	}
 
@@ -481,7 +480,7 @@ final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NSTableVi
 		}
 	}
 
-	override func viewDidMoveToWindow() {
+	public override func viewDidMoveToWindow() {
 		super.viewDidMoveToWindow()
 		if window == nil { stopIdle() } else { scheduleIdle() }
 		watchWheel()
@@ -539,7 +538,7 @@ final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NSTableVi
 		scheduleIdle()
 	}
 
-	override func viewDidEndLiveResize() {
+	public override func viewDidEndLiveResize() {
 		super.viewDidEndLiveResize()
 		// The visible rows' diagrams, which waited for the resize to end, are drawn at the width it ended at.
 		for row in visibleRows where entries[row].item != nil { _ = model(row) }
@@ -586,7 +585,7 @@ final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NSTableVi
 	}
 
 	/// Scrolls as the reader would, to the very top (the test bridge's `scrollTop`).
-	func scrollToTop() {
+	public func scrollToTop() {
 		contentView.scroll(to: .zero)
 		reflectScrolledClipView(contentView)
 	}
@@ -605,7 +604,7 @@ final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NSTableVi
 	/// What the test bridge reads: every item row's sequence, kind (the web transcript's `chat-<kind>` class), text and
 	/// top relative to the visible area's top, the cards, every row's text in order, how many diagrams are drawn, failed,
 	/// pending or shown as their source while streaming, and the web transcript's other fields. Nothing native runs a row's content, so there are no scripts or unsafe attributes to count.
-	func observation() -> [String: Any] {
+	public func observation() -> [String: Any] {
 		let top = contentView.bounds.minY
 		var rows: [[String: Any]] = []
 		var texts: [String] = []
@@ -706,7 +705,7 @@ final class TranscriptCell: NSTableCellView {
 }
 
 /// The native transcript in SwiftUI: one `TranscriptScrollView` per chat panel.
-struct TranscriptView: NSViewRepresentable {
+public struct TranscriptView: NSViewRepresentable {
 	let items: [TranscriptItem]
 	var questions: [PermissionQuestion] = []
 	var generation: UInt64 = 0
@@ -718,11 +717,28 @@ struct TranscriptView: NSViewRepresentable {
 	var onAnswer: (String, String, UInt64) -> Void = { _, _, _ in }
 	var onView: (TranscriptScrollView) -> Void
 
-	func makeNSView(context: Context) -> TranscriptScrollView {
+	public init(
+		items: [TranscriptItem], questions: [PermissionQuestion] = [], generation: UInt64 = 0, theme: [String: String] = [:],
+		hasOlder: Bool, anchor: ChatScrollAnchor?, onScroll: @escaping (ChatScrollAnchor?) -> Void, onNeedsOlder: @escaping () -> Void,
+		onAnswer: @escaping (String, String, UInt64) -> Void = { _, _, _ in }, onView: @escaping (TranscriptScrollView) -> Void
+	) {
+		self.items = items
+		self.questions = questions
+		self.generation = generation
+		self.theme = theme
+		self.hasOlder = hasOlder
+		self.anchor = anchor
+		self.onScroll = onScroll
+		self.onNeedsOlder = onNeedsOlder
+		self.onAnswer = onAnswer
+		self.onView = onView
+	}
+
+	public func makeNSView(context: Context) -> TranscriptScrollView {
 		TranscriptScrollView(anchor: anchor)
 	}
 
-	func updateNSView(_ view: TranscriptScrollView, context: Context) {
+	public func updateNSView(_ view: TranscriptScrollView, context: Context) {
 		view.onScroll = onScroll
 		view.onNeedsOlder = onNeedsOlder
 		view.onAnswer = onAnswer

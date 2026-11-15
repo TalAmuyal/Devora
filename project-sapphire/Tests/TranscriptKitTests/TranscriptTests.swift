@@ -4,7 +4,7 @@ import Foundation
 import SwiftUI
 import Testing
 
-@testable import AppShell
+@testable import TranscriptKit
 
 private func item(_ sequence: UInt64, _ content: TranscriptContent, state: ItemState = .complete) -> TranscriptItem {
 	TranscriptItem(sequence: sequence, cliSession: "s", parentToolUseId: nil, state: state, content: content)

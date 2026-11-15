@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-@testable import AppShell
+@testable import TranscriptKit
 
 struct MarkdownDocumentTests {
 	@Test func blocksKeepTheirStructure() {

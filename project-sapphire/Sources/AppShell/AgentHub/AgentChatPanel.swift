@@ -4,6 +4,7 @@ import Layers
 import Observation
 import Store
 import SwiftUI
+import TranscriptKit
 
 @MainActor
 @Observable

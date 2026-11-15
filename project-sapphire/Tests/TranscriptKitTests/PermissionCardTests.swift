@@ -2,7 +2,7 @@ import AppKit
 import CoreBindings
 import Testing
 
-@testable import AppShell
+@testable import TranscriptKit
 
 private func question(
 	_ id: String = "q1", tool: String = "t2", rules: String? = nil, always: Bool = true, reason: String? = "Ask rule"
