@@ -31,6 +31,8 @@ let appStderr: string[] = [];
 let appLogPath: string | null = null;
 /** A launch that failed: every later scenario fails with it at once, rather than launching again. */
 let launchFailure: Error | null = null;
+/** The scenario that ran last: when the app is found gone, the one most likely to have crashed it. */
+let lastScenario: string | null = null;
 let testHarnessPort: number | null = null;
 let ipcPort: number | null = null;
 let fakeClaudeServer: FakeClaudeServer | null = null;
@@ -296,7 +298,7 @@ async function appProblemBeforeScenario(): Promise<Error | null> {
   captureAppEvidence('app-gone-before-scenario');
   await stopApp();
   await launchApp();
-  return new Error(`Before this scenario, ${problem}; it was launched again for the next scenarios. Latest stderr:\n${evidence}`);
+  return new Error(`Before this scenario (after "${lastScenario ?? 'none'}"), ${problem}; it was launched again for the next scenarios. Latest stderr:\n${evidence}`);
 }
 
 BeforeAll({ timeout: LAUNCH_STEP_TIMEOUT_MS }, async function () {
@@ -328,7 +330,6 @@ BeforeAll({ timeout: LAUNCH_STEP_TIMEOUT_MS }, async function () {
   await launchApp();
 });
 
-
 AfterStep(async function (this: EmberWorld, { result, pickle, pickleStep }) {
   if (result.status !== Status.FAILED) return;
   await captureFailure(this.driver, `${pickle.name}--${pickleStep.text}`);
@@ -337,6 +338,7 @@ AfterStep(async function (this: EmberWorld, { result, pickle, pickleStep }) {
 
 Before({ timeout: LAUNCH_STEP_TIMEOUT_MS }, async function (this: EmberWorld, scenario) {
   const problem = await appProblemBeforeScenario();
+  lastScenario = scenario.pickle.name;
   const healthFixture = path.join(testConfigDir!, 'health-report.json');
   if (scenario.pickle.tags.some((tag) => tag.name === '@real-health')) {
     fs.rmSync(healthFixture, { force: true });
