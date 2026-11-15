@@ -94,6 +94,8 @@ public final class Store {
 	/// Whether `app` has folded the subscription's first event, the core's snapshot; an early fold must come after it, or the snapshot would undo it.
 	@ObservationIgnored private(set) var hasFoldedInitialState = false
 	@ObservationIgnored private var initialStateWaiters: [CheckedContinuation<Void, Never>] = []
+	/// Whether the state's events stopped (the subscription closed or failed); no snapshot can come after that.
+	@ObservationIgnored private var stateEventsStopped = false
 	@ObservationIgnored private var reportedErrors: Task<Void, Never>?
 	/// Bumped by each selection, so that a later selection wins over a slower, earlier one.
 	@ObservationIgnored private var selectionGeneration = 0
@@ -213,14 +215,18 @@ public final class Store {
 		self.app = app
 		if !hasFoldedInitialState, events.contains(where: { if case .snapshot = $0 { true } else { false } }) {
 			hasFoldedInitialState = true
-			for waiter in initialStateWaiters { waiter.resume() }
-			initialStateWaiters = []
+			resumeInitialStateWaiters()
 		}
+	}
+
+	private func resumeInitialStateWaiters() {
+		for waiter in initialStateWaiters { waiter.resume() }
+		initialStateWaiters = []
 	}
 
 	/// Returns once `app` has folded the core's initial snapshot, folding at once rather than on the next frame, so that a hidden window's stopped display link can't hold it up.
 	private func untilInitialState() async {
-		guard stateEvents != nil, !hasFoldedInitialState else { return }
+		guard stateEvents != nil, !hasFoldedInitialState, !stateEventsStopped else { return }
 		foldPending()
 		guard !hasFoldedInitialState else { return }
 		await withCheckedContinuation { initialStateWaiters.append($0) }
@@ -569,6 +575,11 @@ public final class Store {
 				await MainActor.run { [weak self] in
 					self?.showError("the app state's events stopped: \(Self.describe(error))")
 				}
+			}
+			// Ended or failed, possibly before its snapshot: what waits for that snapshot goes on without it.
+			await MainActor.run { [weak self] in
+				self?.stateEventsStopped = true
+				self?.resumeInitialStateWaiters()
 			}
 		}
 	}
