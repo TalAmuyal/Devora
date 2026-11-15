@@ -225,10 +225,10 @@ struct WebDiagramDrawerTests {
 	}
 }
 
-/// The built renderer, if there is one: `build/web-renderer`, beside this package's `Tests`.
+/// The built renderer, if there is one: the app's `build/web-renderer`, beside the `Packages` this package is in.
 private let webRenderer: URL? = {
-	let root = URL(filePath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-		.appending(path: "build/web-renderer", directoryHint: .isDirectory)
+	let root = URL(filePath: #filePath).deletingLastPathComponent()
+		.appending(path: "../../../../build/web-renderer", directoryHint: .isDirectory).standardized
 	return FileManager.default.fileExists(atPath: root.appending(path: "index.html").path) ? root : nil
 }()
 

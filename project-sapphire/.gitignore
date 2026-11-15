@@ -1,7 +1,9 @@
 /build/
 /vendor/
 /.build/
+/Packages/*/.build/
 /.swiftpm/
+/Packages/*/.swiftpm/
 *.xcodeproj/
 DerivedData/
 /Sources/CoreBindings/CoreBindings.swift
