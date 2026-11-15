@@ -289,6 +289,50 @@ struct TranscriptScrollViewTests {
 		let wrong = (0..<view.table.numberOfRows).filter { view.table.rect(ofRow: $0).height != view.tableView(view.table, heightOfRow: $0) }
 		#expect(wrong.isEmpty)
 	}
+
+	/// Every cell that shows a row, where it is in the table, by the row's sequence: one entry per cell, so a row shown
+	/// twice has two.
+	private func shownCells(_ view: TranscriptScrollView) -> [(sequence: UInt64, frame: NSRect)] {
+		var cells: [(UInt64, NSRect)] = []
+		view.table.enumerateAvailableRowViews { rowView, _ in
+			guard let cell = rowView.view(atColumn: 0) as? TranscriptCell, case .row(let model)? = cell.entry?.model else { return }
+			cells.append((model.item.sequence, cell.convert(cell.bounds, to: view.table)))
+		}
+		return cells
+	}
+
+	@Test func afterALongTurnScrollingAndAnOlderPageEveryShownRowIsAtItsPlace() async {
+		let (window, view) = shown([])
+		defer { window.close() }
+		// The cells' frames are what their hosted rows' accessibility frames follow: a cell elsewhere than its row is a row
+		// VoiceOver finds at another row's place.
+		func misplaced() -> [String] {
+			let cells = shownCells(view)
+			let twice = Dictionary(grouping: cells, by: \.sequence).filter { $0.value.count > 1 }.keys.map { "\($0) shown twice" }
+			let elsewhere = cells.compactMap { cell -> String? in
+				guard let row = view.items.firstIndex(where: { $0.sequence == cell.sequence }) else { return "\(cell.sequence) no longer a row" }
+				return cell.frame == view.table.rect(ofRow: row) ? nil : "\(cell.sequence) at \(cell.frame.minY), its row at \(view.table.rect(ofRow: row).minY)"
+			}
+			return cells.isEmpty ? ["no row shown"] : twice + elsewhere
+		}
+		longTurn(view)
+		window.layoutIfNeeded()
+		#expect(misplaced().isEmpty, "Following the bottom: \(misplaced())")
+		// Up through the tail as the reader does, with the table laying out and reusing cells at each step.
+		for _ in 0..<30 {
+			view.contentView.scroll(to: NSPoint(x: 0, y: max(0, view.contentView.bounds.minY - 150)))
+			view.reflectScrolledClipView(view.contentView)
+			window.layoutIfNeeded()
+			await Task.yield()
+		}
+		#expect(misplaced().isEmpty, "Scrolled up: \(misplaced())")
+		// The turn's oldest replies, which its last batch pushed out of the tail.
+		let older = (0..<40).map { reply(UInt64(3 + $0), "History turn \($0 + 1)") }
+		let tail = view.items
+		view.apply(older + tail)
+		window.layoutIfNeeded()
+		#expect(misplaced().isEmpty, "With an older page: \(misplaced())")
+	}
 }
 
 /// The scroll benchmark for the native transcript's target (no frame over 50 ms scrolling 5,000 rows), on a real window and display
