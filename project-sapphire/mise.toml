@@ -122,13 +122,19 @@ depends = ["npm-install"]
 run = "node --import tsx scripts/test-agent-cli.ts"
 
 [tasks.test-unit]
-description = "Run the Swift tests against the real core"
+description = "Run the Swift tests against the real core, and the transcript's"
 depends = ["core", "web-renderer"]
 run = """
 set -euo pipefail
 [ -d build/GhosttyKit.xcframework ] || mise run ghostty-build
 swift test
+mise run test-transcript
 """
+
+[tasks.test-transcript]
+description = "Run the transcript's Swift tests, which need neither the core nor Ghostty"
+depends = ["web-renderer"]
+run = "swift test --package-path Packages/TranscriptKit"
 
 [tasks.npm-install]
 description = "Install the acceptance tests' npm dependencies when package.json or the lock file changed"

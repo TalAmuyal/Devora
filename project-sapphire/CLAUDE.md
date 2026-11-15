@@ -90,7 +90,7 @@ Reading older history preserves a sequence/offset anchor, while following the bo
 Permission answers carry the observed generation and request ID, and the facade validates that generation and the question's continued existence.
 Command+Y, Command+N and Command+Shift+Y answer the first active question through the tab layer, from the editor or transcript.
 
-The transcript is native (ADR-014), its own module (`Sources/TranscriptKit`, whose entry point is `TranscriptView`); the web renderer draws only the guide, the previews and the transcript's Mermaid diagrams.
+The transcript is native (ADR-014), its own module (`Packages/TranscriptKit`, whose entry point is `TranscriptView`); the web renderer draws only the guide, the previews and the transcript's Mermaid diagrams.
 Its colors are the Devora theme's, the ones the web renderer's Markdown takes (`TranscriptTheme`, from the panel's CSS variables: the page, text, quieter text, headings and quote edges, links, code blocks, borders and errors), each falling back to the system's; the page's darkness picks the dark or light appearance for what the theme doesn't color (buttons, scrollers); the kind dots and the Judgess badges keep their own colors.
 `TranscriptScrollView` is an `NSTableView` of `TranscriptCell`s hosting SwiftUI `TranscriptRow`s and permission cards, fed `AgentChat.items` and `questions`; `TranscriptChange` turns each update into a prepend, changes in place with rows added or dropped at either end, or a reload.
 It follows the bottom while the reader is within 24 pt of it, keeps the top visible row in place otherwise, asks for an older page within 80 pt of the top (saving the anchor first, so the chat stops trimming to its tail), and reports the anchor 250 ms after the reader's scrolls (the item's sequence and its top's offset, or none while following the bottom); its own adjustments don't count as the reader's.
@@ -230,15 +230,16 @@ Sapphire follows Ember's error reporting (ADR-002).
 - `Sources/Store`: the one `@MainActor @Observable` store; views dispatch `Command`s to it, and only it calls `DevoraCore`.
 - `Sources/TerminalKit`: the terminal, over Ghostty's internal embedding API; the only module that imports `GhosttyKit`, with `TerminalPane` as its view entry point, `TerminalSession` as its model and `TerminalLaunch` as what it runs.
 - `Sources/Layers`: the layer system (ADR-003): the stacks, the key router and the presets, with no surface or domain knowledge; its `CLAUDE.md` is the current reference.
-- `Sources/TranscriptKit`: the native agent transcript (ADR-014), with `TranscriptView` as its view entry point; it knows no store and no app shell, only the generated core types it shows.
-- `Sources/WebRendering`: the bundled web renderer's local scheme (`RendererSchemeHandler`), shared by the web views and the transcript's diagram drawer.
+- `Packages/TranscriptKit`: a local package of its own, so that it builds and tests without the core's and Ghostty's binaries (`mise run test-transcript`), which SwiftPM checks for every target of a package:
+	- `Sources/TranscriptKit`: the native agent transcript (ADR-014), with `TranscriptView` as its view entry point; it knows no store, no app shell and no core, only its own value types (`TranscriptModel.swift`), which AppShell maps the core's into (`TranscriptAdapter.swift`).
+	- `Sources/WebRendering`: the bundled web renderer's local scheme (`RendererSchemeHandler`), shared by the web views and the transcript's diagram drawer.
+	- `Tests/TranscriptKitTests`: the transcript in an offscreen window (following the bottom, keeping the reader's place, row heights, the wheel), its Markdown, Mermaid drawing, permission cards and theme; `mise run test-unit` runs them too.
 - `Sources/AppShell`: the views, the tab bar, the terminals, the app-wide shortcuts, the layer stacks' wiring and the display-link fold.
 - `App/`: the thin app target; `project.yml` is its XcodeGen spec (the `.xcodeproj` is gitignored).
 - `Tests/StoreTests`: the store and the event fold against the real core, over a fixture config, task creation, Add Repo and Clone Repo over real git repos, and the creation progress's fold.
 - `Tests/TerminalKitTests`: the command line libghostty runs.
-- `Tests/TranscriptKitTests`: the transcript in an offscreen window (following the bottom, keeping the reader's place, row heights, the wheel), its Markdown, Mermaid drawing, permission cards and theme.
 - `Tests/LayersTests`: the routing and focus rules, on stand-in layers.
-- `Tests/TestSupport`: what the test targets share, how they wait for asynchronous work (`eventually`; see Waiting in tests).
+- `Packages/TestSupport`: what the test targets of both packages share, how they wait for asynchronous work (`eventually`; see Waiting in tests).
 - `Tests/AppShellTests`: which key-downs are app-wide shortcuts, the Workspace Hub's list, cursor, scrolling and keys, the Remove Task decision, the confirmation dialog's keys, the New Task dialog's selection, filter and keys, the repo dialogs' forms, keys and clone hint, the profile form's validation and keys, and the Settings Hub's commit rules, inherited hints and list keys.
 - `acceptance/`: the acceptance scenarios' Cucumber.js harness (steps, hooks, the bridge client) and Sapphire-only features; `../acceptance/features/` holds those shared with Ember.
 - `UITests/`: the XCUITests, a UI-test target in `App/project.yml`.
@@ -311,7 +312,7 @@ Real input (key events, focus, the IME, libghostty's key path) is what the bridg
 A test that waits decides on what it waits for, never on the clock: the unit tests share the one main actor with every other suite running at once, so on a busy machine (a CI runner) a suite can wait seconds for a turn, and a deadline in time expires with the work still queued behind it.
 
 - Await the event when there is one: an observer's callback, a continuation, an async result. `MermaidRendererTests`' `Announced` turns the renderer's `observe` into awaitable "done" states, and their `Gate` holds a fake's work open until the test releases it.
-- Otherwise use `eventually` (`Tests/TestSupport`, shared by the test targets; one overload takes an async condition): its budget is a number of looks, 10 ms apart while the main actor is free, so a busy machine only makes the looks come later.
+- Otherwise use `eventually` (`Packages/TestSupport`, shared by the test targets; one overload takes an async condition): its budget is a number of looks, 10 ms apart while the main actor is free, so a busy machine only makes the looks come later.
 - Never `Task.sleep` to let work happen, nor to show that something doesn't: assert the synchronous state that would show it (nothing asked for, nothing queued), or wait for a later event that would have come after it.
 - Code under test that times out takes its wait as a parameter (`MermaidRenderer`'s `sleep`), so a test fires the timeout when it says (`TimeoutClock`), and other tests never time out on their own.
 - XCUITest's synthesized input has no timing guarantee: on a busy machine its events can arrive seconds apart, so a UI test never depends on how quickly two of them arrive. A timing rule of the app takes its window as a parameter and is unit-tested on exact timestamps: `ShiftDoubleTap`'s 0.5 s, which the UI tests that tap Shift-Shift widen with `allowSlowShiftDoubleTaps` (`DEVORA_TEST_SHIFT_TAP_WINDOW`).

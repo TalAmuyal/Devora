@@ -196,7 +196,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: ~/Library/Caches/org.swift.swiftpm
-          key: sapphire-swiftpm-${{ hashFiles('project-sapphire/Package.resolved') }}
+          key: sapphire-swiftpm-${{ hashFiles('project-sapphire/Package.resolved', 'project-sapphire/Packages/*/Package.resolved') }}
           restore-keys: sapphire-swiftpm-
 
       # Building libghostty is slow and needs the Metal Toolchain (missing from the image, actions/runner-images#14548), so it only happens on a cache miss.
