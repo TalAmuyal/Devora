@@ -1,5 +1,4 @@
 import AppKit
-import CoreBindings
 import Foundation
 import SwiftUI
 import Testing

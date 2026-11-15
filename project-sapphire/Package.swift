@@ -30,7 +30,7 @@ let package = Package(
 		// The native agent transcript (ADR-014); its view entry point is `TranscriptView`.
 		.target(
 			name: "TranscriptKit",
-			dependencies: ["CoreBindings", "WebRendering", .product(name: "Markdown", package: "swift-markdown")]
+			dependencies: ["WebRendering", .product(name: "Markdown", package: "swift-markdown")]
 		),
 		.target(name: "AppShell", dependencies: ["Store", "TerminalKit", "Layers", "TranscriptKit", "WebRendering"]),
 
@@ -39,7 +39,7 @@ let package = Package(
 		.testTarget(name: "StoreTests", dependencies: ["Store", "CoreBindings", "TestSupport"]),
 		.testTarget(name: "TerminalKitTests", dependencies: ["TerminalKit"]),
 		.testTarget(name: "LayersTests", dependencies: ["Layers"]),
-		.testTarget(name: "TranscriptKitTests", dependencies: ["TranscriptKit", "CoreBindings", "TestSupport"]),
+		.testTarget(name: "TranscriptKitTests", dependencies: ["TranscriptKit", "TestSupport"]),
 		.testTarget(name: "AppShellTests", dependencies: ["AppShell", "Layers", "Store", "CoreBindings", "TestSupport"]),
 	]
 )

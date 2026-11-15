@@ -1,5 +1,4 @@
 import AppKit
-import CoreBindings
 import SwiftUI
 
 /// What one row draws: its item, the item's Markdown (parsed once per content), whether a thinking or tool row is

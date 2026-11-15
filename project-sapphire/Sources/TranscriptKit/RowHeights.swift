@@ -1,4 +1,3 @@
-import CoreBindings
 import Foundation
 
 /// The transcript's row heights: exact for a row measured at its current content, expansion and width, estimated

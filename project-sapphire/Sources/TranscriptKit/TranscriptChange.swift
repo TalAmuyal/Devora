@@ -1,4 +1,3 @@
-import CoreBindings
 
 /// One row of the native transcript: an item, or a permission card the host builds from a question.
 enum TranscriptEntry: Equatable {

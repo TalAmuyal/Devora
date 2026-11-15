@@ -1,5 +1,4 @@
 import AppKit
-import CoreBindings
 import Testing
 
 @testable import TranscriptKit
