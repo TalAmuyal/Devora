@@ -39,6 +39,11 @@ public final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NS
 	private var following = true
 	/// Set while the view moves itself, so that only the reader's scrolls count as theirs.
 	private var adjusting = false
+	/// Set while the table applies new heights. It resizes, and the clip view keeps its place, so the bounds change; that
+	/// change is handled once the table is done, since measuring inside it would call `noteHeightOfRows` reentrantly,
+	/// which AppKit warns will become an assert.
+	private var notingHeights = false
+	private var boundsChangedWhileNoting = false
 	private var restoring: ChatScrollAnchor?
 	private var olderRequested = false
 	private var scrollReport: Task<Void, Never>?
@@ -416,8 +421,15 @@ public final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NS
 
 	/// Applies new heights without moving what the reader sees: the bottom while following, otherwise `anchor`.
 	private func noteHeights(_ rows: IndexSet, keeping anchor: Pin?) {
+		assert(!notingHeights, "noteHeightOfRows must not be called while the table applies heights")
 		adjusting = true
+		notingHeights = true
 		withoutAnimation { table.noteHeightOfRows(withIndexesChanged: rows) }
+		notingHeights = false
+		if boundsChangedWhileNoting {
+			boundsChangedWhileNoting = false
+			boundsChanged()
+		}
 		settle(anchor)
 		adjusting = false
 	}
@@ -547,6 +559,10 @@ public final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NS
 	// MARK: Scrolling
 
 	@objc private func boundsChanged() {
+		if notingHeights {
+			boundsChangedWhileNoting = true
+			return
+		}
 		let top = contentView.bounds.minY
 		if top >= Self.olderSlack {
 			// Away from the top again: a request that brought nothing (an error) may go again on the way back.
