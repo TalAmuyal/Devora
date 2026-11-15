@@ -232,13 +232,15 @@ jobs:
 
       # Unit, acceptance, XCUITests where available, then packaging/smoke reusing the built app and test-tools.
       - name: Tests
+        # Its own limit, under the job's 60 minutes, so that a hang outside any one test (xcodebuild or the test runner stuck between tests) still ends early and leaves time for the uploads: green runs take 18 to 28 minutes.
+        timeout-minutes: 40
         run: mise run -C project-sapphire test
 
       - name: Core tests (macOS)
         run: mise run -C project-core test
 
       - name: Upload acceptance failure captures
-        if: failure()
+        if: failure() || cancelled()
         uses: actions/upload-artifact@v7
         with:
           name: sapphire-failure-captures
@@ -247,7 +249,7 @@ jobs:
           retention-days: 14
 
       - name: Upload native UI failure results
-        if: failure()
+        if: failure() || cancelled()
         uses: actions/upload-artifact@v7
         with:
           name: sapphire-ui-failure-results
