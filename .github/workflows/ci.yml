@@ -156,7 +156,8 @@ jobs:
           BASE: ${{ github.event.pull_request.base.sha }}
           HEAD: ${{ github.event.pull_request.head.sha }}
         run: |
-          if [ "$EVENT" = pull_request ] && changed=$(git diff --name-only "$BASE...$HEAD"); then
+          # --no-renames: a moved file counts by both its old and new path, so moving a file out of an app still runs its jobs.
+          if [ "$EVENT" = pull_request ] && changed=$(git diff --no-renames --name-only "$BASE...$HEAD"); then
             sapphire=$(printf '%s\n' "$changed" | scripts/ci/sapphire-affected.sh)
             ember=$(printf '%s\n' "$changed" | scripts/ci/ember-affected.sh)
           else
