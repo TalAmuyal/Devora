@@ -1,14 +1,16 @@
 import XCTest
 
-/// The native transcript (ADR-014) under real input: following the bottom, staying put while scrolled up, and
-/// loading older history at the top without moving what the reader looks at, under the wheel; a card answered by a click.
+/// The native transcript (ADR-014) under real input: following the bottom, and the wheel over it and its code blocks,
+/// with its rows' accessibility elements where the rows are; a card answered by a click.
+/// What the wheel only takes the view to (staying put while scrolled up, loading older history) is tested in process
+/// (`TranscriptScrollViewTests`) and, through the whole app, by agent-chat.feature.
 final class NativeTranscriptUITests: XCTestCase {
 	@MainActor
-	func testFollowingTheBottomAndLoadingOlderHistoryWithTheWheel() throws {
+	func testTheWheelOverTheTranscriptAndItsCodeBlocks() throws {
 		let (app, editor, transcript) = try openAgent()
 
 		// The fake agent answers `history:240` with 240 replies, "History turn 0" to "History turn 239": past the chat's
-		// 200-row tail, so older history exists, in one turn rather than hundreds of typed prompts.
+		// 200-row tail, in one turn rather than hundreds of typed prompts.
 		send("history:240", from: editor, in: app)
 		// The rows reach accessibility a frame or more after they are drawn, so the snapshot is retaken until it catches up.
 		var view = try TranscriptSnapshot(transcript)
@@ -17,12 +19,7 @@ final class NativeTranscriptUITests: XCTestCase {
 			view = next
 			return next.shows("History turn 239")
 		}
-		if !view.shows("History turn 239") {
-			let dump = XCTAttachment(string: transcript.debugDescription)
-			dump.name = "Transcript accessibility tree"
-			dump.lifetime = .keepAlways
-			add(dump)
-		}
+		if !view.shows("History turn 239") { attachTree(of: transcript) }
 		XCTAssertTrue(view.shows("History turn 239"), "Following the bottom shows the newest reply, not \(view.inViewSummary)")
 		capture(app, "Native transcript following the bottom")
 
@@ -35,53 +32,35 @@ final class NativeTranscriptUITests: XCTestCase {
 		// The new rows are still being measured after the turn ends; their corrections move the block, so each position is
 		// read once it holds still.
 		let codeTop = settledTop(of: code)
+		// Where XCUITest aims the scroll, read before it: what a failure needs to tell a missed target from an unmoved view.
+		let aim = "code frame \(code.frame), hittable \(code.isHittable), aimed at \(code.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).screenPoint), visible area \(transcript.frame)"
 		code.scroll(byDeltaX: 0, deltaY: 300)
 		let scrolledTop = settledTop(of: code, movedFrom: codeTop)
-		XCTAssertGreaterThan(scrolledTop, codeTop + 100, "A vertical scroll over a code block must scroll the transcript")
+		if scrolledTop <= codeTop + 100 {
+			let before = XCTAttachment(string: aim)
+			before.name = "Before the wheel scroll over the code block"
+			before.lifetime = .keepAlways
+			add(before)
+			attachTree(of: transcript)
+			capture(app, "After the wheel scroll over the code block")
+		}
+		XCTAssertGreaterThan(scrolledTop, codeTop + 100, "A vertical scroll over a code block must scroll the transcript (\(aim))")
 		code.scroll(byDeltaX: -300, deltaY: 0)
 		XCTAssertEqual(settledTop(of: code), scrolledTop, accuracy: 1, "A sideways scroll over a code block must not scroll the transcript")
 
-		// Scrolled up, a new turn arrives below without moving what the reader looks at.
+		// Up through about half the 200-row tail (3,000 pt of its 5,000), so that the table reuses its cells for the rows coming
+		// into view, and short of the top, where an older page would load.
 		let bottom = try TranscriptSnapshot(transcript)
-		transcript.scroll(byDeltaX: 0, deltaY: 600)
+		for _ in 0..<5 { transcript.scroll(byDeltaX: 0, deltaY: 600) }
 		view = try settledSnapshot(of: transcript, after: bottom)
-		let reading = try XCTUnwrap(view.topTurn, "A reply must be in view after scrolling up")
-		send("History turn 240", from: editor, in: app)
-		let after = try TranscriptSnapshot(transcript)
-		XCTAssertFalse(after.shows("History turn 240"), "Scrolled up, a new turn must not pull the view down")
-		XCTAssertEqual(
-			after.top(of: reading.text) ?? .nan, reading.top, accuracy: 1,
-			"The row in view must stay put (\(reading.text) in the snapshot at \(after.turns.filter { $0.text == reading.text }.map(\.top)))")
-
-		// At the top, the older page loads above, and the reader stays on the rows they were reading.
-		let tail = after.rows
-		var beforeLoad = after
-		view = after
-		var scrolls = 0
-		var steps: [String] = []
-		while view.rows == tail && scrolls < 150 {
-			beforeLoad = view
-			// Big steps while one can't reach the top 80 pt, where the older page loads; then half the visible area, so
-			// that the row on top before the step that loads stays in view after it, unless the view jumps.
-			let step = view.distanceFromTop > 400 + 120 ? 400 : view.visibleArea.height / 2
-			transcript.scroll(byDeltaX: 0, deltaY: step)
-			view = try settledSnapshot(of: transcript, after: beforeLoad)
-			steps.append("\(Int(step)) from \(Int(beforeLoad.distanceFromTop)) to \(Int(view.distanceFromTop))")
-			scrolls += 1
-		}
-		capture(app, "Native transcript after loading older history")
-		// After hundreds of rows scrolled through and an older page: `NSTableView` exposes every row, in view or not, so that
-		// VoiceOver can reach it; what a reused cell must not leave behind is a row's text twice, or at another row's place.
+		capture(app, "Native transcript scrolled up")
+		XCTAssertLessThan(view.distanceFromTop, bottom.distanceFromTop - 2_000, "The wheel must scroll the transcript up (from \(Int(bottom.distanceFromTop)) to \(Int(view.distanceFromTop)) below its top)")
+		// `NSTableView` exposes every row, in view or not, so that VoiceOver can reach it; what a reused cell must not leave
+		// behind is a row's text twice, or at another row's place.
 		XCTAssertEqual(Set(view.turns.map(\.text)).count, view.turns.count, "No row text twice: \(view.turns.map(\.number).sorted())")
 		let byNumber = view.turns.sorted { $0.number < $1.number }
 		let misplaced = zip(byNumber, byNumber.dropFirst()).filter { $0.top >= $1.top }
 		XCTAssertTrue(misplaced.isEmpty, "Every row's element at its row's place: \(misplaced.map { "\($0.number)@\(Int($0.top)) above \($1.number)@\(Int($1.top))" })")
-		XCTAssertGreaterThan(view.rows, tail, "Scrolling to the top must load older history")
-		let anchor = try XCTUnwrap(beforeLoad.topTurn?.text)
-		XCTAssertTrue(
-			view.shows(anchor),
-			"\(anchor) must still be in view once older history loads (in view before: \(beforeLoad.inViewSummary); after: \(view.inViewSummary); last steps, by distance from the top: \(steps.suffix(3).joined(separator: ", ")))")
-		XCTAssertFalse(view.shows("History turn 0"), "Loading older history must not jump to its top")
 	}
 
 	/// A permission card's buttons answer its question, as its keys do: the card goes, and the turn goes on.
@@ -215,6 +194,15 @@ final class NativeTranscriptUITests: XCTestCase {
 		attachment.lifetime = .keepAlways
 		add(attachment)
 	}
+
+	/// The transcript's accessibility tree, as XCUITest sees it: what a failure about where its rows are needs.
+	@MainActor
+	private func attachTree(of transcript: XCUIElement) {
+		let dump = XCTAttachment(string: transcript.debugDescription)
+		dump.name = "Transcript accessibility tree"
+		dump.lifetime = .keepAlways
+		add(dump)
+	}
 }
 
 /// The transcript as one accessibility snapshot: reading each element's frame separately costs a round trip per element,
@@ -270,12 +258,6 @@ private struct TranscriptSnapshot {
 
 	func shows(_ text: String) -> Bool { turnsInView.contains { $0.text == text } }
 
-	/// The top of `text` in view, or nil when it isn't.
-	func top(of text: String) -> CGFloat? { turnsInView.first { $0.text == text }?.top }
-
 	/// The turns in view, top to bottom, as `<number>@<top>`: what a failure shows.
 	var inViewSummary: String { turnsInView.sorted { $0.top < $1.top }.map { "\($0.number)@\(Int($0.top))" }.joined(separator: ", ") }
-
-	/// The topmost turn in view.
-	var topTurn: Turn? { turnsInView.min { $0.top < $1.top } }
 }
