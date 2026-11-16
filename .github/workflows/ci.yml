@@ -255,6 +255,29 @@ jobs:
       - name: Core tests (macOS)
         run: mise run -C project-core test
 
+      # Each test's outcome and duration, on every run (scripts/ci/test-outcomes/README.md); never fails the job.
+      - name: Record test outcomes
+        if: always()
+        continue-on-error: true
+        run: >-
+          scripts/ci/test-outcomes/record.sh sapphire project-sapphire/build/test-outcomes/outcomes.jsonl
+          swift-testing=project-sapphire/build/test-outcomes/unit.jsonl
+          swift-testing=project-sapphire/build/test-outcomes/transcript.jsonl
+          cucumber=project-sapphire/build/test-outcomes/acceptance.json
+          xcresult=project-sapphire/build/ui-tests.xcresult
+          cucumber=project-sapphire/build/test-outcomes/bundle.json
+
+      - name: Upload test outcomes
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          # One per attempt, so that a re-run's outcomes don't collide with the first attempt's.
+          name: test-outcomes-sapphire-attempt-${{ github.run_attempt }}
+          path: project-sapphire/build/test-outcomes/outcomes.jsonl
+          if-no-files-found: warn
+          retention-days: 90
+
       - name: Upload acceptance failure captures
         if: failure() || cancelled()
         uses: actions/upload-artifact@v7

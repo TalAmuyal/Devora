@@ -26,6 +26,7 @@ description = "Clean build artifacts"
 run = """
 set -e
 bash scripts/test-install.sh
+bash scripts/ci/test-outcomes/test.sh
 mise run -C project-core test
 mise run -C project-debi test
 mise run -C project-judgess test
