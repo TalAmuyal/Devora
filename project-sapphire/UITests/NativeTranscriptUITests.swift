@@ -41,7 +41,7 @@ final class NativeTranscriptUITests: XCTestCase {
 		// XCUITest's delta isn't points (150 moves the view about 85), so the check is that it moved, not how far.
 		let centre = code.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
 		let overBlock = "at \(centre.screenPoint), code frame \(code.frame), visible area \(transcript.frame)"
-		centre.scroll(byDeltaX: 0, deltaY: 150)
+		centre.scrollWithPointer(byDeltaX: 0, deltaY: 150)
 		let scrolledTop = settledTop(of: code, movedFrom: codeTop)
 		if scrolledTop <= codeTop + 30 { attachWheelEvidence(app, transcript, "the wheel scroll over the code block", overBlock) }
 		XCTAssertGreaterThan(scrolledTop, codeTop + 30, "A vertical scroll over a code block must scroll the transcript (\(overBlock))")
@@ -50,18 +50,18 @@ final class NativeTranscriptUITests: XCTestCase {
 		// own to aim at: scrolling the element scrolls at XCUITest's own point for it, which is the label (the case that
 		// failed in CI). The app's trace records the point and the view it hit.
 		let overLabel = "XCUITest's own point for the row, code frame \(code.frame), visible area \(transcript.frame)"
-		code.scroll(byDeltaX: 0, deltaY: -150)
+		code.scrollWithPointer(byDeltaX: 0, deltaY: -150)
 		let backTop = settledTop(of: code, movedFrom: scrolledTop)
 		if backTop >= scrolledTop - 30 { attachWheelEvidence(app, transcript, "the wheel scroll over the row's label", overLabel) }
 		XCTAssertLessThan(backTop, scrolledTop - 30, "A vertical scroll over a row's label must scroll the transcript (\(overLabel))")
 
-		code.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).scroll(byDeltaX: -300, deltaY: 0)
+		code.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).scrollWithPointer(byDeltaX: -300, deltaY: 0)
 		XCTAssertEqual(settledTop(of: code), backTop, accuracy: 1, "A sideways scroll over a code block must not scroll the transcript")
 
 		// Up through about half the 200-row tail (3,000 pt of its 5,000), so that the table reuses its cells for the rows coming
 		// into view, and short of the top, where an older page would load.
 		let bottom = try TranscriptSnapshot(transcript)
-		for _ in 0..<5 { transcript.scroll(byDeltaX: 0, deltaY: 600) }
+		for _ in 0..<5 { transcript.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).scrollWithPointer(byDeltaX: 0, deltaY: 600) }
 		view = try settledSnapshot(of: transcript, after: bottom)
 		capture(app, "Native transcript scrolled up")
 		XCTAssertLessThan(view.distanceFromTop, bottom.distanceFromTop - 2_000, "The wheel must scroll the transcript up (from \(Int(bottom.distanceFromTop)) to \(Int(view.distanceFromTop)) below its top)")
