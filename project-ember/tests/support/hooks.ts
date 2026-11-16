@@ -18,7 +18,21 @@ import { FAILURE_CAPTURE_DIR, canCaptureScreen, captureFailure } from './failure
 import { cleanupFixtures, writeTestConfig } from './fixture-helper';
 import { EmberWorld } from './world';
 
+/** How long one launch may take in all, from spawning the app to its test namespace; a normal launch takes 1 to 10 s. */
+const LAUNCH_BUDGET_MS = 60_000;
+/** The Cucumber timeout of a hook or step that launches the app: above the launch's budget, so a slow launch fails with the launch's own error. */
+export const LAUNCH_STEP_TIMEOUT_MS = LAUNCH_BUDGET_MS + 15_000;
+/** How many of the app's latest stderr lines a failure keeps. */
+const STDERR_LINES = 500;
+
 let appProcess: ChildProcess | null = null;
+/** The app's stderr since its last launch, its latest lines only, and the log it named there: a failure's evidence. */
+let appStderr: string[] = [];
+let appLogPath: string | null = null;
+/** A launch that failed: every later scenario fails with it at once, rather than launching again. */
+let launchFailure: Error | null = null;
+/** The scenario that ran last: when the app is found gone, the one most likely to have crashed it. */
+let lastScenario: string | null = null;
 let testHarnessPort: number | null = null;
 let ipcPort: number | null = null;
 let fakeClaudeServer: FakeClaudeServer | null = null;
@@ -80,18 +94,69 @@ function findAppBinary(): string {
 async function waitForReady(port: number, timeoutMs: number): Promise<void> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    try {
-      const response = await fetch(`http://127.0.0.1:${port}/test/ready`);
-      if (response.ok) return;
-    } catch {
-      // not ready yet
-    }
+    if (await bridgeAnswers(port, 1_000)) return;
     await new Promise((r) => setTimeout(r, 200));
   }
   throw new Error(`App did not become ready within ${timeoutMs}ms`);
 }
 
+/** Whether the app's test bridge answers `/test/ready` within `timeoutMs`. */
+async function bridgeAnswers(port: number, timeoutMs: number): Promise<boolean> {
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/test/ready`, { signal: AbortSignal.timeout(timeoutMs) });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+/** The end of the app's stderr that isn't a whole line yet: chunks split lines anywhere. */
+let stderrPartial = '';
+
+function recordStderr(chunk: Buffer): void {
+  const lines = (stderrPartial + chunk.toString()).split('\n');
+  stderrPartial = lines.pop()!;
+  for (const line of lines) {
+    const log = line.match(/^Devora Ember log: (\S+)$/);
+    if (log) appLogPath = log[1];
+  }
+  appStderr.push(...lines);
+  if (appStderr.length > STDERR_LINES) appStderr = appStderr.slice(-STDERR_LINES);
+}
+
+/** The app's latest stderr lines, its unfinished last line included. */
+function stderrTail(count: number): string {
+  return [...appStderr, ...(stderrPartial ? [stderrPartial] : [])].slice(-count).join('\n');
+}
+
+/** What the app said: its stderr since the last launch, and the end of the log it writes. */
+function appEvidence(): string {
+  let log = '(no log path seen on stderr)';
+  if (appLogPath) {
+    try {
+      log = fs.readFileSync(appLogPath, 'utf8').split('\n').slice(-200).join('\n');
+    } catch (error) {
+      log = `(${appLogPath} unreadable: ${String(error)})`;
+    }
+  }
+  return `== App stderr (since its last launch, latest ${STDERR_LINES} lines) ==\n${stderrTail(STDERR_LINES)}\n\n== ${appLogPath ?? 'App log'} (end) ==\n${log}\n`;
+}
+
+/** Saves the app's evidence beside a failure's screenshot, for CI's failure artifact. */
+function captureAppEvidence(label: string): void {
+  fs.mkdirSync(FAILURE_CAPTURE_DIR, { recursive: true });
+  const file = path.join(FAILURE_CAPTURE_DIR, `${Date.now()}-${label.replace(/[^a-zA-Z0-9_-]+/g, '_').slice(0, 120)}.app.txt`);
+  fs.writeFileSync(file, appEvidence());
+  console.error(`Failure capture: ${file}`);
+}
+
+/**
+ * Launches the app and waits until it can be driven, within one budget for all of it (the ports on stderr, the bridge, the frontend's test namespace).
+ * A launch that runs out names the wait it was in, and its failure stops the rest of the run (see `launchFailure`).
+ */
 async function launchApp(): Promise<AppDriver> {
+  const deadline = Date.now() + LAUNCH_BUDGET_MS;
+  const left = () => Math.max(0, deadline - Date.now());
   const binary = findAppBinary();
 
   const ALLOWED_ENV_VARS = ['HOME', 'SHELL', 'TMPDIR', 'USER', 'LANG'] as const;
@@ -106,14 +171,17 @@ async function launchApp(): Promise<AppDriver> {
       .join(':');
   }
 
-  appProcess = spawn(binary, [], {
+  appStderr = [];
+  stderrPartial = '';
+  appLogPath = null;
+  const app = spawn(binary, [], {
     env: {
       ...baseEnv,
       DEVORA_TEST_MODE: '1',
       DEVORA_TEST_HEALTH_FIXTURE: path.join(testConfigDir!, 'health-report.json'),
-      ANTHROPIC_BASE_URL: `http://127.0.0.1:${fakeClaudeServer.getPort()}`,
+      ANTHROPIC_BASE_URL: `http://127.0.0.1:${fakeClaudeServer!.getPort()}`,
       ANTHROPIC_API_KEY: 'sk-ant-fake-key-for-bdd-tests',
-      DEVORA_CONFIG_PATH: testConfigPath,
+      DEVORA_CONFIG_PATH: testConfigPath!,
       DEVORA_STATE_DIR: path.join(testConfigDir!, 'state'),
       CLAUDE_CONFIG_DIR: CLAUDE_CONFIG_PATH,
       // No feature flags or telemetry from the network, so Claude Code behaves the same on every run.
@@ -121,76 +189,119 @@ async function launchApp(): Promise<AppDriver> {
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
+  appProcess = app;
+  app.stderr!.on('data', recordStderr);
 
-  const portsPromise = new Promise<{ ipc: number; testHarness: number }>((resolve, reject) => {
-    let foundIpcPort: number | null = null;
-    let foundTestHarnessPort: number | null = null;
+  let waitingFor = 'the ports on stderr';
+  try {
+    const ports = await new Promise<{ ipc: number; testHarness: number }>((resolve, reject) => {
+      let foundIpcPort: number | null = null;
+      let foundTestHarnessPort: number | null = null;
+      const timeout = setTimeout(() => reject(new Error('no ports on stderr')), left());
 
-    const timeout = setTimeout(
-      () => reject(new Error('Timed out waiting for ports on stderr')),
-      30_000,
-    );
+      // A pipe delivers stderr in arbitrary chunks, so a line can arrive split in two ("...on port ", then "56325\n"):
+      // match whole lines of everything received so far.
+      let received = '';
+      function onData(chunk: Buffer): void {
+        received += chunk.toString();
+        const ipcMatch = received.match(/Devora IPC server on port (\d+)\r?\n/);
+        if (ipcMatch) foundIpcPort = parseInt(ipcMatch[1], 10);
+        const harnessMatch = received.match(/Devora test harness on port (\d+)\r?\n/);
+        if (harnessMatch) foundTestHarnessPort = parseInt(harnessMatch[1], 10);
+        if (foundIpcPort !== null && foundTestHarnessPort !== null) {
+          clearTimeout(timeout);
+          app.stderr!.removeListener('data', onData);
+          resolve({ ipc: foundIpcPort, testHarness: foundTestHarnessPort });
+        }
+      }
 
-    function tryResolve(): void {
-      if (foundIpcPort !== null && foundTestHarnessPort !== null) {
+      app.stderr!.on('data', onData);
+      app.on('error', (err) => {
         clearTimeout(timeout);
-        appProcess!.stderr!.removeListener('data', onData);
-        resolve({ ipc: foundIpcPort, testHarness: foundTestHarnessPort });
-      }
-    }
-
-    function onData(chunk: Buffer): void {
-      const text = chunk.toString();
-
-      const ipcMatch = text.match(/Devora IPC server on port (\d+)/);
-      if (ipcMatch) {
-        foundIpcPort = parseInt(ipcMatch[1], 10);
-      }
-
-      const harnessMatch = text.match(/Devora test harness on port (\d+)/);
-      if (harnessMatch) {
-        foundTestHarnessPort = parseInt(harnessMatch[1], 10);
-      }
-
-      tryResolve();
-    }
-
-    appProcess!.stderr!.on('data', onData);
-    appProcess!.on('error', (err) => {
-      clearTimeout(timeout);
-      reject(err);
+        reject(err);
+      });
+      app.on('exit', (code, signal) => {
+        clearTimeout(timeout);
+        reject(new Error(`the app exited (code ${code}, signal ${signal}) before its ports were found`));
+      });
     });
-    appProcess!.on('exit', (code) => {
-      clearTimeout(timeout);
-      reject(new Error(`App exited with code ${code} before ports were found`));
-    });
-  });
+    ipcPort = ports.ipc;
+    testHarnessPort = ports.testHarness;
 
-  const ports = await portsPromise;
-  ipcPort = ports.ipc;
-  testHarnessPort = ports.testHarness;
+    waitingFor = 'its test bridge (/test/ready)';
+    await waitForReady(testHarnessPort, left());
 
-  await waitForReady(testHarnessPort, 30_000);
-
-  // /test/ready only proves the harness HTTP server is up; the frontend may still be inside its DOMContentLoaded handler.
-  // Wait until the app exposes its test namespace so the first scenario cannot race app initialization.
-  const driver = new AppDriver(testHarnessPort, ipcPort);
-  await driver.pollFor("return typeof window.__test !== 'undefined'", true, 30_000);
-  return driver;
+    // /test/ready only proves the harness HTTP server is up; the frontend may still be inside its DOMContentLoaded handler.
+    // Wait until the app exposes its test namespace so the first scenario cannot race app initialization.
+    waitingFor = 'its frontend (window.__test)';
+    const driver = new AppDriver(testHarnessPort, ipcPort);
+    await driver.pollFor("return typeof window.__test !== 'undefined'", true, left());
+    return driver;
+  } catch (error) {
+    launchFailure = new Error(
+      `The app's launch failed while waiting for ${waitingFor}, within its ${LAUNCH_BUDGET_MS / 1000} s budget: ` +
+        `${error instanceof Error ? error.message : String(error)}\n` +
+        `Its stderr and log are in the failure captures; latest stderr:\n${stderrTail(20)}`,
+    );
+    captureAppEvidence('launch-failed');
+    throw launchFailure;
+  }
 }
 
-/** Restart the real binary with the same config and state directory. */
-export async function restartApp(): Promise<AppDriver> {
+/** Stops the app, if it still runs, and waits for its exit. */
+async function stopApp(): Promise<void> {
   const previous = appProcess;
   if (previous && previous.exitCode === null && previous.signalCode === null) {
     const exited = new Promise<void>(resolve => previous.once('exit', () => resolve()));
     previous.kill();
     await exited;
   }
+}
+
+/** Whether a launch failed in this run: there is no app left to tear down. */
+export function appLaunchFailed(): boolean {
+  return launchFailure !== null;
+}
+
+/** Restart the real binary with the same config and state directory. */
+export async function restartApp(): Promise<AppDriver> {
+  await stopApp();
   return launchApp();
 }
 
-BeforeAll(async function () {
+/**
+ * Before a scenario: the shared app must still run and answer. If it doesn't, the app is launched again for the scenarios after it, and
+ * this returns what happened, for this scenario to fail with (the run stays red, so a crash can't pass unnoticed). After a failed launch,
+ * every scenario fails with that launch's error at once.
+ */
+async function appProblemBeforeScenario(): Promise<Error | null> {
+  if (launchFailure) throw launchFailure;
+  const app = appProcess!;
+  const exitOf = () => `the app exited (code ${app.exitCode ?? 'none'}, signal ${app.signalCode ?? 'none'})`;
+  let problem: string | null = null;
+  if (app.exitCode !== null || app.signalCode !== null) {
+    problem = exitOf();
+  } else if (!(await bridgeAnswers(testHarnessPort!, 2_000))) {
+    // A bridge that refuses at once may be an exit whose event hasn't arrived yet: give it a moment to tell which.
+    const exited = await new Promise<boolean>((resolve) => {
+      if (app.exitCode !== null || app.signalCode !== null) return resolve(true);
+      const timer = setTimeout(() => resolve(false), 1_000);
+      app.once('exit', () => {
+        clearTimeout(timer);
+        resolve(true);
+      });
+    });
+    problem = exited ? exitOf() : "the app's test bridge didn't answer /test/ready within 2 s";
+  }
+  if (!problem) return null;
+  const evidence = stderrTail(20);
+  captureAppEvidence('app-gone-before-scenario');
+  await stopApp();
+  await launchApp();
+  return new Error(`Before this scenario (after "${lastScenario ?? 'none'}"), ${problem}; it was launched again for the next scenarios. Latest stderr:\n${evidence}`);
+}
+
+BeforeAll({ timeout: LAUNCH_STEP_TIMEOUT_MS }, async function () {
   fs.rmSync(STRUCTURED_LOG_BASE_DIR, { recursive: true, force: true });
   fs.rmSync(FAILURE_CAPTURE_DIR, { recursive: true, force: true });
 
@@ -222,9 +333,12 @@ BeforeAll(async function () {
 AfterStep(async function (this: EmberWorld, { result, pickle, pickleStep }) {
   if (result.status !== Status.FAILED) return;
   await captureFailure(this.driver, `${pickle.name}--${pickleStep.text}`);
+  captureAppEvidence(`${pickle.name}--${pickleStep.text}`);
 });
 
-Before(async function (this: EmberWorld, scenario) {
+Before({ timeout: LAUNCH_STEP_TIMEOUT_MS }, async function (this: EmberWorld, scenario) {
+  const problem = await appProblemBeforeScenario();
+  lastScenario = scenario.pickle.name;
   const healthFixture = path.join(testConfigDir!, 'health-report.json');
   if (scenario.pickle.tags.some((tag) => tag.name === '@real-health')) {
     fs.rmSync(healthFixture, { force: true });
@@ -233,6 +347,8 @@ Before(async function (this: EmberWorld, scenario) {
   }
   this.driver = new AppDriver(testHarnessPort!, ipcPort!);
   this.testConfigPath = testConfigPath!;
+  // Failed only once its driver is on the relaunched app, so that the teardown runs on it.
+  if (problem) throw problem;
 });
 
 Before({ tags: '@real-claude' }, async function (this: EmberWorld, scenario) {
@@ -263,6 +379,7 @@ Before({ tags: '@screen-capture' }, function () {
 });
 
 After(async function (this: EmberWorld, scenario) {
+  if (launchFailure) return;
   // Cucumber runs After hooks in reverse registration order: verify CLI exit
   // here, before closing PTYs or deleting fixtures, rather than in the tagged hook.
   if (scenario.pickle.tags.some(tag => tag.name === '@real-claude')) {

@@ -24,6 +24,8 @@ The harness (`tests/support/hooks.ts`) independently refuses stale/incomplete bu
 ### Failure captures
 
 When a step fails, `tests/support/failure-capture.ts` saves a screenshot of the screen and the active terminal's text to `test-results/failures/`, at the moment of failure.
+With them, `tests/support/hooks.ts` saves the app's evidence (`<name>.app.txt`): its stderr since its last launch, and the end of the log it named there.
+The suite shares one app. A launch has one budget for all its waits (60 s; the hooks and steps that launch run under a longer Cucumber timeout), and a failed one names the wait it was in. Before each scenario the app must still run and answer: if it doesn't, that scenario fails saying so and the app is launched again for the next ones; after a failed launch, the rest fail at once with its error.
 In CI they are uploaded as the `e2e-failure-captures` artifact of the failed run (`gh run download <run-id> -n e2e-failure-captures`): look there before trying to reproduce a CI-only failure.
 Screenshots need macOS Screen Recording permission for the process running the tests; without it locally, only the terminal text is saved and the `@screen-capture` scenario is skipped (it always runs in CI).
 

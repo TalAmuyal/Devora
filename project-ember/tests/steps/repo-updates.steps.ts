@@ -8,7 +8,7 @@ import { createTestFixtureRoot, createTestProfile, createTestRepo, writeTestConf
 import { GIT_TEST_IDENTITY } from '../support/git-test-env';
 import { runPaletteCommand } from '../support/command-palette-helper';
 import { UIDriver } from '../support/ui-driver';
-import { restartApp } from '../support/hooks';
+import { LAUNCH_STEP_TIMEOUT_MS, appLaunchFailed, restartApp } from '../support/hooks';
 
 function git(cwd: string, ...args: string[]): string {
   return execFileSync('git', args, { cwd, env: { ...process.env, ...GIT_TEST_IDENTITY }, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
@@ -94,9 +94,10 @@ Then('the Ember parent clone reaches its advanced origin', async function (this:
     await new Promise(resolve => setTimeout(resolve, 50));
   }
 });
-When('Ember restarts with its saved state', async function (this: EmberWorld) { this.driver = await restartApp(); });
+When('Ember restarts with its saved state', { timeout: LAUNCH_STEP_TIMEOUT_MS }, async function (this: EmberWorld) { this.driver = await restartApp(); });
 
 After({ tags: '@repo-updates' }, async function (this: EmberWorld) {
+  if (appLaunchFailed()) return;
   await this.driver.eval('window.__test.layers.clear();');
   if (await this.driver.eval("return document.querySelector('.global-pause-hint') !== null")) {
     await runPaletteCommand(this.driver, 'Resume Devora');
