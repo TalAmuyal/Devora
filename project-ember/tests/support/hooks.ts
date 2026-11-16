@@ -13,7 +13,7 @@ import {
 } from '../../scripts/app-bundle';
 import { AppDriver } from './app-driver';
 import { FakeClaudeServer, STRUCTURED_LOG_BASE_DIR } from './fake-claude-server';
-import { CLAUDE_CONFIG_PATH, cleanupWorkspace, stopClaudeCode } from './claude-helper';
+import { CLAUDE_CONFIG_PATH, CLAUDE_TEST_STATE, NO_INTERNET, cleanupWorkspace, stopClaudeCode } from './claude-helper';
 import { FAILURE_CAPTURE_DIR, canCaptureScreen, captureFailure } from './failure-capture';
 import { cleanupFixtures, writeTestConfig } from './fixture-helper';
 import { EmberWorld } from './world';
@@ -186,6 +186,7 @@ async function launchApp(): Promise<AppDriver> {
       CLAUDE_CONFIG_DIR: CLAUDE_CONFIG_PATH,
       // No feature flags or telemetry from the network, so Claude Code behaves the same on every run.
       CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
+      ...NO_INTERNET,
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -318,11 +319,7 @@ BeforeAll({ timeout: LAUNCH_STEP_TIMEOUT_MS }, async function () {
     path.join(CLAUDE_CONFIG_PATH, 'settings.json'),
     JSON.stringify({ permissions: { defaultMode: 'plan' }, theme: 'dark' }, null, 2),
   );
-  // Claude Code shows one-time nudge dialogs (e.g. "Make auto mode your default permission mode?") depending on remote cohorts; one appearing mid-test swallows the keys meant for the prompt, so mark them as already seen.
-  fs.writeFileSync(
-    path.join(CLAUDE_CONFIG_PATH, '.claude.json'),
-    JSON.stringify({ hasSeenAutoDefaultNudge: true, hasSeenEffortMediumNudge: true }, null, 2),
-  );
+  fs.writeFileSync(path.join(CLAUDE_CONFIG_PATH, '.claude.json'), JSON.stringify(CLAUDE_TEST_STATE, null, 2));
   // Note: We intentionally do NOT copy .credentials.json here.
   // Tests use ANTHROPIC_API_KEY (pointed at the fake server) instead of OAuth tokens.
   // Copying credentials would cause an "auth conflict" warning in Claude Code.

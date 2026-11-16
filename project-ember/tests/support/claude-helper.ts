@@ -15,6 +15,16 @@ export type ClaudeHookType = 'PostToolUse' | 'PermissionRequest';
 
 export const CLAUDE_CONFIG_PATH = '/tmp/ember-bdd-claude';
 
+/**
+ * The `.claude.json` a test run starts with.
+ * Onboarding is marked done: its connectivity check calls api.anthropic.com directly, whatever `ANTHROPIC_BASE_URL` says.
+ * The one-time nudge dialogs (e.g. "Make auto mode your default permission mode?") depend on remote cohorts, and one appearing mid-test swallows the keys meant for the prompt, so they are marked as seen.
+ */
+export const CLAUDE_TEST_STATE = { hasCompletedOnboarding: true, hasSeenAutoDefaultNudge: true, hasSeenEffortMediumNudge: true };
+
+/** Proxy variables that send every request but this machine's to a closed port, so one that escapes to the internet fails at once, every run. */
+export const NO_INTERNET = { HTTPS_PROXY: 'http://127.0.0.1:9', HTTP_PROXY: 'http://127.0.0.1:9', NO_PROXY: '127.0.0.1,localhost' };
+
 /** A native terminal uses the same interactive CLI/onboarding/permission/exit protocol. */
 export interface ClaudeTerminal {
   start(): Promise<void>;
@@ -128,15 +138,12 @@ export function cleanupWorkspace(workspacePath: string): void {
 }
 
 const ONBOARDING_STEPS = [
-  { id: 'theme', needle: 'Choose the text style', keys: [KEY_CR] },
   { id: 'apikey', needle: 'Do you want to use this API key', keys: [KEY_ARROW_UP, KEY_CR], delayMs: 100 },
-  { id: 'security', needle: 'Press Enter to continue', keys: [KEY_CR] },
 ] as const;
 
 /**
- * Dismiss Claude Code onboarding screens (theme picker, API key
- * confirmation, etc.) by detecting known prompts and sending the
- * appropriate keystrokes.
+ * Dismiss the startup prompts Claude Code still shows with onboarding marked done (`CLAUDE_TEST_STATE`):
+ * the API key confirmation, by detecting it and sending the keystrokes that accept it.
  *
  * Returns true if an action was taken (so the caller can re-poll).
  */
@@ -164,7 +171,7 @@ async function dismissOnboardingIfNeeded(
 
 /**
  * Start Claude Code interactively by typing `ccc` into the terminal.
- * Handles first-run onboarding screens if they appear, then waits for
+ * Answers its startup prompts if they appear, then waits for
  * the Claude Code input prompt (`>`) before returning.
  */
 export async function startClaudeCode(driver: ClaudeDriver): Promise<void> {
