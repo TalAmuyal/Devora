@@ -5,6 +5,9 @@ import XCTest
 /// What the wheel only takes the view to (staying put while scrolled up, loading older history) is tested in process
 /// (`TranscriptScrollViewTests`) and, through the whole app, by agent-chat.feature.
 final class NativeTranscriptUITests: XCTestCase {
+	/// Where the app writes its wheel and scrolling decisions (`DEVORA_WHEEL_TRACE`), attached when a wheel assertion fails.
+	private var wheelTrace: URL?
+
 	@MainActor
 	func testTheWheelOverTheTranscriptAndItsCodeBlocks() throws {
 		let (app, editor, transcript) = try openAgent()
@@ -32,21 +35,28 @@ final class NativeTranscriptUITests: XCTestCase {
 		// The new rows are still being measured after the turn ends; their corrections move the block, so each position is
 		// read once it holds still.
 		let codeTop = settledTop(of: code)
-		// Where XCUITest aims the scroll, read before it: what a failure needs to tell a missed target from an unmoved view.
-		let aim = "code frame \(code.frame), hittable \(code.isHittable), aimed at \(code.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).screenPoint), visible area \(transcript.frame)"
-		code.scroll(byDeltaX: 0, deltaY: 300)
+		// At an explicit point: scrolling the element itself, XCUITest picks its own point of the row, which is the row's
+		// label at its top-left (the block's centre hit-tests to the block's own scroll view), not the code block.
+		// Up by 150 over the block's centre, then back down over the label: CI's small window keeps both points in view.
+		// XCUITest's delta isn't points (150 moves the view about 85), so the check is that it moved, not how far.
+		let centre = code.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+		let overBlock = "at \(centre.screenPoint), code frame \(code.frame), visible area \(transcript.frame)"
+		centre.scroll(byDeltaX: 0, deltaY: 150)
 		let scrolledTop = settledTop(of: code, movedFrom: codeTop)
-		if scrolledTop <= codeTop + 100 {
-			let before = XCTAttachment(string: aim)
-			before.name = "Before the wheel scroll over the code block"
-			before.lifetime = .keepAlways
-			add(before)
-			attachTree(of: transcript)
-			capture(app, "After the wheel scroll over the code block")
-		}
-		XCTAssertGreaterThan(scrolledTop, codeTop + 100, "A vertical scroll over a code block must scroll the transcript (\(aim))")
-		code.scroll(byDeltaX: -300, deltaY: 0)
-		XCTAssertEqual(settledTop(of: code), scrolledTop, accuracy: 1, "A sideways scroll over a code block must not scroll the transcript")
+		if scrolledTop <= codeTop + 30 { attachWheelEvidence(app, transcript, "the wheel scroll over the code block", overBlock) }
+		XCTAssertGreaterThan(scrolledTop, codeTop + 30, "A vertical scroll over a code block must scroll the transcript (\(overBlock))")
+
+		// The row's label is part of the transcript too. The row is one accessibility element, so the label has none of its
+		// own to aim at: scrolling the element scrolls at XCUITest's own point for it, which is the label (the case that
+		// failed in CI). The app's trace records the point and the view it hit.
+		let overLabel = "XCUITest's own point for the row, code frame \(code.frame), visible area \(transcript.frame)"
+		code.scroll(byDeltaX: 0, deltaY: -150)
+		let backTop = settledTop(of: code, movedFrom: scrolledTop)
+		if backTop >= scrolledTop - 30 { attachWheelEvidence(app, transcript, "the wheel scroll over the row's label", overLabel) }
+		XCTAssertLessThan(backTop, scrolledTop - 30, "A vertical scroll over a row's label must scroll the transcript (\(overLabel))")
+
+		code.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).scroll(byDeltaX: -300, deltaY: 0)
+		XCTAssertEqual(settledTop(of: code), backTop, accuracy: 1, "A sideways scroll over a code block must not scroll the transcript")
 
 		// Up through about half the 200-row tail (3,000 pt of its 5,000), so that the table reuses its cells for the rows coming
 		// into view, and short of the top, where an older page would load.
@@ -96,6 +106,8 @@ final class NativeTranscriptUITests: XCTestCase {
 			app.launchEnvironment[key] = try XCTUnwrap(ProcessInfo.processInfo.environment[key])
 		}
 		app.launchEnvironment["DEVORA_FAKE_REPORT"] = scratch.appending(path: "fake-report.jsonl").path
+		wheelTrace = scratch.appending(path: "wheel-trace.log")
+		app.launchEnvironment["DEVORA_WHEEL_TRACE"] = wheelTrace?.path
 		app.launch()
 		addTeardownBlock { @MainActor in
 			if app.state != .notRunning {
@@ -193,6 +205,22 @@ final class NativeTranscriptUITests: XCTestCase {
 		attachment.name = name
 		attachment.lifetime = .keepAlways
 		add(attachment)
+	}
+
+	/// What a failed wheel assertion needs: where the scroll was aimed, the app's own wheel and scrolling decisions
+	/// (`DEVORA_WHEEL_TRACE`), the transcript's accessibility tree and a screenshot.
+	@MainActor
+	private func attachWheelEvidence(_ app: XCUIApplication, _ transcript: XCUIElement, _ what: String, _ aim: String) {
+		let aimed = XCTAttachment(string: aim)
+		aimed.name = "Where \(what) was aimed"
+		aimed.lifetime = .keepAlways
+		add(aimed)
+		let trace = XCTAttachment(string: (wheelTrace.flatMap { try? String(contentsOf: $0, encoding: .utf8) }) ?? "(no wheel trace)")
+		trace.name = "The app's wheel decisions"
+		trace.lifetime = .keepAlways
+		add(trace)
+		attachTree(of: transcript)
+		capture(app, "After \(what)")
 	}
 
 	/// The transcript's accessibility tree, as XCUITest sees it: what a failure about where its rows are needs.
