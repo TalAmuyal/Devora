@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Runs the XCUITests (UITests/) against the app, or says why they can't run here.
+# Arguments go to xcodebuild (stress-ui passes `-only-testing:` and `-test-iterations`).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -40,7 +41,7 @@ rm -rf "$results"
 if ! xcodebuild -project App/DevoraSapphire.xcodeproj -scheme DevoraSapphire -configuration Release \
 	-derivedDataPath build/DerivedData -destination 'platform=macOS,arch=arm64' -resultBundlePath "$results" \
 	-test-timeouts-enabled YES -default-test-execution-time-allowance 300 \
-	-maximum-test-execution-time-allowance 300 test -quiet; then
+	-maximum-test-execution-time-allowance 300 "$@" test -quiet; then
 	# `-quiet` names the failing tests but not why they failed; the result bundle has the messages.
 	xcrun xcresulttool get test-results summary --path "$results" --compact |
 		jq -r '.testFailures[] | "\(.testIdentifierString): \(.failureText)"' || true
