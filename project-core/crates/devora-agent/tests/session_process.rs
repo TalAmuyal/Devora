@@ -5,11 +5,30 @@ use devora_agent::session::*;
 use devora_app::log::Log;
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
-use std::os::unix::fs::PermissionsExt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::sync::OnceLock;
 use std::time::Duration;
+
+/// Writes the fake CLI as an executable whose shebang is Python's own path, since the session clears `PATH`.
+/// Python writes it, not this process: a child another test thread forks while this process has the file open for
+/// writing would inherit that descriptor until its own exec, and exec'ing the file meanwhile fails on Linux with
+/// "Text file busy". The tests' spawns are inside `Session::start`, where no lock of theirs can reach.
+fn write_fake_cli(path: &Path) {
+    let source = include_str!("support/fake_cli.py")
+        .split_once('\n')
+        .unwrap()
+        .1;
+    let status = std::process::Command::new("python3")
+        .args([
+            "-c",
+            "import os, sys\nwith open(sys.argv[1], 'w') as file: file.write('#!' + sys.executable + '\\n' + sys.argv[2])\nos.chmod(sys.argv[1], 0o755)",
+        ])
+        .arg(path)
+        .arg(source)
+        .status()
+        .expect("Python 3 is required for the deterministic subprocess peer");
+    assert!(status.success());
+}
 
 struct Fixture {
     root: tempfile::TempDir,
@@ -17,23 +36,8 @@ struct Fixture {
 
 impl Fixture {
     fn new() -> Self {
-        static PYTHON: OnceLock<String> = OnceLock::new();
-        let python = PYTHON.get_or_init(|| {
-            let output = std::process::Command::new("python3")
-                .args(["-c", "import sys; print(sys.executable)"])
-                .output()
-                .expect("Python 3 is required for the deterministic subprocess peer");
-            assert!(output.status.success());
-            String::from_utf8(output.stdout).unwrap().trim().to_owned()
-        });
         let root = tempfile::tempdir().unwrap();
-        let source = include_str!("support/fake_cli.py")
-            .split_once('\n')
-            .unwrap()
-            .1;
-        let executable = root.path().join("fake-cli");
-        std::fs::write(&executable, format!("#!{python}\n{source}")).unwrap();
-        std::fs::set_permissions(executable, std::fs::Permissions::from_mode(0o755)).unwrap();
+        write_fake_cli(&root.path().join("fake-cli"));
         Self { root }
     }
 
@@ -443,11 +447,8 @@ async fn initialization_and_invalid_protocol_fail_visibly() {
     options
         .environment
         .insert("DEVORA_FAKE_INIT_ERROR".into(), "1".into());
-    assert!(Session::start(options, fixture.log())
-        .await
-        .err()
-        .unwrap()
-        .contains("initialize refused"));
+    let refused = Session::start(options, fixture.log()).await.err().unwrap();
+    assert!(refused.contains("initialize refused"), "{refused}");
     let mut session = Session::start(fixture.options(), fixture.log())
         .await
         .unwrap();
