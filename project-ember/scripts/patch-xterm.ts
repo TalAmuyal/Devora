@@ -7,7 +7,8 @@
  * silently dropped until the next resize. The same function's other branch has the check; this applies it here too,
  * so a line with no room is trimmed instead.
  *
- * xterm is pinned to the version the fix was written for; drop this script when a release has the fix.
+ * Reported upstream as xtermjs/xterm.js#6331. xterm is pinned to the version the fix was written for; drop this script
+ * when a release has the fix.
  */
 
 import * as fs from 'node:fs';
