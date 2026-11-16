@@ -3,7 +3,6 @@ use crate::test_support::{profile, Profile};
 use devora_core::state::Command;
 use futures_lite::future::{block_on, poll_once};
 use std::fs;
-use std::os::unix::fs::PermissionsExt;
 use std::sync::mpsc;
 use std::time::Duration;
 
@@ -24,25 +23,24 @@ impl Fixture {
             r#"{"claude":{"default-model":"haiku","effort":"low"}}"#,
         )
         .unwrap();
-        let python = std::process::Command::new("python3")
-            .args(["-c", "import sys; print(sys.executable)"])
-            .output()
-            .unwrap();
-        assert!(python.status.success());
         let program = profile.root.path().join("fake-cli");
         let source = include_str!("../../../devora-agent/tests/support/fake_cli.py")
             .split_once('\n')
             .unwrap()
             .1;
-        fs::write(
-            &program,
-            format!(
-                "#!{}\n{source}",
-                String::from_utf8(python.stdout).unwrap().trim()
-            ),
-        )
-        .unwrap();
-        fs::set_permissions(&program, fs::Permissions::from_mode(0o755)).unwrap();
+        // Python writes the executable, not this process: a child another test thread forks while this process has
+        // it open for writing would inherit the descriptor until its own exec, and exec'ing the file meanwhile fails
+        // on Linux with "Text file busy".
+        let written = std::process::Command::new("python3")
+            .args([
+                "-c",
+                "import os, sys\nwith open(sys.argv[1], 'w') as file: file.write('#!' + sys.executable + '\\n' + sys.argv[2])\nos.chmod(sys.argv[1], 0o755)",
+            ])
+            .arg(&program)
+            .arg(source)
+            .status()
+            .unwrap();
+        assert!(written.success());
         let log = crate::log::test_log();
         let state = persistent.then(|| {
             profile

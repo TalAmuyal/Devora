@@ -107,26 +107,24 @@ impl Fixture {
         source
     }
     fn context(&self) -> LaunchContext {
-        use std::os::unix::fs::PermissionsExt;
-        let python = Command::new("python3")
-            .args(["-c", "import sys;print(sys.executable)"])
-            .output()
-            .unwrap();
-        assert!(python.status.success());
         let source = include_str!("../../devora-agent/tests/support/fake_cli.py")
             .split_once('\n')
             .unwrap()
             .1;
         let program = self.root.path().join("fake-cli");
-        std::fs::write(
-            &program,
-            format!(
-                "#!{}\n{source}",
-                String::from_utf8(python.stdout).unwrap().trim()
-            ),
-        )
-        .unwrap();
-        std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o755)).unwrap();
+        // Python writes the executable, not this process: a child another test thread forks while this process has
+        // it open for writing would inherit the descriptor until its own exec, and exec'ing the file meanwhile fails
+        // on Linux with "Text file busy".
+        let written = Command::new("python3")
+            .args([
+                "-c",
+                "import os, sys\nwith open(sys.argv[1], 'w') as file: file.write('#!' + sys.executable + '\\n' + sys.argv[2])\nos.chmod(sys.argv[1], 0o755)",
+            ])
+            .arg(&program)
+            .arg(source)
+            .status()
+            .unwrap();
+        assert!(written.success());
         LaunchContext {
             global_config: self.global.clone(),
             program,
