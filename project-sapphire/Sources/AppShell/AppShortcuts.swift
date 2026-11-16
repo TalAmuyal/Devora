@@ -94,6 +94,7 @@ final class AppShortcuts {
 
 	/// Returns whether the key was a shortcut, which consumes it even when unavailable: a deliberate no-op, so the key reaches neither the surface that made it unavailable nor a terminal.
 	func handle(_ key: KeyPress) -> Bool {
+		InputTrace.note("key \(key.keyCode) \(key.modifiers.rawValue): the Shift tap resets")
 		shiftTap.reset()
 		guard let shortcut = AppShortcut(key) else { return false }
 		if !available(shortcut) { return true }
@@ -107,7 +108,10 @@ final class AppShortcuts {
 
 	func handleFlags(keyCode: UInt16, modifiers: KeyModifiers, at time: TimeInterval) {
 		let isAvailable = available(.openCommandPalette)
+		let before = InputTrace.isOn ? shiftTap.state : ""
 		let fired = shiftTap.flagsChanged(keyCode: keyCode, modifiers: modifiers, at: time, available: isAvailable)
+		InputTrace.note(
+			"flags \(keyCode) \(modifiers.rawValue) at \(String(format: "%.3f", time)): palette available \(isAvailable), fired \(fired); before: \(before); after: \(shiftTap.state)")
 		if fired {
 			run(.openCommandPalette)
 		}
@@ -118,6 +122,10 @@ final class AppShortcuts {
 		uninstall()
 		flagsMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { [weak self, weak window] event in
 			MainActor.assumeIsolated {
+				if InputTrace.isOn, event.windowNumber != window?.windowNumber {
+					InputTrace.note(
+						"flags \(event.keyCode) ignored: its window \(event.windowNumber), ours \(window?.windowNumber ?? -1), key \(NSApp.keyWindow?.windowNumber ?? -1)")
+				}
 				guard let self, let window, event.windowNumber == window.windowNumber else { return }
 				self.handleFlags(keyCode: event.keyCode, modifiers: KeyModifiers(event.modifierFlags), at: event.timestamp)
 			}
