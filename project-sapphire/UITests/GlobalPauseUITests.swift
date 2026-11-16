@@ -42,6 +42,7 @@ final class GlobalPauseUITests: XCTestCase {
 			trace.lifetime = .keepAlways
 			add(trace)
 			XCTFail("Shift-Shift after the relaunch must open the command palette")
+			return
 		}
 		app.typeText("Resume Devora")
 		app.typeKey(.return, modifierFlags: [])
