@@ -3,9 +3,9 @@
  *
  * Narrowing a terminal rewraps its lines; when the cursor is on the bottom row, `Buffer._reflowSmaller` scrolls the
  * viewport (`ybase++`) without checking that the buffer has room for the line it scrolls off. With `scrollback: 0`
- * (Ember's terminals) it never has: the cursor's row is left with no line behind it, and everything written there is
- * silently dropped until the next resize. The same function's other branch has the check; this applies it here too,
- * so a line with no room is trimmed instead.
+ * (Ember's terminals) it never has: the cursor's row points past the buffer's end, so what is written next lands on
+ * the wrong lines (over an older line, then wrapping around to the first, off screen) until the next resize.
+ * The same function's other branch has the check; this applies it here too, so a line with no room is trimmed instead.
  *
  * Reported upstream as xtermjs/xterm.js#6331. xterm is pinned to the version the fix was written for; drop this script
  * when a release has the fix.

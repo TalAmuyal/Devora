@@ -5,7 +5,7 @@ import { TerminalPane } from '../TerminalPane';
 /**
  * The terminal Ember makes, with its real options (no scrollback), on the real xterm.js.
  * Narrowing it (a preview pane opening beside it) rewraps its lines; with the cursor on the bottom row, xterm 6.0.0 used to
- * leave that row with no line behind it, dropping everything written after (`scripts/patch-xterm.ts`).
+ * point that row past the buffer's end, so what was written next landed on the wrong lines, off screen (`scripts/patch-xterm.ts`).
  */
 
 function write(terminal: Terminal, data: string): Promise<void> {
