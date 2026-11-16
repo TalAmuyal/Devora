@@ -1,3 +1,4 @@
+import AppKit
 import XCTest
 
 /// Writes a global config in `dir` with one empty profile, and returns its URL: with none, the Workspace Hub a launch opens is the first-run welcome, which can't be closed.
@@ -46,6 +47,47 @@ extension XCUIApplication {
 }
 
 
+/// Wheel scrolls that go where they're aimed. XCUITest posts a scroll's events at the pointer's position, and its move to
+/// the target can land after the first of them, or after all of them on a busy machine, which then go to wherever the
+/// pointer was. So the pointer goes there first, and the scroll waits until the system reports it there.
+extension XCUICoordinate {
+	@MainActor
+	func scrollWithPointer(byDeltaX deltaX: CGFloat, deltaY: CGFloat, file: StaticString = #filePath, line: UInt = #line) {
+		hover()
+		let target = screenPoint
+		awaitPointer(in: CGRect(x: target.x - 1, y: target.y - 1, width: 2, height: 2), what: "\(target)", file: file, line: line)
+		scroll(byDeltaX: deltaX, deltaY: deltaY)
+	}
+}
+
+extension XCUIElement {
+	/// Scrolls at XCUITest's own point for the element, the one `hover()` moves to, once the pointer is there.
+	@MainActor
+	func scrollWithPointer(byDeltaX deltaX: CGFloat, deltaY: CGFloat, file: StaticString = #filePath, line: UInt = #line) {
+		hover()
+		awaitPointer(in: frame, what: "\(frame)", file: file, line: line)
+		scroll(byDeltaX: deltaX, deltaY: deltaY)
+	}
+}
+
+/// Waits until the pointer is in `area` (screen points, origin top-left, as XCUITest's) and has stopped moving.
+@MainActor
+private func awaitPointer(in area: CGRect, what: String, file: StaticString, line: UInt) {
+	func pointer() -> CGPoint {
+		let location = NSEvent.mouseLocation  // origin bottom-left of the main screen
+		return CGPoint(x: location.x, y: (NSScreen.screens.first?.frame.height ?? 0) - location.y)
+	}
+	var last = pointer()
+	let deadline = Date().addingTimeInterval(10)
+	while Date() < deadline {
+		RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+		let now = pointer()
+		if area.contains(now) && now == last { return }
+		last = now
+	}
+	XCTFail("The pointer must reach \(what) before a scroll there; it is at \(last)", file: file, line: line)
+}
+
 extension XCUIApplication {
 	/// Scroll the detail's margin so a nested prompt preview cannot consume the wheel events.
 	@MainActor
@@ -56,7 +98,7 @@ extension XCUIApplication {
 			if visible.contains(control.frame) { return }
 			let delta: CGFloat = control.frame.midY > visible.midY ? -200 : 200
 			detail.coordinate(withNormalizedOffset: CGVector(dx: 0.01, dy: 0.5))
-				.scroll(byDeltaX: 0, deltaY: delta)
+				.scrollWithPointer(byDeltaX: 0, deltaY: delta)
 		}
 		XCTFail("Settings control did not scroll into view: \(control.identifier)")
 	}
