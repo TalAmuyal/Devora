@@ -513,10 +513,20 @@ public final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NS
 	}
 
 	private func takeWheel(_ event: NSEvent) -> Bool {
-		guard let window, event.windowNumber == window.windowNumber, isUnderPointer(at: event.locationInWindow) else { return false }
+		guard let window, event.windowNumber == window.windowNumber, isUnderPointer(at: event.locationInWindow) else {
+			if WheelTrace.isOn {
+				WheelTrace.note(
+					"wheel passed on: at \(event.locationInWindow), its window \(event.windowNumber), ours \(window?.windowNumber ?? -1), "
+						+ "under the pointer \(isUnderPointer(at: event.locationInWindow))")
+			}
+			return false
+		}
 		let toTranscript = wheelRouting.toTranscript(
 			phase: event.phase, momentumPhase: event.momentumPhase,
 			deltaX: event.scrollingDeltaX, deltaY: event.scrollingDeltaY)
+		WheelTrace.note(
+			"wheel \(toTranscript ? "to the transcript" : "passed on"): at \(event.locationInWindow), phase \(event.phase.rawValue), "
+				+ "momentum \(event.momentumPhase.rawValue), dx \(event.scrollingDeltaX), dy \(event.scrollingDeltaY), top \(contentView.bounds.minY)")
 		guard toTranscript else { return false }
 		scrollWheel(with: event)
 		return true
@@ -575,6 +585,9 @@ public final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NS
 			lastTop = top
 			following = distanceFromBottom < Self.followSlack
 		}
+		WheelTrace.note(
+			"bounds: top \(top), \(byReader ? "the reader's" : "the view's own (adjusting \(adjusting))"), "
+				+ "following \(following), from the bottom \(distanceFromBottom)")
 		// After `following` is the reader's: the rows coming into view settle around what they now look at.
 		measureVisible()
 		guard byReader else { return }
