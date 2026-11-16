@@ -23,6 +23,11 @@ struct ShiftDoubleTap {
 	private var overlappingShifts = false
 	private var firstRelease: TimeInterval?
 
+	/// The tracker's state, for the input trace.
+	var state: String {
+		"held \(heldShift.map(String.init) ?? "none"), overlapping \(overlappingShifts), first release \(firstRelease.map { String(format: "%.3f", $0) } ?? "none"), window \(window)"
+	}
+
 	/// A key-down invalidates both a pending tap and a Shift currently held for a chord.
 	mutating func reset() {
 		heldShift = nil
