@@ -525,7 +525,7 @@ public final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NS
 			phase: event.phase, momentumPhase: event.momentumPhase,
 			deltaX: event.scrollingDeltaX, deltaY: event.scrollingDeltaY)
 		WheelTrace.note(
-			"wheel \(toTranscript ? "to the transcript" : "passed on"): at \(event.locationInWindow), phase \(event.phase.rawValue), "
+			"wheel \(toTranscript ? "to the transcript" : "passed on"): at \(event.locationInWindow) (on \(hitView(at: event.locationInWindow).map { String(describing: type(of: $0)) } ?? "nothing")), phase \(event.phase.rawValue), "
 				+ "momentum \(event.momentumPhase.rawValue), dx \(event.scrollingDeltaX), dy \(event.scrollingDeltaY), top \(contentView.bounds.minY)")
 		guard toTranscript else { return false }
 		scrollWheel(with: event)
@@ -536,10 +536,13 @@ public final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NS
 	/// active (every tab stays in the view tree, invisible and not hit-testable), nor under a layer drawn over it (a hub,
 	/// the palette): being inside its frame isn't enough.
 	func isUnderPointer(at point: NSPoint) -> Bool {
-		guard let content = window?.contentView else { return false }
+		hitView(at: point)?.isDescendant(of: self) ?? false
+	}
+
+	private func hitView(at point: NSPoint) -> NSView? {
+		guard let content = window?.contentView else { return nil }
 		// `hitTest` takes a point in the receiver's superview's coordinates.
-		let hit = content.hitTest(content.superview?.convert(point, from: nil) ?? point)
-		return hit?.isDescendant(of: self) ?? false
+		return content.hitTest(content.superview?.convert(point, from: nil) ?? point)
 	}
 
 	// MARK: Width

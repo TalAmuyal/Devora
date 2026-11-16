@@ -46,10 +46,11 @@ final class NativeTranscriptUITests: XCTestCase {
 		if scrolledTop <= codeTop + 30 { attachWheelEvidence(app, transcript, "the wheel scroll over the code block", overBlock) }
 		XCTAssertGreaterThan(scrolledTop, codeTop + 30, "A vertical scroll over a code block must scroll the transcript (\(overBlock))")
 
-		// The row's label is part of the transcript too.
-		let label = code.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: 57, dy: 8))
-		let overLabel = "at \(label.screenPoint), code frame \(code.frame), visible area \(transcript.frame)"
-		label.scroll(byDeltaX: 0, deltaY: -150)
+		// The row's label is part of the transcript too. The row is one accessibility element, so the label has none of its
+		// own to aim at: scrolling the element scrolls at XCUITest's own point for it, which is the label (the case that
+		// failed in CI). The app's trace records the point and the view it hit.
+		let overLabel = "XCUITest's own point for the row, code frame \(code.frame), visible area \(transcript.frame)"
+		code.scroll(byDeltaX: 0, deltaY: -150)
 		let backTop = settledTop(of: code, movedFrom: scrolledTop)
 		if backTop >= scrolledTop - 30 { attachWheelEvidence(app, transcript, "the wheel scroll over the row's label", overLabel) }
 		XCTAssertLessThan(backTop, scrolledTop - 30, "A vertical scroll over a row's label must scroll the transcript (\(overLabel))")
