@@ -3,7 +3,7 @@ import { BeforeAll, Before, AfterAll } from '@cucumber/cucumber';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { FakeClaudeServer } from '../../../project-ember/tests/support/fake-claude-server';
-import { CLAUDE_CONFIG_PATH, stopClaudeCode, testClaudeProcesses, cleanupWorkspace, type ClaudeTerminal } from '../../../project-ember/tests/support/claude-helper';
+import { CLAUDE_CONFIG_PATH, CLAUDE_TEST_STATE, NO_INTERNET, stopClaudeCode, testClaudeProcesses, cleanupWorkspace, type ClaudeTerminal } from '../../../project-ember/tests/support/claude-helper';
 import type { SapphireWorld } from './world';
 
 let server: FakeClaudeServer;
@@ -14,7 +14,7 @@ BeforeAll(async function () {
   fs.rmSync(CLAUDE_CONFIG_PATH, { recursive: true, force: true });
   fs.mkdirSync(path.join(CLAUDE_CONFIG_PATH, 'plans'), { recursive: true });
   fs.writeFileSync(path.join(CLAUDE_CONFIG_PATH, 'settings.json'), JSON.stringify({ permissions: { defaultMode: 'plan' }, theme: 'dark' }));
-  fs.writeFileSync(path.join(CLAUDE_CONFIG_PATH, '.claude.json'), JSON.stringify({ hasSeenAutoDefaultNudge: true, hasSeenEffortMediumNudge: true }));
+  fs.writeFileSync(path.join(CLAUDE_CONFIG_PATH, '.claude.json'), JSON.stringify(CLAUDE_TEST_STATE));
 });
 Before({ tags: '@real-claude' }, async function (scenario) {
   await server.loadCassette(scenario.pickle.name.replace(/[^a-zA-Z0-9_-]/g, '_'));
@@ -25,7 +25,7 @@ AfterAll(async function () {
 });
 export function claudeEnvironment(): Record<string, string> {
   return { ANTHROPIC_BASE_URL: `http://127.0.0.1:${server.getPort()}`, ANTHROPIC_API_KEY: 'sk-ant-fake-key-for-bdd-tests',
-    CLAUDE_CONFIG_DIR: CLAUDE_CONFIG_PATH, CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1' };
+    CLAUDE_CONFIG_DIR: CLAUDE_CONFIG_PATH, CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1', ...NO_INTERNET };
 }
 
 /** The bridge sends text and real Return/Up events through Ghostty, addressing the owning tab. */
