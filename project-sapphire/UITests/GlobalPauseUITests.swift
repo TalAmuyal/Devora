@@ -1,3 +1,4 @@
+import CoreGraphics
 import XCTest
 
 final class GlobalPauseUITests: XCTestCase {
@@ -32,7 +33,11 @@ final class GlobalPauseUITests: XCTestCase {
 		let search = app.descendants(matching: .any)["command-palette-search"].firstMatch
 		if !search.waitForExistence(timeout: 5) {
 			// What the app made of the two taps: whether they arrived, for which window, and how the double tap read them.
-			let trace = XCTAttachment(string: (try? String(contentsOf: inputTrace, encoding: .utf8)) ?? "(no input trace)")
+			// Beside it, whether the system still has Shift down: if so, the last release was never posted; if not, it was posted and the app never got it.
+			// (Synthesized events change the session's state only, not the HID system's.)
+			let appTrace = (try? String(contentsOf: inputTrace, encoding: .utf8)) ?? "(no input trace)"
+			let shiftDown = CGEventSource.flagsState(.combinedSessionState).contains(.maskShift)
+			let trace = XCTAttachment(string: "\(appTrace)system now: Shift down \(shiftDown)\n")
 			trace.name = "The app's shortcut decisions"
 			trace.lifetime = .keepAlways
 			add(trace)
