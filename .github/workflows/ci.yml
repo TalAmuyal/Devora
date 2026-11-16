@@ -50,8 +50,32 @@ jobs:
           key: ember-rust-${{ runner.os }}-${{ hashFiles('project-ember/src-tauri/Cargo.lock') }}
           restore-keys: ember-rust-${{ runner.os }}-
 
+      # The Rust side only: its tests build in dev mode, which loads the frontend from `devUrl` rather than embedding `dist/`, so they need no npm modules,
+      # and `--no-deps` keeps project-ember's automatic npm sync from installing them. The frontend's tests and type-check run on Linux (test-ember-unit).
+      - name: Rust format and lint
+        run: mise run --no-deps -C project-ember lint-rust
+
+      - name: Rust tests
+        run: mise run --no-deps -C project-ember test-rust
+
+  # Ember's frontend unit tests (Vitest under happy-dom) and type-check: nothing in them is macOS-specific, so they run on Linux.
+  test-ember-unit:
+    needs: changes
+    if: needs.changes.outputs.ember == 'true'
+    runs-on: ubuntu-latest
+    env:
+      # Only node: none of the root tools (Rust, shellcheck) nor the Tauri CLI.
+      MISE_AUTO_INSTALL: "false"
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: jdx/mise-action@v4
+        with:
+          experimental: true
+          working_directory: project-ember
+          install_args: node
+
       - name: Cache npm modules
-        id: cache-npm
         uses: actions/cache@v5
         with:
           path: |
@@ -60,17 +84,9 @@ jobs:
           key: ember-npm-${{ runner.os }}-${{ hashFiles('project-ember/package-lock.json', 'web-renderer/package-lock.json') }}
           restore-keys: ember-npm-${{ runner.os }}-
 
-      - name: Install npm dependencies
-        if: steps.cache-npm.outputs.cache-hit != 'true'
-        run: |
-          mise exec -C project-ember -- npm ci --prefix ../web-renderer
-          mise exec -C project-ember -- npm ci
-
-      - name: Rust format and lint
-        run: mise run ember-lint
-
-      - name: Rust tests
-        run: mise run ember-test
+      # project-ember's automatic npm sync installs the modules when the cache didn't have them.
+      - name: Frontend unit tests (Vitest)
+        run: mise run -C project-ember test-unit
 
       - name: TypeScript type-check
         run: mise exec -C project-ember -- npx tsc --noEmit
@@ -267,7 +283,7 @@ jobs:
   # On a pull request: what the run tested (the merge commit's tree) and each job's result.
   reuse-evidence:
     if: always() && github.event_name == 'pull_request'
-    needs: [test, test-ember, e2e-ember, changes, sapphire]
+    needs: [test, test-ember, test-ember-unit, e2e-ember, changes, sapphire]
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:

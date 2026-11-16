@@ -26,7 +26,7 @@ From the repo root:
 ```
 mise build-ember-app           # Build .app only
 mise ember-create-dmg          # Build .app + DMG installer
-mise ember-test                # Run Rust tests
+mise ember-test                # Run Rust and frontend unit tests
 ```
 
 From `project-ember/`:
