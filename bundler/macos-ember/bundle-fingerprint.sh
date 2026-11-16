@@ -81,7 +81,8 @@ if [[ ${#INPUTS[@]} -eq 0 ]]; then
 		INPUTS+=(project-sapphire mise.toml)
 	else
 		INPUTS+=(project-ember/src project-ember/src-tauri project-ember/package.json
-			project-ember/package-lock.json project-ember/vite.config.ts project-ember/tsconfig.json)
+			project-ember/package-lock.json project-ember/scripts/patch-xterm.ts project-ember/vite.config.ts
+			project-ember/tsconfig.json)
 	fi
 
 	# A missing input means the list has drifted from the repo (e.g. a moved

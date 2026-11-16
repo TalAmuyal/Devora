@@ -81,7 +81,7 @@ jobs:
           path: |
             project-ember/node_modules
             web-renderer/node_modules
-          key: ember-npm-${{ runner.os }}-${{ hashFiles('project-ember/package-lock.json', 'web-renderer/package-lock.json') }}
+          key: ember-npm-${{ runner.os }}-${{ hashFiles('project-ember/package-lock.json', 'project-ember/scripts/patch-xterm.ts', 'web-renderer/package-lock.json') }}
           restore-keys: ember-npm-${{ runner.os }}-
 
       # project-ember's automatic npm sync installs the modules when the cache didn't have them.
@@ -117,7 +117,7 @@ jobs:
           path: |
             project-ember/node_modules
             web-renderer/node_modules
-          key: ember-npm-${{ runner.os }}-${{ hashFiles('project-ember/package-lock.json', 'web-renderer/package-lock.json') }}
+          key: ember-npm-${{ runner.os }}-${{ hashFiles('project-ember/package-lock.json', 'project-ember/scripts/patch-xterm.ts', 'web-renderer/package-lock.json') }}
           restore-keys: ember-npm-${{ runner.os }}-
 
       - name: Install npm dependencies
