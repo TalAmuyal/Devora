@@ -107,6 +107,21 @@ mise run _cucumber -- "$@"
 """
 description = "Run Gherkin acceptance tests (verifies app-bundle freshness, rebuilds when stale; EMBER_E2E_PREBUILT=1 tests the existing artifact as-is)"
 
+[tasks.stress-e2e]
+dir = "."
+description = "Run the e2e scenarios matching --name (a regex, as cucumber-js's) --times times on the efficiency cores, and print the tally"
+usage = '''
+flag "--name <regex>" required=#true help="The scenarios to run"
+flag "--times <n>" default="10" help="How many runs"
+'''
+run = """
+set -e
+if ! node --import tsx scripts/check-app-freshness.ts; then
+	mise run -C "$(git rev-parse --show-toplevel)" build-ember-app
+fi
+EMBER_E2E_PREBUILT=1 ../acceptance/stress.sh "$usage_name" "$usage_times" test-results/stress-e2e -- mise run test-e2e -- --name "$usage_name"
+"""
+
 [tasks.record-claude]
 dir = "."
 run = "RECORD_MODE=1 mise run _cucumber -- --tags '@real-claude'"

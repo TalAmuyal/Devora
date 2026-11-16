@@ -11,6 +11,12 @@ For example, Claude Code must be launched via `ccc` interactively, no shortcuts 
 The suite also runs `../acceptance/features/`, the scenarios Sapphire runs too (see `../acceptance/CLAUDE.md`), minus those tagged `@sapphire-only`.
 Changing the wording of a step those scenarios use means changing Sapphire's step (`project-sapphire/acceptance/steps/`) as well.
 
+### New or changed scenarios run under load first
+
+A PR that adds or changes an e2e scenario or step runs those scenarios 10 times under load first, and its description reports the tally ("10 of 10 passed under load"), or says why it couldn't: flakes are cheapest to catch when they're written.
+`mise run stress-e2e --name <regex>` does it: it rebuilds the bundle if stale, then runs the matching scenarios `--times` times (10 by default) under `taskpolicy -c background`, which confines the harness and the app it spawns to the efficiency cores, as a CI runner's contention does (`../acceptance/stress.sh`).
+It fails when no scenario matches, and nothing retries. For a changed shared step, run the scenarios that use it, up to its feature file, not the whole suite.
+
 ### App bundle freshness
 
 Acceptance tests run a **prebuilt** `.app` bundle — the frontend is embedded at build time, so a stale bundle silently tests stale code.

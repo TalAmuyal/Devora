@@ -159,6 +159,24 @@ description = "Run development-app Gherkin scenarios (bundled-tools run in test-
 depends = ["build", "npm-install", "test-tools"]
 run = "node --import tsx ./node_modules/.bin/cucumber-js acceptance/features/ ../acceptance/features/ --tags 'not @ember-only and not @bundled-tools' --import 'acceptance/steps/*.ts' --import 'acceptance/support/*.ts' --format progress"
 
+[tasks.stress-acceptance]
+description = "Run the acceptance scenarios matching --name (a regex, as cucumber-js's) --times times on the efficiency cores, and print the tally"
+depends = ["build", "npm-install", "test-tools"]
+usage = '''
+flag "--name <regex>" required=#true help="The scenarios to run"
+flag "--times <n>" default="10" help="How many runs"
+'''
+run = '../acceptance/stress.sh "$usage_name" "$usage_times" build/stress-acceptance -- mise run --no-deps test-acceptance -- --name "$usage_name"'
+
+[tasks.stress-ui]
+description = "Run the XCUITests --only names (Class or Class/test) --times times with every core busy, and print the tally"
+depends = ["build", "test-tools"]
+usage = '''
+flag "--only <test>" required=#true help="Class or Class/testMethod, in DevoraSapphireUITests"
+flag "--times <n>" default="10" help="How many iterations"
+'''
+run = './scripts/stress-ui.sh "$usage_only" "$usage_times"'
+
 [tasks.test-ui]
 description = "Run the XCUITests, which drive the app with real input; skipped, with the reason, where they can't run"
 depends = ["build", "test-tools"]
