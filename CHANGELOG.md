@@ -95,6 +95,7 @@ Types of changes:
 
 ### Fixed
 
+- Devora Ember's terminal no longer stops showing output when a preview pane opening beside it narrows it with the cursor on its bottom row (an xterm.js reflow bug, patched until a release fixes it)
 - Devora Sapphire's agent transcript lays every row out at its measured height: rows no longer keep an outdated estimated height that is too tall or too short for their content, and VoiceOver no longer reports a row away from where it is drawn after the transcript scrolls itself to the bottom
 - Config updates replace files atomically, so readers do not see partially written JSON
 

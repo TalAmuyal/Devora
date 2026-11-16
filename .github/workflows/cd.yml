@@ -109,7 +109,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: project-ember/node_modules
-          key: ember-npm-${{ runner.os }}-${{ hashFiles('project-ember/package-lock.json') }}
+          key: ember-npm-${{ runner.os }}-${{ hashFiles('project-ember/package-lock.json', 'project-ember/scripts/patch-xterm.ts') }}
           restore-keys: ember-npm-${{ runner.os }}-
 
       - name: Rust tests
@@ -142,7 +142,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: project-ember/node_modules
-          key: ember-npm-${{ runner.os }}-${{ hashFiles('project-ember/package-lock.json') }}
+          key: ember-npm-${{ runner.os }}-${{ hashFiles('project-ember/package-lock.json', 'project-ember/scripts/patch-xterm.ts') }}
           restore-keys: ember-npm-${{ runner.os }}-
 
       - name: Build Ember variant
