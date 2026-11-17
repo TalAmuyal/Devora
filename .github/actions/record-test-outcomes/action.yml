@@ -1,0 +1,36 @@
+name: Record test outcomes
+description: >-
+  Records each test's outcome and duration from what the job's test runs wrote, and uploads them as the artifact
+  test-outcomes-<job>-attempt-<n> (scripts/ci/test-outcomes/README.md). Use it with `if: always()` and
+  `continue-on-error: true`: it must never fail the job, and it runs whether the tests passed or not.
+inputs:
+  job:
+    description: The CI job's name, recorded on each outcome and in the artifact's
+    required: true
+  results:
+    description: The job's results, one `<format>=<path>` per line (formats in scripts/ci/test-outcomes/README.md)
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Convert the results
+      shell: bash
+      env:
+        JOB: ${{ inputs.job }}
+        RESULTS: ${{ inputs.results }}
+      run: |
+        # A read loop rather than mapfile: macOS runners' bash may be 3.2.
+        set --
+        while IFS= read -r result; do
+          [ -n "${result//[[:space:]]/}" ] && set -- "$@" "$result"
+        done <<<"$RESULTS"
+        scripts/ci/test-outcomes/record.sh "$JOB" "$RUNNER_TEMP/test-outcomes/outcomes.jsonl" "$@"
+
+    - name: Upload the outcomes
+      uses: actions/upload-artifact@v7
+      with:
+        # One per attempt, so that a re-run's outcomes don't collide with the first attempt's.
+        name: test-outcomes-${{ inputs.job }}-attempt-${{ github.run_attempt }}
+        path: ${{ runner.temp }}/test-outcomes/outcomes.jsonl
+        if-no-files-found: warn
+        retention-days: 90

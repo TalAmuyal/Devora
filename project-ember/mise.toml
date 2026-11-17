@@ -64,7 +64,8 @@ cargo clippy --all-targets -- -D warnings
 description = "Check Rust formatting (rustfmt) and lint with clippy"
 
 [tasks.test-unit]
-run = "npx vitest run"
+# The JSON report is each test's outcome and duration, which CI records (scripts/ci/test-outcomes/).
+run = "npx vitest run --reporter=default --reporter=json --outputFile.json=test-results/test-outcomes/unit.json"
 description = "Run frontend unit tests"
 
 [tasks.test-unit-watch]
@@ -82,7 +83,8 @@ description = "Run all tests (Rust + frontend unit)"
 [tasks._cucumber]
 dir = "."
 # ../acceptance/features/ holds the scenarios shared with Sapphire.
-run = "node --import tsx ./node_modules/.bin/cucumber-js tests/features/ ../acceptance/features/ --tags 'not @sapphire-only' --import 'tests/steps/*.ts' --import 'tests/support/*.ts' --publish-quiet \"${@}\""
+# The JSON is each scenario's outcome and duration, which CI records (scripts/ci/test-outcomes/).
+run = "node --import tsx ./node_modules/.bin/cucumber-js tests/features/ ../acceptance/features/ --tags 'not @sapphire-only' --import 'tests/steps/*.ts' --import 'tests/support/*.ts' --publish-quiet --format progress --format json:test-results/test-outcomes/e2e.json \"${@}\""
 hide = true
 
 [tasks.test-e2e]

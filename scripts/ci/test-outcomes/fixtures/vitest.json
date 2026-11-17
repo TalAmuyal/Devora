@@ -1,0 +1,67 @@
+{
+  "numTotalTests": 4,
+  "testResults": [
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": [
+            "findAppBundle"
+          ],
+          "fullName": "findAppBundle returns null when the bundle directory does not exist",
+          "status": "passed",
+          "title": "returns null when the bundle directory does not exist",
+          "duration": 2.3544160000000147,
+          "failureMessages": [],
+          "meta": {}
+        },
+        {
+          "ancestorTitles": [
+            "findAppBundle"
+          ],
+          "fullName": "findAppBundle returns null when the directory contains no .app",
+          "status": "failed",
+          "title": "returns null when the directory contains no .app",
+          "duration": 0.547458000000006,
+          "failureMessages": [],
+          "meta": {}
+        }
+      ],
+      "startTime": 1794905664227,
+      "endTime": 1794905664680.8608,
+      "status": "passed",
+      "message": "",
+      "name": "/home/runner/work/Devora/Devora/project-ember/scripts/__tests__/app-bundle.test.ts"
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": [
+            "bundle-fingerprint.sh with explicit inputs"
+          ],
+          "fullName": "bundle-fingerprint.sh with explicit inputs prints a sha256 hex digest and is deterministic across calls",
+          "status": "passed",
+          "title": "prints a sha256 hex digest and is deterministic across calls",
+          "duration": 255.67725000000007,
+          "failureMessages": [],
+          "meta": {}
+        },
+        {
+          "ancestorTitles": [
+            "bundle-fingerprint.sh with explicit inputs"
+          ],
+          "fullName": "bundle-fingerprint.sh with explicit inputs is independent of file creation order",
+          "status": "skipped",
+          "title": "is independent of file creation order",
+          "duration": null,
+          "failureMessages": [],
+          "meta": {}
+        }
+      ],
+      "startTime": 1794905664206,
+      "endTime": 1794905667825.6104,
+      "status": "passed",
+      "message": "",
+      "name": "/home/runner/work/Devora/Devora/project-ember/scripts/__tests__/bundle-fingerprint.test.ts"
+    }
+  ]
+}

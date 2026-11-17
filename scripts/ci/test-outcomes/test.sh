@@ -67,6 +67,35 @@ jq '.[0].elements[0].name = "Refreshing a path keeps its siblings"' "$fixtures/c
 expect "cucumber identity follows a rename" "File preview pane | Refreshing a path keeps its siblings | passed" \
 	"$("$here/cucumber.sh" "$scratch/renamed.json" | summary)"
 
+# Rust: unit, integration and doc-tests by package; failed, ignored (with or without a reason) and should-panic tests.
+expect "rust outcomes" "$(printf '%s\n' \
+	'debi | repo::tests::names_sort | passed' \
+	'debi | repo::tests::rejects_escape | passed' \
+	'debi/repo | usage_errors_and_empty_lists_have_the_documented_exit_codes | passed' \
+	'devora_agent (doc) | crates/devora-agent/src/lib.rs - version::check | passed' \
+	'devora_agent | session::tests::pinned_cli_only | skipped' \
+	'devora_agent | session::tests::pinned_cli_reason | skipped' \
+	'devora_agent | session::tests::stop_grace | failed' \
+	'devora_agent/repo | add_refuses_a_mismatch | passed')" \
+	"$("$here/rust.sh" "$fixtures/rust-output.txt" | summary)"
+# A rebuild changes the binaries' hashes, and an edit moves a doc-test's line: the identities stay.
+sed -E 's/-[0-9a-f]{16}\)/-0123456789abcdef)/; s/\(line 12\)/(line 40)/' "$fixtures/rust-output.txt" >"$scratch/edited.log"
+expect "rust identity survives a rebuild and an edit" \
+	"$("$here/rust.sh" "$fixtures/rust-output.txt" | summary)" \
+	"$("$here/rust.sh" "$scratch/edited.log" | summary)"
+
+# Vitest: the file from the repository's root, describe blocks and title; failed and skipped tests.
+expect "vitest outcomes" "$(printf '%s\n' \
+	'project-ember/scripts/__tests__/app-bundle.test.ts | findAppBundle > returns null when the bundle directory does not exist | passed' \
+	'project-ember/scripts/__tests__/app-bundle.test.ts | findAppBundle > returns null when the directory contains no .app | failed' \
+	'project-ember/scripts/__tests__/bundle-fingerprint.test.ts | bundle-fingerprint.sh with explicit inputs > is independent of file creation order | skipped' \
+	'project-ember/scripts/__tests__/bundle-fingerprint.test.ts | bundle-fingerprint.sh with explicit inputs > prints a sha256 hex digest and is deterministic across calls | passed')" \
+	"$("$here/vitest.sh" "$fixtures/vitest.json" /home/runner/work/Devora/Devora | summary)"
+sed 's|/home/runner/work/Devora/Devora/|/Users/someone/Devora/|' "$fixtures/vitest.json" >"$scratch/moved.json"
+expect "vitest identity is the same in another checkout" \
+	"$("$here/vitest.sh" "$fixtures/vitest.json" /home/runner/work/Devora/Devora | summary)" \
+	"$("$here/vitest.sh" "$scratch/moved.json" /Users/someone/Devora | summary)"
+
 # record.sh: the run's identity on every outcome, and a missing or unreadable result logged, never failing.
 echo 'not json' >"$scratch/broken.json"
 log=$(GITHUB_RUN_ID=42 GITHUB_RUN_ATTEMPT=2 GITHUB_SHA=abc GITHUB_EVENT_NAME=pull_request GITHUB_REF=refs/pull/7/merge \
