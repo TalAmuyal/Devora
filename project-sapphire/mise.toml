@@ -108,8 +108,8 @@ depends = ["build", "test-tools", "npm-install"]
 run = '''
 set -e
 time ../bundler/macos-sapphire/bundle-sapphire.sh --prebuilt
-node --import tsx ./node_modules/.bin/cucumber-js acceptance/features/ ../acceptance/features/ --tags '@bundled-tools and not @ember-only' --import 'acceptance/steps/*.ts' --import 'acceptance/support/*.ts' --format progress --format json:build/test-outcomes/bundle.json
-node --import tsx scripts/bundle-smoke.ts
+../scripts/with-ui-lock.sh node --import tsx ./node_modules/.bin/cucumber-js acceptance/features/ ../acceptance/features/ --tags '@bundled-tools and not @ember-only' --import 'acceptance/steps/*.ts' --import 'acceptance/support/*.ts' --format progress --format json:build/test-outcomes/bundle.json
+../scripts/with-ui-lock.sh node --import tsx scripts/bundle-smoke.ts
 '''
 
 [tasks.test]
@@ -159,7 +159,7 @@ cp ../project-core/target/release/debi build/test-tools/ccc
 [tasks.test-acceptance]
 description = "Run development-app Gherkin scenarios (bundled-tools run in test-bundle); arguments go to cucumber-js"
 depends = ["build", "npm-install", "test-tools"]
-run = "node --import tsx ./node_modules/.bin/cucumber-js acceptance/features/ ../acceptance/features/ --tags 'not @ember-only and not @bundled-tools' --import 'acceptance/steps/*.ts' --import 'acceptance/support/*.ts' --format progress --format json:build/test-outcomes/acceptance.json"
+run = "../scripts/with-ui-lock.sh node --import tsx ./node_modules/.bin/cucumber-js acceptance/features/ ../acceptance/features/ --tags 'not @ember-only and not @bundled-tools' --import 'acceptance/steps/*.ts' --import 'acceptance/support/*.ts' --format progress --format json:build/test-outcomes/acceptance.json"
 
 [tasks.stress-acceptance]
 description = "Run the acceptance scenarios matching --name (a regex, as cucumber-js's) --times times on the efficiency cores, and print the tally"
@@ -168,7 +168,7 @@ usage = '''
 flag "--name <regex>" required=#true help="The scenarios to run"
 flag "--times <n>" default="10" help="How many runs"
 '''
-run = '../acceptance/stress.sh "$usage_name" "$usage_times" build/stress-acceptance -- mise run --no-deps test-acceptance -- --name "$usage_name"'
+run = '../scripts/with-ui-lock.sh ../acceptance/stress.sh "$usage_name" "$usage_times" build/stress-acceptance -- mise run --no-deps test-acceptance -- --name "$usage_name"'
 
 [tasks.stress-ui]
 description = "Run the XCUITests --only names (Class or Class/test) --times times with every core busy, and print the tally"
@@ -177,9 +177,9 @@ usage = '''
 flag "--only <test>" required=#true help="Class or Class/testMethod, in DevoraSapphireUITests"
 flag "--times <n>" default="10" help="How many iterations"
 '''
-run = './scripts/stress-ui.sh "$usage_only" "$usage_times"'
+run = '../scripts/with-ui-lock.sh ./scripts/stress-ui.sh "$usage_only" "$usage_times"'
 
 [tasks.test-ui]
 description = "Run the XCUITests, which drive the app with real input; skipped, with the reason, where they can't run"
 depends = ["build", "test-tools"]
-run = "./scripts/test-ui.sh"
+run = "../scripts/with-ui-lock.sh ./scripts/test-ui.sh"
