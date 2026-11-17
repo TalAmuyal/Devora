@@ -34,6 +34,7 @@ Renaming a test starts a new history, under the new name. `test.sh` checks that 
 `mise run flake-report [--runs N] [--test <regex>]` (`scripts/ci/flake-report.sh`, with gh's login) downloads the outcomes of the last N completed CI runs (30 by default), keeping each run's in `~/.cache/devora-flake-report/`, since an artifact never changes.
 For each test that failed, it prints its failures out of the runs where it ran, on master and on pull requests apart, the last failure with its run, and its median and slowest durations.
 A failure that passed when the job was re-run (an earlier attempt failed, the last passed, same commit) is flagged: it's the clearest sign of a flake.
+Read the two columns differently: a failure on a pull request can be that pull request's own bug, in work not merged yet, while a failure on master, or one that passed on re-run, is the stronger sign of a flake.
 `--test` narrows it to the tests whose suite and name match, and lists them all, failed or not.
 Jobs GitHub cancelled before a runner took them are listed apart, as "not run": that's runner capacity, not a test result.
 `flake-report.jq` is the report itself, and `flake-report.test.sh` checks it on made-up outcomes.
