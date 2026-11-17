@@ -24,7 +24,7 @@ export interface HangWatchdog {
 const KEY = Symbol.for('devora.acceptance.hangWatchdog');
 const global = globalThis as { [KEY]?: HangWatchdog };
 
-/** The run's one watchdog; it doesn't watch until the first activity, so a run without the formatter is never stopped. */
+/** The run's one watchdog; it watches from the first activity (the formatter's start), so a run without the formatter is never stopped. */
 export function hangWatchdog(): HangWatchdog {
   if (!global[KEY]) {
     const worker = new Worker(new URL('./hang-watchdog-worker.mjs', import.meta.url), {

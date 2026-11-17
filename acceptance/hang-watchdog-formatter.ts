@@ -29,6 +29,9 @@ export default {
   type: 'formatter',
   formatter({ on, write }: Context) {
     const watchdog = hangWatchdog();
+    // The clock starts with the formatter, so a hang before the first scenario (parsing the features, a BeforeAll hook) is
+    // caught too. Only loading the support code comes before it: Cucumber loads it first.
+    watchdog.activity('Cucumber started its formatters (it parses the features next, then starts the run)');
     const pickles = new Map<string, NonNullable<Envelope['pickle']>>();
     const hooks = new Map<string, NonNullable<Envelope['hook']>>();
     const testCases = new Map<string, NonNullable<Envelope['testCase']>>();
@@ -54,7 +57,7 @@ export default {
       if (envelope.pickle) pickles.set(envelope.pickle.id, envelope.pickle);
       else if (envelope.hook) hooks.set(envelope.hook.id, envelope.hook);
       else if (envelope.testCase) testCases.set(envelope.testCase.id, envelope.testCase);
-      else if (envelope.testRunStarted) watchdog.activity('the run started');
+      else if (envelope.testRunStarted) watchdog.activity('the run started (its BeforeAll hooks run next, then the first scenario)');
       else if (envelope.testCaseStarted) {
         const { id, testCaseId } = envelope.testCaseStarted;
         started.set(id, testCaseId);

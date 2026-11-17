@@ -13,13 +13,16 @@ fail() {
 	failures=$((failures + 1))
 }
 
-# Runs the fixture scenarios tagged $1; its output is in $scratch/$1.out, the report in $scratch/$1.txt.
+# Runs the fixture scenarios tagged $1, with the support files after it; its output is in $scratch/$1.out, the report in $scratch/$1.txt.
 run() {
+	local tag="$1" support=()
+	shift
+	for file in "$@"; do support+=(--import "$file"); done
 	# The group's own stderr only takes bash's notice of a command a signal ended ("Terminated: 15"), which a stopped run is.
 	{
-		ACCEPTANCE_HANG_LIMIT_SECONDS=3 ACCEPTANCE_HANG_REPORT="$scratch/$1.txt" \
-			node --import tsx ./node_modules/.bin/cucumber-js "$fixtures/hangs.feature" --tags "@$1" --import "$fixtures/hangs.steps.ts" \
-			--format progress --format "../acceptance/hang-watchdog-formatter.ts:$scratch/$1.progress" >"$scratch/$1.out" 2>&1
+		ACCEPTANCE_HANG_LIMIT_SECONDS=3 ACCEPTANCE_HANG_REPORT="$scratch/$tag.txt" \
+			node --import tsx ./node_modules/.bin/cucumber-js "$fixtures/hangs.feature" --tags "@$tag" --import "$fixtures/hangs.steps.ts" ${support[@]+"${support[@]}"} \
+			--format progress --format "../acceptance/hang-watchdog-formatter.ts:$scratch/$tag.progress" >"$scratch/$tag.out" 2>&1
 	} 2>/dev/null
 }
 
@@ -45,6 +48,14 @@ if run lingering; then
 fi
 grep -qF 'acceptance: no progress for 3 s since the last scenario finished, and the run should have exited' "$scratch/lingering.out" ||
 	fail "a run that doesn't exit: the message doesn't say so: $(cat "$scratch/lingering.out")"
+
+# A hang before any scenario: the same passing scenario, after a BeforeAll that blocks (its report goes to passing.txt).
+if run passing "$fixtures/blocked-before-all.ts"; then
+	fail "a blocked BeforeAll: the run passed"
+fi
+grep -qF 'acceptance: no progress for 3 s since the run started (its BeforeAll hooks run next, then the first scenario)' "$scratch/passing.out" ||
+	fail "a blocked BeforeAll: the message doesn't say the run was before its first scenario: $(cat "$scratch/passing.out")"
+rm -f "$scratch/passing.txt"
 
 if ! run passing; then
 	fail "a run that ends: it failed: $(cat "$scratch/passing.out")"
