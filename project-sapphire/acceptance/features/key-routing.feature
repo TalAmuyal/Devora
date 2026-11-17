@@ -6,7 +6,9 @@ Feature: Key routing through the layers
 
   Scenario: Keys no shortcut claims reach the terminal, Ctrl+C included
     Given a session exists
-    When "echo START_$((6*7)); sleep 30; echo NOT_$((6*7))" is typed in the terminal
+    # START comes from the process the Ctrl+C is for, which already has the terminal: a shell builtin's output comes
+    # before the shell hands the terminal to the next command, and a Ctrl+C in between would reach only the shell.
+    When "sh -c 'echo START_$((6*7)); exec sleep 30'; echo NOT_$((6*7))" is typed in the terminal
     Then the terminal should contain "START_42"
     When the user presses Ctrl+C
     And "echo DONE_$((6*7))" is typed in the terminal
