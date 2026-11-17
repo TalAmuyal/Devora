@@ -1,0 +1,343 @@
+[
+  {
+    "description": "  The agent's typed transcript and unsent prompt belong to its persistent space.",
+    "elements": [
+      {
+        "description": "",
+        "id": "agent-chat-panel;permission-shortcuts-deny-or-always-allow",
+        "keyword": "Scenario Outline",
+        "line": 91,
+        "name": "Permission shortcuts deny or always allow",
+        "steps": [
+          {
+            "keyword": "Before",
+            "hidden": true,
+            "result": {
+              "status": "passed",
+              "duration": 341202375
+            }
+          },
+          {
+            "arguments": [],
+            "keyword": "Given ",
+            "line": 5,
+            "name": "an origin-backed profile \"Work\" with repo \"api\"",
+            "match": {
+              "location": "acceptance/steps/task-creation.steps.ts:63"
+            },
+            "result": {
+              "status": "passed",
+              "duration": 151032583
+            }
+          },
+          {
+            "arguments": [],
+            "keyword": "And ",
+            "line": 6,
+            "name": "Devora is running with no sessions open",
+            "match": {
+              "location": "acceptance/steps/session.steps.ts:13"
+            },
+            "result": {
+              "status": "passed",
+              "duration": 8617040
+            }
+          },
+          {
+            "arguments": [],
+            "keyword": "And ",
+            "line": 7,
+            "name": "the Agent Hub is open",
+            "match": {
+              "location": "acceptance/steps/agent-hub.steps.ts:45"
+            },
+            "result": {
+              "status": "passed",
+              "duration": 121827873
+            }
+          },
+          {
+            "arguments": [],
+            "keyword": "And ",
+            "line": 8,
+            "name": "an agent \"Echo\" was created",
+            "match": {
+              "location": "acceptance/steps/agent-hub.steps.ts:58"
+            },
+            "result": {
+              "status": "passed",
+              "duration": 482666248
+            }
+          },
+          {
+            "arguments": [],
+            "keyword": "When ",
+            "line": 9,
+            "name": "the user opens the chat for \"Echo\"",
+            "match": {
+              "location": "acceptance/steps/agent-chat.steps.ts:6"
+            },
+            "result": {
+              "status": "passed",
+              "duration": 12191958
+            }
+          },
+          {
+            "arguments": [],
+            "keyword": "When ",
+            "line": 83,
+            "name": "the user sends the agent prompt \"permission\"",
+            "match": {
+              "location": "acceptance/steps/agent-chat.steps.ts:13"
+            },
+            "result": {
+              "status": "passed",
+              "duration": 7548000
+            }
+          },
+          {
+            "arguments": [],
+            "keyword": "Then ",
+            "line": 84,
+            "name": "the agent chat shows a permission card",
+            "match": {
+              "location": "acceptance/steps/agent-chat.steps.ts:40"
+            },
+            "result": {
+              "status": "passed",
+              "duration": 30140499
+            }
+          },
+          {
+            "arguments": [],
+            "keyword": "When ",
+            "line": 85,
+            "name": "the user answers the agent permission with \"Command+N\"",
+            "match": {
+              "location": "acceptance/steps/agent-chat.steps.ts:114"
+            },
+            "result": {
+              "status": "passed",
+              "duration": 1660248
+            }
+          },
+          {
+            "arguments": [],
+            "keyword": "Then ",
+            "line": 86,
+            "name": "the agent chat has no permission card",
+            "match": {
+              "location": "acceptance/steps/agent-chat.steps.ts:43"
+            },
+            "result": {
+              "status": "passed",
+              "duration": 36912042
+            }
+          },
+          {
+            "arguments": [],
+            "keyword": "And ",
+            "line": 87,
+            "name": "the agent \"Echo\" should be idle",
+            "match": {
+              "location": "acceptance/steps/agent-hub.steps.ts:137"
+            },
+            "result": {
+              "status": "passed",
+              "duration": 1582666
+            }
+          },
+          {
+            "keyword": "After",
+            "hidden": true,
+            "result": {
+              "status": "passed",
+              "duration": 152513999
+            }
+          },
+          {
+            "keyword": "After",
+            "hidden": true,
+            "result": {
+              "status": "passed",
+              "duration": 57166
+            }
+          }
+        ],
+        "tags": [],
+        "type": "scenario"
+      },
+      {
+        "description": "",
+        "id": "agent-chat-panel;permission-shortcuts-deny-or-always-allow",
+        "keyword": "Scenario Outline",
+        "line": 92,
+        "name": "Permission shortcuts deny or always allow",
+        "steps": [
+          {
+            "keyword": "Before",
+            "hidden": true,
+            "result": {
+              "status": "passed",
+              "duration": 339970917
+            }
+          },
+          {
+            "arguments": [],
+            "keyword": "Given ",
+            "line": 5,
+            "name": "an origin-backed profile \"Work\" with repo \"api\"",
+            "match": {
+              "location": "acceptance/steps/task-creation.steps.ts:63"
+            },
+            "result": {
+              "status": "passed",
+              "duration": 150634708
+            }
+          },
+          {
+            "arguments": [],
+            "keyword": "And ",
+            "line": 6,
+            "name": "Devora is running with no sessions open",
+            "match": {
+              "location": "acceptance/steps/session.steps.ts:13"
+            },
+            "result": {
+              "status": "passed",
+              "duration": 7379917
+            }
+          },
+          {
+            "arguments": [],
+            "keyword": "And ",
+            "line": 7,
+            "name": "the Agent Hub is open",
+            "match": {
+              "location": "acceptance/steps/agent-hub.steps.ts:45"
+            },
+            "result": {
+              "status": "passed",
+              "duration": 117105832
+            }
+          },
+          {
+            "arguments": [],
+            "keyword": "And ",
+            "line": 8,
+            "name": "an agent \"Echo\" was created",
+            "match": {
+              "location": "acceptance/steps/agent-hub.steps.ts:58"
+            },
+            "result": {
+              "status": "passed",
+              "duration": 424815916
+            }
+          },
+          {
+            "arguments": [],
+            "keyword": "When ",
+            "line": 9,
+            "name": "the user opens the chat for \"Echo\"",
+            "match": {
+              "location": "acceptance/steps/agent-chat.steps.ts:6"
+            },
+            "result": {
+              "status": "passed",
+              "duration": 11923666
+            }
+          },
+          {
+            "arguments": [],
+            "keyword": "When ",
+            "line": 83,
+            "name": "the user sends the agent prompt \"permission\"",
+            "match": {
+              "location": "acceptance/steps/agent-chat.steps.ts:13"
+            },
+            "result": {
+              "status": "passed",
+              "duration": 7171206
+            }
+          },
+          {
+            "arguments": [],
+            "keyword": "Then ",
+            "line": 84,
+            "name": "the agent chat shows a permission card",
+            "match": {
+              "location": "acceptance/steps/agent-chat.steps.ts:40"
+            },
+            "result": {
+              "status": "passed",
+              "duration": 16315832
+            }
+          },
+          {
+            "arguments": [],
+            "keyword": "When ",
+            "line": 85,
+            "name": "the user answers the agent permission with \"Command+Shift+Y\"",
+            "match": {
+              "location": "acceptance/steps/agent-chat.steps.ts:114"
+            },
+            "result": {
+              "status": "passed",
+              "duration": 13181499
+            }
+          },
+          {
+            "arguments": [],
+            "keyword": "Then ",
+            "line": 86,
+            "name": "the agent chat has no permission card",
+            "match": {
+              "location": "acceptance/steps/agent-chat.steps.ts:43"
+            },
+            "result": {
+              "status": "passed",
+              "duration": 26159165
+            }
+          },
+          {
+            "arguments": [],
+            "keyword": "And ",
+            "line": 87,
+            "name": "the agent \"Echo\" should be idle",
+            "match": {
+              "location": "acceptance/steps/agent-hub.steps.ts:137"
+            },
+            "result": {
+              "status": "passed",
+              "duration": 7736541
+            }
+          },
+          {
+            "keyword": "After",
+            "hidden": true,
+            "result": {
+              "status": "passed",
+              "duration": 151990500
+            }
+          },
+          {
+            "keyword": "After",
+            "hidden": true,
+            "result": {
+              "status": "passed",
+              "duration": 38166
+            }
+          }
+        ],
+        "tags": [],
+        "type": "scenario"
+      }
+    ],
+    "id": "agent-chat-panel",
+    "line": 1,
+    "keyword": "Feature",
+    "name": "Agent chat panel",
+    "tags": [],
+    "uri": "acceptance/features/agent-chat.feature"
+  }
+]

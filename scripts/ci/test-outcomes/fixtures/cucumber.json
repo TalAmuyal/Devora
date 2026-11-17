@@ -1,0 +1,136 @@
+[
+  {
+    "description": "  An external tool (debi preview) asks Devora via the IPC HTTP server to render a Markdown or HTML file in a pane beside the terminal of a specific session.",
+    "elements": [
+      {
+        "description": "",
+        "id": "file-preview-pane;refreshing-an-existing-path-preserves-its-stacked-siblings",
+        "keyword": "Scenario",
+        "line": 48,
+        "name": "Refreshing an existing path preserves its stacked siblings",
+        "steps": [
+          {
+            "keyword": "Before",
+            "hidden": true,
+            "result": {
+              "status": "passed",
+              "duration": 673239583
+            }
+          },
+          {
+            "arguments": [],
+            "keyword": "Given ",
+            "line": 6,
+            "name": "Devora is running with no sessions open",
+            "match": {
+              "location": "acceptance/steps/session.steps.ts:13"
+            },
+            "result": {
+              "status": "passed",
+              "duration": 8607583
+            }
+          },
+          {
+            "arguments": [],
+            "keyword": "And ",
+            "line": 7,
+            "name": "a session exists",
+            "match": {
+              "location": "acceptance/steps/session.steps.ts:18"
+            },
+            "result": {
+              "status": "passed",
+              "duration": 110174624
+            }
+          },
+          {
+            "arguments": [],
+            "keyword": "When ",
+            "line": 49,
+            "name": "a Markdown file is previewed in the active session",
+            "match": {
+              "location": "acceptance/steps/preview.steps.ts:45"
+            },
+            "result": {
+              "status": "passed",
+              "duration": 180602957
+            }
+          },
+          {
+            "arguments": [],
+            "keyword": "And ",
+            "line": 50,
+            "name": "another Markdown file is previewed in the active session with --stack",
+            "match": {
+              "location": "acceptance/steps/preview.steps.ts:147"
+            },
+            "result": {
+              "status": "passed",
+              "duration": 111252291
+            }
+          },
+          {
+            "arguments": [],
+            "keyword": "And ",
+            "line": 51,
+            "name": "the first preview file is previewed again without --stack",
+            "match": {
+              "location": "acceptance/steps/preview.steps.ts:150"
+            },
+            "result": {
+              "status": "passed",
+              "duration": 108183665
+            }
+          },
+          {
+            "arguments": [],
+            "keyword": "Then ",
+            "line": 52,
+            "name": "the active session should have 2 preview panes",
+            "match": {
+              "location": "acceptance/steps/preview.steps.ts:53"
+            },
+            "result": {
+              "status": "passed",
+              "duration": 1507667
+            }
+          },
+          {
+            "keyword": "After",
+            "hidden": true,
+            "result": {
+              "status": "passed",
+              "duration": 85551708
+            }
+          },
+          {
+            "keyword": "After",
+            "hidden": true,
+            "result": {
+              "status": "passed",
+              "duration": 86082
+            }
+          }
+        ],
+        "tags": [
+          {
+            "name": "@preview",
+            "line": 1
+          }
+        ],
+        "type": "scenario"
+      }
+    ],
+    "id": "file-preview-pane",
+    "line": 2,
+    "keyword": "Feature",
+    "name": "File preview pane",
+    "tags": [
+      {
+        "name": "@preview",
+        "line": 1
+      }
+    ],
+    "uri": "../acceptance/features/preview.feature"
+  }
+]

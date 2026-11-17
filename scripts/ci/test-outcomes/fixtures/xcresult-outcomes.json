@@ -1,0 +1,6 @@
+{"devices":[],"testNodes":[{"name":"DevoraSapphire","nodeType":"Test Plan","result":"Failed","children":[{"name":"DevoraSapphireUITests","nodeType":"UI test bundle","result":"Failed","children":[
+{"name":"GlobalPauseUITests","nodeType":"Test Suite","result":"Failed","children":[
+{"duration":"17s","durationInSeconds":17.18,"name":"testToolbarHoldSurvivesRelaunchAndThePaletteResumesIt()","nodeIdentifier":"GlobalPauseUITests/testToolbarHoldSurvivesRelaunchAndThePaletteResumesIt()","nodeType":"Test Case","result":"Failed"}]},
+{"name":"PreviewUITests","nodeType":"Test Suite","result":"Passed","children":[
+{"duration":"21s","durationInSeconds":21.5,"name":"testDraggingTheDividerResizesThePane()","nodeIdentifier":"PreviewUITests/testDraggingTheDividerResizesThePane()","nodeType":"Test Case","result":"Passed"},
+{"name":"testScreenshots()","nodeIdentifier":"PreviewUITests/testScreenshots()","nodeType":"Test Case","result":"Skipped"}]}]}]}]}
