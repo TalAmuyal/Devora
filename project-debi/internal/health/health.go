@@ -250,7 +250,9 @@ var dependencies = []Dependency{
 	{Name: "git", Required: true, VersionCommand: []string{"git", "--version"}},
 	{Name: "zsh", Required: true, VersionCommand: []string{"zsh", "--version"}},
 	{Name: "nvim", Required: false, VersionCommand: []string{"nvim", "--version"}},
-	{Name: "mise", Required: false, VersionCommand: []string{"mise", "--version"}},
+	// Offline: otherwise, with a cold cache, `mise --version` checks online for a newer mise and retries while that fails,
+	// stalling the check for seconds without a network
+	{Name: "mise", Required: false, VersionCommand: []string{"env", "MISE_OFFLINE=1", "mise", "--version"}},
 	{Name: ghDepName, Required: false, VersionCommand: []string{"gh", "--version"}},
 }
 

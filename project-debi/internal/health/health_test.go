@@ -125,6 +125,33 @@ func TestCheck_FoundDependency(t *testing.T) {
 	}
 }
 
+// mise's version command must run offline: online, with a cold cache, it checks for a newer mise and retries for
+// seconds when there's no network. The real command runs here, against a mise that only answers when offline.
+func TestCheck_MiseVersionRunsOffline(t *testing.T) {
+	dir := t.TempDir()
+	fakeMise := "#!/bin/sh\n[ \"$MISE_OFFLINE\" = 1 ] || { echo 'checking for a newer mise' >&2; exit 1; }\necho '2026.10.3 macos-arm64 (2026-10-05)'\n"
+	if err := os.WriteFile(dir+"/mise", []byte(fakeMise), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	var mise *Dependency
+	for i := range dependencies {
+		if dependencies[i].Name == "mise" {
+			mise = &dependencies[i]
+		}
+	}
+	if mise == nil {
+		t.Fatal("expected mise among the dependencies")
+	}
+
+	result := Check(*mise)
+
+	if result.Version != "2026.10.3" {
+		t.Fatalf("expected mise's version from an offline run, got: %q", result.Version)
+	}
+}
+
 func TestCheck_NotFoundDependency(t *testing.T) {
 	stubHealthDeps(t)
 
