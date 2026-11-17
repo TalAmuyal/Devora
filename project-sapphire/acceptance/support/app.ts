@@ -2,6 +2,7 @@
 
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
 import * as path from 'node:path';
+import { hangWatchdog } from '../../../acceptance/hang-watchdog';
 import { Bridge, type AppState } from './bridge';
 
 const PROJECT_DIR = path.resolve(import.meta.dirname, '../..');
@@ -55,6 +56,7 @@ export async function launch(configPath: string, stateDir: string | undefined, o
     app.stderr!.on('data', (chunk: Buffer) => {
       const text = chunk.toString();
       stderr.push(text);
+      hangWatchdog().output(`The app's stderr (pid ${app.pid})`, text);
       const match = text.match(/Devora test harness on port (\d+)/);
       if (match) {
         clearTimeout(timeout);
