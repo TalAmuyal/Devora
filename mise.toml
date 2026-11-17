@@ -27,12 +27,17 @@ run = """
 set -e
 bash scripts/test-install.sh
 bash scripts/ci/test-outcomes/test.sh
+bash scripts/ci/flake-report.test.sh
 mise run -C project-core test
 mise run -C project-debi test
 mise run -C project-judgess test
 mise run -C project-status-line test
 """
 description = "Run tests for all sub-projects"
+
+[tasks.flake-report]
+description = "Each test's failures over the last CI runs (--runs N, default 30; --test <regex>), from the recorded test outcomes; uses gh's login"
+run = "bash scripts/ci/flake-report.sh"
 
 [tasks.lint]
 run = """
