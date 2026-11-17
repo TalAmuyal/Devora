@@ -1,0 +1,72 @@
+{
+  "testIdentifier": "AgentSettingsUITests/testMultilineSaveAndTemplateFilePicker()",
+  "testName": "testMultilineSaveAndTemplateFilePicker()",
+  "testRuns": [
+    {
+      "activities": [
+        {
+          "title": "Start Test at 2026-11-16 11:08:46.166"
+        },
+        {
+          "title": "Set Up"
+        },
+        {
+          "title": "Checking existence of `\"confirmation-dialog\" Any`"
+        },
+        {
+          "title": "Click \"agent-save-role\" Button",
+          "childActivities": [
+            {
+              "title": "Wait for dev.devora.sapphire.dev to idle"
+            },
+            {
+              "title": "Find the \"agent-save-role\" Button"
+            },
+            {
+              "title": "Check for interrupting elements affecting \"agent-save-role\" Button"
+            },
+            {
+              "title": "Synthesize event",
+              "childActivities": [
+                {
+                  "title": "Scroll element to visible",
+                  "childActivities": [
+                    {
+                      "title": "Scroll \"settings-detail-scroll\" ScrollView by dx: 198.75, dy: -295.25",
+                      "childActivities": [
+                        {
+                          "title": "Wait for dev.devora.sapphire.dev to idle"
+                        },
+                        {
+                          "title": "Find the \"settings-detail-scroll\" ScrollView"
+                        },
+                        {
+                          "title": "Check for interrupting elements affecting \"settings-detail-scroll\" ScrollView"
+                        },
+                        {
+                          "title": "Synthesize event"
+                        },
+                        {
+                          "title": "Wait for dev.devora.sapphire.dev to idle"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "title": "Find the \"agent-save-role\" Button"
+                }
+              ]
+            },
+            {
+              "title": "Wait for dev.devora.sapphire.dev to idle"
+            }
+          ]
+        },
+        {
+          "title": "Find the \"settings-detail-scroll\" ScrollView"
+        }
+      ]
+    }
+  ]
+}
