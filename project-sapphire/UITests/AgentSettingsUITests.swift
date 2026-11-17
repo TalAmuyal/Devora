@@ -40,7 +40,10 @@ final class AgentSettingsUITests: XCTestCase {
 		XCTAssertEqual(role.value as? String, expected, "Both Return keys insert newlines")
 		XCTAssertNil(try agentConfig(profileConfig)["role"], "Typing and Return keep the draft unsaved")
 		XCTAssertFalse(app.descendants(matching: .any)["confirmation-dialog"].firstMatch.exists, "d typed into the editor stays text")
-		app.buttons["agent-save-role"].click()
+		// Save is under the editor, below the detail's visible part: brought into view first, since XCUITest's own scroll is posted where the pointer rests, on the editor.
+		let save = app.buttons["agent-save-role"]
+		app.scrollSettingsDetail(to: save)
+		save.click()
 		let savedRole = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
 			(try? self.agentConfig(profileConfig)["role"] as? String) == expected
 		}, object: nil)
