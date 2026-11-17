@@ -30,7 +30,18 @@ jobs:
 
       - run: mise run lint
 
-      - run: mise run test
+      # The output is kept for its Rust tests' outcomes (libtest prints them as it goes).
+      - run: |
+          set -o pipefail
+          mise run test 2>&1 | tee "$RUNNER_TEMP/test.log"
+
+      - name: Record test outcomes
+        if: always()
+        continue-on-error: true
+        uses: ./.github/actions/record-test-outcomes
+        with:
+          job: test
+          results: rust=${{ runner.temp }}/test.log
 
   test-ember:
     needs: changes
@@ -56,7 +67,17 @@ jobs:
         run: mise run --no-deps -C project-ember lint-rust
 
       - name: Rust tests
-        run: mise run --no-deps -C project-ember test-rust
+        run: |
+          set -o pipefail
+          mise run --no-deps -C project-ember test-rust 2>&1 | tee "$RUNNER_TEMP/rust-tests.log"
+
+      - name: Record test outcomes
+        if: always()
+        continue-on-error: true
+        uses: ./.github/actions/record-test-outcomes
+        with:
+          job: test-ember
+          results: rust=${{ runner.temp }}/rust-tests.log
 
   # Ember's frontend unit tests (Vitest under happy-dom) and type-check: nothing in them is macOS-specific, so they run on Linux.
   test-ember-unit:
@@ -90,6 +111,14 @@ jobs:
 
       - name: TypeScript type-check
         run: mise exec -C project-ember -- npx tsc --noEmit
+
+      - name: Record test outcomes
+        if: always()
+        continue-on-error: true
+        uses: ./.github/actions/record-test-outcomes
+        with:
+          job: test-ember-unit
+          results: vitest=project-ember/test-results/test-outcomes/unit.json
 
   e2e-ember:
     needs: changes
@@ -138,6 +167,14 @@ jobs:
         env:
           CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
         run: mise run -C project-ember test-e2e
+
+      - name: Record test outcomes
+        if: always()
+        continue-on-error: true
+        uses: ./.github/actions/record-test-outcomes
+        with:
+          job: e2e-ember
+          results: cucumber=project-ember/test-results/test-outcomes/e2e.json
 
       - name: Upload failure captures
         if: failure()
@@ -250,33 +287,30 @@ jobs:
       - name: Tests
         # Its own limit, under the job's 60 minutes, so that a hang outside any one test (xcodebuild or the test runner stuck between tests) still ends early and leaves time for the uploads: green runs take 18 to 28 minutes.
         timeout-minutes: 40
-        run: mise run -C project-sapphire test
+        # The output is kept for the agent CLI's Rust tests' outcomes.
+        run: |
+          set -o pipefail
+          mise run -C project-sapphire test 2>&1 | tee "$RUNNER_TEMP/sapphire-tests.log"
 
       - name: Core tests (macOS)
-        run: mise run -C project-core test
+        run: |
+          set -o pipefail
+          mise run -C project-core test 2>&1 | tee "$RUNNER_TEMP/core-tests.log"
 
-      # Each test's outcome and duration, on every run (scripts/ci/test-outcomes/README.md); never fails the job.
       - name: Record test outcomes
         if: always()
         continue-on-error: true
-        run: >-
-          scripts/ci/test-outcomes/record.sh sapphire project-sapphire/build/test-outcomes/outcomes.jsonl
-          swift-testing=project-sapphire/build/test-outcomes/unit.jsonl
-          swift-testing=project-sapphire/build/test-outcomes/transcript.jsonl
-          cucumber=project-sapphire/build/test-outcomes/acceptance.json
-          xcresult=project-sapphire/build/ui-tests.xcresult
-          cucumber=project-sapphire/build/test-outcomes/bundle.json
-
-      - name: Upload test outcomes
-        if: always()
-        continue-on-error: true
-        uses: actions/upload-artifact@v7
+        uses: ./.github/actions/record-test-outcomes
         with:
-          # One per attempt, so that a re-run's outcomes don't collide with the first attempt's.
-          name: test-outcomes-sapphire-attempt-${{ github.run_attempt }}
-          path: project-sapphire/build/test-outcomes/outcomes.jsonl
-          if-no-files-found: warn
-          retention-days: 90
+          job: sapphire
+          results: |
+            swift-testing=project-sapphire/build/test-outcomes/unit.jsonl
+            swift-testing=project-sapphire/build/test-outcomes/transcript.jsonl
+            cucumber=project-sapphire/build/test-outcomes/acceptance.json
+            xcresult=project-sapphire/build/ui-tests.xcresult
+            cucumber=project-sapphire/build/test-outcomes/bundle.json
+            rust=${{ runner.temp }}/sapphire-tests.log
+            rust=${{ runner.temp }}/core-tests.log
 
       - name: Upload acceptance failure captures
         if: failure() || cancelled()

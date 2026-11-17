@@ -1,0 +1,21 @@
+[test]      Running unittests src/main.rs (target/debug/deps/debi-daed9924cd33da6f)
+[test] 
+[test] running 2 tests
+[test] test repo::tests::names_sort ... ok
+[test] test repo::tests::rejects_escape - should panic ... ok
+[test] 
+[test] test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+[test] 
+[test]      Running tests/repo.rs (target/debug/deps/repo-78fbbbf2f46783d8)
+[test] test usage_errors_and_empty_lists_have_the_documented_exit_codes ... ok
+     Running unittests src/lib.rs (target/debug/deps/devora_agent-c23d8d4556f2ef2a)
+test session::tests::stop_grace ... FAILED
+test session::tests::pinned_cli_only ... ignored
+test session::tests::pinned_cli_reason ... ignored, requires the pinned Claude CLI
+     Running tests/repo.rs (target/debug/deps/repo-1111111111111111)
+test add_refuses_a_mismatch ... ok
+   Doc-tests devora_agent
+test crates/devora-agent/src/lib.rs - version::check (line 12) ... ok
+
+failures:
+    session::tests::stop_grace
