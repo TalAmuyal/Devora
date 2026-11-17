@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# Checks flake-report.jq on made-up outcomes: master and pull-request counts kept apart, a failure that passed on
+# re-run flagged, skipped tests not counted as runs, tests that never failed left out, and the --test filter.
+set -uo pipefail
+here=$(cd "$(dirname "$0")" && pwd)
+failures=0
+expect() {
+	if [ "$3" != "$2" ]; then
+		printf 'FAIL: %s\n--- expected:\n%s\n--- actual:\n%s\n' "$1" "$2" "$3" >&2
+		failures=$((failures + 1))
+	fi
+}
+listed='[
+	{"databaseId": 1, "event": "push", "url": "https://ci/1", "createdAt": "2026-11-01T00:00:00Z"},
+	{"databaseId": 2, "event": "push", "url": "https://ci/2", "createdAt": "2026-11-02T00:00:00Z"},
+	{"databaseId": 3, "event": "pull_request", "url": "https://ci/3", "createdAt": "2026-11-03T00:00:00Z"},
+	{"databaseId": 4, "event": "pull_request", "url": "https://ci/4", "createdAt": "2026-11-04T00:00:00Z"}]'
+outcome() { printf '{"job":"%s","suite":"%s","name":"%s","outcome":"%s","duration":%s,"run_id":"%s","run_attempt":%s,"event":"%s"}\n' "$@"; }
+outcomes=$(
+	outcome sapphire Health "real check" failed 12 1 1 push
+	outcome sapphire Health "real check" passed 8 2 1 push
+	outcome sapphire Health "real check" passed 9 3 1 pull_request
+	outcome sapphire Settings "multiline save" failed 54 4 1 pull_request
+	outcome sapphire Settings "multiline save" passed 50 4 2 pull_request
+	outcome sapphire Settings "multiline save" passed 49 3 1 pull_request
+	outcome test-ember-unit "app.test.ts" "always skipped" skipped null 1 1 push
+	outcome test-ember-unit "app.test.ts" "always passes" passed 0.25 1 1 push
+)
+report() { jq -r -s --argjson listed "$listed" --arg filter "$1" -f "$here/flake-report.jq" <<<"$outcomes"; }
+
+expect "the report" "$(printf '%s\n' \
+	'Over the last 4 CI runs (2 on master, 2 on pull requests), 4 tests recorded:' \
+	'' \
+	'0/0 master, 1/2 PR  sapphire: Settings / multiline save' \
+	'    failed, then passed on re-run, in 1 run(s)' \
+	'    last failed: 2026-11-04T00:00:00Z https://ci/4' \
+	'    duration: median 50s, slowest 54s' \
+	'1/2 master, 0/1 PR  sapphire: Health / real check' \
+	'    last failed: 2026-11-01T00:00:00Z https://ci/1' \
+	'    duration: median 9s, slowest 12s')" "$(report "")"
+
+expect "the --test filter" "$(printf '%s\n' \
+	'Over the last 4 CI runs (2 on master, 2 on pull requests), 2 tests recorded:' \
+	'' \
+	'No test failed.' \
+	'' \
+	'All matching tests:' \
+	'  test-ember-unit: app.test.ts / always passes: failed 0/1 master, 0/0 PR; median 0.3s, slowest 0.3s' \
+	'  test-ember-unit: app.test.ts / always skipped: failed 0/0 master, 0/0 PR; median -, slowest -')" "$(report "app.test")"
+
+if [ "$failures" -gt 0 ]; then
+	echo "$failures check(s) failed" >&2
+	exit 1
+fi
+echo "flake-report: all checks passed"
