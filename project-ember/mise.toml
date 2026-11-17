@@ -84,7 +84,7 @@ description = "Run all tests (Rust + frontend unit)"
 dir = "."
 # ../acceptance/features/ holds the scenarios shared with Sapphire.
 # The JSON is each scenario's outcome and duration, which CI records (scripts/ci/test-outcomes/).
-run = "node --import tsx ./node_modules/.bin/cucumber-js tests/features/ ../acceptance/features/ --tags 'not @sapphire-only' --import 'tests/steps/*.ts' --import 'tests/support/*.ts' --publish-quiet --format progress --format json:test-results/test-outcomes/e2e.json \"${@}\""
+run = "../scripts/with-ui-lock.sh node --import tsx ./node_modules/.bin/cucumber-js tests/features/ ../acceptance/features/ --tags 'not @sapphire-only' --import 'tests/steps/*.ts' --import 'tests/support/*.ts' --publish-quiet --format progress --format json:test-results/test-outcomes/e2e.json \"${@}\""
 hide = true
 
 [tasks.test-e2e]
@@ -121,7 +121,7 @@ set -e
 if ! node --import tsx scripts/check-app-freshness.ts; then
 	mise run -C "$(git rev-parse --show-toplevel)" build-ember-app
 fi
-EMBER_E2E_PREBUILT=1 ../acceptance/stress.sh "$usage_name" "$usage_times" test-results/stress-e2e -- mise run test-e2e -- --name "$usage_name"
+EMBER_E2E_PREBUILT=1 ../scripts/with-ui-lock.sh ../acceptance/stress.sh "$usage_name" "$usage_times" test-results/stress-e2e -- mise run test-e2e -- --name "$usage_name"
 """
 
 [tasks.record-claude]

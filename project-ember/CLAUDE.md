@@ -11,6 +11,12 @@ For example, Claude Code must be launched via `ccc` interactively, no shortcuts 
 The suite also runs `../acceptance/features/`, the scenarios Sapphire runs too (see `../acceptance/CLAUDE.md`), minus those tagged `@sapphire-only`.
 Changing the wording of a step those scenarios use means changing Sapphire's step (`project-sapphire/acceptance/steps/`) as well.
 
+### One UI-test run at a time on a shared Mac
+
+The e2e runs (`test-e2e`, through `_cucumber`, and `stress-e2e`) launch the app and bring its window forward, so they take a host-wide lock through `../scripts/with-ui-lock.sh`: agents share one Mac, and two such runs at once (Sapphire's included) break each other.
+A run that finds it held says what holds it (worktree, command, since when) and waits; it never fails for it, and the holder's exit, kill -9 included, frees it at once.
+The lock is `/tmp/devora-ui-tests.lock`, which assumes every agent runs as the same macOS user (if not, it would need to be group-writable). In CI it's always free.
+
 ### New or changed scenarios run under load first
 
 A PR that adds or changes an e2e scenario or step runs those scenarios 10 times under load first, and its description reports the tally ("10 of 10 passed under load"), or says why it couldn't: flakes are cheapest to catch when they're written.
