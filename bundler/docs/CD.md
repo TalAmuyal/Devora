@@ -14,7 +14,7 @@ There are two release types: **nightly** builds that run daily, and **stable** r
 | Cron | Daily at 03:00 UTC (midnight UTC-3) | Nightly |
 | Tag push | `v*` (e.g. `v2026-03-28.0`) | Stable |
 | PR merge | Release PR merged to `master` (auto-tag workflow) | Creates `v*` tag |
-| Manual dispatch | `workflow_dispatch` via GitHub Actions UI or CLI | Depends on ref (tag → stable, branch → nightly) |
+| Manual dispatch | `workflow_dispatch` via GitHub Actions UI or CLI | Depends on ref (tag → stable, branch → nightly); none with `publish` off |
 
 ## Build process
 
@@ -30,14 +30,14 @@ After an incomplete Sapphire nightly, the marker stays unchanged so the next sch
 
 **Stable Sapphire gate:** `SAPPHIRE_STABLE_ENABLED` at the top of the workflow is the single switch, currently `false` until Tal approves after the week-long daily-use gate.
 Enabling that switch later also requires lifting `install.sh`'s explicit nightly-only Sapphire validation.
-Do not dispatch CD to test changes without coordinating with Bravo; it publishes real releases.
+Do not dispatch CD to test changes without coordinating with Bravo; it publishes real releases unless its `publish` input is off, which builds and checks both apps (e.g. on a PR branch) and skips the `publish` job.
 
 ### Build steps (build-and-release)
 
 1. **Checkout** with `fetch-depth: 0` (full history, needed for version computation).
 2. **Set up mise** for Go, Python, and other tool versions.
 3. **Restore build caches** for the Ember Rust build artifacts (keyed on `Cargo.lock`) and npm modules (keyed on `package-lock.json`).
-4. **Build the app bundle** via `mise run ember-bundle`, then **create the DMG** via `mise run ember-create-dmg`. This compiles Debi and Status-line, builds the Tauri (Ember) app into `Devora Ember.app`, bundles all resources, and produces a compressed `Devora-Ember.dmg`.
+4. **Build the app bundle** via `mise run ember-bundle`, signed with the identity from a throwaway keychain (see [Signing](#signing)), then **create the DMG** via `mise run ember-create-dmg`. This compiles Debi and Status-line, builds the Tauri (Ember) app into `Devora Ember.app`, bundles all resources, and produces a compressed `Devora-Ember.dmg`. The app inside the DMG is then checked to be signed with the certificate.
 5. **Smoke test** -- verifies that:
    - The built `.app` exists and contains the `devora-ember` binary
    - Bundled resources (`debi`) were copied in
@@ -45,6 +45,14 @@ Do not dispatch CD to test changes without coordinating with Bravo; it publishes
    - The app icon (`app.icns`) was generated
    - `Devora-Ember.dmg` was created
 6. **Upload the artifact for the publish job** (see [Release types](#release-types)).
+
+## Signing
+
+Both build jobs sign their app with the self-signed "Devora Local Signing" certificate, so the published apps keep their macOS permissions across nightly updates (see `bundler/CLAUDE.md`).
+The repository secrets `DEVORA_SIGNING_P12` (the base64 `.p12`, certificate and private key) and `DEVORA_SIGNING_P12_PASSWORD` hold it.
+`ci-signing-keychain.sh create` imports it into a throwaway keychain, the bundle step runs with `DEVORA_SIGNING_IDENTITY` set so a missing identity fails the job instead of shipping ad hoc, and `ci-signing-keychain.sh delete` removes the keychain even when the job fails.
+`verify-dmg-signature.sh` then checks that the app in the DMG is signed with the certificate for its bundle id.
+Only these two CD jobs see the secrets; PR CI builds stay ad hoc.
 
 ## Release types
 

@@ -42,12 +42,5 @@ elif [[ "$version" == *-dev.* ]]; then
 fi
 plutil -replace CFBundleName -string "$name" "$app/Contents/Info.plist"
 plutil -replace CFBundleDisplayName -string "$name" "$app/Contents/Info.plist"
-# Sign every nested Mach-O first (including future plugin executables), then seal the app.
-while IFS= read -r -d '' binary; do
-	if [[ "$(file -b "$binary")" == Mach-O* ]]; then
-		codesign --force --sign - "$binary"
-	fi
-done < <(find "$app/Contents" -type f -print0)
-codesign --force --sign - --options runtime "$app"
-codesign --verify --deep --strict "$app"
+bundler/sign-macos-app.sh "$app" --runtime
 echo "Bundled $app ($version)"
