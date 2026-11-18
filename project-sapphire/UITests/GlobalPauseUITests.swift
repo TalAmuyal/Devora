@@ -21,8 +21,10 @@ final class GlobalPauseUITests: XCTestCase {
 		let toggle = app.buttons["global-pause-toggle"]
 		XCTAssertTrue(toggle.waitForExistence(timeout: 10))
 		toggle.click()
-		let paused = app.staticTexts["global-pause-indicator"]
+		// The pause status is a button, which opens who the hold still waits for.
+		let paused = app.buttons["global-pause-indicator"]
 		XCTAssertTrue(paused.waitForExistence(timeout: 5))
+		XCTAssertEqual(paused.label, "Paused", "No agent is running, so the hold is complete at once")
 		app.terminate()
 		app.launch()
 		XCTAssertTrue(paused.waitForExistence(timeout: 10), "The toolbar restores the persisted hold")
