@@ -92,6 +92,7 @@ Types of changes:
 - Removed the remnants of Devora OG (Kitty + Glimpse-TTY), including the `debi workspace-ui` command
 - Removed the Crit integration (the plan-review overlay opened when Claude Code exits plan mode)
 - Crit is no longer bundled with Devora
+- `debi util` and its `json-validate`, `yaml-validate` and `toml-validate` commands
 
 ### Fixed
 

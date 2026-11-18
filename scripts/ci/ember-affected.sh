@@ -11,7 +11,7 @@ irrelevant() {
 		CHANGELOG.md) return 0 ;;
 		docs/* | scripts/hooks/*) return 0 ;;
 		.github/workflows/cd.yml | .github/workflows/changelog.yml | .github/workflows/auto-tag.yml) return 0 ;;
-		CLAUDE.md | AGENTS.md | README.md | CONTRIBUTING.md | SECURITY.md | LICENSE | THIRD_PARTY_LICENSES.md | cut-release.sh | additional-instructions.md) return 0 ;;
+		CLAUDE.md | AGENTS.md | README.md | CONTRIBUTING.md | SECURITY.md | LICENSE | THIRD_PARTY_LICENSES.md | cut-release.sh) return 0 ;;
 		*) return 1 ;;
 	esac
 }

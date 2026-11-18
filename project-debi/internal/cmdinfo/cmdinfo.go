@@ -22,8 +22,6 @@ type SubCommand struct {
 	Description string
 	Flags       []Flag
 	ValidArgs   []string
-	// CompletesFiles makes the positional argument complete as a file path; flags are offered only once the word starts with "-".
-	CompletesFiles bool
 }
 
 // Flag describes a flag accepted by a command.
