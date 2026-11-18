@@ -529,6 +529,11 @@ public final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NS
 				+ "momentum \(event.momentumPhase.rawValue), dx \(event.scrollingDeltaX), dy \(event.scrollingDeltaY), top \(contentView.bounds.minY)")
 		guard toTranscript else { return false }
 		scrollWheel(with: event)
+		// The scroll view applies the scroll a moment later (the next "bounds" line): this is where it starts from, and how far
+		// it can go.
+		WheelTrace.note(
+			"after the wheel: top \(contentView.bounds.minY), the furthest \(table.bounds.height - contentView.bounds.height) "
+				+ "(document \(table.bounds.height), visible \(contentView.bounds.height)), following \(following)")
 		return true
 	}
 
