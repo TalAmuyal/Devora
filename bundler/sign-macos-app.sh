@@ -6,8 +6,9 @@
 # an ad hoc signature makes it the build's own hash, so every build has to be granted again.
 #
 # The identity is DEVORA_SIGNING_IDENTITY when set (used as given, so a missing one fails), else "Devora Local Signing" when the keychain has it, else ad hoc with a warning.
-# Every nested Mach-O is signed before the app is sealed, innermost first: the app's seal records its contents' signatures, so they must be final by then.
-# This is what makes the result correct without `codesign --deep`, which treats Mach-Os under Resources as plain files.
+# It signs each Mach-O file in the app, then seals the app: the seal records its contents' signatures, so they must be final by then.
+# Signing file by file (rather than `codesign --deep`, which treats Mach-Os under Resources as plain files) is correct only because the apps contain no nested bundles;
+# a nested bundle would have to be signed as a bundle, after its contents and before the app, so the script refuses one instead of signing it wrongly.
 set -euo pipefail
 
 usage="Usage: $0 <app> [--runtime (hardened runtime for the app's executable)]"
@@ -32,6 +33,13 @@ elif security find-identity | grep -qF "\"$local_identity\""; then
 else
 	identity="-"
 	echo "warning: no \"$local_identity\" signing identity; signing ad hoc, so macOS will ask for this build's permissions again" >&2
+fi
+
+nested_bundles="$(find "$app/Contents" -type d \( -name '*.app' -o -name '*.framework' -o -name '*.bundle' -o -name '*.xpc' -o -name '*.appex' -o -name '*.plugin' \))"
+if [[ -n "$nested_bundles" ]]; then
+	echo "error: $app contains nested bundles, which this script would sign file by file, and so wrongly:" >&2
+	echo "$nested_bundles" >&2
+	exit 1
 fi
 
 while IFS= read -r -d '' binary; do
