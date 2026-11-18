@@ -293,7 +293,8 @@ export interface AppState {
   cloneRepo: CloneRepoState | null;
   profileForm: ProfileFormState | null;
   settings: SettingsState | null;
-  version: string;
+  /** The window's title as AppKit has it, or null without a window. */
+  windowTitle: string | null;
   profiles: { name: string; path: string }[];
   selectedProfile: string | null;
   workspaces: { id: string; title: string; path: string; active: boolean }[];

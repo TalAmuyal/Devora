@@ -5,7 +5,7 @@ import Synchronization
 
 public enum Command: Sendable {
 	case setGlobalPaused(Bool)
-	/// Loads the version and the profiles, then the workspaces of the selected profile: the one restored from the app state while it is registered, otherwise the first.
+	/// Loads the profiles, then the workspaces of the selected profile: the one restored from the app state while it is registered, otherwise the first.
 	case load
 	/// Selects a profile (`SetActiveProfile`, so that a launch restores it) and lists its workspaces.
 	case selectProfile(path: String)
@@ -57,7 +57,8 @@ public enum StartupProblem: Equatable, Sendable {
 @MainActor
 @Observable
 public final class Store {
-	public private(set) var version = ""
+	/// The window title, from the app bundle: Ember's format, with the install suffix of a side-by-side install.
+	public private(set) var windowTitle = "Devora Sapphire"
 	/// Core-owned minimum widths and resize bounds, available before tab events fold.
 	public private(set) var previewLayoutRules: PreviewLayoutRules?
 	public private(set) var profiles: [Profile] = []
@@ -117,6 +118,9 @@ public final class Store {
 		self.configPath = configPath
 		self.log = log
 		reportedErrors = pullReportedErrors()
+		if let title = try? call("sapphire_window_title", { try sapphireWindowTitle(resourcesDir: Bundle.main.resourcePath) }) {
+			windowTitle = title
+		}
 		open(state)
 	}
 
@@ -608,15 +612,14 @@ public final class Store {
 		for message in messages { banner(message) }
 	}
 
-	/// Loads the version and the profiles, then the workspaces of the selected profile; returns whether every call succeeded.
+	/// Loads the profiles, then the workspaces of the selected profile; returns whether every call succeeded.
 	/// The selection is `selecting` when it is listed, otherwise the core's active profile (read from the core, since its events fold on a later frame) while it is registered, otherwise the first profile, or none.
 	@discardableResult
 	public func load(selecting preferred: String? = nil) async -> Bool {
-		guard let core, let version = try? await call("version", { try core.version() }) else { return false }
+		guard let core else { return false }
 		let started = ContinuousClock.now
 		guard let profiles = try? await call("list_profiles", { try core.listProfiles() }) else { return false }
 		let listProfiles = LoadingLatencies.Phase(from: started, to: .now, origin: started)
-		self.version = version
 		self.profiles = profiles
 		profilesListed = true
 		let active = try? await call("snapshot", { try core.snapshot().activeProfile })

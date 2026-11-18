@@ -89,7 +89,6 @@ struct StoreTests {
 		await store.dispatch(.load).value
 
 		#expect(store.scrapeErrors() == [])
-		#expect(!store.version.isEmpty)
 		#expect(store.profiles.map(\.name) == ["work", "home"])
 		#expect(store.selectedProfilePath == work)
 		#expect(store.workspaces.map(\.id) == ["ws-1", "ws-2"])

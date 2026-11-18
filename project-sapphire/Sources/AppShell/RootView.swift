@@ -50,7 +50,7 @@ public struct RootView: View {
 		}
 		.overlay(alignment: .top) { ErrorBannerStack(store: store) }
 		.background(FrameDriver(store: store))
-		.navigationTitle(store.version.isEmpty ? "Devora Sapphire" : "Devora Sapphire \(store.version)")
+		.navigationTitle(store.windowTitle)
 		.toolbar {
 			if store.startupProblem == nil {
 				ToolbarItem {

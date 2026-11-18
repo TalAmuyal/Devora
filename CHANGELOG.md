@@ -97,6 +97,7 @@ Types of changes:
 
 ### Fixed
 
+- Devora Sapphire's window title shows its real version instead of "0.1.0", and the install suffix of a side-by-side install, as Ember's does
 - The health check (`debi health` and the Health Hub) no longer stalls for seconds without a network: mise's version check now runs offline, skipping mise's online check for a newer release
 - Devora Ember's terminal no longer stops showing output when a preview pane opening beside it narrows it with the cursor on its bottom row (an xterm.js reflow bug, patched until a release fixes it)
 - Devora Sapphire's agent transcript lays every row out at its measured height: rows no longer keep an outdated estimated height that is too tall or too short for their content, and VoiceOver no longer reports a row away from where it is drawn after the transcript scrolls itself to the bottom
