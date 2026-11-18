@@ -1,7 +1,7 @@
 import XCTest
 
 final class GlobalPauseUITests: XCTestCase {
-	/// Resumes with the toolbar, not the palette: XCUITest sometimes doesn't post a Shift release right after a relaunch (#181), so Shift-Shift there would test XCUITest.
+	/// Resumes with the toolbar, not the palette: XCUITest sometimes doesn't post a Shift release right after a relaunch (the system still had Shift down seconds later), so Shift-Shift there would test XCUITest.
 	/// Real Shift-Shift is in `KeyRoutingUITests`, and resuming from the palette after a relaunch in `global-pause.feature`.
 	@MainActor
 	func testToolbarHoldSurvivesRelaunchAndTheToolbarResumesIt() throws {
