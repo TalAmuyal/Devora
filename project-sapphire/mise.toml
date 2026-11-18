@@ -108,13 +108,13 @@ depends = ["build", "test-tools", "npm-install"]
 run = '''
 set -e
 time ../bundler/macos-sapphire/bundle-sapphire.sh --prebuilt
-../scripts/with-ui-lock.sh node --import tsx ./node_modules/.bin/cucumber-js acceptance/features/ ../acceptance/features/ --tags '@bundled-tools and not @ember-only' --import 'acceptance/steps/*.ts' --import 'acceptance/support/*.ts' --format progress --format json:build/test-outcomes/bundle.json
+../scripts/with-ui-lock.sh node --import tsx ./node_modules/.bin/cucumber-js acceptance/features/ ../acceptance/features/ --tags '@bundled-tools and not @ember-only' --import 'acceptance/steps/*.ts' --import 'acceptance/support/*.ts' --format progress --format json:build/test-outcomes/bundle.json --format ../acceptance/hang-watchdog-formatter.ts:build/test-outcomes/bundle-progress.txt
 ../scripts/with-ui-lock.sh node --import tsx scripts/bundle-smoke.ts
 '''
 
 [tasks.test]
 description = "Run unit tests, pinned Claude contracts, acceptance, real-input UI and signed bundle smoke"
-run = [{ task = "test-unit" }, { task = "test-agent-cli" }, { task = "test-acceptance" }, { task = "test-ui" }, { task = "test-bundle" }]
+run = [{ task = "test-unit" }, { task = "test-agent-cli" }, { task = "test-hang-watchdog" }, { task = "test-acceptance" }, { task = "test-ui" }, { task = "test-bundle" }]
 
 [tasks.test-agent-cli]
 description = "Verify the CI-pinned Claude CLI against the offline agent backend"
@@ -156,10 +156,15 @@ mise exec -C ../project-core -- cargo build --release -p debi
 cp ../project-core/target/release/debi build/test-tools/ccc
 '''
 
+[tasks.test-hang-watchdog]
+description = "Check the acceptance runs' hang watchdog (../acceptance/hang-watchdog.ts) on real hangs, without the app"
+depends = ["npm-install"]
+run = "bash scripts/hang-watchdog.test.sh"
+
 [tasks.test-acceptance]
 description = "Run development-app Gherkin scenarios (bundled-tools run in test-bundle); arguments go to cucumber-js"
 depends = ["build", "npm-install", "test-tools"]
-run = "../scripts/with-ui-lock.sh node --import tsx ./node_modules/.bin/cucumber-js acceptance/features/ ../acceptance/features/ --tags 'not @ember-only and not @bundled-tools' --import 'acceptance/steps/*.ts' --import 'acceptance/support/*.ts' --format progress --format json:build/test-outcomes/acceptance.json"
+run = "../scripts/with-ui-lock.sh node --import tsx ./node_modules/.bin/cucumber-js acceptance/features/ ../acceptance/features/ --tags 'not @ember-only and not @bundled-tools' --import 'acceptance/steps/*.ts' --import 'acceptance/support/*.ts' --format progress --format json:build/test-outcomes/acceptance.json --format ../acceptance/hang-watchdog-formatter.ts:build/test-outcomes/acceptance-progress.txt"
 
 [tasks.stress-acceptance]
 description = "Run the acceptance scenarios matching --name (a regex, as cucumber-js's) --times times on the efficiency cores, and print the tally"
