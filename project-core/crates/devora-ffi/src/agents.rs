@@ -5,9 +5,9 @@ use devora_core::agents::{
     self, CreationForm, Field, LaunchContext, ModelChoice, PermissionAnswer, Scope, Source,
 };
 use devora_core::state::{
-    Chat, ChatContext, ChatEvent, ChatPhase, ChatUpdate, ItemState, PermissionQuestion,
-    Subscription, SystemKind, ToolResult, ToolVerdict, TranscriptChange, TranscriptContent,
-    TranscriptItem,
+    AgentActivity, Chat, ChatContext, ChatEvent, ChatPhase, ChatUpdate, ItemState,
+    PermissionQuestion, RunningAgent, RunningAgents, Subscription, SystemKind, ToolResult,
+    ToolVerdict, TranscriptChange, TranscriptContent, TranscriptItem,
 };
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -295,9 +295,29 @@ pub enum ChatUpdate {
     Context { context: ChatContext },
 }
 #[uniffi::remote(Enum)]
+pub enum AgentActivity {
+    Turn,
+    Question,
+    Idle,
+    Stopping,
+}
+#[uniffi::remote(Record)]
+pub struct RunningAgent {
+    pub profile_path: String,
+    pub name: String,
+    pub tab: Option<u64>,
+    pub activity: AgentActivity,
+}
+#[uniffi::remote(Record)]
+pub struct RunningAgents {
+    pub total: u32,
+    pub running: Vec<RunningAgent>,
+}
+#[uniffi::remote(Enum)]
 pub enum ChatEvent {
     Snapshot {
         chats: Vec<Chat>,
+        running: RunningAgents,
     },
     Started {
         chat: Chat,
@@ -309,6 +329,9 @@ pub enum ChatEvent {
     },
     Closed {
         tab: u64,
+    },
+    Running {
+        running: RunningAgents,
     },
 }
 #[uniffi::remote(Enum)]
@@ -562,9 +585,14 @@ impl DevoraCore {
             inner: self.state.subscribe_chats(),
         }))
     }
+    /// Stops every agent, interrupting live turns; fails with what went wrong, once every agent has stopped.
     pub async fn shutdown_agents(&self) -> Result<(), CoreError> {
-        self.agents.shutdown().await;
-        Ok(())
+        let problems = self.agents.shutdown().await;
+        if problems.is_empty() {
+            Ok(())
+        } else {
+            Err(problems.join("\n").into())
+        }
     }
     /// Call after supplying the host launch context on relaunch, before rendering
     /// restored agent tabs. Each failed launch is projected on its existing tab.

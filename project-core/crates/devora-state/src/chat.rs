@@ -49,6 +49,36 @@ pub struct Chat {
     pub context: Option<ChatContext>,
 }
 
+/// What an agent with a live runtime is doing, for knowing when everyone has stopped.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum AgentActivity {
+    /// A turn is running: one the user sent, or a compaction step.
+    Turn,
+    /// A turn waits for the user's answer to a permission question.
+    Question,
+    /// No turn is running; the runtime is still up.
+    Idle,
+    /// Its tab was closed and its runtime is stopping.
+    Stopping,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RunningAgent {
+    pub profile_path: String,
+    pub name: String,
+    /// `None` once its tab was closed.
+    pub tab: Option<u64>,
+    pub activity: AgentActivity,
+}
+
+/// The agents whose runtime is live, out of every agent the registry still holds,
+/// open or stopping; a global hold is complete once `running` is empty.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct RunningAgents {
+    pub total: u32,
+    pub running: Vec<RunningAgent>,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ChatUpdate {
     GlobalHold { held: bool },
@@ -82,12 +112,17 @@ pub enum ChatCommand {
     Close {
         tab: u64,
     },
+    /// Published by the agent registry whenever the live runtimes change.
+    Running {
+        running: RunningAgents,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ChatEvent {
     Snapshot {
         chats: Vec<Chat>,
+        running: RunningAgents,
     },
     Started {
         chat: Chat,
@@ -100,10 +135,21 @@ pub enum ChatEvent {
     Closed {
         tab: u64,
     },
+    Running {
+        running: RunningAgents,
+    },
 }
 
-pub(crate) fn apply(chats: &mut Vec<Chat>, command: ChatCommand) -> Result<ChatEvent, StateError> {
+pub(crate) fn apply(
+    chats: &mut Vec<Chat>,
+    running: &mut RunningAgents,
+    command: ChatCommand,
+) -> Result<ChatEvent, StateError> {
     match command {
+        ChatCommand::Running { running: next } => {
+            *running = next.clone();
+            Ok(ChatEvent::Running { running: next })
+        }
         ChatCommand::Start { tab, generation } => {
             let chat = Chat {
                 tab,

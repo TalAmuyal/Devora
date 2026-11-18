@@ -183,7 +183,8 @@ impl RepoUpdater {
         self.settings.send_replace(settings);
     }
 
-    pub fn shutdown(&self) {
+    /// Fails when the admitted checkout outlives the wait; it then finishes on its own.
+    pub fn shutdown(&self) -> Result<(), String> {
         self.work.stop.store(true, Ordering::Release);
         self.work.wake.notify_one();
         let done = self.work.done.0.lock().unwrap_or_else(|e| e.into_inner());
@@ -194,19 +195,21 @@ impl RepoUpdater {
             .wait_timeout_while(done, SHUTDOWN_WAIT, |done| !*done)
             .unwrap_or_else(|e| e.into_inner());
         if !*done {
-            self.work.log.write(Level::Warn, "repo-update shutdown wait expired after 30 seconds; admitted checkout will finish without interruption");
-            return;
+            let message = "repo-update shutdown wait expired after 30 seconds; admitted checkout will finish without interruption";
+            self.work.log.write(Level::Warn, message);
+            return Err(message.into());
         }
         if let Some(thread) = self.thread.lock().unwrap_or_else(|e| e.into_inner()).take() {
             let _ = thread.join();
         }
+        Ok(())
     }
 }
 
 impl Drop for RepoUpdater {
     fn drop(&mut self) {
         if !self.work.stop.load(Ordering::Acquire) {
-            self.shutdown();
+            let _ = self.shutdown();
         }
     }
 }
@@ -509,7 +512,7 @@ mod tests {
             received.recv_timeout(Duration::from_secs(5)).unwrap(),
             second
         );
-        worker.shutdown();
+        worker.shutdown().unwrap();
         assert!(
             received.try_recv().is_err(),
             "overlapping requests produce one pending round"
@@ -563,7 +566,7 @@ mod tests {
         .into_iter()
         .collect();
         assert_eq!(expected, actual);
-        worker.shutdown();
+        worker.shutdown().unwrap();
         assert!(received.try_recv().is_err());
     }
     #[tokio::test(start_paused = true)]

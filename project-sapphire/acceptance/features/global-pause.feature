@@ -77,3 +77,32 @@ Feature: Global Pause
     When the user resumes the agent chat
     Then the agent "Echo" should be idle
     And the pause widget shows "Pause"
+
+  Scenario: Quitting waits for an agent's question, then quits by itself once it's answered
+    When the user sends the agent prompt "permission"
+    Then the agent chat shows a permission card
+    When Sapphire is asked to quit
+    Then Sapphire waits to quit for "Echo", which is "waiting for an answer"
+    And Devora is globally paused
+    And the toolbar shows "Pausing… (0 of 1)"
+    When the user shows the agent "Echo" from the quit progress
+    And the user allows the agent permission with Command+Y
+    Then Sapphire quits by itself
+
+  Scenario: Cancelling a waiting quit keeps the global hold
+    When the user sends the agent prompt "permission"
+    Then the agent chat shows a permission card
+    When Sapphire is asked to quit
+    Then Sapphire waits to quit for "Echo", which is "waiting for an answer"
+    When the user cancels the quit
+    Then Sapphire is still running with no quit pending
+    When the user allows the agent permission with Command+Y
+    Then the toolbar shows "Paused"
+
+  Scenario: Closing the window waits too, and Interrupt and quit cuts the turn short
+    When the user sends the agent prompt "stream"
+    Then the agent "Echo" is running a turn
+    When the user closes the window
+    Then Sapphire waits to quit for "Echo", which is "running a turn"
+    When the user interrupts and quits
+    Then Sapphire quits by itself

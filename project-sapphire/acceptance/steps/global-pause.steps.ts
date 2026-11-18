@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { When, Then } from '@cucumber/cucumber';
+import { exited, hasExited } from '../support/app';
 import { SapphireWorld } from '../support/world';
 
 When('the user globally pauses Devora', async function (this: SapphireWorld) {
@@ -65,4 +66,48 @@ Then('the agent resume action is available', async function (this: SapphireWorld
   const chat = await this.bridge.agentChat();
   assert.equal(chat.pauseWidget.label, 'Resume');
   assert.equal(chat.pauseWidget.enabled, true);
+});
+
+const ACTIVITIES: Record<string, string> = {
+  'running a turn': 'turn',
+  'waiting for an answer': 'question',
+};
+
+When('Sapphire is asked to quit', async function (this: SapphireWorld) {
+  await this.bridge.quit();
+});
+When('the user closes the window', async function (this: SapphireWorld) {
+  await this.bridge.closeWindow();
+});
+Then('the agent {string} is running a turn', async function (this: SapphireWorld, name: string) {
+  await this.bridge.waitFor('the running turn', () => this.bridge.state(), state => state.runningAgents.running.some(agent => agent.name === name && agent.activity === 'turn'));
+});
+Then('Sapphire waits to quit for {string}, which is {string}', async function (this: SapphireWorld, name: string, activity: string) {
+  const expected = ACTIVITIES[activity];
+  assert.ok(expected, `unknown activity "${activity}"`);
+  await this.bridge.waitFor(`the quit waiting for ${name}`, () => this.bridge.state(), state =>
+    state.quitPending && state.pauseProgress?.mode === 'quitting'
+    && state.runningAgents.running.some(agent => agent.name === name && agent.activity === expected));
+});
+Then('the toolbar shows {string}', async function (this: SapphireWorld, indicator: string) {
+  await this.bridge.waitFor(`the toolbar's "${indicator}"`, () => this.bridge.state(), state => state.pauseIndicator === indicator);
+});
+When('the user shows the agent {string} from the quit progress', async function (this: SapphireWorld, name: string) {
+  await this.bridge.pauseProgressShow(name);
+  await this.bridge.waitFor('the progress closed over the agent tab', () => this.bridge.state(), state =>
+    state.pauseProgress === null && state.tabs.find(tab => tab.id === state.activeTab)?.title === name);
+});
+When('the user cancels the quit', async function (this: SapphireWorld) {
+  await this.bridge.pauseProgressButton('Cancel Quit');
+});
+When('the user interrupts and quits', async function (this: SapphireWorld) {
+  await this.bridge.pauseProgressButton('Interrupt and Quit', true);
+});
+Then('Sapphire quits by itself', async function (this: SapphireWorld) {
+  assert.equal(await exited(this.app, 30_000), 0);
+});
+Then('Sapphire is still running with no quit pending', async function (this: SapphireWorld) {
+  const state = await this.bridge.waitFor('the cancelled quit', () => this.bridge.state(), state => !state.quitPending && state.pauseProgress === null);
+  assert.equal(hasExited(this.app), false);
+  assert.equal(state.globalPaused, true, 'the hold stays after Cancel');
 });

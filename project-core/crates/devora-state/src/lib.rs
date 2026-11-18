@@ -19,7 +19,8 @@ mod persist;
 mod store;
 
 pub use chat::{
-    Chat, ChatCommand, ChatContext, ChatEvent, ChatPhase, ChatUpdate, PermissionQuestion,
+    AgentActivity, Chat, ChatCommand, ChatContext, ChatEvent, ChatPhase, ChatUpdate,
+    PermissionQuestion, RunningAgent, RunningAgents,
 };
 pub use command::{Command, Event, StateError};
 pub use feed::{feed, Feed, Subscription};
