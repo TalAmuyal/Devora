@@ -1,3 +1,4 @@
+import CoreGraphics
 import XCTest
 
 /// Real key events through the key router: Sapphire's own chords act on the app, and every other key reaches the shell unchanged.
@@ -10,6 +11,9 @@ final class KeyRoutingUITests: XCTestCase {
 		scratch = FileManager.default.temporaryDirectory.appending(path: "sapphire-uitest-\(UUID().uuidString)")
 		try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
 	}
+
+	/// What the app-wide shortcuts made of each modifier event (`InputTrace`).
+	private var inputTrace: URL { scratch.appending(path: "input-trace.log") }
 
 	override func tearDownWithError() throws {
 		try? FileManager.default.removeItem(at: scratch)
@@ -24,6 +28,7 @@ final class KeyRoutingUITests: XCTestCase {
 		app.launchEnvironment["DEVORA_CONFIG_PATH"] = config.path
 		app.launchEnvironment["DEVORA_STATE_DIR"] = scratch.appending(path: "state").path
 		app.launchEnvironment["UITEST_OUT"] = scratch.path
+		app.launchEnvironment["DEVORA_INPUT_TRACE"] = inputTrace.path
 		app.launch()
 		addTeardownBlock { @MainActor [app] in app?.terminate() }
 		app.openFirstShell()
@@ -74,12 +79,27 @@ final class KeyRoutingUITests: XCTestCase {
 		let field = app.descendants(matching: .any)["command-palette-search"].firstMatch
 		tapShift(); tapShift()
 		app.typeText("q")
-		XCTAssertTrue(field.waitForExistence(timeout: 5), app.debugDescription)
+		assertShiftShiftOpened(field)
 		XCTAssertEqual(field.value as? String, "q")
 		app.typeKey(.escape, modifierFlags: [])
 		XCTAssertTrue(field.waitForNonExistence(timeout: 5))
 		tapShift(); tapShift()
-		XCTAssertTrue(field.waitForExistence(timeout: 5))
+		assertShiftShiftOpened(field)
+	}
+
+	/// Fails unless the palette's field appears. On failure, it attaches what the app made of the taps: whether they arrived, for which window, and how the double tap read them.
+	/// Beside that is whether the system still has Shift down. If it does, XCUITest never posted the last release, which it has done right after a relaunch.
+	/// If not, the release was posted, or an earlier one is the one missing.
+	@MainActor
+	private func assertShiftShiftOpened(_ field: XCUIElement, file: StaticString = #filePath, line: UInt = #line) {
+		if field.waitForExistence(timeout: 5) { return }
+		let appTrace = (try? String(contentsOf: inputTrace, encoding: .utf8)) ?? "(no input trace)"
+		let shiftDown = CGEventSource.flagsState(.combinedSessionState).contains(.maskShift)
+		let trace = XCTAttachment(string: "\(appTrace)system now: Shift down \(shiftDown)\n")
+		trace.name = "The app's shortcut decisions"
+		trace.lifetime = .keepAlways
+		add(trace)
+		XCTFail("Shift-Shift must open the command palette\n\(app.debugDescription)", file: file, line: line)
 	}
 
 	/// Types a command and Return, then waits for the file it writes in `UITEST_OUT` and returns its contents.
