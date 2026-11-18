@@ -103,7 +103,7 @@ description = "Build the complete Devora Ember.app bundle with all resources"
 run = "./bundler/macos-ember/bundle-ember.sh"
 
 [tasks.sapphire-bundle]
-description = "Build and ad hoc sign Devora Sapphire.app with its bundled tools and resources"
+description = "Build and sign Devora Sapphire.app with its bundled tools and resources"
 run = "./bundler/macos-sapphire/bundle-sapphire.sh"
 
 [tasks.sapphire-create-dmg]
@@ -141,22 +141,19 @@ if [[ ! -d "$INSTALL_DIR" ]]; then
 	exit 1
 fi
 
-./bundler/macos-ember/bundle-ember.sh
-
-# The Tauri bundle already has the release name; source installs add a suffix or dev version.
-APP_SRC="project-ember/src-tauri/target/release/bundle/macos/Devora Ember.app"
-VERSION=$(cat "$APP_SRC/Contents/Resources/VERSION")
+# The release bundle is named "Devora Ember"; source installs add a suffix or dev version.
+VERSION=$(./bundler/macos-ember/effective-version.sh)
 if [[ -n "$SUFFIX" ]]; then
 	APP_NAME="Devora Ember-${SUFFIX}"
-	# Read by Ember for the window title; the plist names drive the menu bar, Dock, and Cmd+Tab.
-	printf "%s" "$SUFFIX" > "$APP_SRC/Contents/Resources/INSTALL_SUFFIX"
 elif [[ "$VERSION" == *-dev.* ]]; then
 	APP_NAME="Devora Ember-${VERSION}"
 else
 	APP_NAME="Devora Ember"
 fi
-plutil -replace CFBundleName -string "$APP_NAME" "$APP_SRC/Contents/Info.plist"
-plutil -replace CFBundleDisplayName -string "$APP_NAME" "$APP_SRC/Contents/Info.plist"
+./bundler/macos-ember/bundle-ember.sh --name "$APP_NAME" ${SUFFIX:+--suffix "$SUFFIX"}
+
+# The bundle is signed and sealed: move it as is, never edit it.
+APP_SRC="project-ember/src-tauri/target/release/bundle/macos/Devora Ember.app"
 APP_DEST="${INSTALL_DIR%/}/${APP_NAME}.app"
 rm -rf "$APP_DEST"
 mv "$APP_SRC" "$APP_DEST"

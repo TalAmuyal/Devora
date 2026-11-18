@@ -83,7 +83,7 @@ This builds `Devora Ember.app` and installs it to `/Applications`.
 To build and install the native Sapphire app, run `mise run sapphire-install`.
 Use `--path <directory>` to choose the destination, or `--suffix <name>` for a side-by-side install with separate app state.
 Untagged builds include their `-dev.` version in the app name.
-This uses an ad hoc signature for local use.
+Both installs sign with the "Devora Local Signing" certificate when your login keychain has it, so macOS keeps the apps' permissions across rebuilds and suffixes; without it they are signed ad hoc, and macOS asks again after every build.
 Nightly Sapphire downloads use the installer above.
 
 ## Components

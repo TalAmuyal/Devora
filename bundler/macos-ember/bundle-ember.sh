@@ -2,14 +2,18 @@
 
 set -eEo pipefail
 
-HELPER_TEXT="Usage: $0 [--help|-h] [--open]
+HELPER_TEXT="Usage: $0 [--help|-h] [--open] [--name <name>] [--suffix <suffix>]
 
-  --open      Open the built app after bundling
-  --help, -h  Show this help message and exit
+  --open             Open the built app after bundling
+  --name <name>      App name for the menu bar, Dock and Cmd+Tab (default: Devora Ember)
+  --suffix <suffix>  Install suffix, shown in the window title
+  --help, -h         Show this help message and exit
 "
 
 # Parse arguments
 SHOULD_OPEN=false
+APP_NAME=""
+SUFFIX=""
 while [[ $# -gt 0 ]]; do
 	case "$1" in
 		--help|-h)
@@ -19,6 +23,14 @@ while [[ $# -gt 0 ]]; do
 		--open)
 			SHOULD_OPEN=true
 			shift
+			;;
+		--name)
+			APP_NAME="${2:?--name requires a value}"
+			shift 2
+			;;
+		--suffix)
+			SUFFIX="${2:?--suffix requires a value}"
+			shift 2
 			;;
 		*)
 			echo "Unknown argument: $1"
@@ -117,8 +129,28 @@ echo "==> Bundling resources into Devora Ember.app..."
 
 echo "    Resources bundled."
 
+if [[ -n "$SUFFIX" ]]; then
+	# Read by Ember for the window title.
+	printf "%s" "$SUFFIX" > "$APP_DIR/Contents/Resources/INSTALL_SUFFIX"
+fi
+if [[ -n "$APP_NAME" ]]; then
+	plutil -replace CFBundleName -string "$APP_NAME" "$APP_DIR/Contents/Info.plist"
+	plutil -replace CFBundleDisplayName -string "$APP_NAME" "$APP_DIR/Contents/Info.plist"
+fi
+
+# --- Sign ---
+
+echo ""
+echo "==> Signing Devora Ember.app..."
+
+"$BUNDLER_DIR/sign-macos-app.sh" "$APP_DIR"
+
 # --- Done ---
 
 echo ""
 echo "Done. App bundle at:"
 echo "  $APP_DIR"
+
+if [[ "$SHOULD_OPEN" == true ]]; then
+	open "$APP_DIR"
+fi

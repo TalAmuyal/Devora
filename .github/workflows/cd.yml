@@ -2,6 +2,11 @@ name: CD
 
 on:
   workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish the release (off to only build and check the apps, e.g. on a branch)
+        type: boolean
+        default: true
   schedule:
     # Daily at midnight UTC-3 (= 03:00 UTC)
     - cron: '0 3 * * *'
@@ -145,11 +150,26 @@ jobs:
           key: ember-npm-${{ runner.os }}-${{ hashFiles('project-ember/package-lock.json', 'project-ember/scripts/patch-xterm.ts') }}
           restore-keys: ember-npm-${{ runner.os }}-
 
+      - name: Import the signing identity
+        env:
+          DEVORA_SIGNING_P12: ${{ secrets.DEVORA_SIGNING_P12 }}
+          DEVORA_SIGNING_P12_PASSWORD: ${{ secrets.DEVORA_SIGNING_P12_PASSWORD }}
+        run: bundler/ci-signing-keychain.sh create
+
       - name: Build Ember variant
+        env:
+          DEVORA_SIGNING_IDENTITY: Devora Local Signing
         run: mise run ember-bundle
+
+      - name: Delete the signing identity
+        if: always()
+        run: bundler/ci-signing-keychain.sh delete
 
       - name: Create Ember DMG
         run: mise run ember-create-dmg
+
+      - name: Check the DMG's signature
+        run: bundler/verify-dmg-signature.sh project-ember/src-tauri/target/release/bundle/macos/Devora-Ember.dmg com.devora-org.devora
 
       - name: Smoke test
         run: |
@@ -240,8 +260,20 @@ jobs:
         if: steps.cache-ghostty.outputs.cache-hit != 'true'
         run: mise run -C project-sapphire ghostty-build
 
+      - name: Import the signing identity
+        env:
+          DEVORA_SIGNING_P12: ${{ secrets.DEVORA_SIGNING_P12 }}
+          DEVORA_SIGNING_P12_PASSWORD: ${{ secrets.DEVORA_SIGNING_P12_PASSWORD }}
+        run: bundler/ci-signing-keychain.sh create
+
       - name: Bundle Sapphire
+        env:
+          DEVORA_SIGNING_IDENTITY: Devora Local Signing
         run: mise run sapphire-bundle
+
+      - name: Delete the signing identity
+        if: always()
+        run: bundler/ci-signing-keychain.sh delete
 
       - name: Install bundle smoke dependencies
         run: mise run -C project-sapphire npm-install
@@ -251,6 +283,9 @@ jobs:
 
       - name: Create Sapphire DMG
         run: mise run sapphire-create-dmg
+
+      - name: Check the DMG's signature
+        run: bundler/verify-dmg-signature.sh project-sapphire/build/bundle/Devora-Sapphire.dmg dev.devora.sapphire
 
       - uses: actions/upload-artifact@v7
         with:
@@ -262,7 +297,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [check-changes, build-and-release, build-sapphire]
     # Publish Ember on either channel even if Sapphire failed or was skipped.
-    if: always() && !cancelled() && needs.build-and-release.result == 'success'
+    if: always() && !cancelled() && needs.build-and-release.result == 'success' && (github.event_name != 'workflow_dispatch' || inputs.publish)
     steps:
       - uses: actions/checkout@v6
 
