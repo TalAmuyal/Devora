@@ -40,6 +40,8 @@ try {
     assert.equal(plistValue('CFBundleIdentifier'), 'dev.devora.sapphire', 'The distribution keeps the published bundle id, not the development build\'s');
     const displayName = plistValue('CFBundleDisplayName');
     assert.equal(displayName, `Devora Sapphire${suffix ? `-${suffix}` : version.includes('-dev.') ? `-${version}` : ''}`);
+    // The same title as Ember's, from the bundle's VERSION and INSTALL_SUFFIX.
+    assert.equal((await launched.bridge.state()).windowTitle, `Devora Sapphire ${version}${suffix ? ` [${suffix}]` : ''}`);
     await launched.bridge.clearWindowSurfaces();
     await launched.bridge.dispatch({ command: 'openShell' });
     const state = await launched.bridge.waitFor('the bundled shell', () => launched.bridge.state(), state => state.tabs.length === 1 && state.tabs[0].terminal === 'running');

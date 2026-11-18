@@ -976,7 +976,7 @@ final class TestBridge {
 			"fontSize": TerminalRuntime.shared.fontSize,
 			"windowLayers": surfaces.windowStack.layers.map(\.spec.name),
 			"editingText": surfaces.router.isEditingText,
-			"version": store.version,
+			"windowTitle": NSApp.windows.first(where: { $0.isVisible && $0.contentView != nil })?.title ?? NSNull(),
 			"globalPaused": store.app.globalPaused,
 			"profiles": store.profiles.map { ["name": $0.name, "path": $0.path] },
 			"selectedProfile": store.selectedProfilePath ?? NSNull(),

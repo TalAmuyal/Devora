@@ -261,10 +261,6 @@ impl DevoraCore {
             .map_err(|error| format!("could not read {path}: {error}").into())
     }
 
-    pub fn version(&self) -> Result<String, CoreError> {
-        Ok(env!("CARGO_PKG_VERSION").to_string())
-    }
-
     pub fn list_profiles(&self) -> Result<Vec<Profile>, CoreError> {
         let profiles = workspace::list_profiles_in(&self.config_path)?;
         Ok(profiles.into_iter().map(Profile::from).collect())

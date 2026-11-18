@@ -244,6 +244,19 @@ pub fn sapphire_state_path(resources_dir: Option<String>) -> Result<String, Core
     Ok(path.to_string_lossy().into_owned())
 }
 
+/// Sapphire's window title, as Ember's: `Devora Sapphire <version>`, with ` [<suffix>]` for a bundle with an install suffix.
+///
+/// The version is the bundle's `VERSION`, or this build's own outside a bundle (a development run).
+/// `resources_dir` is the app bundle's `Resources` directory, as for [`sapphire_state_path`].
+#[uniffi::export]
+pub fn sapphire_window_title(resources_dir: Option<String>) -> Result<String, CoreError> {
+    let version = AppVersion::read(
+        resources_dir.as_deref().map(Path::new),
+        env!("CARGO_PKG_VERSION"),
+    );
+    Ok(version.window_title("Devora Sapphire"))
+}
+
 fn state_path(
     state_dir: Option<OsString>,
     home: Option<OsString>,
@@ -411,6 +424,35 @@ mod tests {
             state_path(Some("".into()), home, Some("".into())).unwrap(),
             Path::new("/Users/me/Library/Application Support/Devora Sapphire/state.db"),
             "empty values count as unset"
+        );
+    }
+
+    #[test]
+    fn the_window_title_shows_the_bundle_version_and_install_suffix() {
+        let bundle = tempfile::tempdir().unwrap();
+        let resources = Some(bundle.path().to_string_lossy().into_owned());
+        std::fs::write(bundle.path().join("VERSION"), "2026-08-03.0-dev.7\n").unwrap();
+        assert_eq!(
+            sapphire_window_title(resources.clone()).unwrap(),
+            "Devora Sapphire 2026-08-03.0-dev.7"
+        );
+
+        std::fs::write(bundle.path().join("INSTALL_SUFFIX"), "beta\n").unwrap();
+        assert_eq!(
+            sapphire_window_title(resources).unwrap(),
+            "Devora Sapphire 2026-08-03.0-dev.7 [beta]"
+        );
+    }
+
+    #[test]
+    fn outside_a_bundle_the_window_title_shows_the_build_version() {
+        let expected = format!("Devora Sapphire {}", env!("CARGO_PKG_VERSION"));
+        assert_eq!(sapphire_window_title(None).unwrap(), expected);
+        let empty = tempfile::tempdir().unwrap();
+        assert_eq!(
+            sapphire_window_title(Some(empty.path().to_string_lossy().into_owned())).unwrap(),
+            expected,
+            "a development app's Resources has no VERSION"
         );
     }
 
