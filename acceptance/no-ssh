@@ -1,0 +1,5 @@
+#!/bin/sh
+# The acceptance runs' GIT_SSH_COMMAND (NO_INTERNET in project-ember/tests/support/claude-helper.ts): git over ssh from a
+# test process fails at once, saying so, as an escaped HTTP request does at the closed proxy port.
+echo "no-ssh: tests have no internet; refused ssh $*" >&2
+exit 255

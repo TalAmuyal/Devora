@@ -30,6 +30,7 @@ bash scripts/ci/test-outcomes/test.sh
 bash scripts/ci/flake-report.test.sh
 bash scripts/with-ui-lock.test.sh
 bash project-sapphire/scripts/check-ui-scrolls.test.sh
+bash acceptance/no-ssh.test.sh
 mise run -C project-core test
 mise run -C project-debi test
 mise run -C project-judgess test

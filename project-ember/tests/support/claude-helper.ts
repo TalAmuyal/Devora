@@ -22,8 +22,20 @@ export const CLAUDE_CONFIG_PATH = '/tmp/ember-bdd-claude';
  */
 export const CLAUDE_TEST_STATE = { hasCompletedOnboarding: true, hasSeenAutoDefaultNudge: true, hasSeenEffortMediumNudge: true };
 
-/** Proxy variables that send every request but this machine's to a closed port, so one that escapes to the internet fails at once, every run. */
-export const NO_INTERNET = { HTTPS_PROXY: 'http://127.0.0.1:9', HTTP_PROXY: 'http://127.0.0.1:9', NO_PROXY: '127.0.0.1,localhost' };
+/**
+ * What keeps the tests off the internet, so a request that escapes fails at once, every run:
+ * - Proxy variables that send every request but this machine's to a closed port.
+ * - A `GIT_SSH_COMMAND` that refuses (`acceptance/no-ssh`): git lets it override `core.sshCommand`, which Claude Code sets for its own git calls. A direct `ssh` call can't be stopped from the environment.
+ * - Claude Code's official marketplace auto-install off: with HTTPS refused, it falls back to git over ssh.
+ */
+export const NO_INTERNET = {
+  HTTPS_PROXY: 'http://127.0.0.1:9',
+  HTTP_PROXY: 'http://127.0.0.1:9',
+  NO_PROXY: '127.0.0.1,localhost',
+  // Run through a shell, so quoted.
+  GIT_SSH_COMMAND: `'${path.resolve(import.meta.dirname, '../../../acceptance/no-ssh').replaceAll("'", "'\\''")}'`,
+  CLAUDE_CODE_DISABLE_OFFICIAL_MARKETPLACE_AUTOINSTALL: '1',
+};
 
 /** A native terminal uses the same interactive CLI/onboarding/permission/exit protocol. */
 export interface ClaudeTerminal {
