@@ -8,6 +8,12 @@ Accepted
 
 2026-07-09, revised 2026-07-29
 
+## Scope
+
+Devora Ember.
+Sapphire borrows only its key-routing model: one router, app-wide shortcuts before any surface, stacks for what has no native form.
+Which of Sapphire's surfaces are native controls and which are layers is ADR-010's decision (amended on 2026-11-18), not this one's.
+
 ## Context
 
 Devora-Ember stacks UI surfaces: full pages (Workspace Hub, Settings Hub, Health Hub, User Guide, Command Palette), modal dialogs, an anchored dropdown, and per-session surfaces (Crit review, task-creation progress) over a terminal.

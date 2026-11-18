@@ -1,7 +1,14 @@
 # Layer System (Sapphire) — current reference
 
-Sapphire's port of ADR-003: stacked surfaces are routed and focused by their position in a stack, and their extent comes from which stack they are in.
-The contract is Ember's ([`project-ember/src/ui/layers/CLAUDE.md`](../../../project-ember/src/ui/layers/CLAUDE.md)); this file records how Sapphire implements it and where it differs.
+Sapphire borrows ADR-003's key-routing model from Ember: stacked surfaces are routed and focused by their position in a stack, and their extent comes from which stack they are in.
+Ember's contract ([`project-ember/src/ui/layers/CLAUDE.md`](../../../project-ember/src/ui/layers/CLAUDE.md)) is where the model comes from; this file records how Sapphire implements it and where it differs.
+
+## Native controls first
+
+Layers are for what has no native control (ADR-010, "Native controls first"): full-window pages (the hubs, the User Guide, the Command Palette) and surfaces over a single tab.
+A window-modal dialog is a sheet, details anchored to a control are a popover, a confirmation is an alert and a dropdown is a menu.
+Those are windows of their own, so the router, which routes only the main window's keys, leaves their keys to them; when one closes, the focus goes back to the active tab's top layer (`LayerRouter.focusActiveTab`).
+The dialogs below that are layers were built before this rule, and move to native controls as their own items.
 
 ## Topology: n + 1 stacks
 

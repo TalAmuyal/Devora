@@ -98,6 +98,14 @@ All of it sits over the shared core (ADR-007) and its state model (ADR-008).
 	- Every bundled helper binary (`debi`, `judgess`, …) is signed the same way.
 	- The `NS*UsageDescription` strings cover the privacy prompts that child processes trigger, since Sapphire becomes their responsible process.
 - **Theme tokens from the core** map to SwiftUI colors, the libghostty palette and Neovim highlight groups, so a theme change repaints every pane.
+- **Native controls first** (amended on 2026-11-18)
+	- A surface that macOS has a control for uses that control: a sheet for a window-modal dialog, a popover for details anchored to a control, an alert for a confirmation, a menu for a dropdown.
+		They look and behave as the platform's do, and they handle their own keys (Escape, Tab, Return).
+	- Sapphire's own layers, which borrow ADR-003's routing model, are for what has no native form: full-window pages (the hubs, the User Guide, the Command Palette) and surfaces over a single tab (task-creation progress).
+	- The key router stays: app-wide shortcuts still have to be handled before libghostty sees a key.
+		It only routes keys for the main window, and a native sheet, popover or alert is a window of its own, so it never intercepts their keys.
+		When a native control closes, the focus goes back to the active tab's top layer.
+	- Surfaces built as layers before this amendment move to native controls as their own items.
 
 ## Alternatives considered
 
