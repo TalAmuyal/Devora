@@ -1254,3 +1254,31 @@ fn shutdown_reports_an_agent_that_had_to_be_terminated() {
         "Stubborn: Claude didn't stop within the grace period and was terminated"
     );
 }
+
+#[test]
+fn shutdown_reports_a_terminated_agent_during_a_global_hold_too() {
+    let f = Fixture::new(false);
+    let events = f.core.subscribe_agent_chats().unwrap();
+    f.create("Stubborn");
+    let tab = f.open("Stubborn");
+    let chat = f.wait(&events, |c| c.tab == tab && c.phase == ChatPhase::Running);
+    block_on(
+        f.core
+            .send_agent_turn(tab, chat.generation, "ignore-interrupt".into()),
+    )
+    .unwrap();
+    f.wait_running(&events, |r| {
+        activities(r) == [("Stubborn".into(), AgentActivity::Turn)]
+    });
+    // A quit that waited holds Devora first; "Interrupt and quit" then shuts down.
+    f.core
+        .dispatch(Command::SetGlobalPaused { paused: true })
+        .unwrap();
+    f.wait(&events, |c| c.tab == tab && c.globally_held);
+
+    let error = block_on(f.core.shutdown_agents()).unwrap_err();
+    assert_eq!(
+        error.to_string(),
+        "Stubborn: Claude didn't stop within the grace period and was terminated"
+    );
+}

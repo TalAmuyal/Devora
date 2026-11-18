@@ -385,9 +385,14 @@ export class Bridge {
     }
   }
 
-  /** Clicks the toolbar's "Pausing…", which opens the pause progress layer. */
+  /** Clicks the toolbar's pause status, which opens the pause progress popover. */
   async openPauseProgress(): Promise<void> {
     await this.request('POST', '/test/pause-progress', { action: 'open' });
+  }
+
+  /** Hides the pause progress popover, as Escape or a click elsewhere does. */
+  async hidePauseProgress(): Promise<void> {
+    await this.request('POST', '/test/pause-progress', { action: 'hide' });
   }
 
   /** Clicks an agent's Show in the pause progress layer. */

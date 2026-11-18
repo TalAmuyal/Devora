@@ -96,7 +96,8 @@ impl Background {
 
     pub fn shutdown(&self) {
         if let Ok(running) = &self.0 {
-            running.updater.shutdown();
+            // A checkout outliving the wait is already in the log, and finishes on its own.
+            let _ = running.updater.shutdown();
         }
     }
 }

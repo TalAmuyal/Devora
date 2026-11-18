@@ -945,14 +945,7 @@ async fn run_session(
             while let Some(event) = running.next_update().await {
                 publish(inner, state, key, generation, event);
             }
-            let stop = result?;
-            let mut inner = lock(inner);
-            if inner.closing && !stop.graceful {
-                inner.shutdown_problems.push(format!(
-                    "{}: Claude didn't stop within the grace period and was terminated",
-                    key.name
-                ));
-            }
+            note_forced_stop(inner, key, &result?);
             return Ok(());
         }
         tokio::select! {
@@ -971,6 +964,17 @@ async fn run_session(
                 publish(inner, state, key, generation, event);
             }
         }
+    }
+}
+
+/// A stop that had to kill Claude during shutdown is one of the shutdown's problems.
+fn note_forced_stop(inner: &Mutex<Inner>, key: &Key, stop: &devora_agent::session::StopInfo) {
+    let mut inner = lock(inner);
+    if inner.closing && !stop.graceful {
+        inner.shutdown_problems.push(format!(
+            "{}: Claude didn't stop within the grace period and was terminated",
+            key.name
+        ));
     }
 }
 

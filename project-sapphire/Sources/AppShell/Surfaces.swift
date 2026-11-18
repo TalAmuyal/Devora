@@ -31,6 +31,8 @@ final class Surfaces {
 	private(set) var pauseProgress: PauseProgressModel?
 	/// A quit waits for the agents to stop cleanly: it goes on by itself once they have, until Cancel, even with its layer closed to answer a question.
 	private(set) var quitPending = false
+	/// What went wrong while stopping the agents, once shown: the agents are stopped, so the app can only quit, and the toolbar keeps offering that until it does.
+	private(set) var shutdownProblems: [String]?
 	/// The open New Task dialog; nil while none is.
 	@ObservationIgnored private(set) var newTask: NewTaskDialogModel?
 	/// The open Settings Hub; nil while it is closed.
@@ -378,6 +380,8 @@ final class Surfaces {
 		case .quitting:
 			[
 				.init(title: "Interrupt and Quit", isDestructive: true) { [unowned self] in
+					// This quit replaces the waiting one, which must not quit again once the agents are gone.
+					quitPending = false
 					hidePauseProgress()
 					AppTermination.interruptAndQuit()
 				},
@@ -390,6 +394,22 @@ final class Surfaces {
 			[.init(title: "Quit", isDefault: true) { AppTermination.quitAfterProblems() }]
 		}
 		pauseProgress = PauseProgressModel(mode: mode, actions: actions)
+	}
+
+	/// Shows what went wrong while stopping, and keeps it until the app quits (`shutdownProblems`).
+	func showShutdownProblems(_ problems: [String]) {
+		quitPending = false
+		shutdownProblems = problems
+		showPauseProgress(.problems(problems))
+	}
+
+	/// What the toolbar's status opens: the shutdown's problems once there are any, else the waiting quit or the hold's progress.
+	func showPauseStatus() {
+		if let shutdownProblems {
+			showPauseProgress(.problems(shutdownProblems))
+		} else {
+			showPauseProgress(quitPending ? .quitting : .pausing)
+		}
 	}
 
 	/// Hides the popover; a waiting quit stays armed.

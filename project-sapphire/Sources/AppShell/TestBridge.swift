@@ -372,10 +372,16 @@ final class TestBridge {
 
 	/// Clicks the toolbar's pause status (`open`), or what its popover draws: a button (by its title), or an agent's Show (by its name).
 	private func pauseProgressAction(_ body: [String: Any]) throws {
-		if body["action"] as? String == "open" {
-			guard store.pauseIndicator != nil else { throw BridgeError(status: 409, "Devora isn't held") }
-			surfaces.showPauseProgress(surfaces.quitPending ? .quitting : .pausing)
+		switch body["action"] as? String {
+		case "open":
+			guard store.pauseIndicator != nil || surfaces.shutdownProblems != nil else { throw BridgeError(status: 409, "the toolbar shows no pause status") }
+			surfaces.showPauseStatus()
 			return
+		case "hide":
+			// As Escape or a click elsewhere does.
+			surfaces.hidePauseProgress()
+			return
+		default: break
 		}
 		guard let progress = surfaces.pauseProgress else { throw BridgeError(status: 409, "no pause progress is open") }
 		switch body["action"] as? String {
@@ -1031,7 +1037,7 @@ final class TestBridge {
 			"health": healthState(),
 			"dialog": dialogState(),
 			"pauseProgress": pauseProgressState(),
-			"pauseIndicator": store.pauseIndicator ?? NSNull(),
+			"pauseIndicator": (surfaces.shutdownProblems != nil ? "Stopped" : store.pauseIndicator) ?? NSNull(),
 			"quitPending": surfaces.quitPending,
 			"runningAgents": runningAgentsState(),
 			"newTask": newTaskState(),

@@ -75,12 +75,12 @@ public struct RootView: View {
 		.navigationTitle(store.windowTitle)
 		.toolbar {
 			if store.startupProblem == nil {
-				if let indicator = store.pauseIndicator {
+				if let indicator = surfaces.shutdownProblems != nil ? "Stopped" : store.pauseIndicator {
 					// Its own item, so that the toolbar gives it its own, evenly padded capsule.
 					ToolbarItem {
-						Button(indicator) { surfaces.showPauseProgress(surfaces.quitPending ? .quitting : .pausing) }
+						Button(indicator) { surfaces.showPauseStatus() }
 							.accessibilityIdentifier("global-pause-indicator")
-							.help("Show who Devora is still waiting for")
+							.help(surfaces.shutdownProblems != nil ? "Show what went wrong while stopping, and quit" : "Show who Devora is still waiting for")
 							.popover(isPresented: Binding(
 								get: { surfaces.pauseProgress != nil },
 								set: { if !$0 { surfaces.hidePauseProgress() } }
@@ -129,7 +129,7 @@ public struct RootView: View {
 		AppTermination.saveDrafts = { [weak store] in store?.flushAgentDrafts() ?? true }
 		AppTermination.pauseAgents = store.agentShutdown()
 		AppTermination.mayQuit = { [weak surfaces] in surfaces?.mayQuit() ?? true }
-		AppTermination.showProblems = { [weak surfaces] problems in surfaces?.showPauseProgress(.problems(problems)) }
+		AppTermination.showProblems = { [weak surfaces] problems in surfaces?.showShutdownProblems(problems) }
 		AppTermination.logWarning = { [weak store] message in store?.logWarning(message) }
 		await store.dispatch(.load).value
 		await store.startRepoUpdates()

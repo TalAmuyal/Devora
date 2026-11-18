@@ -34,6 +34,10 @@ final class PauseProgressModel {
 		self.actions = actions
 	}
 
+	var isProblems: Bool {
+		if case .problems = mode { true } else { false }
+	}
+
 	var title: String {
 		switch mode {
 		case .pausing: "Pausing Devora"
@@ -81,6 +85,8 @@ struct PauseProgressView: View {
 		.frame(width: 380, alignment: .leading)
 		// Opaque, rather than the popover's translucent material, so that what's behind doesn't show through.
 		.presentationBackground(Color(nsColor: .windowBackgroundColor))
+		// The agents are stopped, so the problems' Quit is the only way on.
+		.interactiveDismissDisabled(model.isProblems)
 		.accessibilityElement(children: .contain)
 		.accessibilityIdentifier("pause-progress")
 	}

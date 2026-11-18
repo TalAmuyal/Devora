@@ -107,7 +107,24 @@ Then('Sapphire quits by itself', async function (this: SapphireWorld) {
   assert.equal(await exited(this.app, 30_000), 0);
 });
 Then('Sapphire is still running with no quit pending', async function (this: SapphireWorld) {
-  const state = await this.bridge.waitFor('the cancelled quit', () => this.bridge.state(), state => !state.quitPending && state.pauseProgress === null);
+  // The quit commits the hold asynchronously, so its fold may come after the cancel.
+  await this.bridge.waitFor('the cancelled quit, with the hold kept', () => this.bridge.state(), state =>
+    !state.quitPending && state.pauseProgress === null && state.globalPaused);
   assert.equal(hasExited(this.app), false);
-  assert.equal(state.globalPaused, true, 'the hold stays after Cancel');
+});
+Then('Sapphire shows that an agent had to be terminated', async function (this: SapphireWorld) {
+  await this.bridge.waitFor('the shutdown problems', () => this.bridge.state(), state =>
+    state.pauseProgress?.mode === 'problems' && state.pauseProgress.problems.some(problem => problem.includes('was terminated')));
+  assert.equal(hasExited(this.app), false, 'the app waits for the problems to be seen');
+});
+When('the user dismisses the pause progress', async function (this: SapphireWorld) {
+  await this.bridge.hidePauseProgress();
+  await this.bridge.waitFor('the hidden popover', () => this.bridge.state(), state => state.pauseProgress === null);
+});
+When('the user opens the pause status', async function (this: SapphireWorld) {
+  await this.bridge.openPauseProgress();
+});
+When('the user quits from the shutdown problems', async function (this: SapphireWorld) {
+  await this.bridge.waitFor('the shutdown problems', () => this.bridge.state(), state => state.pauseProgress?.mode === 'problems');
+  await this.bridge.pauseProgressButton('Quit', true);
 });

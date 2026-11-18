@@ -106,3 +106,16 @@ Feature: Global Pause
     Then Sapphire waits to quit for "Echo", which is "running a turn"
     When the user interrupts and quits
     Then Sapphire quits by itself
+
+  Scenario: What went wrong while stopping stays offered until the user quits
+    When the user sends the agent prompt "ignore-interrupt"
+    Then the agent "Echo" is running a turn
+    When Sapphire is asked to quit
+    Then Sapphire waits to quit for "Echo", which is "running a turn"
+    When the user interrupts and quits
+    Then Sapphire shows that an agent had to be terminated
+    When the user dismisses the pause progress
+    Then the toolbar shows "Stopped"
+    When the user opens the pause status
+    And the user quits from the shutdown problems
+    Then Sapphire quits by itself
