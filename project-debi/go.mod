@@ -4,8 +4,6 @@ go 1.25.0
 
 require (
 	charm.land/lipgloss/v2 v2.0.2
-	github.com/BurntSushi/toml v1.6.0
-	github.com/goccy/go-yaml v1.19.2
 	github.com/zalando/go-keyring v0.2.8
 	golang.org/x/sync v0.19.0
 )

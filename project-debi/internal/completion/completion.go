@@ -109,12 +109,7 @@ _{{.BinaryName}}_completions() {
 {{- range .Commands}}
 {{- $parent := .}}
 {{- range .SubCommands}}
-{{- if .CompletesFiles}}
-        {{$parent.Name}}:{{.Name}})
-            COMPREPLY=($(compgen -f -- "$cur"))
-            return
-            ;;
-{{- else if .Flags}}
+{{- if .Flags}}
         {{$parent.Name}}:{{.Name}})
             COMPREPLY=($(compgen -W "{{range .Flags}}{{.Name}} {{end}}-h --help" -- "$cur"))
             return
@@ -191,9 +186,7 @@ _{{.BinaryName}}() {
                 case "${words[2]}" in
 {{- range .SubCommands}}
                 {{.Name}})
-{{- if .CompletesFiles}}
-                    _files
-{{- else if .Flags}}
+{{- if .Flags}}
                     local -a subcmd_completions
                     subcmd_completions=(
 {{- range .Flags}}
@@ -294,9 +287,7 @@ complete -c {{$.BinaryName}} -f -n "__{{$.BinaryName}}_needs_subcmd_of {{$cmd.Na
 complete -c {{$.BinaryName}} -f -n "__{{$.BinaryName}}_needs_subcmd_of {{$cmd.Name}}{{if $cmd.Alias}} {{$cmd.Alias}}{{end}}" -a "--help" -d "Show help"
 {{- range .SubCommands}}
 {{- $sub := . -}}
-{{- if .CompletesFiles}}
-complete -c {{$.BinaryName}} -F -n "__{{$.BinaryName}}_seen_subcmd {{$cmd.Name}} {{.Name}}"
-{{- else if .Flags}}
+{{- if .Flags}}
 {{- range .Flags}}
 complete -c {{$.BinaryName}} -f -n "__{{$.BinaryName}}_seen_subcmd {{$cmd.Name}} {{$sub.Name}}" -a "{{.Name}}" -d "{{.Description | fishDoubleQuote}}"
 {{- end}}

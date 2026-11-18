@@ -42,6 +42,10 @@ func testCommands() []cmdinfo.Command {
 						{Name: "--json", Description: "Output status as JSON"},
 					},
 				},
+				{
+					Name:        "submit",
+					Description: "Commit, create tracker task and GitHub PR",
+				},
 			},
 		},
 		{
@@ -55,30 +59,6 @@ func testCommands() []cmdinfo.Command {
 			ArgsHint:    "<bash|zsh|fish>",
 			Group:       "Utility",
 			ValidArgs:   []string{"bash", "zsh", "fish"},
-		},
-		{
-			Name:        "util",
-			Description: "Developer utility commands",
-			ArgsHint:    "<subcommand>",
-			Group:       "Utility",
-			MinArgs:     1,
-			SubCommands: []cmdinfo.SubCommand{
-				{
-					Name:           "json-validate",
-					Description:    "Validate a JSON file",
-					CompletesFiles: true,
-				},
-				{
-					Name:           "yaml-validate",
-					Description:    "Validate a YAML file",
-					CompletesFiles: true,
-				},
-				{
-					Name:           "toml-validate",
-					Description:    "Validate a TOML file",
-					CompletesFiles: true,
-				},
-			},
 		},
 		{
 			Name:           "preview",
@@ -354,7 +334,7 @@ func TestGenerate_PRCheckSubcommandCompletion(t *testing.T) {
 	// `pr` sub-command rendering context, so this test cannot be satisfied
 	// by an unrelated top-level `check` entry.
 	expectations := map[string]string{
-		"bash": `compgen -W "check -h --help"`,
+		"bash": `compgen -W "check submit -h --help"`,
 		"zsh":  `'check:Check the status of the PR for the current branch'`,
 		"fish": `-n "__debi_needs_subcmd_of pr" -a "check"`,
 	}
@@ -402,14 +382,10 @@ func TestGenerate_SubCommandNamesAtSecondLevel(t *testing.T) {
 			tc.generate(&buf, "debi", testCommands())
 			output := buf.String()
 
-			// Sub-command names should appear in second-level completions
-			for _, name := range []string{"json-validate", "yaml-validate", "toml-validate"} {
+			for _, name := range []string{"check", "submit"} {
 				if !strings.Contains(output, name) {
-					t.Fatalf("%s output should contain %q as a sub-command of util", tc.name, name)
+					t.Fatalf("%s output should contain %q as a sub-command of pr", tc.name, name)
 				}
-			}
-			if !strings.Contains(output, "check") {
-				t.Fatalf("%s output should contain 'check' as a sub-command of pr", tc.name)
 			}
 		})
 	}
@@ -454,61 +430,12 @@ func TestGenerateFish_SubCommandFlags(t *testing.T) {
 	}
 }
 
-func TestGenerateBash_SubCommandFileCompletion(t *testing.T) {
-	var buf bytes.Buffer
-	GenerateBash(&buf, "debi", testCommands())
-	output := buf.String()
-
-	for _, name := range []string{"json-validate", "yaml-validate", "toml-validate"} {
-		marker := "util:" + name + ")"
-		if !strings.Contains(output, marker) {
-			t.Fatalf("bash output should contain %q case for third-level file completion", marker)
-		}
-	}
-	if !strings.Contains(output, "compgen -f") {
-		t.Fatal("bash output should contain 'compgen -f' for file completion in util:<validator>")
-	}
-}
-
-func TestGenerateZsh_SubCommandFileCompletion(t *testing.T) {
-	var buf bytes.Buffer
-	GenerateZsh(&buf, "debi", testCommands())
-	output := buf.String()
-
-	for _, name := range []string{"json-validate", "yaml-validate", "toml-validate"} {
-		if !strings.Contains(output, name) {
-			t.Fatalf("zsh output should contain %q in util sub-command handling", name)
-		}
-	}
-	if !strings.Contains(output, "_files") {
-		t.Fatal("zsh output should contain '_files' for file completion in util validators")
-	}
-}
-
-func TestGenerateFish_SubCommandFileCompletion(t *testing.T) {
-	var buf bytes.Buffer
-	GenerateFish(&buf, "debi", testCommands())
-	output := buf.String()
-
-	for _, name := range []string{"json-validate", "yaml-validate", "toml-validate"} {
-		marker := "__debi_seen_subcmd util " + name
-		if !strings.Contains(output, marker) {
-			t.Fatalf("fish output should contain %q for file completion", marker)
-		}
-	}
-	// File completion uses -F flag in fish
-	if !strings.Contains(output, "-F") {
-		t.Fatal("fish output should contain '-F' flag for file completion in util validators")
-	}
-}
-
 func TestGenerateZsh_TopLevelFileCompletion(t *testing.T) {
 	var buf bytes.Buffer
 	GenerateZsh(&buf, "debi", testCommands())
 	output := buf.String()
 
 	// A top-level command with CompletesFiles (preview) must dispatch on whether the current word is a flag: bare TAB -> _files, '-' -> the flags.
-	// The dash-check is unique to this branch (util validators use a bare _files), so it scopes the assertion to the preview rendering context.
 	if !strings.Contains(output, "preview)") {
 		t.Fatal("zsh output should contain a 'preview)' case for the top-level command")
 	}
@@ -623,10 +550,6 @@ func TestGenerateBash_SubCommandSecondLevelFromSubCommands(t *testing.T) {
 	// pr should offer "check" at second level
 	if !strings.Contains(output, "pr)") {
 		t.Fatal("bash output should contain 'pr)' case entry for second-level completion")
-	}
-	// util should offer "json-validate" at second level
-	if !strings.Contains(output, "util)") {
-		t.Fatal("bash output should contain 'util)' case entry for second-level completion")
 	}
 }
 

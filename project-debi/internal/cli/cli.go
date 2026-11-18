@@ -8,19 +8,15 @@ import (
 	"devora/internal/credentials"
 	"devora/internal/git"
 	"devora/internal/health"
-	"devora/internal/jsonvalidate"
 	"devora/internal/process"
 	"devora/internal/prstatus"
 	"devora/internal/shellinit"
 	"devora/internal/submit"
-	"devora/internal/tomlvalidate"
-	"devora/internal/yamlvalidate"
 	// Register the Asana task-tracker provider. The blank import runs the
 	// package's init(), which calls tasktracker.Register("asana", New).
 	_ "devora/internal/tasktracker/asana"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"strings"
 )
@@ -539,57 +535,4 @@ func runGitShortcutShims(args []string) error {
 		return nil
 	}
 	return shellinit.WriteShims(dir)
-}
-
-// The validators exit 2 on usage or file errors (rather than a UsageError's 1) so scripts can tell "invalid" (1) from "could not check" (2).
-func runUtil(args []string) error {
-	subcommand := args[0]
-	subArgs := args[1:]
-
-	switch subcommand {
-	case "-h", "--help":
-		fmt.Println("usage: debi util <subcommand>\n\nSubcommands:\n  json-validate <file|->  Validate a JSON file (use - for stdin)\n  yaml-validate <file|->  Validate a YAML file (use - for stdin)\n  toml-validate <file|->  Validate a TOML file (use - for stdin)")
-		return nil
-	case "json-validate":
-		return runValidate(subArgs, "json-validate", "JSON", jsonvalidate.Validate)
-	case "yaml-validate":
-		return runValidate(subArgs, "yaml-validate", "YAML", yamlvalidate.Validate)
-	case "toml-validate":
-		return runValidate(subArgs, "toml-validate", "TOML", tomlvalidate.Validate)
-	default:
-		return &UsageError{Message: fmt.Sprintf("unknown util subcommand: %s\nusage: debi util <subcommand>", subcommand)}
-	}
-}
-
-func runValidate(args []string, subcommand, format string, validate func(io.Reader) (bool, string, error)) error {
-	if len(args) != 1 {
-		fmt.Fprintf(os.Stderr, "usage: debi util %s <file|->\n", subcommand)
-		return &process.PassthroughError{Code: 2}
-	}
-
-	var reader io.Reader
-	if args[0] == "-" {
-		reader = os.Stdin
-	} else {
-		f, err := os.Open(args[0])
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "error: %s\n", err.Error())
-			return &process.PassthroughError{Code: 2}
-		}
-		defer f.Close()
-		reader = f
-	}
-
-	valid, errMsg, err := validate(reader)
-	if err != nil {
-		return err
-	}
-
-	if valid {
-		fmt.Printf("Valid %s\n", format)
-		return nil
-	}
-
-	fmt.Printf("Invalid %s: %s\n", format, errMsg)
-	return &process.PassthroughError{Code: 1}
 }

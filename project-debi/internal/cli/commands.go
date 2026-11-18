@@ -135,31 +135,6 @@ var commands = []Command{
 			{Name: "--stack", Description: "Open in a new pane instead of replacing the current preview"},
 		},
 	},
-	{
-		Name:        "util",
-		Description: "Developer utility commands",
-		ArgsHint:    "<subcommand>",
-		Group:       "Utility",
-		MinArgs:     1,
-		Run:         func(args []string) error { return runUtil(args) },
-		SubCommands: []cmdinfo.SubCommand{
-			{
-				Name:           "json-validate",
-				Description:    "Validate a JSON file",
-				CompletesFiles: true,
-			},
-			{
-				Name:           "yaml-validate",
-				Description:    "Validate a YAML file",
-				CompletesFiles: true,
-			},
-			{
-				Name:           "toml-validate",
-				Description:    "Validate a TOML file",
-				CompletesFiles: true,
-			},
-		},
-	},
 }
 
 var commandIndex map[string]*Command
