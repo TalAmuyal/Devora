@@ -65,6 +65,8 @@ struct Inner {
     changed: Arc<Notify>,
     /// What went wrong while shutting down, for `shutdown` to return.
     shutdown_problems: Vec<String>,
+    /// The launch of the latest open, for reopening an agent from Keep paused.
+    launch: Option<LaunchContext>,
 }
 
 /// Each facade has one event-loop thread. UI async exports need no Tokio context.
@@ -92,6 +94,7 @@ impl Agents {
             deletions: BTreeMap::new(),
             changed: Arc::new(Notify::new()),
             shutdown_problems: Vec::new(),
+            launch: None,
         }));
         let (stop, stopped) = oneshot::channel();
         let (ready, receive) = std::sync::mpsc::sync_channel(1);
@@ -133,6 +136,7 @@ impl Agents {
 
     /// Starts opening immediately. Ready/failure is delivered through the Store.
     /// A request during pause waits for ownership release, then opens again.
+    /// The user's own open (Resume, Retry, the Agent Hub) clears an individual pause first.
     pub async fn open(
         &self,
         profile: &Path,
@@ -140,6 +144,22 @@ impl Agents {
         context: LaunchContext,
     ) -> Result<u64, String> {
         let key = Key::new(profile, name)?;
+        // During a hold, opening only goes to the agent's tab; Keep paused is how its pause changes then.
+        if !self.state.global_paused() {
+            set_paused(&self.state, &key, false)?;
+        }
+        self.open_key(key, context, false).await
+    }
+
+    /// Opens the agent as its stored pause says: a paused one shows Paused, and launches only once the user resumes it.
+    /// `reopen` opens a stopped agent anew during a hold, held, so that it launches with the others on release.
+    async fn open_key(
+        &self,
+        key: Key,
+        context: LaunchContext,
+        reopen: bool,
+    ) -> Result<u64, String> {
+        lock(&self.inner).launch = Some(context.clone());
         loop {
             let mut done = {
                 let mut inner = lock(&self.inner);
@@ -150,7 +170,12 @@ impl Agents {
                     return Err("agent space is being deleted".into());
                 }
                 if self.state.global_paused() {
-                    if let Some(tab) = inner.owners.get(&key).and_then(|owner| owner.tab) {
+                    if let Some(tab) = inner
+                        .owners
+                        .get(&key)
+                        .filter(|owner| !reopen || !*owner.done.borrow())
+                        .and_then(|owner| owner.tab)
+                    {
                         self.state
                             .dispatch(Command::ActivateTab { tab })
                             .map_err(|e| e.to_string())?;
@@ -173,6 +198,9 @@ impl Agents {
                     let generation = inner.generation;
                     let (pause, paused) = watch::channel(false);
                     let (done, _) = watch::channel(false);
+                    let view = self.state.snapshot().agent_views.into_iter().find(|view| {
+                        view.profile_path == key.profile.to_string_lossy() && view.name == key.name
+                    });
                     inner.owners.insert(
                         key.clone(),
                         Owner {
@@ -183,11 +211,8 @@ impl Agents {
                             pause,
                             pause_requested: false,
                             globally_held: false,
-                            keep_paused: self.state.snapshot().agent_views.iter().any(|view| {
-                                view.profile_path == key.profile.to_string_lossy()
-                                    && view.name == key.name
-                                    && view.keep_paused
-                            }),
+                            // During a hold, a stored pause is the Keep paused choice; without one, it keeps the agent from launching.
+                            keep_paused: view.as_ref().is_some_and(|view| view.paused),
                             done,
                             live: false,
                         },
@@ -216,10 +241,10 @@ impl Agents {
         for tab in &snapshot.window.tabs {
             if let SessionKind::AgentSpace { name } = &tab.session.kind {
                 let result = match tab.session.profile_path.as_deref() {
-                    Some(profile) => self
-                        .open(Path::new(profile), name, context.clone())
-                        .await
-                        .map(|_| ()),
+                    Some(profile) => match Key::new(Path::new(profile), name) {
+                        Ok(key) => self.open_key(key, context.clone(), false).await.map(|_| ()),
+                        Err(error) => Err(error),
+                    },
                     None => Err("agent tab has no owning profile".into()),
                 };
                 if let Err(error) = result {
@@ -312,59 +337,72 @@ impl Agents {
         Ok(())
     }
 
-    /// Change only the release choice of an owner held by Global Pause.
-    pub fn set_keep_paused(
+    /// During a global hold: whether the agent stays paused when Devora resumes (one stored flag with Pause).
+    /// A held owner changes only its release choice. An agent paused before the hold has stopped: unticking it
+    /// reopens it, held, so that it launches with the others on release.
+    pub async fn set_keep_paused(
         &self,
         tab: u64,
         generation: u64,
         keep_paused: bool,
     ) -> Result<(), String> {
-        let mut inner = lock(&self.inner);
-        if inner.closing {
-            return Err("agents are shutting down".into());
+        let reopen = {
+            let mut inner = lock(&self.inner);
+            if inner.closing {
+                return Err("agents are shutting down".into());
+            }
+            if !self.state.global_paused() {
+                return Err("Keep paused requires an active global hold".into());
+            }
+            let launch = inner.launch.clone();
+            let (key, owner) = inner
+                .owners
+                .iter_mut()
+                .find(|(_, owner)| owner.tab == Some(tab))
+                .ok_or("agent is not open")?;
+            if owner.generation != generation || *owner.pause.borrow() {
+                return Err("agent generation is stale or pausing".into());
+            }
+            if *owner.done.borrow() {
+                // Paused before the hold, so already stopped and kept paused.
+                if keep_paused {
+                    return Ok(());
+                }
+                set_paused(&self.state, key, false)?;
+                Some((key.clone(), launch.ok_or("the agent's launch is unknown")?))
+            } else {
+                if !owner.globally_held || owner.pause_requested {
+                    return Err("agent is not globally held".into());
+                }
+                if owner.keep_paused == keep_paused {
+                    return Ok(());
+                }
+                set_paused(&self.state, key, keep_paused)?;
+                owner.keep_paused = keep_paused;
+                events::update(
+                    &self.state,
+                    tab,
+                    generation,
+                    ChatUpdate::KeepPaused { keep_paused },
+                );
+                None
+            }
+        };
+        if let Some((key, launch)) = reopen {
+            self.open_key(key, launch, true).await?;
         }
-        if !self.state.global_paused() {
-            return Err("Keep paused requires an active global hold".into());
-        }
-        let (key, owner) = inner
-            .owners
-            .iter_mut()
-            .find(|(_, owner)| owner.tab == Some(tab))
-            .ok_or("agent is not open")?;
-        if owner.generation != generation || *owner.pause.borrow() || *owner.done.borrow() {
-            return Err("agent generation is stale or pausing".into());
-        }
-        if !owner.globally_held || owner.pause_requested {
-            return Err("agent is not globally held".into());
-        }
-        if owner.keep_paused == keep_paused {
-            return Ok(());
-        }
-        self.state
-            .dispatch(Command::SetAgentKeepPaused {
-                profile_path: key.profile.to_string_lossy().into_owned(),
-                name: key.name.clone(),
-                keep_paused,
-            })
-            .map_err(|error| error.to_string())?;
-        owner.keep_paused = keep_paused;
-        events::update(
-            &self.state,
-            tab,
-            generation,
-            ChatUpdate::KeepPaused { keep_paused },
-        );
         Ok(())
     }
 
     pub async fn pause(&self, tab: u64) -> Result<(), String> {
         let mut done = {
             let mut inner = lock(&self.inner);
-            let owner = inner
+            let (key, owner) = inner
                 .owners
-                .values_mut()
-                .find(|o| o.tab == Some(tab))
+                .iter_mut()
+                .find(|(_, o)| o.tab == Some(tab))
                 .ok_or("agent is not open")?;
+            set_paused(&self.state, key, true)?;
             owner.globally_held = false;
             owner.pause_requested = true;
             events::update(
@@ -393,10 +431,10 @@ impl Agents {
         if inner.closing {
             return Err("agents are shutting down".into());
         }
-        let owner = inner
+        let (key, owner) = inner
             .owners
-            .values_mut()
-            .find(|o| o.tab == Some(tab))
+            .iter_mut()
+            .find(|(_, o)| o.tab == Some(tab))
             .ok_or("agent is not open")?;
         if owner.generation != generation || *owner.pause.borrow() || *owner.done.borrow() {
             return Err("agent generation is stale or pausing".into());
@@ -404,6 +442,10 @@ impl Agents {
         if owner.pause_requested {
             return Ok(());
         }
+        // Committed when requested, not at the turn's boundary: an app killed mid-turn brings the agent back
+        // paused, as the user asked, rather than running.
+        set_paused(&self.state, key, true)?;
+        let key = key.clone();
         if owner.globally_held && owner.handle.is_none() {
             owner.globally_held = false;
             owner.pause_requested = true;
@@ -452,6 +494,7 @@ impl Agents {
                             && !*o.pause.borrow()
                     }) {
                         owner.pause_requested = false;
+                        let _ = set_paused(&state, &key, false);
                         events::update(
                             &state,
                             tab,
@@ -896,6 +939,7 @@ async fn run_session(
     if *pause.borrow() {
         return Ok(());
     }
+    // Paused until the user resumes it: shown Paused, never launched.
     if lock(inner)
         .owners
         .get(key)
@@ -965,6 +1009,18 @@ async fn run_session(
             }
         }
     }
+}
+
+/// Commits whether the user has the agent individually paused, so that a restore keeps it paused.
+fn set_paused(state: &Store, key: &Key, paused: bool) -> Result<(), String> {
+    state
+        .dispatch(Command::SetAgentPaused {
+            profile_path: key.profile.to_string_lossy().into_owned(),
+            name: key.name.clone(),
+            paused,
+        })
+        .map(|_| ())
+        .map_err(|e| e.to_string())
 }
 
 /// A stop that had to kill Claude during shutdown is one of the shutdown's problems.

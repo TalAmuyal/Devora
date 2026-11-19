@@ -132,9 +132,10 @@ pub struct AgentViewState {
     pub name: String,
     pub draft: String,
     pub anchor: Option<ChatScrollAnchor>,
-    /// Remain individually paused when the current global hold releases.
+    /// Stays paused until the user resumes it (a Pause, or Keep paused during a global hold):
+    /// a restore doesn't launch it, nor does a release.
     #[serde(default)]
-    pub keep_paused: bool,
+    pub paused: bool,
 }
 
 /// The top visible transcript item and its offset, or None for following output.

@@ -12,10 +12,11 @@ pub enum Command {
     SetGlobalPaused {
         paused: bool,
     },
-    SetAgentKeepPaused {
+    /// The agent stays paused until the user resumes it: a Pause, or Keep paused during a global hold; a release leaves it.
+    SetAgentPaused {
         profile_path: String,
         name: String,
-        keep_paused: bool,
+        paused: bool,
     },
     ClearAgentDraft {
         profile_path: String,
@@ -248,43 +249,26 @@ pub(crate) fn apply(
                 vec![]
             } else {
                 app.global_paused = paused;
-                let mut events = vec![];
-                if !paused {
-                    for view in &mut app.agent_views {
-                        if view.keep_paused {
-                            view.keep_paused = false;
-                            events.push(Event::AgentViewChanged {
-                                profile_path: view.profile_path.clone(),
-                                name: view.name.clone(),
-                                view: Some(view.clone()),
-                            });
-                        }
-                    }
-                }
-                events.push(Event::GlobalPauseChanged { paused });
-                events
+                vec![Event::GlobalPauseChanged { paused }]
             }
         }
-        Command::SetAgentKeepPaused {
+        Command::SetAgentPaused {
             profile_path,
             name,
-            keep_paused,
+            paused,
         } => {
-            if !app.global_paused {
-                return Err(StateError::GlobalPauseRequired);
-            }
-            if !keep_paused
+            if !paused
                 && !app.agent_views.iter().any(|view| {
-                    view.profile_path == profile_path && view.name == name && view.keep_paused
+                    view.profile_path == profile_path && view.name == name && view.paused
                 })
             {
                 return Ok(vec![]);
             }
             let view = agent_view(app, &profile_path, &name);
-            if view.keep_paused == keep_paused {
+            if view.paused == paused {
                 return Ok(vec![]);
             }
-            view.keep_paused = keep_paused;
+            view.paused = paused;
             vec![Event::AgentViewChanged {
                 profile_path,
                 name,

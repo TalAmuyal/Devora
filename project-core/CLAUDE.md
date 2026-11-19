@@ -56,9 +56,12 @@ A fresh process restores all open agent tabs under the saved hold, showing histo
 Keep paused is a reversible release choice on a globally held owner, changed through a generation-scoped setter while the authoritative global hold is active.
 It changes no worker or process while held.
 On release, a selected owner completes its current turn and stays individually paused; its admission check retains that boundary even if release arrives before the turn ends.
-The choice persists beside the agent's draft and scroll state so a held restore publishes it before any CLI launch.
-Releasing the global hold clears those durable choices in the same transaction; the existing owner retains its selected pause intent until stopped.
-An agent individually paused before the global hold retains its individual pause and cannot change this release choice.
+Pause and Keep paused are one durable fact, "this agent stays paused until the user resumes it": `agent_views.paused` (`Command::SetAgentPaused`), beside the agent's draft and scroll state.
+Pause commits it when the user asks, before the turn's boundary, so an app killed mid-turn brings the agent back paused; Keep paused sets and clears it during a hold; a global release leaves it.
+In memory the two still stop differently: Pause stops the actor after its turn, while Keep paused changes only what the release does to a held owner.
+An owner starts with Keep paused from the stored flag, so `restore` shows a paused agent Paused, with its history, and never launches it: a hold publishes it as held with Keep paused on, and without one it stays paused until resumed.
+The user's own `open` (Resume, Retry, the Agent Hub) clears the flag outside a hold; during one, opening only goes to the agent's tab.
+Unticking Keep paused on an agent paused before the hold (its runtime stopped) clears the flag and reopens it, held, so that it launches with the others on release.
 
 ## Periodic repository updates
 
