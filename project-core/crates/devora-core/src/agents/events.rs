@@ -35,6 +35,9 @@ pub(super) fn publish(state: &Store, tab: u64, generation: u64, event: SpaceEven
         SpaceEvent::TurnStarted => {
             update(state, tab, generation, ChatUpdate::Turn { running: true })
         }
+        SpaceEvent::TurnEnded => {
+            update(state, tab, generation, ChatUpdate::Turn { running: false })
+        }
     }
 }
 
@@ -43,9 +46,6 @@ fn session(state: &Store, tab: u64, generation: u64, event: SessionEvent) {
         SessionEvent::Ready { session_id, .. } => {
             update(state, tab, generation, ChatUpdate::Ready { session_id })
         }
-        SessionEvent::Message(devora_agent::protocol::Message::Known(
-            devora_agent::protocol::KnownMessage::Result(_),
-        )) => update(state, tab, generation, ChatUpdate::Turn { running: false }),
         SessionEvent::PermissionRequested {
             request_id,
             question,

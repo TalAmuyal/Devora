@@ -1147,3 +1147,88 @@ fn the_preview_is_what_creation_renders_and_coding_instructions_can_be_replaced(
     .unwrap_err();
     assert!(error.contains("team"), "{error}");
 }
+
+// A result the CLI produced by itself (background work finishing, a resume)
+// leaves the sent turn running: it neither ends the turn in the chat, nor moves
+// compaction on, nor lets a pause stop the agent mid-turn.
+#[tokio::test]
+async fn a_result_nobody_asked_for_leaves_the_sent_turn_running() {
+    let fixture = Fixture::new();
+    // Any result of ours would start compaction.
+    std::fs::write(
+        fixture.profile.join("config.json"),
+        json!({"prepare-command":"true","agent":{"compact-threshold":1}}).to_string(),
+    )
+    .unwrap();
+    let context = fixture.context();
+    let space = fixture.create(fixture.form("Delta")).unwrap();
+    let log = Arc::new(Log::open(&fixture.root.path().join("log")).unwrap());
+    let mut running = space.start(&context, log).await.unwrap();
+    let handle = running.handle();
+    handle.send_turn("unrequested-result".into()).await.unwrap();
+    let mut unrequested = false;
+    tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            match running.next_update().await.unwrap() {
+                SpaceEvent::Session(SessionEvent::Message(Message::Known(
+                    KnownMessage::Result(_),
+                ))) => unrequested = true,
+                SpaceEvent::Session(SessionEvent::Message(Message::Raw(value)))
+                    if value["type"] == "fake_stream_ready" =>
+                {
+                    break
+                }
+                SpaceEvent::TurnEnded => panic!("a result nobody asked for ended the turn"),
+                SpaceEvent::Transcript(TranscriptChange::Upsert { item })
+                    if matches!(
+                        item.content,
+                        TranscriptContent::System {
+                            kind: SystemKind::Compaction,
+                            ..
+                        }
+                    ) =>
+                {
+                    panic!("a result nobody asked for started compaction")
+                }
+                _ => {}
+            }
+        }
+    })
+    .await
+    .unwrap();
+    assert!(unrequested);
+    assert_eq!(
+        handle.send_turn("second".into()).await.unwrap_err(),
+        "a turn is already running"
+    );
+    let pausing = tokio::spawn(handle.pause_after_turn());
+    handle.interrupt().await.unwrap();
+    tokio::time::timeout(Duration::from_secs(10), async {
+        while !matches!(running.next_update().await.unwrap(), SpaceEvent::TurnEnded) {}
+    })
+    .await
+    .expect("the turn's own result ends it");
+    tokio::time::timeout(Duration::from_secs(10), pausing)
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    let report: Vec<serde_json::Value> =
+        std::fs::read_to_string(fixture.root.path().join("report.jsonl"))
+            .unwrap()
+            .lines()
+            .map(|line| serde_json::from_str(line).unwrap())
+            .collect();
+    let kinds: Vec<_> = report
+        .iter()
+        .map(|entry| entry["kind"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        kinds.iter().filter(|kind| **kind == "user").count(),
+        1,
+        "no compaction step was sent: {kinds:?}"
+    );
+    let interrupt = kinds.iter().position(|kind| *kind == "interrupt").unwrap();
+    let eof = kinds.iter().position(|kind| *kind == "eof").unwrap();
+    assert!(interrupt < eof, "the pause waited for the turn: {kinds:?}");
+}

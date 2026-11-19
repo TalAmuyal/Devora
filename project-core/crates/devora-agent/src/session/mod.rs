@@ -105,7 +105,11 @@ type Reply<T> = oneshot::Sender<Result<T, String>>;
 
 pub(super) enum Command {
     Control(ControlRequest, Reply<Value>),
-    Turn(String, Reply<()>),
+    Turn {
+        id: String,
+        text: String,
+        reply: Reply<()>,
+    },
     Permission(String, PermissionAnswer, Reply<()>),
     Mcp(String, Value, Reply<()>),
     Pause(Option<Reply<StopInfo>>),
@@ -133,9 +137,10 @@ impl SessionHandle {
         self.call(|reply| Command::Pause(Some(reply))).await
     }
 
-    /// Submit one turn. A session accepts the next turn after the current result.
-    pub async fn send_turn(&self, text: String) -> Result<(), String> {
-        self.call(|reply| Command::Turn(text, reply)).await
+    /// Submit one turn, identified to the CLI by `id`. A session accepts the
+    /// next turn after the result that answers this one.
+    pub async fn send_turn(&self, id: String, text: String) -> Result<(), String> {
+        self.call(|reply| Command::Turn { id, text, reply }).await
     }
 
     /// Interrupt a running turn while keeping the process available.

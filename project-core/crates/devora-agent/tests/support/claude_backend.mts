@@ -9,6 +9,7 @@ const peer = server as any;
 const originalInteraction = structuredClone(peer.cassette.interactions[0]);
 let inputTokens: number | undefined;
 let toolCommand: string | undefined;
+let toolBackground = false;
 let errorAt: number | undefined;
 let holdStream = false;
 let sequence = 0;
@@ -64,7 +65,7 @@ function toolInteraction(command: string) {
     response: { ...response.response, sse_events: [
       startWire,
       event('content_block_start', { index: 0, content_block: tool }),
-      event('content_block_delta', { index: 0, delta: { type: 'input_json_delta', partial_json: JSON.stringify({ command }) } }),
+      event('content_block_delta', { index: 0, delta: { type: 'input_json_delta', partial_json: JSON.stringify(toolBackground ? { command, run_in_background: true, description: 'background' } : { command }) } }),
       event('content_block_stop', { index: 0 }),
       event('message_delta', { delta: { stop_reason: 'tool_use', stop_sequence: null }, usage: { output_tokens: 20 } }),
       event('message_stop', {}),
@@ -130,6 +131,7 @@ for await (const line of lines) {
   if (command.action === 'configure') {
     inputTokens = command.inputTokens;
     toolCommand = command.toolCommand;
+    toolBackground = command.toolBackground ?? false;
     errorAt = command.errorAt;
     holdStream = command.holdStream ?? false;
     reset();

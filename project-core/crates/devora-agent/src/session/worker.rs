@@ -124,7 +124,8 @@ struct Worker {
     ready: Option<oneshot::Sender<Result<(), String>>>,
     initialized: bool,
     ever_ready: bool,
-    active_turn: bool,
+    /// The ID of the turn we sent and the CLI hasn't answered yet.
+    active_turn: Option<String>,
     has_conversation: bool,
     model: String,
     mode: String,
@@ -177,7 +178,7 @@ pub(super) async fn run(
         ready: Some(ready),
         initialized: false,
         ever_ready: false,
-        active_turn: false,
+        active_turn: None,
         sequence: 0,
         controls: HashMap::new(),
         questions: HashMap::new(),
@@ -250,7 +251,7 @@ pub(super) async fn run(
                 }
                 worker.crash_restarts += 1;
                 worker.initialized = false;
-                worker.active_turn = false;
+                worker.active_turn = None;
                 if !worker.has_conversation {
                     worker.id = uuid::Uuid::new_v4().to_string();
                     worker.identity.send_replace(worker.id.clone());
@@ -348,7 +349,7 @@ impl Worker {
             .stopping
             .as_ref()
             .is_some_and(|stop| !stop.interrupt_pending)
-            && !self.active_turn
+            && self.active_turn.is_none()
         {
             process.stdin.take();
         }
@@ -425,9 +426,9 @@ impl Worker {
         self.stopping = Some(Stopping {
             reply,
             deadline: Instant::now() + STOP_GRACE,
-            interrupt_pending: self.active_turn,
+            interrupt_pending: self.active_turn.is_some(),
         });
-        if self.active_turn {
+        if self.active_turn.is_some() {
             self.control(
                 process,
                 ControlRequest::Interrupt { extra: Map::new() },
@@ -457,20 +458,20 @@ impl Worker {
                     self.control(process, request, Some(reply)).await?;
                 }
             }
-            Command::Turn(text, reply) => {
+            Command::Turn { id, text, reply } => {
                 let result = if let Some(error) = unavailable {
                     Err(error.into())
-                } else if self.active_turn {
+                } else if self.active_turn.is_some() {
                     Err("a turn is already running".into())
                 } else {
                     process
-                        .send(Message::user_text(self.id.clone(), text))
+                        .send(Message::user_text(self.id.clone(), id.clone(), text))
                         .await
                         .map(|()| {
-                            self.active_turn = true;
+                            self.active_turn = Some(id);
                         })
                 };
-                let failed = result.is_err() && unavailable.is_none() && !self.active_turn;
+                let failed = result.is_err() && unavailable.is_none() && self.active_turn.is_none();
                 let error = result.as_ref().err().cloned();
                 let _ = reply.send(result);
                 if failed {
@@ -723,7 +724,13 @@ impl Worker {
                 ..
             })) => self.emit(SessionEvent::Compacted(compact_metadata.clone())),
             Message::Known(KnownMessage::Result(result)) => {
-                self.active_turn = false;
+                if self
+                    .active_turn
+                    .as_deref()
+                    .is_some_and(|id| result.answers(id))
+                {
+                    self.active_turn = None;
+                }
                 self.has_conversation = true;
                 if !result.is_error {
                     self.crash_restarts = 0;
