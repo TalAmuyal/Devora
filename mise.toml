@@ -2,7 +2,7 @@
 experimental = true # Required for the 'deps' feature in sub-project tasks (mise run -C ...)
 
 [tools]
-shellcheck = "latest"
+shellcheck = "0.11.0"
 rust = { version = "1.99.1", components = "rustfmt,clippy" }
 
 [tasks.build]
