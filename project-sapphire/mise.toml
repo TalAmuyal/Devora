@@ -159,7 +159,7 @@ cp ../project-core/target/release/debi build/test-tools/ccc
 [tasks.test-hang-watchdog]
 description = "Check the acceptance runs' hang watchdog (../acceptance/hang-watchdog.ts) on real hangs, without the app"
 depends = ["npm-install"]
-run = "bash scripts/hang-watchdog.test.sh"
+run = "bash ../acceptance/hang-watchdog.test.sh ."
 
 [tasks.test-acceptance]
 description = "Run development-app Gherkin scenarios (bundled-tools run in test-bundle); arguments go to cucumber-js"

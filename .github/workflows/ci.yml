@@ -177,7 +177,7 @@ jobs:
           results: cucumber=project-ember/test-results/test-outcomes/e2e.json
 
       - name: Upload failure captures
-        if: failure()
+        if: failure() || cancelled()
         uses: actions/upload-artifact@v7
         with:
           name: e2e-failure-captures

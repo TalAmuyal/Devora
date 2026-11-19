@@ -1,12 +1,19 @@
 #!/usr/bin/env bash
-# Checks the acceptance hang watchdog (../acceptance/hang-watchdog.ts) on real hangs, with a 3-second limit and no app:
-# a step blocked in a synchronous spawn, and a run that doesn't exit after its last scenario, are named and stopped;
-# a run that ends exits as it did without the watchdog.
+# Checks the acceptance hang watchdog (hang-watchdog.ts) on real hangs, with a 3-second limit and no app: a step blocked
+# in a synchronous spawn, and a run that doesn't exit after its last scenario, are named and stopped; a run that ends
+# exits as it did without the watchdog.
+# Usage: hang-watchdog.test.sh <project directory>, run with that project's Cucumber and tsx (Ember's and Sapphire's
+# differ, and how tsx loads the watchdog's module is part of what's checked). The fixture is copied into the project's
+# test-results/, where its steps import that project's Cucumber.
 set -uo pipefail
-cd "$(dirname "$0")/.." || exit 1
-fixtures=scripts/fixtures/hang-watchdog
+here=$(cd "$(dirname "$0")" && pwd)
+cd "$1" || exit 1
+fixtures=test-results/hang-watchdog-fixture
+rm -rf "$fixtures"
+mkdir -p "$(dirname "$fixtures")"
+cp -R "$here/fixtures/hang-watchdog" "$fixtures"
 scratch=$(mktemp -d)
-trap 'rm -rf "$scratch"' EXIT
+trap 'rm -rf "$scratch" "$fixtures"' EXIT
 failures=0
 fail() {
 	printf 'FAIL: %s\n' "$1" >&2
