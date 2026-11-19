@@ -41,8 +41,11 @@ impl Default for AppRun {
 ///   seen. That includes a crash between the commit and the send, after which
 ///   the agent never got the first one.
 ///
-/// So delivery is at least once. Global and individual pauses only defer it:
-/// the notice goes out when the agent next launches.
+/// So delivery is at least once, by the agent's next launch. A CLI that
+/// crashes during the notice's turn and restarts within the same run doesn't
+/// resend it: if Claude saved it, the resumed model still sees it, and if not,
+/// the next launch sends it. Global and individual pauses only defer it: the
+/// notice goes out when the agent next launches.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct RestartNotice {
     pub attempt: Option<String>,
