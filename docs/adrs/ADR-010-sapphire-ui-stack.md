@@ -7,7 +7,7 @@ Their findings are folded in below.
 
 ## Date
 
-2026-10-28 (proposed), 2026-10-30 (accepted)
+2026-10-28 (proposed), 2026-10-30 (accepted), amended on 2026-11-05, 2026-11-18 and 2026-11-19
 
 ## Context
 
@@ -18,7 +18,7 @@ Besides the agent pane (ADR-009), it needs:
 - a prompt editor that keeps Neovim's editing model, so living in Neovim is no longer necessary;
 - web pages (Slack threads, GitHub PRs) as tabs, splits or overlays;
 - file and diff review;
-- light/dark/system theming with user themes;
+- light/dark/system theming with user themes (amended on 2026-11-19: the system's appearance, with no user themes; see the decision);
 - Vim-like ergonomics (ADR-004): two levels of tabs, splits, a `:` command line, `Ctrl-w h/j/k/l` and `Ctrl-h/j/k/l`.
 
 All of it sits over the shared core (ADR-007) and its state model (ADR-008).
@@ -60,7 +60,7 @@ All of it sits over the shared core (ADR-007) and its state model (ADR-008).
 		Restoring a terminal therefore means relaunching in the saved cwd and re-displaying the saved text, until `libghostty-vt`'s snapshot API is an option.
 	- **Sapphire generates libghostty's whole config, never loading the user's Ghostty config.**
 		It starts with `keybind = clear`, so the host's chords are routed first (ADR-003).
-		A theme change applies through a regenerated config (`ghostty_app_update_config`).
+		A change of appearance applies through a regenerated config (`ghostty_app_update_config`).
 	- **Every libghostty callback is built outside any actor (`nonisolated`) and hops to the main thread.**
 		libghostty calls back from its renderer and IO threads, and a closure written in a `@MainActor` context makes Swift 6's runtime isolation check abort the app.
 	- The spawn environment drops `NVIM` and `NVIM_LISTEN_ADDRESS`, as the embedded editor's does, since an inherited `$NVIM` makes flatten.nvim-style plugins exit.
@@ -97,7 +97,13 @@ All of it sits over the shared core (ADR-007) and its state model (ADR-008).
 	- No `com.apple.security.cs.*` exceptions are needed: spawning `claude`, `nvim`, `zsh` and `git`, Metal, and `WKWebView` all work under the hardened runtime.
 	- Every bundled helper binary (`debi`, `judgess`, …) is signed the same way.
 	- The `NS*UsageDescription` strings cover the privacy prompts that child processes trigger, since Sapphire becomes their responsible process.
-- **Theme tokens from the core** map to SwiftUI colors, the libghostty palette and Neovim highlight groups, so a theme change repaints every pane.
+- **The system's appearance, with no user themes** (amended on 2026-11-19; this replaces theme tokens from the core mapped to every pane)
+	- Sapphire's colors come from the system: semantic colors and materials in native views, following the effective appearance (light or dark).
+		Surfaces Sapphire draws itself follow the same appearance with native-looking colors: the transcript and its Mermaid diagrams, the terminals' palette and the web panes.
+	- A User Defaults setting, Appearance, picks Automatic (the system's, the default), Light or Dark, and applies live; every pane repaints when the effective appearance changes.
+	- There is no theme choice: one look per appearance keeps Sapphire simple, and a themed surface beside native controls reads as two apps in one window.
+	- The one exception is the embedded Neovim editor, which keeps its own colorscheme and follows the appearance through its `background` option.
+	- Ember keeps its themes, and the core keeps loading them for Ember; Sapphire stops reading them as each surface moves to the system's colors.
 - **Native controls first** (amended on 2026-11-18)
 	- A surface that macOS has a control for uses that control: a sheet for a window-modal dialog, a popover for details anchored to a control, an alert for a confirmation, a menu for a dropdown.
 		They look and behave as the platform's do, and they handle their own keys (Escape, Tab, Return).
