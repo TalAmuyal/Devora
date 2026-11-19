@@ -203,14 +203,14 @@ fn pinned_cli() -> PathBuf {
 
 async fn check_pin() {
     let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
-    // CI's pin, which Dependabot bumps (.github/ci-tools/README.md).
+    // CI's pin, which Dependabot bumps (scripts/ci/tools/README.md).
     let manifest: Value = serde_json::from_str(
-        &std::fs::read_to_string(repo.join(".github/ci-tools/package.json")).unwrap(),
+        &std::fs::read_to_string(repo.join("scripts/ci/tools/package.json")).unwrap(),
     )
     .unwrap();
     let pin = manifest["dependencies"]["@anthropic-ai/claude-code"]
         .as_str()
-        .expect("an exact @anthropic-ai/claude-code version in .github/ci-tools/package.json");
+        .expect("an exact @anthropic-ai/claude-code version in scripts/ci/tools/package.json");
     let version = Command::new(pinned_cli())
         .arg("--version")
         .output()

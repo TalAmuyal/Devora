@@ -152,10 +152,10 @@ jobs:
           mise exec -C project-ember -- npm ci --prefix ../web-renderer
           mise exec -C project-ember -- npm ci
 
-      # The version is pinned in .github/ci-tools/package.json, which Dependabot bumps (its README.md).
+      # The version is pinned in scripts/ci/tools/package.json, which Dependabot bumps (its README.md).
       - name: Install Claude Code CLI
         run: |
-          version=$(node -p "require(process.env.GITHUB_WORKSPACE + '/.github/ci-tools/package.json').dependencies['@anthropic-ai/claude-code']")
+          version=$(node -p "require(process.env.GITHUB_WORKSPACE + '/scripts/ci/tools/package.json').dependencies['@anthropic-ai/claude-code']")
           npm install -g "@anthropic-ai/claude-code@$version"
           claude --version
 
@@ -277,10 +277,10 @@ jobs:
       - name: Build the app
         run: mise run -C project-sapphire build
 
-      # The version is pinned in .github/ci-tools/package.json, which Dependabot bumps (its README.md).
+      # The version is pinned in scripts/ci/tools/package.json, which Dependabot bumps (its README.md).
       - name: Install Claude Code CLI
         run: |
-          version=$(mise exec -C project-sapphire -- node -p "require(process.env.GITHUB_WORKSPACE + '/.github/ci-tools/package.json').dependencies['@anthropic-ai/claude-code']")
+          version=$(mise exec -C project-sapphire -- node -p "require(process.env.GITHUB_WORKSPACE + '/scripts/ci/tools/package.json').dependencies['@anthropic-ai/claude-code']")
           mise exec -C project-sapphire -- npm install -g "@anthropic-ai/claude-code@$version"
           mise exec -C project-sapphire -- claude --version
 
