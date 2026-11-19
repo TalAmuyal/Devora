@@ -257,7 +257,7 @@ async fn pinned_cli_preserves_user_sources_and_explicit_configuration_for_all_pr
         let mut session = Session::start(options, fixture.log()).await.unwrap();
         session
             .handle()
-            .send_turn("Reply briefly.".into())
+            .send_turn(turn_id(), "Reply briefly.".into())
             .await
             .unwrap();
         result(&mut session).await;
@@ -265,7 +265,10 @@ async fn pinned_cli_preserves_user_sources_and_explicit_configuration_for_all_pr
             let handle = session.handle();
             handle.set_model("sonnet".into()).await.unwrap();
             handle.set_permission_mode("plan".into()).await.unwrap();
-            handle.send_turn("Reply once more.".into()).await.unwrap();
+            handle
+                .send_turn(turn_id(), "Reply once more.".into())
+                .await
+                .unwrap();
             result(&mut session).await;
         }
         session.pause().await.unwrap();
@@ -326,10 +329,16 @@ async fn pinned_cli_exposes_usage_and_suppresses_reactive_automatic_compaction()
         .await
         .unwrap();
     let handle = session.handle();
-    handle.send_turn("First turn.".into()).await.unwrap();
+    handle
+        .send_turn(turn_id(), "First turn.".into())
+        .await
+        .unwrap();
     let first = result(&mut session).await;
     assert!(first["usage"]["input_tokens"].as_u64().unwrap() > 50_000);
-    handle.send_turn("Second turn.".into()).await.unwrap();
+    handle
+        .send_turn(turn_id(), "Second turn.".into())
+        .await
+        .unwrap();
     let blocked = result_with_status(&mut session, true).await;
     assert_eq!(
         blocked["is_error"], true,
@@ -415,7 +424,7 @@ async fn automatic_compaction_control(options: &SessionOptions, root: &std::path
     .expect("control initialize deadline");
     let mut automatic = false;
     for prompt in ["First control turn.", "Second control turn."] {
-        let turn = Message::user_text(id.clone(), prompt.into());
+        let turn = Message::user_text(id.clone(), turn_id(), prompt.into());
         input
             .write_all(format!("{}\n", serde_json::to_string(&turn).unwrap()).as_bytes())
             .await
@@ -480,7 +489,7 @@ async fn pinned_cli_executes_the_in_process_judgess_callback_before_permission_f
     .unwrap();
     session
         .handle()
-        .send_turn("Perform the tool call.".into())
+        .send_turn(turn_id(), "Perform the tool call.".into())
         .await
         .unwrap();
     let mut judged = false;
@@ -539,7 +548,7 @@ async fn pinned_cli_executes_the_in_process_judgess_callback_before_permission_f
     .unwrap();
     let handle = asking.handle();
     handle
-        .send_turn("Perform the tool call.".into())
+        .send_turn(turn_id(), "Perform the tool call.".into())
         .await
         .unwrap();
     let mut approved = false;
@@ -626,7 +635,7 @@ async fn pinned_cli_pause_and_resume_retains_the_conversation() {
         .unwrap();
     first
         .handle()
-        .send_turn("Remember the word AMBER.".into())
+        .send_turn(turn_id(), "Remember the word AMBER.".into())
         .await
         .unwrap();
     let first_messages = collect_turn(&mut first).await;
@@ -677,7 +686,7 @@ async fn pinned_cli_pause_and_resume_retains_the_conversation() {
     assert_eq!(resumed.session_id(), paused.session_id);
     resumed
         .handle()
-        .send_turn("Recall the earlier word.".into())
+        .send_turn(turn_id(), "Recall the earlier word.".into())
         .await
         .unwrap();
     let resumed_messages = collect_turn(&mut resumed).await;
@@ -758,7 +767,7 @@ async fn pinned_cli_user_settings_can_override_transport_auth() {
         let mut session = Session::start(options, fixture.log()).await.unwrap();
         session
             .handle()
-            .send_turn("Reply briefly.".into())
+            .send_turn(turn_id(), "Reply briefly.".into())
             .await
             .unwrap();
         result(&mut session).await;
@@ -803,7 +812,7 @@ async fn pinned_cli_can_reopen_an_unused_session() {
     assert_ne!(reopened.session_id(), paused.session_id);
     reopened
         .handle()
-        .send_turn("First turn after reopening.".into())
+        .send_turn(turn_id(), "First turn after reopening.".into())
         .await
         .unwrap();
     result(&mut reopened).await;
@@ -840,7 +849,7 @@ async fn pinned_cli_hook_ask_forces_a_question_in_auto_mode() {
     let mut session = Session::start(options, fixture.log()).await.unwrap();
     let handle = session.handle();
     handle
-        .send_turn("Perform the tool call.".into())
+        .send_turn(turn_id(), "Perform the tool call.".into())
         .await
         .unwrap();
     let mut asked = false;
@@ -937,7 +946,7 @@ async fn first_turn_stop_roundtrip(partial_stream: bool) {
         .unwrap();
     first
         .handle()
-        .send_turn("Remember FIRST_TURN_MARKER.".into())
+        .send_turn(turn_id(), "Remember FIRST_TURN_MARKER.".into())
         .await
         .unwrap();
     tokio::time::timeout(Duration::from_secs(20), async {
@@ -1028,12 +1037,101 @@ async fn first_turn_stop_roundtrip(partial_stream: bool) {
     assert_ne!(reopened.session_id(), stopped.session_id);
     reopened
         .handle()
-        .send_turn("Recall the first turn.".into())
+        .send_turn(turn_id(), "Recall the first turn.".into())
         .await
         .unwrap();
     result(&mut reopened).await;
     reopened.pause().await.unwrap();
     let snapshot = backend.command(json!({"action":"snapshot"})).await;
     assert!(!snapshot.to_string().contains("FIRST_TURN_MARKER"));
+    backend.stop().await;
+}
+
+/// A fresh ID for one sent turn.
+fn turn_id() -> String {
+    uuid::Uuid::new_v4().to_string()
+}
+
+// Devora settles a sent turn only on the result naming its ID. The CLI keeps
+// that ID as the user entry's uuid in its saved session, and the results it
+// produces by itself (here, the zero-turn one on resuming after background work
+// was cut short) name no user message.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires CI-pinned Claude CLI, Node and Sapphire npm dependencies"]
+async fn pinned_cli_results_name_the_turn_they_answer() {
+    async fn next_result(session: &mut Session) -> devora_agent::protocol::TurnResult {
+        tokio::time::timeout(Duration::from_secs(45), async {
+            while let Some(event) = session.next_event().await {
+                match event {
+                    SessionEvent::Message(Message::Known(KnownMessage::Result(result))) => {
+                        return result
+                    }
+                    SessionEvent::Failed(error) => panic!("{error}"),
+                    _ => {}
+                }
+            }
+            panic!("CLI ended before result");
+        })
+        .await
+        .expect("offline CLI result deadline")
+    }
+    check_pin().await;
+    let fixture = Fixture::new();
+    let mut backend = Backend::start(fixture.root.path()).await;
+    // Longer than the stop's grace, so pausing cuts it short.
+    backend
+        .command(json!({"action":"configure", "toolCommand":"sleep 8", "toolBackground":true}))
+        .await;
+    let mut options = fixture.options(
+        backend.port,
+        Instructions::Append("Turn identity probe".into()),
+    );
+    options.settings["permissions"] = json!({"allow":["Bash"]});
+    let mut first = Session::start(options.clone(), fixture.log())
+        .await
+        .unwrap();
+    let sent = turn_id();
+    first
+        .handle()
+        .send_turn(sent.clone(), "Start the background command.".into())
+        .await
+        .unwrap();
+    assert!(next_result(&mut first).await.answers(&sent));
+    let session = first.session_id();
+    let saved = std::fs::read_dir(fixture.home.join(".claude/projects"))
+        .unwrap()
+        .filter_map(Result::ok)
+        .map(|dir| dir.path().join(format!("{session}.jsonl")))
+        .find(|path| path.exists())
+        .expect("Claude's saved session");
+    assert!(
+        std::fs::read_to_string(saved)
+            .unwrap()
+            .lines()
+            .map(|line| serde_json::from_str::<Value>(line).unwrap())
+            .any(|entry| entry["type"] == "user" && entry["uuid"] == json!(sent)),
+        "the saved session keeps the turn's ID as its uuid"
+    );
+    let paused = first.pause().await.unwrap();
+    backend.command(json!({"action":"configure"})).await;
+    options.resume = Some(Resume {
+        session_id: paused.session_id,
+        has_conversation: paused.has_conversation,
+    });
+    let mut resumed = Session::start(options, fixture.log()).await.unwrap();
+    let unrequested = next_result(&mut resumed).await;
+    assert_eq!(unrequested.num_turns, 0);
+    assert!(
+        !unrequested.extra.contains_key("user_message_uuids"),
+        "{unrequested:?}"
+    );
+    let next = turn_id();
+    resumed
+        .handle()
+        .send_turn(next.clone(), "Continue.".into())
+        .await
+        .unwrap();
+    assert!(next_result(&mut resumed).await.answers(&next));
+    resumed.pause().await.unwrap();
     backend.stop().await;
 }

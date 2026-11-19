@@ -114,6 +114,19 @@ pub struct TurnResult {
     pub extra: Map<String, Value>,
 }
 
+impl TurnResult {
+    /// Whether this result ends the user turn sent with `id`. The CLI also
+    /// produces results nobody asked for: a turn it starts itself when
+    /// background work finishes, and a zero-turn one on resume. Those name no
+    /// user message, so they never end a turn we sent.
+    pub fn answers(&self, id: &str) -> bool {
+        self.extra
+            .get("user_message_uuids")
+            .and_then(Value::as_array)
+            .is_some_and(|ids| ids.iter().any(|value| value.as_str() == Some(id)))
+    }
+}
+
 /// Token accounting shared by completed messages and streaming message updates.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Usage {

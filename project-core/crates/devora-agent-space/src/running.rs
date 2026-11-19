@@ -21,6 +21,9 @@ pub enum SpaceEvent {
     Context(Context),
     /// A turn the space sent itself, compaction's.
     TurnStarted,
+    /// The CLI answered the running turn, or exited during it. Results the CLI
+    /// produces by itself (background work finishing, a resume) end nothing.
+    TurnEnded,
 }
 
 /// Observes the host-owned global hold at turn admission and turn boundaries.
@@ -28,7 +31,7 @@ pub enum SpaceEvent {
 pub type GlobalPauseCheck = Arc<dyn Fn() -> bool + Send + Sync>;
 
 enum Action {
-    Turn(String),
+    Turn { id: String, text: String },
     Interrupt,
     Permission(String, PermissionAnswer),
     PauseAfterTurn,
@@ -72,7 +75,12 @@ impl SpaceHandle {
     }
 
     pub async fn send_turn(&self, text: String) -> Result<(), String> {
-        self.call(Action::Turn(text)).await.map(|_| ())
+        self.call(Action::Turn {
+            id: uuid::Uuid::new_v4().to_string(),
+            text,
+        })
+        .await
+        .map(|_| ())
     }
     pub async fn interrupt(&self) -> Result<Value, String> {
         self.call(Action::Interrupt).await
@@ -285,7 +293,7 @@ fn begin(
     events: &mpsc::UnboundedSender<SpaceEvent>,
 ) -> Result<(), String> {
     let change = match &command.action {
-        Action::Turn(text) => transcript.submit(text.clone()),
+        Action::Turn { text, .. } => transcript.submit(text.clone()),
         Action::Interrupt => transcript.intention(
             SystemKind::Interruption,
             "Interrupt requested".into(),
@@ -322,10 +330,10 @@ fn begin(
         return Err(error);
     }
     let _ = events.send(SpaceEvent::Transcript(change));
-    let turn = matches!(command.action, Action::Turn(_));
+    let turn = matches!(command.action, Action::Turn { .. });
     tokio::spawn(async move {
         let result = match command.action {
-            Action::Turn(text) => runtime.send_turn(text).await.map(|_| Value::Null),
+            Action::Turn { id, text } => runtime.send_turn(id, text).await.map(|_| Value::Null),
             Action::Interrupt => runtime.interrupt().await,
             Action::Permission(id, answer) => runtime
                 .answer_permission(id, answer)
@@ -356,14 +364,15 @@ async fn pump(
 ) -> Result<(), String> {
     let (completed, mut completions) = mpsc::unbounded_channel::<Completion>();
     let mut pending = 0usize;
-    // Whether a turn runs, and a pause waiting for it to end.
-    let mut turn_running = false;
+    // The turn running, by the ID the CLI answers it with, and a pause waiting for it to end.
+    let mut turn_running: Option<String> = None;
     let mut stopping = false;
     let mut pause_after_turn: Option<oneshot::Sender<Result<Value, String>>> = None;
     // The threshold, before any usage arrives.
     let _ = events.send(SpaceEvent::Context(compaction.context()));
     loop {
-        if !turn_running && !stopping && (pause_after_turn.is_some() || globally_paused()) {
+        if turn_running.is_none() && !stopping && (pause_after_turn.is_some() || globally_paused())
+        {
             stopping = true;
             compaction.reset();
             let reply = pause_after_turn
@@ -391,7 +400,7 @@ async fn pump(
             completion = completions.recv(), if pending > 0 => {
                 if let Some(completion) = completion {
                     if completion.failed_turn {
-                        turn_running = false;
+                        turn_running = None;
                     }
                     finish(space,transcript,events,completion)?;
                     pending -= 1;
@@ -401,11 +410,16 @@ async fn pump(
                 let Some(event) = event else { return Ok(()); };
                 persist(space,transcript,&event,events)?;
                 let terminal = matches!(event,SessionEvent::Stopped(_) | SessionEvent::Failed(_));
-                let mut step = compact(compaction,&event,events);
                 // A crash ends the turn too; recovery resumes without it.
-                let ended = matches!(event,SessionEvent::Message(Message::Known(KnownMessage::Result(_))) | SessionEvent::Exited { .. });
-                if ended { turn_running = false; }
+                let ended = turn_running.as_deref().is_some_and(|id| match &event {
+                    SessionEvent::Message(Message::Known(KnownMessage::Result(result))) => result.answers(id),
+                    SessionEvent::Exited { .. } => true,
+                    _ => false,
+                });
+                let mut step = compact(compaction,&event,ended,events);
+                if ended { turn_running = None; }
                 let _ = events.send(SpaceEvent::Session(event));
+                if ended { let _ = events.send(SpaceEvent::TurnEnded); }
                 if ended && (pause_after_turn.is_some() || globally_paused()) {
                     // Every pause reason uses the same boundary before compaction.
                     step = None;
@@ -417,9 +431,10 @@ async fn pump(
                     let _ = events.send(SpaceEvent::Transcript(announcement));
                     // Nobody waits for the outcome; it is recorded like any turn's.
                     let (reply, _) = oneshot::channel();
-                    begin(space,transcript,Command { action: Action::Turn(step.prompt()), reply },session.handle(),completed.clone(),events)?;
+                    let id = uuid::Uuid::new_v4().to_string();
+                    begin(space,transcript,Command { action: Action::Turn { id: id.clone(), text: step.prompt() }, reply },session.handle(),completed.clone(),events)?;
                     pending += 1;
-                    turn_running = true;
+                    turn_running = Some(id);
                     let _ = events.send(SpaceEvent::TurnStarted);
                 }
                 if terminal {
@@ -443,11 +458,17 @@ async fn pump(
                     Some(Command { action: Action::GlobalPauseChanged, reply }) => {
                         let _ = reply.send(Ok(Value::Bool(stopping)));
                     }
-                    Some(command) if matches!(command.action, Action::Turn(_)) && (globally_paused() || stopping || pause_after_turn.is_some()) => {
+                    Some(command) if matches!(command.action, Action::Turn { .. }) && (globally_paused() || stopping || pause_after_turn.is_some()) => {
                         let _ = command.reply.send(Err("This agent is pausing. It starts no new turn until it resumes.".into()));
                     }
+                    // Its failed send would otherwise end the running turn.
+                    Some(command) if matches!(command.action, Action::Turn { .. }) && turn_running.is_some() => {
+                        let _ = command.reply.send(Err("a turn is already running".into()));
+                    }
                     Some(command) => {
-                        turn_running |= matches!(command.action, Action::Turn(_));
+                        if let Action::Turn { id, .. } = &command.action {
+                            turn_running = Some(id.clone());
+                        }
                         begin(space,transcript,command,session.handle(),completed.clone(),events)?;
                         pending += 1;
                     }
@@ -466,11 +487,13 @@ fn pause(runtime: SessionHandle, reply: oneshot::Sender<Result<Value, String>>) 
     });
 }
 
-/// Feeds compaction the session's usage, results and boundaries, publishing the
-/// context as it changes; returns the turn compaction asks for, if any.
+/// Feeds compaction the session's usage, the results ending our turns and
+/// boundaries, publishing the context as it changes; returns the turn
+/// compaction asks for, if any.
 fn compact(
     compaction: &mut Compaction,
     event: &SessionEvent,
+    ended_our_turn: bool,
     events: &mpsc::UnboundedSender<SpaceEvent>,
 ) -> Option<crate::compaction::Step> {
     let before = compaction.context();
@@ -482,7 +505,7 @@ fn compact(
             compaction.usage(usage);
             None
         }
-        SessionEvent::Message(Message::Known(KnownMessage::Result(result))) => {
+        SessionEvent::Message(Message::Known(KnownMessage::Result(result))) if ended_our_turn => {
             compaction.result(result)
         }
         SessionEvent::Compacted(metadata) => {

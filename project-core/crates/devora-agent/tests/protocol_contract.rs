@@ -259,8 +259,13 @@ fn host_messages_and_unrecorded_control_variants_match_the_wire_contract() {
         );
     }
     assert_eq!(
-        serde_json::to_value(Message::user_text("session".into(), "hello".into())).unwrap(),
-        json!({"type":"user","message":{"role":"user","content":"hello"},"session_id":"session","parent_tool_use_id":null})
+        serde_json::to_value(Message::user_text(
+            "session".into(),
+            "turn-id".into(),
+            "hello".into()
+        ))
+        .unwrap(),
+        json!({"type":"user","message":{"role":"user","content":"hello"},"session_id":"session","parent_tool_use_id":null,"uuid":"turn-id"})
     );
     let answer = PermissionResponse::Deny {
         message: "Use a safe command".into(),
@@ -371,4 +376,35 @@ fn streaming_usage_can_report_only_output_tokens() {
         event:Extensible::Known(StreamEvent::MessageDelta { usage,.. }),..
     }) if usage.output_tokens==7));
     assert_eq!(serde_json::to_value(message).unwrap(), value);
+}
+
+// Shapes observed from Claude Code 2.1.312 and 2.1.316 (the minimum and the CI
+// pin): our turns' results, `/compact`, interrupts and API errors all name the
+// sent user message; results the CLI starts by itself name none.
+#[test]
+fn a_result_answers_only_the_user_turns_it_names() {
+    let result = |fields: Value| {
+        let mut value = json!({"type":"result","subtype":"success","session_id":"s","is_error":false,
+            "num_turns":1,"usage":{"input_tokens":1,"output_tokens":1}});
+        value
+            .as_object_mut()
+            .unwrap()
+            .extend(fields.as_object().unwrap().clone());
+        let Message::Known(KnownMessage::Result(result)) = decode(value) else {
+            panic!("a typed result")
+        };
+        result
+    };
+    let ours = result(json!({"user_message_uuids":["turn-id"]}));
+    assert!(ours.answers("turn-id"));
+    assert!(!ours.answers("another-turn"));
+    let interrupted = result(json!({"subtype":"error_during_execution","is_error":true,
+        "user_message_uuids":["turn-id"]}));
+    assert!(interrupted.answers("turn-id"));
+    for unrequested in [
+        json!({"num_turns":0,"origin":{"kind":"task-notification"}}),
+        json!({"origin":{"kind":"task-notification","producer":"session-task"}}),
+    ] {
+        assert!(!result(unrequested).answers("turn-id"));
+    }
 }

@@ -134,7 +134,7 @@ async fn launch_is_explicit_and_a_session_runs_multiple_turns() {
         .await
         .unwrap();
     let handle = session.handle();
-    handle.send_turn("first".into()).await.unwrap();
+    handle.send_turn(turn_id(), "first".into()).await.unwrap();
     let usage = event(&mut session, |event| {
         matches!(
             event,
@@ -150,7 +150,7 @@ async fn launch_is_explicit_and_a_session_runs_multiple_turns() {
     };
     assert!(usage["input_tokens"].is_number());
     turn_ended(&mut session).await;
-    handle.send_turn("second".into()).await.unwrap();
+    handle.send_turn(turn_id(), "second".into()).await.unwrap();
     turn_ended(&mut session).await;
     session.pause().await.unwrap();
     let reports = fixture.reports();
@@ -209,7 +209,10 @@ async fn questions_can_apply_suggested_rules_and_withdrawn_answers_are_rejected(
         .await
         .unwrap();
     let handle = session.handle();
-    handle.send_turn("permission".into()).await.unwrap();
+    handle
+        .send_turn(turn_id(), "permission".into())
+        .await
+        .unwrap();
     let SessionEvent::PermissionRequested {
         request_id,
         question,
@@ -233,7 +236,10 @@ async fn questions_can_apply_suggested_rules_and_withdrawn_answers_are_rejected(
         "localSettings"
     );
     turn_ended(&mut session).await;
-    handle.send_turn("cancel-permission".into()).await.unwrap();
+    handle
+        .send_turn(turn_id(), "cancel-permission".into())
+        .await
+        .unwrap();
     event(&mut session,|event|matches!(event,SessionEvent::PermissionCancelled { request_id } if request_id=="question")).await;
     assert!(handle
         .answer_permission("question".into(), PermissionAnswer::Allow)
@@ -251,7 +257,10 @@ async fn judgess_and_mcp_are_driven_over_the_real_child_stdio() {
         .await
         .unwrap();
     let handle = session.handle();
-    handle.send_turn("hook:eval foo".into()).await.unwrap();
+    handle
+        .send_turn(turn_id(), "hook:eval foo".into())
+        .await
+        .unwrap();
     let SessionEvent::ToolJudged {
         tool_use_id,
         verdict,
@@ -270,7 +279,7 @@ async fn judgess_and_mcp_are_driven_over_the_real_child_stdio() {
         "deny"
     );
     turn_ended(&mut session).await;
-    handle.send_turn("mcp".into()).await.unwrap();
+    handle.send_turn(turn_id(), "mcp".into()).await.unwrap();
     let SessionEvent::McpRequested {
         request_id,
         message,
@@ -308,7 +317,7 @@ async fn pause_interrupts_before_eof_and_reopening_resumes_the_same_id() {
         .await
         .unwrap();
     let handle = session.handle();
-    handle.send_turn("stream".into()).await.unwrap();
+    handle.send_turn(turn_id(), "stream".into()).await.unwrap();
     event(&mut session,|event|matches!(event,SessionEvent::Message(Message::Raw(value)) if value["type"]=="fake_stream_ready")).await;
     let stopped = session.pause().await.unwrap();
     assert!(stopped.graceful);
@@ -365,11 +374,11 @@ async fn crash_recovery_preserves_id_model_and_mode_and_bounds_crash_loops() {
     handle.set_permission_mode("plan".into()).await.unwrap();
     let id = session.session_id().to_owned();
     handle
-        .send_turn("establish conversation".into())
+        .send_turn(turn_id(), "establish conversation".into())
         .await
         .unwrap();
     turn_ended(&mut session).await;
-    handle.send_turn("crash".into()).await.unwrap();
+    handle.send_turn(turn_id(), "crash".into()).await.unwrap();
     event(&mut session, |event| {
         matches!(event, SessionEvent::Ready { resumed: true, .. })
     })
@@ -389,7 +398,7 @@ async fn crash_recovery_preserves_id_model_and_mode_and_bounds_crash_loops() {
         let index = args.iter().position(|arg| arg == key).unwrap();
         assert_eq!(args[index + 1], value);
     }
-    handle.send_turn("crash".into()).await.unwrap();
+    handle.send_turn(turn_id(), "crash".into()).await.unwrap();
     event(&mut session, |event| {
         matches!(event, SessionEvent::Failed(_))
     })
@@ -411,7 +420,7 @@ async fn usage_compaction_and_once_per_kind_drift_are_visible() {
     let log = fixture.log();
     let mut session = Session::start(fixture.options(), log).await.unwrap();
     let handle = session.handle();
-    handle.send_turn("drift".into()).await.unwrap();
+    handle.send_turn(turn_id(), "drift".into()).await.unwrap();
     let mut warnings = 0;
     let mut raw_assistants = 0;
     loop {
@@ -425,7 +434,7 @@ async fn usage_compaction_and_once_per_kind_drift_are_visible() {
         }
     }
     assert_eq!((warnings, raw_assistants), (1, 2));
-    handle.send_turn("compact".into()).await.unwrap();
+    handle.send_turn(turn_id(), "compact".into()).await.unwrap();
     let SessionEvent::Compacted(metadata) = event(&mut session, |event| {
         matches!(event, SessionEvent::Compacted(_))
     })
@@ -454,7 +463,7 @@ async fn initialization_and_invalid_protocol_fail_visibly() {
         .unwrap();
     session
         .handle()
-        .send_turn("malformed".into())
+        .send_turn(turn_id(), "malformed".into())
         .await
         .unwrap();
     let SessionEvent::Failed(error) = event(&mut session, |event| {
@@ -490,7 +499,10 @@ async fn an_unknown_request_stays_raw_and_gets_an_explicit_unsupported_response(
         .await
         .unwrap();
     let handle = session.handle();
-    handle.send_turn("unknown-request".into()).await.unwrap();
+    handle
+        .send_turn(turn_id(), "unknown-request".into())
+        .await
+        .unwrap();
     event(&mut session, |event| {
         matches!(event,
             SessionEvent::Message(Message::Known(KnownMessage::ControlRequest {
@@ -511,7 +523,7 @@ async fn an_unknown_request_stays_raw_and_gets_an_explicit_unsupported_response(
         unreachable!()
     };
     assert_eq!(event, stopped);
-    assert!(handle.send_turn("late".into()).await.is_err());
+    assert!(handle.send_turn(turn_id(), "late".into()).await.is_err());
     drop(session);
 }
 
@@ -523,7 +535,7 @@ async fn an_unresponsive_process_is_reaped_after_the_pause_grace_period() {
         .unwrap();
     session
         .handle()
-        .send_turn("ignore-interrupt".into())
+        .send_turn(turn_id(), "ignore-interrupt".into())
         .await
         .unwrap();
     event(&mut session,|event|matches!(event,SessionEvent::Message(Message::Raw(value)) if value["type"]=="fake_stream_ready")).await;
@@ -593,7 +605,7 @@ async fn a_control_timeout_uses_the_same_bounded_recovery_as_a_crash() {
         .unwrap();
     let handle = session.handle();
     handle
-        .send_turn("establish conversation".into())
+        .send_turn(turn_id(), "establish conversation".into())
         .await
         .unwrap();
     turn_ended(&mut session).await;
@@ -645,7 +657,7 @@ async fn a_first_turn_crash_before_result_starts_fresh_even_after_assistant_outp
         .unwrap();
     session
         .handle()
-        .send_turn("assistant-then-crash".into())
+        .send_turn(turn_id(), "assistant-then-crash".into())
         .await
         .unwrap();
     event(&mut session, |event| {
@@ -669,4 +681,72 @@ async fn a_first_turn_crash_before_result_starts_fresh_even_after_assistant_outp
         .as_array()
         .unwrap()
         .contains(&json!("--session-id")));
+}
+
+/// A fresh ID for one sent turn.
+fn turn_id() -> String {
+    uuid::Uuid::new_v4().to_string()
+}
+
+// The CLI also emits results nobody sent a turn for: one for a turn it starts
+// itself when background work finishes, and a zero-turn one on resume. Only the
+// result naming the sent turn's ID ends it.
+#[tokio::test]
+async fn only_the_result_naming_the_sent_turn_ends_it() {
+    let fixture = Fixture::new();
+    let mut session = Session::start(fixture.options(), fixture.log())
+        .await
+        .unwrap();
+    let handle = session.handle();
+    let id = turn_id();
+    handle
+        .send_turn(id.clone(), "unrequested-result".into())
+        .await
+        .unwrap();
+    let SessionEvent::Message(Message::Known(KnownMessage::Result(unrequested))) =
+        event(&mut session, |event| {
+            matches!(
+                event,
+                SessionEvent::Message(Message::Known(KnownMessage::Result(_)))
+            )
+        })
+        .await
+    else {
+        unreachable!()
+    };
+    assert!(!unrequested.answers(&id));
+    event(&mut session,|event|matches!(event,SessionEvent::Message(Message::Raw(value)) if value["type"]=="fake_stream_ready")).await;
+    assert_eq!(
+        handle.send_turn(turn_id(), "second".into()).await,
+        Err("a turn is already running".into()),
+        "a result the CLI started by itself must not end the sent turn"
+    );
+    handle.interrupt().await.unwrap();
+    let SessionEvent::Message(Message::Known(KnownMessage::Result(answer))) =
+        event(&mut session, |event| {
+            matches!(
+                event,
+                SessionEvent::Message(Message::Known(KnownMessage::Result(_)))
+            )
+        })
+        .await
+    else {
+        unreachable!()
+    };
+    assert!(answer.answers(&id));
+    handle.send_turn(turn_id(), "second".into()).await.unwrap();
+    turn_ended(&mut session).await;
+    session.pause().await.unwrap();
+    let sent: Vec<_> = fixture
+        .reports()
+        .into_iter()
+        .filter(|report| report["kind"] == "user")
+        .map(|report| report["uuid"].clone())
+        .collect();
+    assert_eq!(sent.len(), 2);
+    assert_eq!(
+        sent[0],
+        json!(id),
+        "the CLI receives the turn's ID as its uuid"
+    );
 }

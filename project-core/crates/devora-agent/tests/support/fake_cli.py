@@ -30,10 +30,20 @@ def emit(value):
         value["session_id"] = session_id
     print(json.dumps(value), flush=True)
 
+sent_turn = None
 def result(interrupted=False):
     value = recorded("result")
     if interrupted:
         value.update(subtype="error_during_execution", is_error=True, terminal_reason="aborted_streaming")
+    value["user_message_uuids"] = [sent_turn]
+    emit(value)
+
+def unrequested_result():
+    # What the CLI emits for a turn it starts itself (background work finishing),
+    # or for a resume after a kill: a result naming no user message.
+    value = recorded("result")
+    value.update(num_turns=0, origin={"kind":"task-notification"})
+    value.pop("user_message_uuids", None)
     emit(value)
 
 def question():
@@ -83,7 +93,8 @@ for line in sys.stdin:
         emit({"type":"fake_answer","answer":message["response"].get("response", {"error":message["response"].get("error")})})
         result()
     elif kind == "user":
-        report({"kind":"user","message":message["message"]})
+        report({"kind":"user","message":message["message"],"uuid":message.get("uuid")})
+        sent_turn = message.get("uuid")
         text = message["message"]["content"]
         if text == "permission":
             question()
@@ -135,6 +146,10 @@ for line in sys.stdin:
         elif text == "mcp":
             emit({"type":"control_request","request_id":"mcp","request":{
                 "subtype":"mcp_message","server_name":"devora","message":{"jsonrpc":"2.0","id":1,"method":"tools/list"}}})
+        elif text == "unrequested-result":
+            unrequested_result()
+            emit(recorded("stream_event"))
+            emit({"type":"fake_stream_ready"})
         elif text in ("stream", "ignore-interrupt"):
             ignore_interrupt = text == "ignore-interrupt"
             emit(recorded("stream_event"))

@@ -93,8 +93,9 @@ impl Message {
         })
     }
 
-    /// A user text turn sent to a persistent CLI process.
-    pub fn user_text(session_id: String, text: String) -> Self {
+    /// A user text turn sent to a persistent CLI process. The CLI keeps `id`
+    /// as the message's UUID, and the result that ends this turn names it.
+    pub fn user_text(session_id: String, id: String, text: String) -> Self {
         Self::Known(KnownMessage::User {
             message: Turn {
                 role: "user".into(),
@@ -104,6 +105,7 @@ impl Message {
             extra: Map::from_iter([
                 ("session_id".into(), Value::String(session_id)),
                 ("parent_tool_use_id".into(), Value::Null),
+                ("uuid".into(), Value::String(id)),
             ]),
         })
     }
