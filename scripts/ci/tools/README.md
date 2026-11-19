@@ -2,6 +2,7 @@
 
 `package.json` pins the tools CI installs, so that a new release can't change CI under an unchanged tree, and so that Dependabot can see the pins (it can't read a version inside a workflow).
 Today that's the Claude Code CLI (`@anthropic-ai/claude-code`), exact, which the real-Claude acceptance scenarios and the agent CLI tests run.
+It lives here, not under `.github/`: GitHub refuses Dependabot changes to files under `.github/` for every ecosystem but github-actions (its pull request is rejected as "invalid or unauthorized changes").
 
 Every reader takes the version from here:
 

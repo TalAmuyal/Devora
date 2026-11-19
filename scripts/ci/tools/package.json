@@ -1,4 +1,5 @@
 {
+  "name": "devora-ci-tools",
   "private": true,
   "description": "Tools CI installs, pinned so Dependabot can bump them (README.md)",
   "dependencies": {

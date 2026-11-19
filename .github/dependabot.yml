@@ -1,8 +1,8 @@
 version: 2
 updates:
-  # The Claude Code CLI CI installs (.github/ci-tools/README.md): weekly, one open PR at most, each bump on its own.
+  # The Claude Code CLI CI installs (scripts/ci/tools/README.md): weekly, one open PR at most, each bump on its own.
   - package-ecosystem: npm
-    directory: /.github/ci-tools
+    directory: /scripts/ci/tools
     schedule:
       interval: weekly
     open-pull-requests-limit: 1
