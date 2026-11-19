@@ -71,6 +71,8 @@ pub(super) async fn wait_for_release(
             if !state.global_paused() {
                 let owner = inner.owners.get_mut(key).expect("eligible owner");
                 if owner.keep_paused {
+                    // Kept paused through the hold, it is now individually paused, across a restart too.
+                    let _ = super::set_paused(state, key, true);
                     owner.pause_requested = true;
                     owner.globally_held = false;
                     owner.pause.send_replace(true);

@@ -17,6 +17,12 @@ pub enum Command {
         name: String,
         keep_paused: bool,
     },
+    /// The user paused or resumed the agent; unlike `keep_paused`, a global release leaves it.
+    SetAgentPaused {
+        profile_path: String,
+        name: String,
+        paused: bool,
+    },
     ClearAgentDraft {
         profile_path: String,
         name: String,
@@ -285,6 +291,29 @@ pub(crate) fn apply(
                 return Ok(vec![]);
             }
             view.keep_paused = keep_paused;
+            vec![Event::AgentViewChanged {
+                profile_path,
+                name,
+                view: Some(view.clone()),
+            }]
+        }
+        Command::SetAgentPaused {
+            profile_path,
+            name,
+            paused,
+        } => {
+            if !paused
+                && !app.agent_views.iter().any(|view| {
+                    view.profile_path == profile_path && view.name == name && view.paused
+                })
+            {
+                return Ok(vec![]);
+            }
+            let view = agent_view(app, &profile_path, &name);
+            if view.paused == paused {
+                return Ok(vec![]);
+            }
+            view.paused = paused;
             vec![Event::AgentViewChanged {
                 profile_path,
                 name,

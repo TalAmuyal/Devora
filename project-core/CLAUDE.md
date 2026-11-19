@@ -59,6 +59,8 @@ On release, a selected owner completes its current turn and stays individually p
 The choice persists beside the agent's draft and scroll state so a held restore publishes it before any CLI launch.
 Releasing the global hold clears those durable choices in the same transaction; the existing owner retains its selected pause intent until stopped.
 An agent individually paused before the global hold retains its individual pause and cannot change this release choice.
+An individual pause is durable too (`agent_views.paused`, `Command::SetAgentPaused`), committed when the user asks for it, before the turn's boundary, so an app killed mid-turn brings the agent back paused.
+`restore` keeps it: the agent shows Paused, with its history, and never launches, whether a hold is set or released; the user's own `open` (Resume, Retry, the Agent Hub) clears it first; a global release leaves it, while Keep paused turns into it.
 
 ## Periodic repository updates
 

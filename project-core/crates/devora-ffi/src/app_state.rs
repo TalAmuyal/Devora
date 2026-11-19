@@ -30,6 +30,7 @@ pub struct AgentViewState {
     pub draft: String,
     pub anchor: Option<ChatScrollAnchor>,
     pub keep_paused: bool,
+    pub paused: bool,
 }
 #[uniffi::remote(Record)]
 pub struct ChatScrollAnchor {
@@ -98,6 +99,11 @@ pub enum Command {
         profile_path: String,
         name: String,
         keep_paused: bool,
+    },
+    SetAgentPaused {
+        profile_path: String,
+        name: String,
+        paused: bool,
     },
     ClearAgentDraft {
         profile_path: String,

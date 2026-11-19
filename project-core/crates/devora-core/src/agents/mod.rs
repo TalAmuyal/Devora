@@ -133,6 +133,7 @@ impl Agents {
 
     /// Starts opening immediately. Ready/failure is delivered through the Store.
     /// A request during pause waits for ownership release, then opens again.
+    /// The user's own open (Resume, Retry, the Agent Hub) clears an individual pause first.
     pub async fn open(
         &self,
         profile: &Path,
@@ -140,6 +141,17 @@ impl Agents {
         context: LaunchContext,
     ) -> Result<u64, String> {
         let key = Key::new(profile, name)?;
+        set_paused(&self.state, &key, false)?;
+        self.open_key(key, context, false).await
+    }
+
+    /// `restoring` keeps an individual pause the agent had when the app quit, so it shows Paused without launching.
+    async fn open_key(
+        &self,
+        key: Key,
+        context: LaunchContext,
+        restoring: bool,
+    ) -> Result<u64, String> {
         loop {
             let mut done = {
                 let mut inner = lock(&self.inner);
@@ -173,6 +185,9 @@ impl Agents {
                     let generation = inner.generation;
                     let (pause, paused) = watch::channel(false);
                     let (done, _) = watch::channel(false);
+                    let view = self.state.snapshot().agent_views.into_iter().find(|view| {
+                        view.profile_path == key.profile.to_string_lossy() && view.name == key.name
+                    });
                     inner.owners.insert(
                         key.clone(),
                         Owner {
@@ -181,13 +196,10 @@ impl Agents {
                             generation,
                             handle: None,
                             pause,
-                            pause_requested: false,
+                            pause_requested: restoring
+                                && view.as_ref().is_some_and(|view| view.paused),
                             globally_held: false,
-                            keep_paused: self.state.snapshot().agent_views.iter().any(|view| {
-                                view.profile_path == key.profile.to_string_lossy()
-                                    && view.name == key.name
-                                    && view.keep_paused
-                            }),
+                            keep_paused: view.as_ref().is_some_and(|view| view.keep_paused),
                             done,
                             live: false,
                         },
@@ -216,10 +228,10 @@ impl Agents {
         for tab in &snapshot.window.tabs {
             if let SessionKind::AgentSpace { name } = &tab.session.kind {
                 let result = match tab.session.profile_path.as_deref() {
-                    Some(profile) => self
-                        .open(Path::new(profile), name, context.clone())
-                        .await
-                        .map(|_| ()),
+                    Some(profile) => match Key::new(Path::new(profile), name) {
+                        Ok(key) => self.open_key(key, context.clone(), true).await.map(|_| ()),
+                        Err(error) => Err(error),
+                    },
                     None => Err("agent tab has no owning profile".into()),
                 };
                 if let Err(error) = result {
@@ -360,11 +372,12 @@ impl Agents {
     pub async fn pause(&self, tab: u64) -> Result<(), String> {
         let mut done = {
             let mut inner = lock(&self.inner);
-            let owner = inner
+            let (key, owner) = inner
                 .owners
-                .values_mut()
-                .find(|o| o.tab == Some(tab))
+                .iter_mut()
+                .find(|(_, o)| o.tab == Some(tab))
                 .ok_or("agent is not open")?;
+            set_paused(&self.state, key, true)?;
             owner.globally_held = false;
             owner.pause_requested = true;
             events::update(
@@ -393,10 +406,10 @@ impl Agents {
         if inner.closing {
             return Err("agents are shutting down".into());
         }
-        let owner = inner
+        let (key, owner) = inner
             .owners
-            .values_mut()
-            .find(|o| o.tab == Some(tab))
+            .iter_mut()
+            .find(|(_, o)| o.tab == Some(tab))
             .ok_or("agent is not open")?;
         if owner.generation != generation || *owner.pause.borrow() || *owner.done.borrow() {
             return Err("agent generation is stale or pausing".into());
@@ -404,6 +417,10 @@ impl Agents {
         if owner.pause_requested {
             return Ok(());
         }
+        // Committed when requested, not at the turn's boundary: an app killed mid-turn brings the agent back
+        // paused, as the user asked, rather than running.
+        set_paused(&self.state, key, true)?;
+        let key = key.clone();
         if owner.globally_held && owner.handle.is_none() {
             owner.globally_held = false;
             owner.pause_requested = true;
@@ -452,6 +469,7 @@ impl Agents {
                             && !*o.pause.borrow()
                     }) {
                         owner.pause_requested = false;
+                        let _ = set_paused(&state, &key, false);
                         events::update(
                             &state,
                             tab,
@@ -896,10 +914,11 @@ async fn run_session(
     if *pause.borrow() {
         return Ok(());
     }
+    // Keep paused, or individually paused when the app quit (a restore): shown Paused, never launched.
     if lock(inner)
         .owners
         .get(key)
-        .is_some_and(|owner| owner.keep_paused)
+        .is_some_and(|owner| owner.keep_paused || owner.pause_requested)
     {
         return Ok(());
     }
@@ -965,6 +984,18 @@ async fn run_session(
             }
         }
     }
+}
+
+/// Commits whether the user has the agent individually paused, so that a restore keeps it paused.
+fn set_paused(state: &Store, key: &Key, paused: bool) -> Result<(), String> {
+    state
+        .dispatch(Command::SetAgentPaused {
+            profile_path: key.profile.to_string_lossy().into_owned(),
+            name: key.name.clone(),
+            paused,
+        })
+        .map(|_| ())
+        .map_err(|e| e.to_string())
 }
 
 /// A stop that had to kill Claude during shutdown is one of the shutdown's problems.

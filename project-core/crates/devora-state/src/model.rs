@@ -135,6 +135,9 @@ pub struct AgentViewState {
     /// Remain individually paused when the current global hold releases.
     #[serde(default)]
     pub keep_paused: bool,
+    /// Individually paused by the user: a restore keeps it from launching until the user resumes it.
+    #[serde(default)]
+    pub paused: bool,
 }
 
 /// The top visible transcript item and its offset, or None for following output.

@@ -48,6 +48,8 @@ const MIGRATIONS: &[&str] = &[
     "CREATE TABLE agent_views (profile_path TEXT NOT NULL, name TEXT NOT NULL, draft TEXT NOT NULL, anchor_sequence INTEGER, anchor_offset INTEGER, PRIMARY KEY(profile_path, name));",
     "ALTER TABLE meta ADD COLUMN global_paused INTEGER NOT NULL DEFAULT 0;",
     "ALTER TABLE agent_views ADD COLUMN keep_paused INTEGER NOT NULL DEFAULT 0;",
+    // Existing views read as not paused, so no agent comes back paused after the upgrade.
+    "ALTER TABLE agent_views ADD COLUMN paused INTEGER NOT NULL DEFAULT 0;",
 ];
 
 pub(crate) struct Db {
@@ -343,7 +345,7 @@ fn load(conn: &Connection) -> Result<State, Error> {
     }
 
     let mut query = conn.prepare(
-        "SELECT profile_path, name, draft, anchor_sequence, anchor_offset, keep_paused
+        "SELECT profile_path, name, draft, anchor_sequence, anchor_offset, keep_paused, paused
          FROM agent_views ORDER BY profile_path, name",
     )?;
     let agent_views = query
@@ -359,6 +361,7 @@ fn load(conn: &Connection) -> Result<State, Error> {
                     offset: offset.unwrap_or(0),
                 }),
                 keep_paused: row.get(5)?,
+                paused: row.get(6)?,
             })
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -379,14 +382,15 @@ fn write(conn: &mut Connection, state: &State) -> rusqlite::Result<()> {
     tx.execute("DELETE FROM agent_views", [])?;
     for view in &state.app.agent_views {
         tx.execute(
-            "INSERT INTO agent_views VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            "INSERT INTO agent_views VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             params![
                 view.profile_path,
                 view.name,
                 view.draft,
                 view.anchor.as_ref().map(|a| a.sequence),
                 view.anchor.as_ref().map(|a| a.offset),
-                view.keep_paused
+                view.keep_paused,
+                view.paused
             ],
         )?;
     }
@@ -1186,6 +1190,37 @@ mod agent_view_tests {
             matches!(&store.dispatch(clear("newer")).unwrap()[0], crate::Event::AgentDraftCleared { text, .. } if text == "newer")
         );
         assert!(store.snapshot().agent_views[0].draft.is_empty());
+    }
+
+    #[test]
+    fn views_saved_before_individual_pauses_were_persisted_come_back_not_paused() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("state.db");
+        let conn = Connection::open(&path).unwrap();
+        let before = MIGRATIONS
+            .iter()
+            .position(|migration| migration.contains("ADD COLUMN paused"))
+            .unwrap();
+        for migration in &MIGRATIONS[..before] {
+            conn.execute_batch(migration).unwrap();
+        }
+        conn.pragma_update(None, "user_version", before).unwrap();
+        conn.execute_batch(
+            "INSERT INTO agent_views VALUES ('/p', 'Kept', 'draft', NULL, NULL, 1);
+             INSERT INTO agent_views VALUES ('/p', 'Plain', '', 4, 2, 0);",
+        )
+        .unwrap();
+        drop(conn);
+
+        let views = Store::open(&path).unwrap().snapshot().agent_views;
+        assert_eq!(
+            views
+                .iter()
+                .map(|view| (view.name.as_str(), view.keep_paused, view.paused))
+                .collect::<Vec<_>>(),
+            [("Kept", true, false), ("Plain", false, false)],
+            "an upgrade pauses no agent"
+        );
     }
 
     #[test]

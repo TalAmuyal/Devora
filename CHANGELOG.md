@@ -98,6 +98,7 @@ Types of changes:
 
 ### Fixed
 
+- A Devora Sapphire agent you paused stays paused across a restart, with or without a global pause, until you resume it
 - Devora Sapphire's window title shows its real version instead of "0.1.0", and the install suffix of a side-by-side install, as Ember's does
 - The health check (`debi health` and the Health Hub) no longer stalls for seconds without a network: mise's version check now runs offline, skipping mise's online check for a newer release
 - Devora Ember's terminal no longer stops showing output when a preview pane opening beside it narrows it with the cursor on its bottom row (an xterm.js reflow bug, patched until a release fixes it)
