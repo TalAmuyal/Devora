@@ -30,6 +30,8 @@ check true USER_GUIDE.md
 check true base-icon-ember.png
 check true mise.toml
 check true .github/workflows/ci.yml
+# A Claude Code bump (.github/ci-tools/README.md) must run both apps' CI: that's what it's for.
+check true .github/ci-tools/package.json .github/ci-tools/package-lock.json
 check true scripts/ci/ember-affected.sh
 check true project-core/CLAUDE.md
 check true some-new-dir/file.txt
