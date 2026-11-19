@@ -8,7 +8,7 @@ import Testing
 	let core = try DevoraCore(configPath: fixture.configPath, statePath: nil, log: fixture.log())
 	let chatEvents = try core.subscribeAgentChats()
 	let snapshot = try await chatEvents.nextBatch(max: 100)
-	guard case .snapshot(let chats) = snapshot.first else {
+	guard case .snapshot(let chats, _) = snapshot.first else {
 		Issue.record("Expected an initial chat snapshot")
 		return
 	}

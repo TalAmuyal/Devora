@@ -2,7 +2,9 @@
 
 use crate::feed::{feed, Feed, Subscription};
 use crate::persist::Db;
-use crate::{AppState, Chat, ChatCommand, ChatEvent, Command, Event, State, StateError};
+use crate::{
+    AppState, Chat, ChatCommand, ChatEvent, Command, Event, RunningAgents, State, StateError,
+};
 use std::path::Path;
 use std::sync::{Mutex, MutexGuard};
 
@@ -20,6 +22,7 @@ struct Inner {
     /// Where every change is committed before it takes effect; `None` for an in-memory store.
     db: Option<Db>,
     chats: Vec<Chat>,
+    running_agents: RunningAgents,
     chat_subscribers: Vec<Feed<ChatEvent>>,
 }
 
@@ -75,7 +78,7 @@ impl Store {
     /// The live projection is held in memory. Token patches never rewrite app-state SQLite.
     pub fn dispatch_chat(&self, command: ChatCommand) -> Result<(), StateError> {
         let inner = &mut *lock(&self.inner);
-        let event = crate::chat::apply(&mut inner.chats, command)?;
+        let event = crate::chat::apply(&mut inner.chats, &mut inner.running_agents, command)?;
         inner
             .chat_subscribers
             .retain(|feed| feed.push(std::slice::from_ref(&event)));
@@ -86,12 +89,26 @@ impl Store {
         lock(&self.inner).chats.clone()
     }
 
+    /// Each chat's tab with whether a turn runs and whether a question waits, without copying transcripts.
+    pub fn chat_activity(&self) -> Vec<(u64, bool, bool)> {
+        lock(&self.inner)
+            .chats
+            .iter()
+            .map(|chat| (chat.tab, chat.turn_running, !chat.questions.is_empty()))
+            .collect()
+    }
+
+    pub fn running_agents(&self) -> RunningAgents {
+        lock(&self.inner).running_agents.clone()
+    }
+
     /// Snapshot and registration share the same lock as updates.
     pub fn subscribe_chats(&self) -> Subscription<ChatEvent> {
         let mut inner = lock(&self.inner);
         let (feed, subscription) = feed();
         feed.push(&[ChatEvent::Snapshot {
             chats: inner.chats.clone(),
+            running: inner.running_agents.clone(),
         }]);
         inner.chat_subscribers.push(feed);
         subscription
@@ -421,7 +438,10 @@ mod chat_tests {
         let events = store.subscribe_chats();
         assert_eq!(
             events.try_next_batch(1),
-            vec![crate::ChatEvent::Snapshot { chats: snapshot }]
+            vec![crate::ChatEvent::Snapshot {
+                chats: snapshot,
+                running: Default::default()
+            }]
         );
     }
 
@@ -474,7 +494,7 @@ mod chat_tests {
         }
         let batch = events.try_next_batch(200);
         assert!(
-            matches!(&batch[0], ChatEvent::Snapshot { chats } if chats.len() == 1 && chats[0].items.is_empty())
+            matches!(&batch[0], ChatEvent::Snapshot { chats, .. } if chats.len() == 1 && chats[0].items.is_empty())
         );
         assert_eq!(batch.len(), 102);
         assert_eq!(store.chat_snapshot()[0].items.len(), 1);

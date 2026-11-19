@@ -28,17 +28,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 	func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool { true }
 	/// Closing the window quits, keeping the tabs for the next launch, as Cmd+Q does.
 	func applicationShouldTerminateAfterLastWindowClosed(_ app: NSApplication) -> Bool { true }
-	/// Quitting pauses every agent first, so each saves its session and resumes on the next launch (ADR-012).
+	/// Quitting stops every agent first, so each saves its session and resumes on the next launch (ADR-012).
+	/// While an agent is still working, the quit waits for it to stop cleanly instead (`AppTermination.mayQuit`), a system logout, restart or shutdown included; "Interrupt and quit" or a force quit cut it short.
+	/// What went wrong while stopping is shown, and the app quits once that's acknowledged.
 	///
 	/// `terminate` may be called from a block on the main queue (the test bridge's quit), and AppKit then waits in a nested run loop inside that block, which can't drain the main queue, so neither the pause nor the reply may need it: the pause runs off the main actor, and the reply is a run-loop block.
 	func applicationShouldTerminate(_ app: NSApplication) -> NSApplication.TerminateReply {
+		if AppTermination.stopped { return .terminateNow }
 		if AppTermination.saveDrafts?() == false { return .terminateCancel }
+		if !AppTermination.skipWait, AppTermination.mayQuit?() == false { return .terminateCancel }
+		AppTermination.skipWait = false
 		guard let pauseAgents = AppTermination.pauseAgents else { return .terminateNow }
 		Task.detached {
-			await pauseAgents()
+			let problems = await pauseAgents()
 			let main = CFRunLoopGetMain()
 			CFRunLoopPerformBlock(main, CFRunLoopMode.commonModes.rawValue) {
-				MainActor.assumeIsolated { NSApp.reply(toApplicationShouldTerminate: true) }
+				MainActor.assumeIsolated {
+					AppTermination.stopped = true
+					for problem in problems { AppTermination.logWarning?("Stopping the agents: \(problem)") }
+					NSApp.reply(toApplicationShouldTerminate: problems.isEmpty)
+					if !problems.isEmpty { AppTermination.showProblems?(problems) }
+				}
 			}
 			CFRunLoopWakeUp(main)
 		}

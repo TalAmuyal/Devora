@@ -63,6 +63,7 @@ Types of changes:
 
 ### Changed
 
+- Devora Sapphire's quit waits for agents to stop cleanly: while one is running a turn or waiting for an answer, quitting (or closing the window) holds Devora and shows who it waits for in a popover from the toolbar, with their questions still answerable, and quits by itself once they have stopped; "Cancel Quit" keeps the hold, and "Interrupt and Quit" cuts the work short. The toolbar shows "Pausing… (n of m)" until every agent has stopped, then "Paused", with the pause status and button evenly spaced, and what goes wrong while stopping is shown instead of ignored
 - Devora Ember and Devora Sapphire are signed with a stable certificate, in releases and in source installs that have it, so macOS keeps their permissions (such as access to Documents) across updates, rebuilds and install suffixes instead of asking again
 - Devora Sapphire's repo picker (New Agent, New Task and Add Repo) is a native Mac list, with checkboxes, the system selection highlight, one-line names truncated in the middle and a native "No Results" view; New Agent's list no longer overlaps the fields around it
 - Sapphire chat puts native Pause controls and a reversible Keep paused switch in the Widget Bar, preserves the switch during held relaunches, replaces Send with Stop during a turn, and shows the agent name in its tab.

@@ -97,7 +97,7 @@ export function hasExited(app: ChildProcess): boolean {
 }
 
 /** Resolves with the exit code (or signal) once the app has exited. */
-function exited(app: ChildProcess, timeoutMs = 10_000): Promise<number | NodeJS.Signals> {
+export function exited(app: ChildProcess, timeoutMs = 10_000): Promise<number | NodeJS.Signals> {
   if (hasExited(app)) return Promise.resolve(app.exitCode ?? app.signalCode!);
   return new Promise((resolve, reject) => {
     const onExit = (code: number | null, signal: NodeJS.Signals | null) => {
@@ -112,9 +112,9 @@ function exited(app: ChildProcess, timeoutMs = 10_000): Promise<number | NodeJS.
   });
 }
 
-/** Quits the app as the app menu's Quit does, and waits for it to exit. */
-export async function quit(app: LaunchedApp): Promise<void> {
-  const [, result] = await Promise.all([app.bridge.quit(), exited(app.app)]);
+/** Quits the app as the app menu's Quit does (or "Interrupt and quit", with `interrupt`), and waits for it to exit. */
+export async function quit(app: LaunchedApp, interrupt = false): Promise<void> {
+  const [, result] = await Promise.all([app.bridge.quit(interrupt), exited(app.app)]);
   if (result !== 0) throw new Error(`The app exited with ${result} on quit:\n${(stderrOf.get(app.app) ?? []).join('')}`);
 }
 
@@ -161,7 +161,8 @@ async function waitForAgentChildren(children: AgentChild[]): Promise<void> {
 export async function shutdown(app: LaunchedApp): Promise<void> {
   const children = agentProcesses().filter(child => child.parent === app.app.pid);
   try {
-    if (!hasExited(app.app)) await quit(app);
+    // A scenario may end with an agent mid-turn, whose quit would otherwise wait for it.
+    if (!hasExited(app.app)) await quit(app, true);
   } finally {
     if (!hasExited(app.app)) {
       children.push(...agentProcesses().filter(child => child.parent === app.app.pid));

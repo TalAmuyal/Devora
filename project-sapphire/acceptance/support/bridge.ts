@@ -293,6 +293,14 @@ export interface AppState {
   cloneRepo: CloneRepoState | null;
   profileForm: ProfileFormState | null;
   settings: SettingsState | null;
+  /** The toolbar's hint while Devora is held ("Pausing… (n of m)", then "Paused"); null while it isn't. */
+  pauseIndicator: string | null;
+  /** A quit waiting for the agents to stop cleanly; it goes on by itself once they have. */
+  quitPending: boolean;
+  /** The agents whose runtime is still live, out of every agent the core still holds. */
+  runningAgents: { total: number; running: { name: string; tab: number | null; activity: 'turn' | 'question' | 'idle' | 'stopping' }[] };
+  /** The open pause progress layer: who the hold still waits for, a waiting quit, or a shutdown's problems. */
+  pauseProgress: { mode: 'pausing' | 'quitting' | 'problems'; buttons: string[]; problems: string[] } | null;
   /** The window's title as AppKit has it, or null without a window. */
   windowTitle: string | null;
   profiles: { name: string; path: string }[];
@@ -368,10 +376,43 @@ export class Bridge {
     await this.request('POST', '/test/dispatch', command);
   }
 
-  /** Asks the app to quit, as the app menu's Quit does; the app may exit before it answers, so callers wait for the process to exit. */
-  async quit(): Promise<void> {
+  /** Presses one of the pause progress layer's buttons, by its title; with `quits`, the app may exit before it answers, so callers wait for the process to exit. */
+  async pauseProgressButton(title: string, quits = false): Promise<void> {
     try {
-      await this.request('POST', '/test/quit');
+      await this.request('POST', '/test/pause-progress', { action: 'press', title });
+    } catch (error) {
+      if (!quits || error instanceof BridgeError) throw error;
+    }
+  }
+
+  /** Clicks the toolbar's pause status, which opens the pause progress popover. */
+  async openPauseProgress(): Promise<void> {
+    await this.request('POST', '/test/pause-progress', { action: 'open' });
+  }
+
+  /** Hides the pause progress popover, as Escape or a click elsewhere does. */
+  async hidePauseProgress(): Promise<void> {
+    await this.request('POST', '/test/pause-progress', { action: 'hide' });
+  }
+
+  /** Clicks an agent's Show in the pause progress layer. */
+  async pauseProgressShow(name: string): Promise<void> {
+    await this.request('POST', '/test/pause-progress', { action: 'show', name });
+  }
+
+  /** Closes the window as its close button does; the app may quit before this answers. */
+  async closeWindow(): Promise<void> {
+    try {
+      await this.request('POST', '/test/window/close');
+    } catch (error) {
+      if (error instanceof BridgeError) throw error;
+    }
+  }
+
+  /** Asks the app to quit, as the app menu's Quit does, or as "Interrupt and quit" does with `interrupt`; the app may exit before it answers, so callers wait for the process to exit. */
+  async quit(interrupt = false): Promise<void> {
+    try {
+      await this.request('POST', '/test/quit', { interrupt });
     } catch (error) {
       if (error instanceof BridgeError) throw error;
     }

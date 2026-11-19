@@ -162,6 +162,49 @@ impl Fixture {
     }
 }
 
+impl Fixture {
+    /// Waits until the published running agents satisfy `predicate`, as `wait` does for a chat.
+    fn wait_running(
+        &self,
+        events: &Arc<ChatSubscription>,
+        mut predicate: impl FnMut(&RunningAgents) -> bool,
+    ) -> RunningAgents {
+        loop {
+            let running = self.core.state.running_agents();
+            if predicate(&running) {
+                return running;
+            }
+            let subscription = events.clone();
+            let (sent, receive) = mpsc::channel();
+            let worker = std::thread::spawn(move || {
+                let _ = sent.send(block_on(subscription.next_batch(100)));
+            });
+            let received = receive.recv_timeout(Duration::from_secs(12));
+            if received.is_err() {
+                events.close().unwrap();
+            }
+            worker.join().unwrap();
+            assert!(
+                !received
+                    .expect("running agents timed out")
+                    .unwrap()
+                    .is_empty(),
+                "chat feed closed"
+            );
+        }
+    }
+}
+
+fn activities(running: &RunningAgents) -> Vec<(String, AgentActivity)> {
+    let mut activities: Vec<_> = running
+        .running
+        .iter()
+        .map(|agent| (agent.name.clone(), agent.activity.clone()))
+        .collect();
+    activities.sort_by(|a, b| a.0.cmp(&b.0));
+    activities
+}
+
 fn has_message(chat: &Chat, kind: &str) -> bool {
     chat.items.iter().any(|item| match &item.content {
         TranscriptContent::System {
@@ -1099,4 +1142,143 @@ fn global_release_cancels_the_pending_hold_and_close_keeps_ownership_serialized(
     });
     assert_eq!(f.core.snapshot().unwrap().window.tabs.len(), 1);
     block_on(f.core.shutdown_agents()).unwrap();
+}
+
+#[test]
+fn a_global_hold_is_complete_once_no_agent_runtime_is_live() {
+    let f = Fixture::new(false);
+    let events = f.core.subscribe_agent_chats().unwrap();
+    let mut tabs = vec![];
+    for name in ["Asking", "Idle"] {
+        f.create(name);
+        let tab = f.open(name);
+        let chat = f.wait(&events, |c| c.tab == tab && c.phase == ChatPhase::Running);
+        tabs.push((tab, chat.generation));
+    }
+    f.wait_running(&events, |r| {
+        r.total == 2
+            && activities(r)
+                == [
+                    ("Asking".into(), AgentActivity::Idle),
+                    ("Idle".into(), AgentActivity::Idle),
+                ]
+    });
+    let (asking, generation) = tabs[0];
+    block_on(
+        f.core
+            .send_agent_turn(asking, generation, "permission".into()),
+    )
+    .unwrap();
+    f.wait_running(&events, |r| {
+        activities(r).contains(&("Asking".into(), AgentActivity::Question))
+    });
+
+    f.core
+        .dispatch(Command::SetGlobalPaused { paused: true })
+        .unwrap();
+    // The idle agent stops at once; the asking one waits for its answer, interrupting nothing.
+    let held = f.wait_running(&events, |r| {
+        activities(r) == [("Asking".into(), AgentActivity::Question)]
+    });
+    assert_eq!(held.total, 2, "held agents still count until they're gone");
+    assert_eq!(held.running[0].tab, Some(asking));
+
+    block_on(f.core.answer_agent_permission(
+        asking,
+        generation,
+        "question".into(),
+        PermissionAnswer::Allow,
+    ))
+    .unwrap();
+    let stopped = f.wait_running(&events, |r| r.running.is_empty());
+    assert_eq!(stopped.total, 2);
+    let paused = f.wait(&events, |c| c.tab == asking && c.phase == ChatPhase::Paused);
+    assert!(
+        has_message(&paused, "result"),
+        "the turn finished before the hold took it"
+    );
+    block_on(f.core.shutdown_agents()).unwrap();
+}
+
+#[test]
+fn a_tab_closed_mid_turn_stays_running_until_its_runtime_stops() {
+    let f = Fixture::new(false);
+    let events = f.core.subscribe_agent_chats().unwrap();
+    f.create("Stubborn");
+    let tab = f.open("Stubborn");
+    let chat = f.wait(&events, |c| c.tab == tab && c.phase == ChatPhase::Running);
+    block_on(
+        f.core
+            .send_agent_turn(tab, chat.generation, "ignore-interrupt".into()),
+    )
+    .unwrap();
+    f.wait_running(&events, |r| {
+        activities(r) == [("Stubborn".into(), AgentActivity::Turn)]
+    });
+
+    f.core.close_agent_space(tab).unwrap();
+    assert!(
+        f.core.agent_chat_snapshot().unwrap().is_empty(),
+        "its chat is gone"
+    );
+    let stopping = f.wait_running(&events, |r| {
+        activities(r) == [("Stubborn".into(), AgentActivity::Stopping)]
+    });
+    assert_eq!(stopping.running[0].tab, None);
+    assert_eq!(stopping.total, 1);
+    // Ignoring the interrupt, it's killed once the stop's grace period ends.
+    let gone = f.wait_running(&events, |r| r.running.is_empty());
+    assert_eq!(gone.total, 0);
+    block_on(f.core.shutdown_agents()).unwrap();
+}
+
+#[test]
+fn shutdown_reports_an_agent_that_had_to_be_terminated() {
+    let f = Fixture::new(false);
+    let events = f.core.subscribe_agent_chats().unwrap();
+    f.create("Stubborn");
+    let tab = f.open("Stubborn");
+    let chat = f.wait(&events, |c| c.tab == tab && c.phase == ChatPhase::Running);
+    block_on(
+        f.core
+            .send_agent_turn(tab, chat.generation, "ignore-interrupt".into()),
+    )
+    .unwrap();
+    f.wait_running(&events, |r| {
+        activities(r) == [("Stubborn".into(), AgentActivity::Turn)]
+    });
+
+    let error = block_on(f.core.shutdown_agents()).unwrap_err();
+    assert_eq!(
+        error.to_string(),
+        "Stubborn: Claude didn't stop within the grace period and was terminated"
+    );
+}
+
+#[test]
+fn shutdown_reports_a_terminated_agent_during_a_global_hold_too() {
+    let f = Fixture::new(false);
+    let events = f.core.subscribe_agent_chats().unwrap();
+    f.create("Stubborn");
+    let tab = f.open("Stubborn");
+    let chat = f.wait(&events, |c| c.tab == tab && c.phase == ChatPhase::Running);
+    block_on(
+        f.core
+            .send_agent_turn(tab, chat.generation, "ignore-interrupt".into()),
+    )
+    .unwrap();
+    f.wait_running(&events, |r| {
+        activities(r) == [("Stubborn".into(), AgentActivity::Turn)]
+    });
+    // A quit that waited holds Devora first; "Interrupt and quit" then shuts down.
+    f.core
+        .dispatch(Command::SetGlobalPaused { paused: true })
+        .unwrap();
+    f.wait(&events, |c| c.tab == tab && c.globally_held);
+
+    let error = block_on(f.core.shutdown_agents()).unwrap_err();
+    assert_eq!(
+        error.to_string(),
+        "Stubborn: Claude didn't stop within the grace period and was terminated"
+    );
 }

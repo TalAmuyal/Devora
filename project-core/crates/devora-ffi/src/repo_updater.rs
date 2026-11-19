@@ -39,7 +39,7 @@ impl DevoraCore {
 
     pub fn shutdown_repo_updates(&self) -> Result<(), CoreError> {
         if let Some(updater) = &*self.updater.lock().unwrap_or_else(|e| e.into_inner()) {
-            updater.shutdown();
+            updater.shutdown()?;
         }
         Ok(())
     }

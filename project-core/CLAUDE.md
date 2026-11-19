@@ -42,6 +42,8 @@ Existing databases migrate to running.
 `Store::subscribe_global_pause` registers under the state lock and delivers the current bool followed by committed changes.
 Integrations subscribe and choose their own graceful unit boundary.
 The authoritative `global_paused` read also guards admission at those boundaries.
+The agent registry publishes `RunningAgents` on the chat subscription (`ChatEvent::Running`, and in its snapshot): every agent it still holds (`total`), and those whose runtime is live, each with its activity (a turn, a permission question, idle, or stopping after its tab closed), so a UI knows when a hold has stopped everyone, closed tabs included (`agents/running.rs`).
+`shutdown_agents` and `shutdown_repo_updates` fail with what went wrong (a forced kill after the stop's grace period, a stop that failed, a checkout outliving the wait), once everything has stopped.
 
 Agents use the existing actor pause-after-turn boundary for individual and global pauses.
 The registry's in-memory `globally_held` eligibility distinguishes agents held globally from individual pauses.

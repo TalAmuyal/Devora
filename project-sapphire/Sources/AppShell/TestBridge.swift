@@ -105,7 +105,9 @@ final class TestBridge {
 				return .init(status: 200, body: [:])
 			case ("POST", "/test/quit"):
 				// The app may exit before the response is out, so the harness waits for the exit instead.
-				Task { NSApp.terminate(nil) }
+				// `interrupt` quits as "Interrupt and quit" does, without waiting for agents still working (the teardown's quit).
+				let interrupt = (try? request.json())?["interrupt"] as? Bool == true
+				Task { interrupt ? AppTermination.interruptAndQuit() : NSApp.terminate(nil) }
 				return .init(status: 200, body: [:])
 			case ("GET", "/test/terminal/text"):
 				let session = try terminal(request.query["tab"].flatMap { UInt64($0) })
@@ -174,6 +176,16 @@ final class TestBridge {
 				return .init(status: 200, body: [:])
 			case ("POST", "/test/dialog"):
 				try dialogButton(request.json())
+				return .init(status: 200, body: [:])
+			case ("POST", "/test/pause-progress"):
+				try pauseProgressAction(request.json())
+				return .init(status: 200, body: [:])
+			case ("POST", "/test/window/close"):
+				// As the close button does; the window may close, and the app quit, before this answers.
+				guard let window = NSApp.windows.first(where: { $0.isVisible && $0.contentView != nil }) else {
+					throw BridgeError(status: 409, "no window")
+				}
+				window.performClose(nil)
 				return .init(status: 200, body: [:])
 			case ("POST", "/test/new-task"):
 				try newTaskAction(request.json())
@@ -356,6 +368,62 @@ final class TestBridge {
 		case "cancel": dialog.cancel()
 		default: throw BridgeError(status: 400, "unknown button \(String(describing: body["button"]))")
 		}
+	}
+
+	/// Clicks the toolbar's pause status (`open`), or what its popover draws: a button (by its title), or an agent's Show (by its name).
+	private func pauseProgressAction(_ body: [String: Any]) throws {
+		switch body["action"] as? String {
+		case "open":
+			guard store.pauseIndicator != nil || surfaces.shutdownProblems != nil else { throw BridgeError(status: 409, "the toolbar shows no pause status") }
+			surfaces.showPauseStatus()
+			return
+		case "hide":
+			// As Escape or a click elsewhere does.
+			surfaces.hidePauseProgress()
+			return
+		default: break
+		}
+		guard let progress = surfaces.pauseProgress else { throw BridgeError(status: 409, "no pause progress is open") }
+		switch body["action"] as? String {
+		case "press":
+			guard let action = progress.actions.first(where: { $0.title == body["title"] as? String }) else {
+				throw BridgeError(status: 404, "no button \(String(describing: body["title"]))")
+			}
+			action.run()
+		case "show":
+			guard let agent = store.runningAgents.running.first(where: { $0.name == body["name"] as? String }), let tab = agent.tab else {
+				throw BridgeError(status: 404, "no running agent with a tab named \(String(describing: body["name"]))")
+			}
+			surfaces.showAgent(tab: tab)
+		default: throw BridgeError(status: 400, "unknown action \(String(describing: body["action"]))")
+		}
+	}
+
+	private func pauseProgressState() -> Any {
+		guard let progress = surfaces.pauseProgress else { return NSNull() }
+		let mode: String
+		var problems: [String] = []
+		switch progress.mode {
+		case .pausing: mode = "pausing"
+		case .quitting: mode = "quitting"
+		case .problems(let shown):
+			mode = "problems"
+			problems = shown
+		}
+		return [
+			"mode": mode,
+			"buttons": progress.actions.map(\.title),
+			"problems": problems,
+		] as [String: Any]
+	}
+
+	private func runningAgentsState() -> Any {
+		[
+			"total": store.runningAgents.total,
+			"running": store.runningAgents.running.map {
+				["name": $0.name, "tab": $0.tab.map { NSNumber(value: $0) } ?? NSNull(), "activity": "\($0.activity)"] as [String: Any]
+			},
+		] as [String: Any]
 	}
 
 	/// Clicks what the open New Task dialog draws: a repo's row (by its name), or one of its buttons.
@@ -968,6 +1036,10 @@ final class TestBridge {
 			"newAgent": newAgentState(),
 			"health": healthState(),
 			"dialog": dialogState(),
+			"pauseProgress": pauseProgressState(),
+			"pauseIndicator": (surfaces.shutdownProblems != nil ? "Stopped" : store.pauseIndicator) ?? NSNull(),
+			"quitPending": surfaces.quitPending,
+			"runningAgents": runningAgentsState(),
 			"newTask": newTaskState(),
 			"addRepo": addRepoState(),
 			"cloneRepo": cloneRepoState(),

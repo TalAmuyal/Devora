@@ -81,6 +81,8 @@ public final class Store {
 	public internal(set) var agentSpaces: [AgentSpace] = []
 	/// Each open agent's status at a glance, by its tab.
 	public internal(set) var agentStatuses: [UInt64: AgentStatus] = [:]
+	/// The agents whose runtime is still live, from the core, including those whose tab was closed mid-turn; a global hold has stopped everyone once it is empty.
+	public internal(set) var runningAgents = RunningAgents(total: 0, running: [])
 	@ObservationIgnored var agentModels: [UInt64: WeakAgentChat] = [:]
 	@ObservationIgnored var agentChats: Task<Void, Never>?
 

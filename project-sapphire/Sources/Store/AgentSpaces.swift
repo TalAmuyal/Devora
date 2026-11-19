@@ -190,12 +190,29 @@ extension Store {
 		}
 	}
 
-	/// Pauses every agent, waiting until each has stopped and saved its session; it calls the core directly, so it can run while the main actor is busy, as it is during a quit.
-	public func agentShutdown() -> (@Sendable () async -> Void)? {
+	/// The toolbar's hint while Devora is held: "Pausing… (n of m)" until every agent has stopped, then "Paused"; nil while it isn't held.
+	public var pauseIndicator: String? {
+		guard app.globalPaused else { return nil }
+		let running = UInt32(runningAgents.running.count)
+		guard running > 0 else { return "Paused" }
+		let total = max(runningAgents.total, running)
+		return "Pausing… (\(total - running) of \(total))"
+	}
+
+	/// Whether a quit has to wait for agents to stop cleanly: one is running a turn or waiting for an answer, or a global hold is still stopping someone.
+	public var quitMustWait: Bool {
+		runningAgents.running.contains { $0.activity == .turn || $0.activity == .question }
+			|| (app.globalPaused && !runningAgents.running.isEmpty)
+	}
+
+	/// Stops the repo updates and every agent, interrupting live turns, and returns what went wrong; it calls the core directly, so it can run while the main actor is busy, as it is during a quit.
+	public func agentShutdown() -> (@Sendable () async -> [String])? {
 		guard let core else { return nil }
 		return {
-			try? core.shutdownRepoUpdates()
-			try? await core.shutdownAgents()
+			var problems: [String] = []
+			do { try core.shutdownRepoUpdates() } catch { problems.append(Store.describe(error)) }
+			do { try await core.shutdownAgents() } catch { problems.append(Store.describe(error)) }
+			return problems
 		}
 	}
 
@@ -219,14 +236,18 @@ extension Store {
 		Task.detached { [weak self] in
 			var chats: [UInt64: (phase: ChatPhase, turn: Bool, questions: Set<String>, pause: Bool)] = [:]
 			var published: [UInt64: AgentStatus] = [:]
+			var running: RunningAgents?
 			do {
 				for try await batch in Batches(subscription) {
 					for event in batch {
 						switch event {
-						case .snapshot(let all):
+						case .snapshot(let all, let agents):
 							chats = Dictionary(uniqueKeysWithValues: all.map {
 								($0.tab, ($0.phase, $0.turnRunning, Set($0.questions.map(\.requestId)), $0.pauseRequested))
 							})
+							running = agents
+						case .running(let agents):
+							running = agents
 						case .started(let chat):
 							chats[chat.tab] = (chat.phase, chat.turnRunning, [], chat.pauseRequested)
 						case .closed(let tab):
@@ -255,6 +276,12 @@ extension Store {
 							case .restore, .transcript, .usage, .context, .globalHold, .keepPaused: continue
 							}
 							chats[tab] = chat
+						}
+					}
+					if let agents = running {
+						running = nil
+						await MainActor.run { [weak self] in
+							if self?.runningAgents != agents { self?.runningAgents = agents }
 						}
 					}
 					let statuses = chats.mapValues { $0.pause ? .pausing : AgentStatus(phase: $0.phase, turnRunning: $0.turn, questions: $0.questions.count) }

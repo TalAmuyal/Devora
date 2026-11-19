@@ -75,7 +75,7 @@ public final class AgentChat {
 	@discardableResult
 	func apply(_ event: ChatEvent) -> Bool {
 		switch event {
-		case .snapshot(let chats):
+		case .snapshot(let chats, _):
 			guard let value = chats.first(where: { $0.tab == tab }) else { return false }
 			restore(value)
 		case .started(let value) where value.tab == tab: restore(value)

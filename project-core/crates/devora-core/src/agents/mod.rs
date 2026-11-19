@@ -5,6 +5,7 @@ mod events;
 mod global_pause;
 mod launch;
 mod operations;
+mod running;
 
 use devora_agent::session::SessionEvent;
 pub use devora_agent::session::{PermissionAnswer, Plugin};
@@ -22,7 +23,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread::JoinHandle;
 use tokio::runtime::Handle;
-use tokio::sync::{oneshot, watch};
+use tokio::sync::{oneshot, watch, Notify};
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 struct Key {
@@ -50,6 +51,8 @@ struct Owner {
     globally_held: bool,
     keep_paused: bool,
     done: watch::Sender<bool>,
+    /// From launching its runtime until the runtime has stopped.
+    live: bool,
 }
 
 struct Inner {
@@ -58,6 +61,10 @@ struct Inner {
     closing: bool,
     operations: BTreeMap<u64, operations::Operation>,
     deletions: BTreeMap<Key, watch::Sender<bool>>,
+    /// Woken whenever an owner's runtime starts or stops, for `running::track`.
+    changed: Arc<Notify>,
+    /// What went wrong while shutting down, for `shutdown` to return.
+    shutdown_problems: Vec<String>,
 }
 
 /// Each facade has one event-loop thread. UI async exports need no Tokio context.
@@ -83,6 +90,8 @@ impl Agents {
             closing: false,
             operations: BTreeMap::new(),
             deletions: BTreeMap::new(),
+            changed: Arc::new(Notify::new()),
+            shutdown_problems: Vec::new(),
         }));
         let (stop, stopped) = oneshot::channel();
         let (ready, receive) = std::sync::mpsc::sync_channel(1);
@@ -111,6 +120,7 @@ impl Agents {
             })
             .map_err(|e| e.to_string())?;
         let runtime = receive.recv().map_err(|e| e.to_string())??;
+        runtime.spawn(running::track(inner.clone(), state.clone()));
         Ok(Self {
             inner,
             state,
@@ -179,8 +189,10 @@ impl Agents {
                                     && view.keep_paused
                             }),
                             done,
+                            live: false,
                         },
                     );
+                    inner.changed.notify_one();
                     self.state
                         .dispatch_chat(ChatCommand::Start { tab, generation })
                         .map_err(|e| e.to_string())?;
@@ -296,6 +308,7 @@ impl Agents {
             owner.tab = None;
             owner.pause.send_replace(true);
         }
+        inner.changed.notify_one();
         Ok(())
     }
 
@@ -458,8 +471,9 @@ impl Agents {
         Ok(())
     }
 
-    pub async fn shutdown(&self) {
-        shutdown(&self.inner, &self.state).await;
+    /// Stops every agent, interrupting live turns; returns what went wrong, if anything did.
+    pub async fn shutdown(&self) -> Vec<String> {
+        shutdown(&self.inner, &self.state).await
     }
 
     pub async fn history(
@@ -596,6 +610,7 @@ impl Agents {
                 if result.is_ok() {
                     inner.owners.remove(&key);
                 }
+                inner.changed.notify_one();
             }
             done.send_replace(true);
             let _ = reply.send(result);
@@ -732,7 +747,7 @@ fn phase(state: &Store, owner: &Owner, phase: ChatPhase) {
     }
 }
 
-async fn shutdown(inner: &Mutex<Inner>, state: &Store) {
+async fn shutdown(inner: &Mutex<Inner>, state: &Store) -> Vec<String> {
     let waits: Vec<_> = {
         let mut inner = lock(inner);
         inner.closing = true;
@@ -757,6 +772,7 @@ async fn shutdown(inner: &Mutex<Inner>, state: &Store) {
     for mut done in waits {
         let _ = done.wait_for(|done| *done).await;
     }
+    std::mem::take(&mut lock(inner).shutdown_problems)
 }
 
 async fn run(
@@ -781,6 +797,7 @@ async fn run(
         .await;
         {
             let mut inner = lock(&inner);
+            let inner = &mut *inner;
             let Some(owner) = inner
                 .owners
                 .get_mut(&key)
@@ -789,8 +806,15 @@ async fn run(
                 return;
             };
             owner.handle = None;
+            owner.live = false;
+            inner.changed.notify_one();
             if let Err(error) = outcome {
                 log.report_error(&error);
+                if inner.closing {
+                    inner
+                        .shutdown_problems
+                        .push(format!("{}: {error}", key.name));
+                }
                 if let Some(tab) = owner.tab {
                     events::update(
                         &state,
@@ -806,13 +830,11 @@ async fn run(
             phase(&state, owner, ChatPhase::Paused);
         }
         if !global_pause::wait_for_release(&inner, &state, &key, generation, &mut pause).await {
-            if let Some(owner) = lock(&inner)
-                .owners
-                .get_mut(&key)
-                .filter(|o| o.run_id == generation)
-            {
+            let inner = lock(&inner);
+            if let Some(owner) = inner.owners.get(&key).filter(|o| o.run_id == generation) {
                 owner.done.send_replace(true);
             }
+            inner.changed.notify_one();
             return;
         }
         let mut inner = lock(&inner);
@@ -820,13 +842,10 @@ async fn run(
             o.run_id == generation && o.tab.is_some() && !o.pause_requested && !*o.pause.borrow()
         });
         if !eligible || inner.closing {
-            if let Some(owner) = inner
-                .owners
-                .get_mut(&key)
-                .filter(|o| o.run_id == generation)
-            {
+            if let Some(owner) = inner.owners.get(&key).filter(|o| o.run_id == generation) {
                 owner.done.send_replace(true);
             }
+            inner.changed.notify_one();
             return;
         }
         inner.generation += 1;
@@ -886,6 +905,7 @@ async fn run_session(
     }
     if let Some(owner) = lock(inner).owners.get_mut(key) {
         owner.globally_held = false;
+        owner.live = true;
         phase(state, owner, ChatPhase::Opening);
         if let Some(tab) = owner.tab {
             events::update(
@@ -925,7 +945,8 @@ async fn run_session(
             while let Some(event) = running.next_update().await {
                 publish(inner, state, key, generation, event);
             }
-            return result.map(|_| ());
+            note_forced_stop(inner, key, &result?);
+            return Ok(());
         }
         tokio::select! {
             biased;
@@ -943,6 +964,17 @@ async fn run_session(
                 publish(inner, state, key, generation, event);
             }
         }
+    }
+}
+
+/// A stop that had to kill Claude during shutdown is one of the shutdown's problems.
+fn note_forced_stop(inner: &Mutex<Inner>, key: &Key, stop: &devora_agent::session::StopInfo) {
+    let mut inner = lock(inner);
+    if inner.closing && !stop.graceful {
+        inner.shutdown_problems.push(format!(
+            "{}: Claude didn't stop within the grace period and was terminated",
+            key.name
+        ));
     }
 }
 

@@ -27,6 +27,12 @@ final class Surfaces {
 	@ObservationIgnored private(set) var cheatsheet: VimScroll?
 	/// The open confirmation dialog; nil while none is.
 	@ObservationIgnored private(set) var dialog: ConfirmationDialogModel?
+	/// The pause progress the toolbar's pause status shows in its popover; nil while it is hidden.
+	private(set) var pauseProgress: PauseProgressModel?
+	/// A quit waits for the agents to stop cleanly: it goes on by itself once they have, until Cancel, even with its layer closed to answer a question.
+	private(set) var quitPending = false
+	/// What went wrong while stopping the agents, once shown: the agents are stopped, so the app can only quit, and the toolbar keeps offering that until it does.
+	private(set) var shutdownProblems: [String]?
 	/// The open New Task dialog; nil while none is.
 	@ObservationIgnored private(set) var newTask: NewTaskDialogModel?
 	/// The open Settings Hub; nil while it is closed.
@@ -364,6 +370,74 @@ final class Surfaces {
 		}
 		handle = windowStack.push(spec)
 		dialog = model
+	}
+
+	/// Shows who the global hold still waits for, in the toolbar's popover, replacing what it showed.
+	func showPauseProgress(_ mode: PauseProgressModel.Mode) {
+		let actions: [PauseProgressModel.Action] = switch mode {
+		case .pausing:
+			[.init(title: "Close", isDefault: true) { [unowned self] in hidePauseProgress() }]
+		case .quitting:
+			[
+				.init(title: "Interrupt and Quit", isDestructive: true) { [unowned self] in
+					// This quit replaces the waiting one, which must not quit again once the agents are gone.
+					quitPending = false
+					hidePauseProgress()
+					AppTermination.interruptAndQuit()
+				},
+				.init(title: "Cancel Quit", isDefault: true) { [unowned self] in
+					quitPending = false
+					hidePauseProgress()
+				},
+			]
+		case .problems:
+			[.init(title: "Quit", isDefault: true) { AppTermination.quitAfterProblems() }]
+		}
+		pauseProgress = PauseProgressModel(mode: mode, actions: actions)
+	}
+
+	/// Shows what went wrong while stopping, and keeps it until the app quits (`shutdownProblems`).
+	func showShutdownProblems(_ problems: [String]) {
+		quitPending = false
+		shutdownProblems = problems
+		showPauseProgress(.problems(problems))
+	}
+
+	/// What the toolbar's status opens: the shutdown's problems once there are any, else the waiting quit or the hold's progress.
+	func showPauseStatus() {
+		if let shutdownProblems {
+			showPauseProgress(.problems(shutdownProblems))
+		} else {
+			showPauseProgress(quitPending ? .quitting : .pausing)
+		}
+	}
+
+	/// Hides the popover; a waiting quit stays armed.
+	func hidePauseProgress() {
+		pauseProgress = nil
+	}
+
+	/// Activates an agent's tab from the popover, hiding it, so that its question can be answered.
+	func showAgent(tab: UInt64) {
+		hidePauseProgress()
+		store.dispatch(.activateTab(id: tab))
+	}
+
+	/// Whether a quit can go on now; while agents are still working, it holds them instead, shows who it waits for, and quits by itself once they have stopped (`finishPendingQuit`).
+	func mayQuit() -> Bool {
+		guard store.quitMustWait else { return true }
+		if !store.app.globalPaused { store.dispatch(.setGlobalPaused(true)) }
+		quitPending = true
+		showPauseProgress(.quitting)
+		return false
+	}
+
+	/// Quits once a pending quit has nothing left to wait for.
+	func finishPendingQuit() {
+		guard quitPending, !store.quitMustWait else { return }
+		quitPending = false
+		hidePauseProgress()
+		NSApp.terminate(nil)
 	}
 
 	/// Opens the New Task dialog over the hub, once the selected profile's repos have loaded; with a `source`, it duplicates that workspace's task, with its title and its repos selected.
