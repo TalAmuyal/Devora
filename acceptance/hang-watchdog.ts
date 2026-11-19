@@ -19,14 +19,13 @@ export interface HangWatchdog {
   output(label: string, chunk: string): void;
 }
 
-// On the global object, not in a module variable: tsx loads this file once for Cucumber's formatter import and again for
-// the harness's (as ESM and as CommonJS), and the two copies must report to the same watchdog.
-const KEY = Symbol.for('devora.acceptance.hangWatchdog');
-const global = globalThis as { [KEY]?: HangWatchdog };
+// One for the formatter and the harness alike: package.json makes this directory ESM, so tsx loads this file once.
+// (Without it, tsx loaded it as CommonJS too, a second copy with a watchdog of its own.)
+let watchdog: HangWatchdog | undefined;
 
 /** The run's one watchdog; it watches from the first activity (the formatter's start), so a run without the formatter is never stopped. */
 export function hangWatchdog(): HangWatchdog {
-  if (!global[KEY]) {
+  if (!watchdog) {
     const worker = new Worker(new URL('./hang-watchdog-worker.mjs', import.meta.url), {
       workerData: {
         limitSeconds: Number(process.env.ACCEPTANCE_HANG_LIMIT_SECONDS ?? 300),
@@ -35,10 +34,10 @@ export function hangWatchdog(): HangWatchdog {
     });
     // It never keeps a run that finished from exiting: one that doesn't exit on its own is what it reports.
     worker.unref();
-    global[KEY] = {
+    watchdog = {
       activity: (what) => worker.postMessage({ activity: what }),
       output: (label, chunk) => worker.postMessage({ label, chunk }),
     };
   }
-  return global[KEY];
+  return watchdog;
 }

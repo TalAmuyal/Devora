@@ -77,14 +77,19 @@ raw = true
 # One after the other, not as parallel `depends`: the unit tests fingerprint the real working tree
 # (scripts/__tests__/bundle-fingerprint.test.ts, app-bundle.test.ts), and a cargo build beside them both slows them past
 # their timeout and can change the files they hash.
-run = [{ task = "test-rust" }, { task = "test-unit" }]
-description = "Run all tests (Rust + frontend unit)"
+run = [{ task = "test-rust" }, { task = "test-unit" }, { task = "test-hang-watchdog" }]
+description = "Run all tests (Rust, frontend unit, and the e2e runs' hang watchdog)"
+
+[tasks.test-hang-watchdog]
+dir = "."
+description = "Check the e2e runs' hang watchdog (../acceptance/hang-watchdog.ts) on real hangs, with Ember's Cucumber and tsx, without the app"
+run = "bash ../acceptance/hang-watchdog.test.sh ."
 
 [tasks._cucumber]
 dir = "."
 # ../acceptance/features/ holds the scenarios shared with Sapphire.
 # The JSON is each scenario's outcome and duration, which CI records (scripts/ci/test-outcomes/).
-run = "../scripts/with-ui-lock.sh node --import tsx ./node_modules/.bin/cucumber-js tests/features/ ../acceptance/features/ --tags 'not @sapphire-only' --import 'tests/steps/*.ts' --import 'tests/support/*.ts' --publish-quiet --format progress --format json:test-results/test-outcomes/e2e.json \"${@}\""
+run = "../scripts/with-ui-lock.sh node --import tsx ./node_modules/.bin/cucumber-js tests/features/ ../acceptance/features/ --tags 'not @sapphire-only' --import 'tests/steps/*.ts' --import 'tests/support/*.ts' --publish-quiet --format progress --format json:test-results/test-outcomes/e2e.json --format ../acceptance/hang-watchdog-formatter.ts:test-results/test-outcomes/e2e-progress.txt \"${@}\""
 hide = true
 
 [tasks.test-e2e]

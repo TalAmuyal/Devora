@@ -15,6 +15,7 @@ import { AppDriver } from './app-driver';
 import { FakeClaudeServer, STRUCTURED_LOG_BASE_DIR } from './fake-claude-server';
 import { CLAUDE_CONFIG_PATH, CLAUDE_TEST_STATE, NO_INTERNET, cleanupWorkspace, stopClaudeCode } from './claude-helper';
 import { FAILURE_CAPTURE_DIR, canCaptureScreen, captureFailure } from './failure-capture';
+import { hangWatchdog } from '../../../acceptance/hang-watchdog';
 import { cleanupFixtures, writeTestConfig } from './fixture-helper';
 import { EmberWorld } from './world';
 
@@ -114,6 +115,7 @@ async function bridgeAnswers(port: number, timeoutMs: number): Promise<boolean> 
 let stderrPartial = '';
 
 function recordStderr(chunk: Buffer): void {
+  hangWatchdog().output(`The app's stderr`, chunk.toString());
   const lines = (stderrPartial + chunk.toString()).split('\n');
   stderrPartial = lines.pop()!;
   for (const line of lines) {

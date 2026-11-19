@@ -1,6 +1,7 @@
 import { When } from '@cucumber/cucumber';
 import { execFileSync } from 'node:child_process';
-import { hangWatchdog } from '../../../../acceptance/hang-watchdog';
+// Relative to where the test copies it: <project>/test-results/hang-watchdog-fixture/.
+import { hangWatchdog } from '../../../acceptance/hang-watchdog';
 
 // 117 s: long enough to outlast the test's 3 s limit, and a duration no other process is likely to sleep for, which the test looks for.
 When('a step waits synchronously for a child process that doesn\'t end', function () {
