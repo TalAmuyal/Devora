@@ -1,0 +1,7 @@
+{
+  "private": true,
+  "description": "Tools CI installs, pinned so Dependabot can bump them (README.md)",
+  "dependencies": {
+    "@anthropic-ai/claude-code": "2.1.316"
+  }
+}

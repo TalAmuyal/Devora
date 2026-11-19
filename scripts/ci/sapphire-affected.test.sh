@@ -38,6 +38,8 @@ check true bundler/macos-sapphire/bundle-sapphire.sh
 check true project-status-line/main.go
 check true project-code-cleanup/cc-plugin/plugin.json
 check true base-icon-sapphire.png
+# A Claude Code bump (.github/ci-tools/README.md) must run both apps' CI: that's what it's for.
+check true .github/ci-tools/package.json .github/ci-tools/package-lock.json
 check false base-icon-ember.png
 check false .github/workflows/cd.yml
 if [ "$failures" -gt 0 ]; then exit 1; fi

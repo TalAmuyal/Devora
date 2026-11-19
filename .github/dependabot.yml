@@ -1,0 +1,12 @@
+version: 2
+updates:
+  # The Claude Code CLI CI installs (.github/ci-tools/README.md): weekly, one open PR at most, each bump on its own.
+  - package-ecosystem: npm
+    directory: /.github/ci-tools
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 1
+    allow:
+      - dependency-name: "@anthropic-ai/claude-code"
+    labels:
+      - skip-changelog

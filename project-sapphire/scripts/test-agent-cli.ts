@@ -4,9 +4,10 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
 const sapphire = fileURLToPath(new URL('..', import.meta.url));
-const workflow = readFileSync(path.join(sapphire, '../.github/workflows/ci.yml'), 'utf8');
-const pin = workflow.match(/^\s*CLAUDE_CODE_VERSION:\s*"([\d.]+)"\s*$/m)?.[1];
-if (!pin) throw new Error('CI must supply an exact CLAUDE_CODE_VERSION');
+// CI's pin, which Dependabot bumps (.github/ci-tools/README.md).
+const manifest = JSON.parse(readFileSync(path.join(sapphire, '../.github/ci-tools/package.json'), 'utf8'));
+const pin: string | undefined = manifest.dependencies?.['@anthropic-ai/claude-code'];
+if (!pin || !/^[\d.]+$/.test(pin)) throw new Error('.github/ci-tools/package.json must pin an exact @anthropic-ai/claude-code version');
 const cacheRoot = path.join(sapphire, 'build/agent-cli');
 const cache = path.join(cacheRoot, pin);
 const executable = (directory: string) => path.join(directory, 'node_modules/.bin/claude');

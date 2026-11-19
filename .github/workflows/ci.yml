@@ -12,9 +12,6 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  CLAUDE_CODE_VERSION: "2.1.316"
-
 permissions:
   contents: read
 
@@ -155,9 +152,11 @@ jobs:
           mise exec -C project-ember -- npm ci --prefix ../web-renderer
           mise exec -C project-ember -- npm ci
 
+      # The version is pinned in .github/ci-tools/package.json, which Dependabot bumps (its README.md).
       - name: Install Claude Code CLI
         run: |
-          npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
+          version=$(node -p "require(process.env.GITHUB_WORKSPACE + '/.github/ci-tools/package.json').dependencies['@anthropic-ai/claude-code']")
+          npm install -g "@anthropic-ai/claude-code@$version"
           claude --version
 
       - name: Build Ember
@@ -278,9 +277,11 @@ jobs:
       - name: Build the app
         run: mise run -C project-sapphire build
 
+      # The version is pinned in .github/ci-tools/package.json, which Dependabot bumps (its README.md).
       - name: Install Claude Code CLI
         run: |
-          mise exec -C project-sapphire -- npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
+          version=$(mise exec -C project-sapphire -- node -p "require(process.env.GITHUB_WORKSPACE + '/.github/ci-tools/package.json').dependencies['@anthropic-ai/claude-code']")
+          mise exec -C project-sapphire -- npm install -g "@anthropic-ai/claude-code@$version"
           mise exec -C project-sapphire -- claude --version
 
       # Unit, acceptance, XCUITests where available, then packaging/smoke reusing the built app and test-tools.
