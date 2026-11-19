@@ -24,6 +24,7 @@ Types of changes:
 
 - Sapphire can periodically update clean, detached parent clones across profiles, with User Defaults controls, a manual palette action and graceful Global Pause integration.
 - Devora Sapphire's New Agent dialog chooses each agent's model (free text, `opus` by default) and effort (a slider from Claude Code's own default to max, starting at the effort set in the Settings Hub), kept for every launch; its fields have user-facing labels, and the agent's space path shows under its name
+- After a restart, each Devora Sapphire agent with a conversation is told once, when it next launches, that Devora restarted its session and its background work (watchers, builds, CI waits, background shells and subagents) may have stopped, so that it re-establishes its waits; the transcript shows it as a system row, a draft stays a draft, and a notice cut short by a crash is resent
 - Devora Sapphire has Global Pause in the title bar and command palette, holding agents after their current turn, preserving drafts and the hold across relaunch, with a shared core subscription for background integrations
 
 - Debi has `repo list` and `repo add <repo> [--postfix <postfix>]` for profile-aware worktree management in workspaces and Agent Spaces, with streamed progress and Ctrl+C rollback

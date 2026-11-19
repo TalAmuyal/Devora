@@ -152,6 +152,7 @@ The chat's Keep paused switch sets the core-owned, generation-scoped release cho
 The typed `globallyHeld` and `keepPaused` chat projections control its availability and selection.
 The choice survives a relaunch while globally paused and can be reversed before Devora resumes.
 The initial restored snapshot carries the global hold before agent restore launches work.
+After a restart, an agent's first launch sends it a notice to re-check its waits, shown as a system row ("Devora restarted: asked the agent to re-check its waits", "(resent)" when resent after a crash); see `project-core/CLAUDE.md`.
 
 ## Profiles and the first run
 

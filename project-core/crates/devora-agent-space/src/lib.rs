@@ -7,10 +7,12 @@
 mod compaction;
 mod db;
 mod inputs;
+mod restart_notice;
 mod running;
 pub mod template;
 pub use compaction::{Context, DEFAULT_THRESHOLD as DEFAULT_COMPACT_THRESHOLD};
 pub use inputs::{fields, preview, Field, Source};
+pub use restart_notice::AppRun;
 pub use running::{GlobalPauseCheck, RunningSpace, SpaceEvent, SpaceHandle};
 
 use db::{storage, Db};
@@ -501,12 +503,15 @@ impl Space {
         })
     }
 
+    /// Launches the agent's CLI in `run`, the app process's identity, which
+    /// decides whether the agent is owed a restart notice.
     pub async fn start(
         self,
         context: &LaunchContext,
         log: Arc<Log>,
+        run: &AppRun,
     ) -> Result<RunningSpace, String> {
-        self.start_with_global_pause(context, log, Arc::new(|| false))
+        self.start_with_global_pause(context, log, Arc::new(|| false), run)
             .await
     }
 
@@ -515,11 +520,12 @@ impl Space {
         context: &LaunchContext,
         log: Arc<Log>,
         globally_paused: GlobalPauseCheck,
+        run: &AppRun,
     ) -> Result<RunningSpace, String> {
         let options = self.session_options(context)?;
         let threshold = devora_config::agent::read(&context.global_config, &self.profile)?
             .compact_threshold
             .unwrap_or(compaction::DEFAULT_THRESHOLD);
-        running::start(self, options, threshold, log, globally_paused).await
+        running::start(self, options, threshold, log, globally_paused, run).await
     }
 }

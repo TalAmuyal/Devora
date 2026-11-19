@@ -68,6 +68,7 @@ extension TranscriptKit.SystemKind {
 		case .judgement: self = .judgement
 		case .result: self = .result
 		case .unfinishedFirstPrompt: self = .unfinishedFirstPrompt
+		case .restartNotice: self = .restartNotice
 		}
 	}
 }

@@ -187,6 +187,7 @@ pub enum SystemKind {
     Judgement,
     Result,
     UnfinishedFirstPrompt,
+    RestartNotice,
 }
 #[uniffi::remote(Record)]
 pub struct ToolVerdict {

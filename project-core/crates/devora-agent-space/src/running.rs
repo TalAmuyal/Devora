@@ -1,12 +1,13 @@
 use crate::compaction::{Compaction, Context};
+use crate::restart_notice::{AppRun, RestartNotice};
 use crate::Space;
 use devora_agent::protocol::{KnownMessage, Message};
 use devora_agent::session::{
-    PermissionAnswer, Resume, Session, SessionEvent, SessionHandle, SessionOptions, StopInfo,
-    UsageSource,
+    saved_turn, PermissionAnswer, Resume, Session, SessionEvent, SessionHandle, SessionOptions,
+    StopInfo, UsageSource,
 };
 use devora_agent::transcript::{SystemKind, Transcript, TranscriptChange, TranscriptItem};
-use devora_app::log::Log;
+use devora_app::log::{Level, Log};
 use serde_json::{json, Value};
 use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot};
@@ -19,7 +20,7 @@ pub enum SpaceEvent {
     Session(SessionEvent),
     /// How full the context is, whenever that changes.
     Context(Context),
-    /// A turn the space sent itself, compaction's.
+    /// A turn the space sent itself: compaction's, or the restart notice.
     TurnStarted,
     /// The CLI answered the running turn, or exited during it. Results the CLI
     /// produces by itself (background work finishing, a resume) end nothing.
@@ -32,6 +33,7 @@ pub type GlobalPauseCheck = Arc<dyn Fn() -> bool + Send + Sync>;
 
 enum Action {
     Turn { id: String, text: String },
+    RestartNotice { id: String, notice: RestartNotice },
     Interrupt,
     Permission(String, PermissionAnswer),
     PauseAfterTurn,
@@ -169,14 +171,39 @@ pub(crate) async fn start(
     compact_threshold: u8,
     log: Arc<Log>,
     globally_paused: GlobalPauseCheck,
+    run: &AppRun,
 ) -> Result<RunningSpace, String> {
-    let (mut space, mut transcript, history) = tokio::task::spawn_blocking(move || {
+    let run = run.clone();
+    let launch = options.clone();
+    let launch_log = log.clone();
+    let (mut space, mut transcript, history, notice) = tokio::task::spawn_blocking(move || {
         let mut transcript = space.db.fold(&space.resume.session_id)?;
         let interrupted = transcript.interrupt(!space.resume.has_conversation);
         space.db.save_changes(None, &interrupted)?;
         transcript.release_completed();
         let history = space.history()?;
-        Ok::<_, String>((space, transcript, history))
+        let (launched, stored) = space.db.launch_state()?;
+        let attempt_saved = match stored.as_ref().and_then(|notice| notice.attempt.as_deref()) {
+            Some(attempt) => {
+                saved_turn(&launch, &space.resume.session_id, attempt).unwrap_or_else(|error| {
+                    // Unknown counts as undelivered: a resend may repeat, but a notice is never lost.
+                    launch_log.write(
+                        Level::Warn,
+                        &format!("restart notice delivery unknown: {error}"),
+                    );
+                    false
+                })
+            }
+            None => false,
+        };
+        let notice = RestartNotice::at_launch(
+            stored,
+            attempt_saved,
+            launched.as_deref() != Some(run.id()),
+            space.resume.has_conversation,
+        );
+        space.db.record_launch(run.id(), notice.as_ref())?;
+        Ok::<_, String>((space, transcript, history, notice))
     })
     .await
     .map_err(|e| e.to_string())??;
@@ -191,6 +218,18 @@ pub(crate) async fn start(
     let (events, received) = mpsc::unbounded_channel();
     let _ = events.send(SpaceEvent::Restored(history));
     let (commands, received_commands) = mpsc::unbounded_channel();
+    // Owed since a restart, the notice is the first turn admitted; a hold
+    // refuses it as any turn, and it stays owed for the next launch.
+    if let Some(notice) = notice {
+        let (reply, _) = oneshot::channel();
+        let _ = commands.send(Command {
+            action: Action::RestartNotice {
+                id: uuid::Uuid::new_v4().to_string(),
+                notice,
+            },
+            reply,
+        });
+    }
     let handle = SpaceHandle {
         runtime: session.handle(),
         commands,
@@ -294,6 +333,11 @@ fn begin(
 ) -> Result<(), String> {
     let change = match &command.action {
         Action::Turn { text, .. } => transcript.submit(text.clone()),
+        Action::RestartNotice { id, notice } => transcript.intention(
+            SystemKind::RestartNotice,
+            notice.row().into(),
+            json!({"turn": id, "recovery": notice.recovery}),
+        ),
         Action::Interrupt => transcript.intention(
             SystemKind::Interruption,
             "Interrupt requested".into(),
@@ -325,15 +369,32 @@ fn begin(
         return Err("intention must be a whole item".into());
     };
     let sequence = item.sequence;
-    if let Err(error) = space.db.save_changes(None, std::slice::from_ref(&change)) {
+    let saved = match &command.action {
+        Action::RestartNotice { id, notice } => space.db.save_notice_attempt(
+            &change,
+            &RestartNotice {
+                attempt: Some(id.clone()),
+                recovery: notice.recovery,
+            },
+        ),
+        _ => space.db.save_changes(None, std::slice::from_ref(&change)),
+    };
+    if let Err(error) = saved {
         let _ = command.reply.send(Err(error.clone()));
         return Err(error);
     }
     let _ = events.send(SpaceEvent::Transcript(change));
-    let turn = matches!(command.action, Action::Turn { .. });
+    let turn = matches!(
+        command.action,
+        Action::Turn { .. } | Action::RestartNotice { .. }
+    );
     tokio::spawn(async move {
         let result = match command.action {
             Action::Turn { id, text } => runtime.send_turn(id, text).await.map(|_| Value::Null),
+            Action::RestartNotice { id, notice } => runtime
+                .send_turn(id, notice.prompt())
+                .await
+                .map(|_| Value::Null),
             Action::Interrupt => runtime.interrupt().await,
             Action::Permission(id, answer) => runtime
                 .answer_permission(id, answer)
@@ -370,6 +431,8 @@ async fn pump(
     let mut pause_after_turn: Option<oneshot::Sender<Result<Value, String>>> = None;
     // The threshold, before any usage arrives.
     let _ = events.send(SpaceEvent::Context(compaction.context()));
+    // The restart notice's turn, until its result delivers it.
+    let mut notice_turn: Option<String> = None;
     loop {
         if turn_running.is_none() && !stopping && (pause_after_turn.is_some() || globally_paused())
         {
@@ -417,7 +480,15 @@ async fn pump(
                     _ => false,
                 });
                 let mut step = compact(compaction,&event,ended,events);
-                if ended { turn_running = None; }
+                if ended {
+                    // Only its own result delivers the notice; a crash leaves the attempt for the next launch to check.
+                    if let SessionEvent::Message(Message::Known(KnownMessage::Result(result))) = &event {
+                        if let Some(id) = notice_turn.take_if(|id| result.answers(id)) {
+                            space.db.notice_delivered(&id)?;
+                        }
+                    }
+                    turn_running = None;
+                }
                 let _ = events.send(SpaceEvent::Session(event));
                 if ended { let _ = events.send(SpaceEvent::TurnEnded); }
                 if ended && (pause_after_turn.is_some() || globally_paused()) {
@@ -458,19 +529,26 @@ async fn pump(
                     Some(Command { action: Action::GlobalPauseChanged, reply }) => {
                         let _ = reply.send(Ok(Value::Bool(stopping)));
                     }
-                    Some(command) if matches!(command.action, Action::Turn { .. }) && (globally_paused() || stopping || pause_after_turn.is_some()) => {
+                    Some(command) if matches!(command.action, Action::Turn { .. } | Action::RestartNotice { .. }) && (globally_paused() || stopping || pause_after_turn.is_some()) => {
                         let _ = command.reply.send(Err("This agent is pausing. It starts no new turn until it resumes.".into()));
                     }
                     // Its failed send would otherwise end the running turn.
-                    Some(command) if matches!(command.action, Action::Turn { .. }) && turn_running.is_some() => {
+                    Some(command) if matches!(command.action, Action::Turn { .. } | Action::RestartNotice { .. }) && turn_running.is_some() => {
                         let _ = command.reply.send(Err("a turn is already running".into()));
                     }
                     Some(command) => {
-                        if let Action::Turn { id, .. } = &command.action {
-                            turn_running = Some(id.clone());
+                        match &command.action {
+                            Action::Turn { id, .. } => turn_running = Some(id.clone()),
+                            Action::RestartNotice { id, .. } => {
+                                turn_running = Some(id.clone());
+                                notice_turn = Some(id.clone());
+                            }
+                            _ => {}
                         }
+                        let notice = matches!(command.action, Action::RestartNotice { .. });
                         begin(space,transcript,command,session.handle(),completed.clone(),events)?;
                         pending += 1;
+                        if notice { let _ = events.send(SpaceEvent::TurnStarted); }
                     }
                     None => {}
                 }

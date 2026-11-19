@@ -9,7 +9,7 @@ mod running;
 
 use devora_agent::session::SessionEvent;
 pub use devora_agent::session::{PermissionAnswer, Plugin};
-use devora_agent_space::Space;
+use devora_agent_space::{AppRun, Space};
 pub use devora_agent_space::{
     CreationForm, Entry as SpaceEntry, Field, LaunchContext, ModelChoice, Source,
 };
@@ -67,6 +67,9 @@ struct Inner {
     shutdown_problems: Vec<String>,
     /// The launch of the latest open, for reopening an agent from Keep paused.
     launch: Option<LaunchContext>,
+    /// This app process, which an agent launched in another one was restarted
+    /// from (its restart notice, `devora_agent_space::AppRun`).
+    run: AppRun,
 }
 
 /// Each facade has one event-loop thread. UI async exports need no Tokio context.
@@ -95,6 +98,7 @@ impl Agents {
             changed: Arc::new(Notify::new()),
             shutdown_problems: Vec::new(),
             launch: None,
+            run: AppRun::new(),
         }));
         let (stop, stopped) = oneshot::channel();
         let (ready, receive) = std::sync::mpsc::sync_channel(1);
@@ -960,8 +964,9 @@ async fn run_session(
             );
         }
     }
+    let run = lock(inner).run.clone();
     let mut running = match space
-        .start_with_global_pause(&context, log.clone(), globally_paused)
+        .start_with_global_pause(&context, log.clone(), globally_paused, &run)
         .await
     {
         Ok(running) => running,

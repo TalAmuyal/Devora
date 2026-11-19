@@ -2,7 +2,8 @@ use devora_agent::protocol::{KnownMessage, Message};
 use devora_agent::session::SessionEvent;
 use devora_agent::transcript::{SystemKind, TranscriptChange, TranscriptContent};
 use devora_agent_space::{
-    model_defaults, template, CreationForm, LaunchContext, ModelChoice, Space, SpaceEvent,
+    model_defaults, template, AppRun, CreationForm, LaunchContext, ModelChoice, RunningSpace,
+    Space, SpaceEvent,
 };
 use devora_app::log::Log;
 use devora_workspace::creation::{CreationHandle, EventSink};
@@ -17,6 +18,8 @@ struct Fixture {
     root: tempfile::TempDir,
     profile: PathBuf,
     global: PathBuf,
+    /// One app process: launches in it owe no restart notice.
+    run: AppRun,
 }
 impl Fixture {
     fn new() -> Self {
@@ -30,6 +33,7 @@ impl Fixture {
             root,
             profile,
             global,
+            run: AppRun::new(),
         }
     }
     fn form(&self, name: &str) -> CreationForm {
@@ -133,6 +137,10 @@ impl Fixture {
             environment: BTreeMap::from([
                 ("PATH".into(), std::env::var("PATH").unwrap()),
                 ("HOME".into(), self.root.path().display().to_string()),
+                (
+                    "CLAUDE_CONFIG_DIR".into(),
+                    self.root.path().join("claude").display().to_string(),
+                ),
                 (
                     "DEVORA_FAKE_FIXTURES".into(),
                     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -364,7 +372,10 @@ async fn session_events_are_persisted_before_delivery_and_reopen_roundtrips() {
     assert_eq!(options.permission_mode, "auto");
     assert_eq!(options.working_directory, space.path());
     let log = Arc::new(Log::open(&fixture.root.path().join("log")).unwrap());
-    let mut running = space.start(&context, log.clone()).await.unwrap();
+    let mut running = space
+        .start(&context, log.clone(), &fixture.run)
+        .await
+        .unwrap();
     let id = match running.next_event().await.unwrap() {
         SessionEvent::Ready {
             session_id,
@@ -408,7 +419,7 @@ async fn session_events_are_persisted_before_delivery_and_reopen_roundtrips() {
     let reopened = Space::open(&fixture.profile, "Delta").unwrap();
     assert_eq!(reopened.saved_session().session_id, id);
     assert!(reopened.saved_session().has_conversation);
-    let mut resumed = reopened.start(&context, log).await.unwrap();
+    let mut resumed = reopened.start(&context, log, &fixture.run).await.unwrap();
     assert!(matches!(
         resumed.next_event().await,
         Some(SessionEvent::Ready { resumed: true, .. })
@@ -422,7 +433,7 @@ async fn dropping_after_a_cancelled_pause_persists_before_releasing_ownership() 
     let context = fixture.context();
     let space = fixture.create(fixture.form("Delta")).unwrap();
     let log = Arc::new(Log::open(&fixture.root.path().join("drop.log")).unwrap());
-    let mut running = space.start(&context, log).await.unwrap();
+    let mut running = space.start(&context, log, &fixture.run).await.unwrap();
     running.handle().send_turn("stream".into()).await.unwrap();
     tokio::time::timeout(Duration::from_secs(10),async {
         while let Some(event) = running.next_event().await {
@@ -704,7 +715,7 @@ async fn an_intention_write_failure_prevents_transport_and_uncommitted_publicati
     let space = fixture.create(fixture.form("Durable")).unwrap();
     let path = space.path().join(".agent-space.db");
     let log = Arc::new(Log::open(&fixture.root.path().join("failure.log")).unwrap());
-    let mut running = space.start(&context, log).await.unwrap();
+    let mut running = space.start(&context, log, &fixture.run).await.unwrap();
     assert!(matches!(
         running.next_event().await,
         Some(SessionEvent::Ready { .. })
@@ -782,7 +793,7 @@ async fn a_real_v1_shape_lists_without_migration_then_upgrades_and_reopens_with_
         .is_empty());
     assert_eq!(version(), 1);
     let space = Space::open(&fixture.profile, "Legacy").unwrap();
-    assert_eq!(version(), 2);
+    assert_eq!(version(), 3);
     assert_eq!(space.instructions(), "Frozen legacy instructions");
     assert_eq!(space.identity().role, "Legacy role");
     assert_eq!(space.saved_session().session_id, previous_id);
@@ -797,7 +808,10 @@ async fn a_real_v1_shape_lists_without_migration_then_upgrades_and_reopens_with_
         previous_id
     );
     let log = Arc::new(Log::open(&fixture.root.path().join("legacy.log")).unwrap());
-    let mut running = space.start(&fixture.context(), log).await.unwrap();
+    let mut running = space
+        .start(&fixture.context(), log, &fixture.run)
+        .await
+        .unwrap();
     assert!(matches!(
         running.next_event().await,
         Some(SessionEvent::Ready { .. })
@@ -817,7 +831,7 @@ async fn a_real_v1_shape_lists_without_migration_then_upgrades_and_reopens_with_
     }
     running.pause().await.unwrap();
     let reopened = Space::open(&fixture.profile, "Legacy").unwrap();
-    assert_eq!(version(), 2);
+    assert_eq!(version(), 3);
     assert!(reopened.history().unwrap().iter().any(|item| matches!(&item.content, devora_agent::transcript::TranscriptContent::User { text, .. } if text == "Legacy prompt")));
     assert_eq!(reopened.instructions(), "Frozen legacy instructions");
 }
@@ -929,7 +943,10 @@ async fn large_history_reopens_with_only_the_tail_and_pages_back_in_order() {
         500
     );
     let log = Arc::new(Log::open(&fixture.root.path().join("history.log")).unwrap());
-    let mut running = reopened.start(&fixture.context(), log).await.unwrap();
+    let mut running = reopened
+        .start(&fixture.context(), log, &fixture.run)
+        .await
+        .unwrap();
     let Some(SpaceEvent::Restored(restored)) = running.next_update().await else {
         panic!("expected restored tail")
     };
@@ -957,7 +974,7 @@ async fn over_the_threshold_the_agent_saves_its_memory_then_devora_compacts() {
     let context = fixture.context();
     let space = fixture.create(fixture.form("Delta")).unwrap();
     let log = Arc::new(Log::open(&fixture.root.path().join("log")).unwrap());
-    let mut running = space.start(&context, log).await.unwrap();
+    let mut running = space.start(&context, log, &fixture.run).await.unwrap();
     running
         .handle()
         .send_turn("first turn".into())
@@ -1036,7 +1053,10 @@ async fn pause_after_turn_waits_for_the_turn_and_wins_over_compaction() {
     let context = fixture.context();
     let space = fixture.create(fixture.form("Delta")).unwrap();
     let log = Arc::new(Log::open(&fixture.root.path().join("log")).unwrap());
-    let mut running = space.start(&context, log.clone()).await.unwrap();
+    let mut running = space
+        .start(&context, log.clone(), &fixture.run)
+        .await
+        .unwrap();
     let handle = running.handle();
     // The fake CLI holds this turn on a permission question until it is answered.
     handle.send_turn("permission".into()).await.unwrap();
@@ -1083,7 +1103,7 @@ async fn pause_after_turn_waits_for_the_turn_and_wins_over_compaction() {
 
     // An idle agent pauses at once.
     let idle = Space::open(&fixture.profile, "Delta").unwrap();
-    let running = idle.start(&context, log).await.unwrap();
+    let running = idle.start(&context, log, &fixture.run).await.unwrap();
     tokio::time::timeout(Duration::from_secs(10), running.handle().pause_after_turn())
         .await
         .unwrap()
@@ -1163,7 +1183,7 @@ async fn a_result_nobody_asked_for_leaves_the_sent_turn_running() {
     let context = fixture.context();
     let space = fixture.create(fixture.form("Delta")).unwrap();
     let log = Arc::new(Log::open(&fixture.root.path().join("log")).unwrap());
-    let mut running = space.start(&context, log).await.unwrap();
+    let mut running = space.start(&context, log, &fixture.run).await.unwrap();
     let handle = running.handle();
     handle.send_turn("unrequested-result".into()).await.unwrap();
     let mut unrequested = false;
@@ -1231,4 +1251,336 @@ async fn a_result_nobody_asked_for_leaves_the_sent_turn_running() {
     let interrupt = kinds.iter().position(|kind| *kind == "interrupt").unwrap();
     let eof = kinds.iter().position(|kind| *kind == "eof").unwrap();
     assert!(interrupt < eof, "the pause waited for the turn: {kinds:?}");
+}
+
+/// The restart notices the fake CLI received, in order.
+fn notices(fixture: &Fixture) -> Vec<serde_json::Value> {
+    std::fs::read_to_string(fixture.root.path().join("report.jsonl"))
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
+        .filter(|entry| {
+            entry["kind"] == "user"
+                && entry["message"]["content"]
+                    .as_str()
+                    .is_some_and(|text| text.starts_with("Devora restarted your session"))
+        })
+        .collect()
+}
+
+/// Notice rows a launch showed, as (text, recovery).
+fn notice_row(update: &SpaceEvent) -> Option<(u64, String, bool)> {
+    let SpaceEvent::Transcript(TranscriptChange::Upsert { item }) = update else {
+        return None;
+    };
+    let TranscriptContent::System {
+        kind: SystemKind::RestartNotice,
+        text,
+        detail_json,
+    } = &item.content
+    else {
+        return None;
+    };
+    let detail: serde_json::Value = serde_json::from_str(detail_json).unwrap();
+    Some((item.sequence, text.clone(), detail["recovery"] == true))
+}
+
+/// Waits for the running turn's end, collecting the notice rows shown on the way.
+async fn turn_end(
+    running: &mut RunningSpace,
+    rows: &mut std::collections::BTreeMap<u64, (String, bool)>,
+) {
+    tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            let update = running.next_update().await.expect("the space stopped");
+            if let Some((sequence, text, recovery)) = notice_row(&update) {
+                rows.insert(sequence, (text, recovery));
+            }
+            match update {
+                SpaceEvent::TurnEnded => return,
+                SpaceEvent::Session(SessionEvent::Failed(error)) => panic!("{error}"),
+                _ => {}
+            }
+        }
+    })
+    .await
+    .expect("turn end deadline")
+}
+
+/// Lets a launch's notice, if it owes one, run to its end, then runs one turn of
+/// the user's, which a running notice would refuse. Returns the notice rows shown.
+async fn settle(running: &mut RunningSpace) -> Vec<(String, bool)> {
+    let mut rows = std::collections::BTreeMap::new();
+    loop {
+        match running.handle().send_turn("probe".into()).await {
+            Ok(()) => break,
+            Err(error) if error == "a turn is already running" => {
+                turn_end(running, &mut rows).await
+            }
+            Err(error) => panic!("{error}"),
+        }
+    }
+    turn_end(running, &mut rows).await;
+    rows.into_values().collect()
+}
+
+/// A launch, in `run`, that holds itself at once, as a global hold does.
+async fn launch_held(fixture: &Fixture, context: &LaunchContext, log: &Arc<Log>, run: &AppRun) {
+    let mut running = Space::open(&fixture.profile, "Delta")
+        .unwrap()
+        .start_with_global_pause(context, log.clone(), Arc::new(|| true), run)
+        .await
+        .unwrap();
+    while running.next_update().await.is_some() {}
+    let _ = running.pause().await;
+}
+
+async fn launch_and_settle(
+    fixture: &Fixture,
+    context: &LaunchContext,
+    log: &Arc<Log>,
+    run: &AppRun,
+) -> Vec<(String, bool)> {
+    let mut running = Space::open(&fixture.profile, "Delta")
+        .unwrap()
+        .start(context, log.clone(), run)
+        .await
+        .unwrap();
+    let rows = settle(&mut running).await;
+    running.pause().await.unwrap();
+    rows
+}
+
+#[tokio::test]
+async fn a_restart_owes_an_agent_one_notice_and_a_relaunch_in_the_same_run_none() {
+    let fixture = Fixture::new();
+    let context = fixture.context();
+    let log = Arc::new(Log::open(&fixture.root.path().join("log")).unwrap());
+    fixture.create(fixture.form("Delta")).unwrap();
+    assert!(
+        launch_and_settle(&fixture, &context, &log, &fixture.run)
+            .await
+            .is_empty(),
+        "without a conversation there is nothing to re-establish"
+    );
+    assert!(launch_and_settle(&fixture, &context, &log, &fixture.run)
+        .await
+        .is_empty());
+
+    let restarted = AppRun::new();
+    let rows = launch_and_settle(&fixture, &context, &log, &restarted).await;
+    assert_eq!(
+        rows,
+        vec![(
+            "Devora restarted: asked the agent to re-check its waits".into(),
+            false
+        )]
+    );
+    assert!(
+        launch_and_settle(&fixture, &context, &log, &restarted)
+            .await
+            .is_empty(),
+        "a relaunch in the same run owes nothing"
+    );
+    assert_eq!(
+        launch_and_settle(&fixture, &context, &log, &AppRun::new())
+            .await
+            .len(),
+        1,
+        "a delivered notice doesn't cover a later restart"
+    );
+
+    let sent = notices(&fixture);
+    assert_eq!(sent.len(), 2);
+    assert_ne!(sent[0]["uuid"], sent[1]["uuid"]);
+    let prompt = sent[0]["message"]["content"].as_str().unwrap();
+    assert!(prompt.contains("re-establish whatever is gone"), "{prompt}");
+    assert!(!prompt.contains("may repeat"), "{prompt}");
+    // The notice is history too: a reopened chat shows it.
+    let history = Space::open(&fixture.profile, "Delta")
+        .unwrap()
+        .history()
+        .unwrap();
+    assert_eq!(
+        history
+            .iter()
+            .filter(|item| matches!(
+                item.content,
+                TranscriptContent::System {
+                    kind: SystemKind::RestartNotice,
+                    ..
+                }
+            ))
+            .count(),
+        2
+    );
+}
+
+// A hold at launch (or a crash before the notice's attempt commits) leaves it
+// owed, and a second restart before it goes out still owes only one.
+#[tokio::test]
+async fn a_notice_waits_out_holds_and_two_restarts_before_it_goes_out_owe_one() {
+    let fixture = Fixture::new();
+    let context = fixture.context();
+    let log = Arc::new(Log::open(&fixture.root.path().join("log")).unwrap());
+    fixture.create(fixture.form("Delta")).unwrap();
+    launch_and_settle(&fixture, &context, &log, &fixture.run).await;
+    launch_held(&fixture, &context, &log, &AppRun::new()).await;
+    let latest = AppRun::new();
+    launch_held(&fixture, &context, &log, &latest).await;
+    assert!(
+        notices(&fixture).is_empty(),
+        "a held agent gets nothing yet"
+    );
+    let rows = launch_and_settle(&fixture, &context, &log, &latest).await;
+    assert_eq!(rows.len(), 1);
+    assert!(!rows[0].1, "nothing was sent before, so it's no recovery");
+    assert_eq!(notices(&fixture).len(), 1);
+}
+
+// The fake CLI dies on the notice, as a crash mid-delivery would, with Claude's
+// saved session holding it or not. The next launch, in the same run, decides by
+// that session alone. Missing from it is also what a crash between committing
+// the attempt and sending it leaves, after which the agent never got the first:
+// that one is marked as resent too, which its "may repeat" wording allows.
+#[tokio::test]
+async fn a_notice_cut_short_is_resent_as_a_recovery_unless_claudes_session_saved_it() {
+    for saved in [false, true] {
+        let fixture = Fixture::new();
+        let mut context = fixture.context();
+        context.environment.insert(
+            "DEVORA_FAKE_NOTICE_CRASH".into(),
+            fixture.root.path().join("crashed").display().to_string(),
+        );
+        if saved {
+            context
+                .environment
+                .insert("DEVORA_FAKE_NOTICE_SAVED".into(), "1".into());
+        }
+        let log = Arc::new(Log::open(&fixture.root.path().join("log")).unwrap());
+        fixture.create(fixture.form("Delta")).unwrap();
+        launch_and_settle(&fixture, &context, &log, &fixture.run).await;
+
+        let restarted = AppRun::new();
+        let mut running = Space::open(&fixture.profile, "Delta")
+            .unwrap()
+            .start(&context, log.clone(), &restarted)
+            .await
+            .unwrap();
+        let mut crashed = false;
+        tokio::time::timeout(Duration::from_secs(10), async {
+            loop {
+                match running.next_update().await.unwrap() {
+                    SpaceEvent::Session(SessionEvent::Exited { .. }) => crashed = true,
+                    SpaceEvent::Session(SessionEvent::Ready { .. }) if crashed => break,
+                    _ => {}
+                }
+            }
+        })
+        .await
+        .expect("the CLI dies on the notice and comes back");
+        running.pause().await.unwrap();
+
+        let rows = launch_and_settle(&fixture, &context, &log, &restarted).await;
+        let sent = notices(&fixture);
+        if saved {
+            assert!(rows.is_empty(), "the saved session shows it was delivered");
+            assert_eq!(sent.len(), 1);
+        } else {
+            assert_eq!(
+                rows,
+                vec![(
+                    "Devora restarted: asked the agent to re-check its waits (resent)".into(),
+                    true
+                )]
+            );
+            assert_eq!(sent.len(), 2);
+            assert_ne!(sent[0]["uuid"], sent[1]["uuid"]);
+            assert!(sent[1]["message"]["content"]
+                .as_str()
+                .unwrap()
+                .contains("may repeat"));
+        }
+    }
+}
+
+// The zero-turn result a resume brings can arrive after the notice is sent.
+// The notice's turn runs on until its own result.
+#[tokio::test]
+async fn a_result_nobody_asked_for_doesnt_end_the_notices_turn() {
+    let fixture = Fixture::new();
+    let mut context = fixture.context();
+    let log = Arc::new(Log::open(&fixture.root.path().join("log")).unwrap());
+    fixture.create(fixture.form("Delta")).unwrap();
+    launch_and_settle(&fixture, &context, &log, &fixture.run).await;
+    context
+        .environment
+        .insert("DEVORA_FAKE_NOTICE_UNREQUESTED".into(), "1".into());
+    let mut running = Space::open(&fixture.profile, "Delta")
+        .unwrap()
+        .start(&context, log.clone(), &AppRun::new())
+        .await
+        .unwrap();
+    tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            match running.next_update().await.unwrap() {
+                SpaceEvent::Session(SessionEvent::Message(Message::Raw(value)))
+                    if value["type"] == "fake_stream_ready" =>
+                {
+                    break
+                }
+                SpaceEvent::TurnEnded => {
+                    panic!("a result nobody asked for ended the notice's turn")
+                }
+                _ => {}
+            }
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(
+        running
+            .handle()
+            .send_turn("too early".into())
+            .await
+            .unwrap_err(),
+        "a turn is already running"
+    );
+    running.handle().interrupt().await.unwrap();
+    tokio::time::timeout(Duration::from_secs(10), async {
+        while !matches!(running.next_update().await.unwrap(), SpaceEvent::TurnEnded) {}
+    })
+    .await
+    .expect("the notice's own result ends it");
+    running.pause().await.unwrap();
+}
+
+// A space from before restart notices has no record of its last launch: its
+// first launch after the upgrade, itself a restart, owes one.
+#[tokio::test]
+async fn a_space_from_before_restart_notices_is_owed_one_on_its_first_launch_after_the_upgrade() {
+    let fixture = Fixture::new();
+    let context = fixture.context();
+    let log = Arc::new(Log::open(&fixture.root.path().join("log")).unwrap());
+    fixture.create(fixture.form("Delta")).unwrap();
+    launch_and_settle(&fixture, &context, &log, &fixture.run).await;
+    let database = fixture.profile.join("agent-spaces/Delta/.agent-space.db");
+    let connection = rusqlite::Connection::open(&database).unwrap();
+    connection
+        .execute_batch(
+            "ALTER TABLE space DROP COLUMN launched_run; ALTER TABLE space DROP COLUMN restart_notice; PRAGMA user_version = 2;",
+        )
+        .unwrap();
+    assert_eq!(
+        launch_and_settle(&fixture, &context, &log, &fixture.run)
+            .await
+            .len(),
+        1
+    );
+    assert_eq!(
+        connection
+            .pragma_query_value::<u32, _>(None, "user_version", |row| row.get(0))
+            .unwrap(),
+        3
+    );
 }
