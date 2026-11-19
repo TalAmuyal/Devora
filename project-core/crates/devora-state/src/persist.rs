@@ -48,8 +48,10 @@ const MIGRATIONS: &[&str] = &[
     "CREATE TABLE agent_views (profile_path TEXT NOT NULL, name TEXT NOT NULL, draft TEXT NOT NULL, anchor_sequence INTEGER, anchor_offset INTEGER, PRIMARY KEY(profile_path, name));",
     "ALTER TABLE meta ADD COLUMN global_paused INTEGER NOT NULL DEFAULT 0;",
     "ALTER TABLE agent_views ADD COLUMN keep_paused INTEGER NOT NULL DEFAULT 0;",
-    // Existing views read as not paused, so no agent comes back paused after the upgrade.
-    "ALTER TABLE agent_views ADD COLUMN paused INTEGER NOT NULL DEFAULT 0;",
+    // One flag for both pauses: Keep paused carries over, and every other view reads as not paused.
+    "ALTER TABLE agent_views ADD COLUMN paused INTEGER NOT NULL DEFAULT 0;
+     UPDATE agent_views SET paused = keep_paused;
+     ALTER TABLE agent_views DROP COLUMN keep_paused;",
 ];
 
 pub(crate) struct Db {
@@ -345,7 +347,7 @@ fn load(conn: &Connection) -> Result<State, Error> {
     }
 
     let mut query = conn.prepare(
-        "SELECT profile_path, name, draft, anchor_sequence, anchor_offset, keep_paused, paused
+        "SELECT profile_path, name, draft, anchor_sequence, anchor_offset, paused
          FROM agent_views ORDER BY profile_path, name",
     )?;
     let agent_views = query
@@ -360,8 +362,7 @@ fn load(conn: &Connection) -> Result<State, Error> {
                     sequence,
                     offset: offset.unwrap_or(0),
                 }),
-                keep_paused: row.get(5)?,
-                paused: row.get(6)?,
+                paused: row.get(5)?,
             })
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -382,14 +383,13 @@ fn write(conn: &mut Connection, state: &State) -> rusqlite::Result<()> {
     tx.execute("DELETE FROM agent_views", [])?;
     for view in &state.app.agent_views {
         tx.execute(
-            "INSERT INTO agent_views VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            "INSERT INTO agent_views VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             params![
                 view.profile_path,
                 view.name,
                 view.draft,
                 view.anchor.as_ref().map(|a| a.sequence),
                 view.anchor.as_ref().map(|a| a.offset),
-                view.keep_paused,
                 view.paused
             ],
         )?;
@@ -1075,43 +1075,35 @@ mod agent_view_tests {
     use crate::{ChatScrollAnchor, Command, Store};
 
     #[test]
-    fn keep_paused_survives_held_restart_and_clears_on_release() {
+    fn a_pause_survives_a_held_restart_and_a_release_leaves_it() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("state.db");
         let store = Store::open(&path).unwrap();
         store
             .dispatch(Command::SetGlobalPaused { paused: true })
             .unwrap();
-        for keep_paused in [true, false, true] {
+        for paused in [true, false, true] {
             store
-                .dispatch(Command::SetAgentKeepPaused {
+                .dispatch(Command::SetAgentPaused {
                     profile_path: "/profile".into(),
                     name: "Delta".into(),
-                    keep_paused,
+                    paused,
                 })
                 .unwrap();
-            assert_eq!(store.snapshot().agent_views[0].keep_paused, keep_paused);
+            assert_eq!(store.snapshot().agent_views[0].paused, paused);
         }
         drop(store);
         let store = Store::open(&path).unwrap();
         assert!(store.snapshot().global_paused);
-        assert!(store.snapshot().agent_views[0].keep_paused);
+        assert!(store.snapshot().agent_views[0].paused);
         store
             .dispatch(Command::SetGlobalPaused { paused: false })
             .unwrap();
-        assert!(!store.snapshot().agent_views[0].keep_paused);
-        let before = store.snapshot();
-        assert_eq!(
-            store.dispatch(Command::SetAgentKeepPaused {
-                profile_path: "/profile".into(),
-                name: "Delta".into(),
-                keep_paused: true,
-            }),
-            Err(StateError::GlobalPauseRequired)
-        );
-        assert_eq!(store.snapshot(), before);
         drop(store);
-        assert!(!Store::open(&path).unwrap().snapshot().agent_views[0].keep_paused);
+        assert!(
+            Store::open(&path).unwrap().snapshot().agent_views[0].paused,
+            "the agent stays paused until the user resumes it"
+        );
     }
 
     #[test]
@@ -1193,7 +1185,7 @@ mod agent_view_tests {
     }
 
     #[test]
-    fn views_saved_before_individual_pauses_were_persisted_come_back_not_paused() {
+    fn an_upgrade_carries_keep_paused_over_and_pauses_no_other_agent() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("state.db");
         let conn = Connection::open(&path).unwrap();
@@ -1216,10 +1208,10 @@ mod agent_view_tests {
         assert_eq!(
             views
                 .iter()
-                .map(|view| (view.name.as_str(), view.keep_paused, view.paused))
+                .map(|view| (view.name.as_str(), view.paused))
                 .collect::<Vec<_>>(),
-            [("Kept", true, false), ("Plain", false, false)],
-            "an upgrade pauses no agent"
+            [("Kept", true), ("Plain", false)],
+            "Keep paused carries over, and no other agent comes back paused"
         );
     }
 

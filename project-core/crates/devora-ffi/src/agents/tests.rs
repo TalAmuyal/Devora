@@ -760,9 +760,7 @@ fn global_pause_keep_choice_is_reversible_and_release_during_a_turn_honors_it() 
             .unwrap();
         f.wait(&events, |c| c.tab == tab && c.globally_held);
         for choice in [true, false, true, keep, keep] {
-            f.core
-                .set_agent_keep_paused(tab, generation, choice)
-                .unwrap();
+            block_on(f.core.set_agent_keep_paused(tab, generation, choice)).unwrap();
             let chat = f
                 .core
                 .agent_chat_snapshot()
@@ -774,17 +772,11 @@ fn global_pause_keep_choice_is_reversible_and_release_during_a_turn_honors_it() 
             assert_eq!(chat.keep_paused, choice);
             assert_eq!(chat.phase, ChatPhase::Running);
         }
-        assert!(f
-            .core
-            .set_agent_keep_paused(tab, generation + 1, !keep)
-            .is_err());
+        assert!(block_on(f.core.set_agent_keep_paused(tab, generation + 1, !keep)).is_err());
         f.core
             .dispatch(Command::SetGlobalPaused { paused: false })
             .unwrap();
-        assert!(f
-            .core
-            .set_agent_keep_paused(tab, generation, !keep)
-            .is_err());
+        assert!(block_on(f.core.set_agent_keep_paused(tab, generation, !keep)).is_err());
         let mut resume = keep.then(|| {
             Box::pin(
                 f.core
@@ -832,7 +824,7 @@ fn global_pause_keep_choice_is_reversible_and_release_during_a_turn_honors_it() 
             });
         }
         f.core.close_agent_space(tab).unwrap();
-        assert!(f.core.set_agent_keep_paused(tab, generation, true).is_err());
+        assert!(block_on(f.core.set_agent_keep_paused(tab, generation, true)).is_err());
         block_on(f.core.shutdown_agents()).unwrap();
     }
 }
@@ -850,9 +842,7 @@ fn global_pause_keep_choice_can_change_after_drain_and_before_any_launch() {
         c.tab == tab && c.globally_held && c.phase == ChatPhase::Paused
     });
     for keep in [true, false, true, false] {
-        f.core
-            .set_agent_keep_paused(tab, chat.generation, keep)
-            .unwrap();
+        block_on(f.core.set_agent_keep_paused(tab, chat.generation, keep)).unwrap();
     }
     assert!(!f.profile.root.path().join("report.jsonl").exists());
     f.core
@@ -866,15 +856,10 @@ fn global_pause_keep_choice_can_change_after_drain_and_before_any_launch() {
         c.tab == tab && c.globally_held && c.phase == ChatPhase::Paused
     });
     for keep in [true, false, true] {
-        f.core
-            .set_agent_keep_paused(tab, held.generation, keep)
-            .unwrap();
+        block_on(f.core.set_agent_keep_paused(tab, held.generation, keep)).unwrap();
     }
     block_on(f.core.shutdown_agents()).unwrap();
-    assert!(f
-        .core
-        .set_agent_keep_paused(tab, held.generation, false)
-        .is_err());
+    assert!(block_on(f.core.set_agent_keep_paused(tab, held.generation, false)).is_err());
 }
 
 #[test]
@@ -889,9 +874,7 @@ fn global_pause_keep_choice_restores_before_launch_and_close_wins_over_changes()
     let held = f.wait(&events, |c| {
         c.tab == tab && c.globally_held && c.phase == ChatPhase::Paused
     });
-    f.core
-        .set_agent_keep_paused(tab, held.generation, true)
-        .unwrap();
+    block_on(f.core.set_agent_keep_paused(tab, held.generation, true)).unwrap();
     block_on(f.core.shutdown_agents()).unwrap();
     events.close().unwrap();
     let old = std::mem::replace(
@@ -918,9 +901,11 @@ fn global_pause_keep_choice_restores_before_launch_and_close_wins_over_changes()
         c.tab == tab && c.globally_held && c.keep_paused && c.phase == ChatPhase::Paused
     });
     assert!(!f.profile.root.path().join("report.jsonl").exists());
-    f.core
-        .set_agent_keep_paused(tab, restored.generation, false)
-        .unwrap();
+    block_on(
+        f.core
+            .set_agent_keep_paused(tab, restored.generation, false),
+    )
+    .unwrap();
     f.core
         .dispatch(Command::SetGlobalPaused { paused: false })
         .unwrap();
@@ -931,14 +916,9 @@ fn global_pause_keep_choice_restores_before_launch_and_close_wins_over_changes()
     let held = f.wait(&events, |c| {
         c.tab == tab && c.globally_held && c.phase == ChatPhase::Paused
     });
-    f.core
-        .set_agent_keep_paused(tab, held.generation, true)
-        .unwrap();
+    block_on(f.core.set_agent_keep_paused(tab, held.generation, true)).unwrap();
     f.core.close_agent_space(tab).unwrap();
-    assert!(f
-        .core
-        .set_agent_keep_paused(tab, held.generation, false)
-        .is_err());
+    assert!(block_on(f.core.set_agent_keep_paused(tab, held.generation, false)).is_err());
     block_on(f.core.shutdown_agents()).unwrap();
 }
 
@@ -1072,9 +1052,9 @@ fn global_pause_survives_relaunch_and_restore_keeps_history_without_launching() 
     assert!(f.core.snapshot().unwrap().global_paused);
     block_on(f.core.restore_agent_spaces(f.launch())).unwrap();
     let events = f.core.subscribe_agent_chats().unwrap();
-    // It was individually paused before the hold, so it comes back paused on its own account.
+    // Its stored pause comes back as the hold's Keep paused choice, which the user can still change.
     let held = f.wait(&events, |c| {
-        c.tab == tab && c.phase == ChatPhase::Paused && !c.globally_held
+        c.tab == tab && c.phase == ChatPhase::Paused && c.globally_held && c.keep_paused
     });
     assert!(has_message(&held, "assistant"));
     assert_eq!(
@@ -1329,9 +1309,7 @@ fn across_a_held_restart_only_the_plainly_held_agent_launches_on_release() {
     let held = f.wait(&events, |c| {
         c.tab == keep && c.globally_held && c.phase == ChatPhase::Paused
     });
-    f.core
-        .set_agent_keep_paused(keep, held.generation, true)
-        .unwrap();
+    block_on(f.core.set_agent_keep_paused(keep, held.generation, true)).unwrap();
     f.wait(&events, |c| c.tab == keep && c.keep_paused);
     let held_tab = tabs["Held"].0;
     f.wait(&events, |c| {
@@ -1399,5 +1377,41 @@ fn an_individually_paused_agent_stays_paused_across_a_restart_until_resumed() {
         .agent_views
         .iter()
         .all(|view| !view.paused));
+    block_on(f.core.shutdown_agents()).unwrap();
+}
+
+#[test]
+fn unticking_keep_paused_on_an_agent_paused_before_the_hold_resumes_it_with_the_others() {
+    let f = Fixture::new(false);
+    let events = f.core.subscribe_agent_chats().unwrap();
+    f.create("Rested");
+    let tab = f.open("Rested");
+    let chat = f.wait(&events, |c| c.tab == tab && c.phase == ChatPhase::Running);
+    f.core.pause_agent_after_turn(tab, chat.generation).unwrap();
+    let paused = f.wait(&events, |c| c.tab == tab && c.phase == ChatPhase::Paused);
+    f.core
+        .dispatch(Command::SetGlobalPaused { paused: true })
+        .unwrap();
+    let launches = f.launches();
+
+    block_on(f.core.set_agent_keep_paused(tab, paused.generation, false)).unwrap();
+    // Reopened, held: it waits for the release rather than launching now.
+    f.wait(&events, |c| {
+        c.tab == tab && c.globally_held && !c.keep_paused && c.phase == ChatPhase::Paused
+    });
+    assert!(f
+        .core
+        .snapshot()
+        .unwrap()
+        .agent_views
+        .iter()
+        .all(|view| !view.paused));
+    assert_eq!(f.launches(), launches);
+
+    f.core
+        .dispatch(Command::SetGlobalPaused { paused: false })
+        .unwrap();
+    f.wait(&events, |c| c.tab == tab && c.phase == ChatPhase::Running);
+    assert_eq!(f.launches(), launches + 1);
     block_on(f.core.shutdown_agents()).unwrap();
 }

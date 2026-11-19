@@ -95,7 +95,7 @@ struct AgentChatPanel: View {
 				canSend: model.chat.canSend, onSend: { Task { await model.chat.send() } },
 				onStop: { Task { await model.chat.stop() } },
 				onPause: { model.chat.pause() }, onResume: { Task { await model.chat.retry() } },
-				onKeepPaused: { model.chat.setKeepPaused($0) }
+				onKeepPaused: { keep in Task { await model.chat.setKeepPaused(keep) } }
 			)
 			.padding(.horizontal, 12).padding(.bottom, 10)
 		}

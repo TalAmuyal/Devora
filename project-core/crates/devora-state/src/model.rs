@@ -132,10 +132,8 @@ pub struct AgentViewState {
     pub name: String,
     pub draft: String,
     pub anchor: Option<ChatScrollAnchor>,
-    /// Remain individually paused when the current global hold releases.
-    #[serde(default)]
-    pub keep_paused: bool,
-    /// Individually paused by the user: a restore keeps it from launching until the user resumes it.
+    /// Stays paused until the user resumes it (a Pause, or Keep paused during a global hold):
+    /// a restore doesn't launch it, nor does a release.
     #[serde(default)]
     pub paused: bool,
 }

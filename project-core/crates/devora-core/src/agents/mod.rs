@@ -65,6 +65,8 @@ struct Inner {
     changed: Arc<Notify>,
     /// What went wrong while shutting down, for `shutdown` to return.
     shutdown_problems: Vec<String>,
+    /// The launch of the latest open, for reopening an agent from Keep paused.
+    launch: Option<LaunchContext>,
 }
 
 /// Each facade has one event-loop thread. UI async exports need no Tokio context.
@@ -92,6 +94,7 @@ impl Agents {
             deletions: BTreeMap::new(),
             changed: Arc::new(Notify::new()),
             shutdown_problems: Vec::new(),
+            launch: None,
         }));
         let (stop, stopped) = oneshot::channel();
         let (ready, receive) = std::sync::mpsc::sync_channel(1);
@@ -141,17 +144,22 @@ impl Agents {
         context: LaunchContext,
     ) -> Result<u64, String> {
         let key = Key::new(profile, name)?;
-        set_paused(&self.state, &key, false)?;
+        // During a hold, opening only goes to the agent's tab; Keep paused is how its pause changes then.
+        if !self.state.global_paused() {
+            set_paused(&self.state, &key, false)?;
+        }
         self.open_key(key, context, false).await
     }
 
-    /// `restoring` keeps an individual pause the agent had when the app quit, so it shows Paused without launching.
+    /// Opens the agent as its stored pause says: a paused one shows Paused, and launches only once the user resumes it.
+    /// `reopen` opens a stopped agent anew during a hold, held, so that it launches with the others on release.
     async fn open_key(
         &self,
         key: Key,
         context: LaunchContext,
-        restoring: bool,
+        reopen: bool,
     ) -> Result<u64, String> {
+        lock(&self.inner).launch = Some(context.clone());
         loop {
             let mut done = {
                 let mut inner = lock(&self.inner);
@@ -162,7 +170,12 @@ impl Agents {
                     return Err("agent space is being deleted".into());
                 }
                 if self.state.global_paused() {
-                    if let Some(tab) = inner.owners.get(&key).and_then(|owner| owner.tab) {
+                    if let Some(tab) = inner
+                        .owners
+                        .get(&key)
+                        .filter(|owner| !reopen || !*owner.done.borrow())
+                        .and_then(|owner| owner.tab)
+                    {
                         self.state
                             .dispatch(Command::ActivateTab { tab })
                             .map_err(|e| e.to_string())?;
@@ -196,10 +209,10 @@ impl Agents {
                             generation,
                             handle: None,
                             pause,
-                            pause_requested: restoring
-                                && view.as_ref().is_some_and(|view| view.paused),
+                            pause_requested: false,
                             globally_held: false,
-                            keep_paused: view.as_ref().is_some_and(|view| view.keep_paused),
+                            // During a hold, a stored pause is the Keep paused choice; without one, it keeps the agent from launching.
+                            keep_paused: view.as_ref().is_some_and(|view| view.paused),
                             done,
                             live: false,
                         },
@@ -229,7 +242,7 @@ impl Agents {
             if let SessionKind::AgentSpace { name } = &tab.session.kind {
                 let result = match tab.session.profile_path.as_deref() {
                     Some(profile) => match Key::new(Path::new(profile), name) {
-                        Ok(key) => self.open_key(key, context.clone(), true).await.map(|_| ()),
+                        Ok(key) => self.open_key(key, context.clone(), false).await.map(|_| ()),
                         Err(error) => Err(error),
                     },
                     None => Err("agent tab has no owning profile".into()),
@@ -324,48 +337,60 @@ impl Agents {
         Ok(())
     }
 
-    /// Change only the release choice of an owner held by Global Pause.
-    pub fn set_keep_paused(
+    /// During a global hold: whether the agent stays paused when Devora resumes (one stored flag with Pause).
+    /// A held owner changes only its release choice. An agent paused before the hold has stopped: unticking it
+    /// reopens it, held, so that it launches with the others on release.
+    pub async fn set_keep_paused(
         &self,
         tab: u64,
         generation: u64,
         keep_paused: bool,
     ) -> Result<(), String> {
-        let mut inner = lock(&self.inner);
-        if inner.closing {
-            return Err("agents are shutting down".into());
+        let reopen = {
+            let mut inner = lock(&self.inner);
+            if inner.closing {
+                return Err("agents are shutting down".into());
+            }
+            if !self.state.global_paused() {
+                return Err("Keep paused requires an active global hold".into());
+            }
+            let launch = inner.launch.clone();
+            let (key, owner) = inner
+                .owners
+                .iter_mut()
+                .find(|(_, owner)| owner.tab == Some(tab))
+                .ok_or("agent is not open")?;
+            if owner.generation != generation || *owner.pause.borrow() {
+                return Err("agent generation is stale or pausing".into());
+            }
+            if *owner.done.borrow() {
+                // Paused before the hold, so already stopped and kept paused.
+                if keep_paused {
+                    return Ok(());
+                }
+                set_paused(&self.state, key, false)?;
+                Some((key.clone(), launch.ok_or("the agent's launch is unknown")?))
+            } else {
+                if !owner.globally_held || owner.pause_requested {
+                    return Err("agent is not globally held".into());
+                }
+                if owner.keep_paused == keep_paused {
+                    return Ok(());
+                }
+                set_paused(&self.state, key, keep_paused)?;
+                owner.keep_paused = keep_paused;
+                events::update(
+                    &self.state,
+                    tab,
+                    generation,
+                    ChatUpdate::KeepPaused { keep_paused },
+                );
+                None
+            }
+        };
+        if let Some((key, launch)) = reopen {
+            self.open_key(key, launch, true).await?;
         }
-        if !self.state.global_paused() {
-            return Err("Keep paused requires an active global hold".into());
-        }
-        let (key, owner) = inner
-            .owners
-            .iter_mut()
-            .find(|(_, owner)| owner.tab == Some(tab))
-            .ok_or("agent is not open")?;
-        if owner.generation != generation || *owner.pause.borrow() || *owner.done.borrow() {
-            return Err("agent generation is stale or pausing".into());
-        }
-        if !owner.globally_held || owner.pause_requested {
-            return Err("agent is not globally held".into());
-        }
-        if owner.keep_paused == keep_paused {
-            return Ok(());
-        }
-        self.state
-            .dispatch(Command::SetAgentKeepPaused {
-                profile_path: key.profile.to_string_lossy().into_owned(),
-                name: key.name.clone(),
-                keep_paused,
-            })
-            .map_err(|error| error.to_string())?;
-        owner.keep_paused = keep_paused;
-        events::update(
-            &self.state,
-            tab,
-            generation,
-            ChatUpdate::KeepPaused { keep_paused },
-        );
         Ok(())
     }
 
@@ -914,11 +939,11 @@ async fn run_session(
     if *pause.borrow() {
         return Ok(());
     }
-    // Keep paused, or individually paused when the app quit (a restore): shown Paused, never launched.
+    // Paused until the user resumes it: shown Paused, never launched.
     if lock(inner)
         .owners
         .get(key)
-        .is_some_and(|owner| owner.keep_paused || owner.pause_requested)
+        .is_some_and(|owner| owner.keep_paused)
     {
         return Ok(());
     }

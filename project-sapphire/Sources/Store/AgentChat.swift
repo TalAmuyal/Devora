@@ -247,9 +247,10 @@ public final class AgentChat {
 		do { try core.pauseAgentAfterTurn(tab: tab, generation: generation) } catch { fail(error) }
 	}
 
-	public func setKeepPaused(_ keepPaused: Bool) {
+	/// During a global hold, whether this agent stays paused when Devora resumes; unticking it on an agent paused before the hold makes it resume with the others.
+	public func setKeepPaused(_ keepPaused: Bool) async {
 		guard let generation = chat?.generation else { return }
-		do { try core.setAgentKeepPaused(tab: tab, generation: generation, keepPaused: keepPaused) } catch { fail(error) }
+		do { try await core.setAgentKeepPaused(tab: tab, generation: generation, keepPaused: keepPaused) } catch { fail(error) }
 	}
 
 	public func retry() async {

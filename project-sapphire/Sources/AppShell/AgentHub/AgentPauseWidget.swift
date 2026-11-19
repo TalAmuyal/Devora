@@ -84,10 +84,11 @@ struct AgentPauseWidget: View {
 			if presentation.keepPaused || presentation.keptPaused {
 				Toggle("Keep paused", isOn: Binding(get: { presentation.keptPaused }, set: onKeepPaused))
 					.toggleStyle(.switch)
-					.disabled(!presentation.globallyHeld || presentation.phase == .failed)
+					// An agent paused before the hold can be let go once it has stopped, not while its turn still ends.
+					.disabled(presentation.phase == .failed || (!presentation.globallyHeld && presentation.phase != .paused))
 					.help(presentation.globallyHeld
 						? "Keep this agent paused when Devora resumes"
-						: "This agent was individually paused. Resume it after Devora resumes.")
+						: "This agent was paused before Devora was. Turn this off to resume it when Devora resumes.")
 					.accessibilityIdentifier("agent-keep-paused")
 			}
 		}

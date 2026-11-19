@@ -503,13 +503,17 @@ impl DevoraCore {
         self.agents.pause_after_turn(tab, generation)?;
         Ok(())
     }
-    pub fn set_agent_keep_paused(
+    /// During a global hold: whether the agent stays paused when Devora resumes. Unticking it on an agent
+    /// paused before the hold reopens it, held, so that it resumes with the others.
+    pub async fn set_agent_keep_paused(
         &self,
         tab: u64,
         generation: u64,
         keep_paused: bool,
     ) -> Result<(), CoreError> {
-        self.agents.set_keep_paused(tab, generation, keep_paused)?;
+        self.agents
+            .set_keep_paused(tab, generation, keep_paused)
+            .await?;
         Ok(())
     }
     pub async fn pause_agent_space(&self, tab: u64) -> Result<(), CoreError> {
