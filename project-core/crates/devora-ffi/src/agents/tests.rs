@@ -1467,6 +1467,10 @@ fn across_a_held_restart_each_agent_gets_one_notice_when_it_launches_and_keeps_i
     });
     block_on(f.core.set_agent_keep_paused(keep, held.generation, true)).unwrap();
     f.wait(&events, |c| c.tab == keep && c.keep_paused);
+    let held_tab = tabs["Held"];
+    f.wait(&events, |c| {
+        c.tab == held_tab && c.globally_held && c.phase == ChatPhase::Paused
+    });
     block_on(f.core.shutdown_agents()).unwrap();
     events.close().unwrap();
 
@@ -1480,7 +1484,6 @@ fn across_a_held_restart_each_agent_gets_one_notice_when_it_launches_and_keeps_i
     f.core
         .dispatch(Command::SetGlobalPaused { paused: false })
         .unwrap();
-    let held_tab = tabs["Held"];
     let woke = f.wait(&events, |c| {
         c.tab == held_tab && restart_notices(c) == 1 && !c.turn_running
     });
