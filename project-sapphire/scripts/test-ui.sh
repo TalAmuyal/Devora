@@ -39,6 +39,8 @@ export TEST_RUNNER_DEVORA_HEALTH_FIXTURE_JSON
 results=build/ui-tests.xcresult
 rm -rf "$results"
 passed=true
+# Local time, the form `log show --start` takes.
+started=$(date '+%Y-%m-%d %H:%M:%S')
 # Each test gets at most 5 minutes (the slowest passing one takes about 1): one that hangs fails by name, with its screenshot (and a spindump, where the runner may take one) in the result bundle, and the run goes on.
 if ! xcodebuild -project App/DevoraSapphire.xcodeproj -scheme DevoraSapphire -configuration Release \
 	-derivedDataPath build/DerivedData -destination 'platform=macOS,arch=arm64' -resultBundlePath "$results" \
@@ -48,6 +50,8 @@ if ! xcodebuild -project App/DevoraSapphire.xcodeproj -scheme DevoraSapphire -co
 	# `-quiet` names the failing tests but not why they failed; the result bundle has the messages.
 	xcrun xcresulttool get test-results summary --path "$results" --compact |
 		jq -r '.testFailures[] | "\(.testIdentifierString): \(.failureText)"' || true
+	# A test that "crashed with signal kill" may have been macOS freeing disk space, not a test: say so when it was.
+	./scripts/explain-ui-test-kill.sh "$started"
 fi
 # Whether they passed or not: a test that leaned on XCUITest's own scroll only flakes some of the time.
 if [ -d "$results" ] && ! ./scripts/check-ui-scrolls.sh "$results"; then
