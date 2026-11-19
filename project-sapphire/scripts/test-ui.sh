@@ -33,7 +33,8 @@ export TEST_RUNNER_DEVORA_TEST_CLAUDE_PROGRAM="$PWD/../project-core/crates/devor
 export TEST_RUNNER_DEVORA_FAKE_FIXTURES="$PWD/../project-core/crates/devora-agent/tests/fixtures/claude-2.1.312"
 export TEST_RUNNER_SAPPHIRE_TEST_DEBI="$PWD/build/test-tools/debi"
 # The sandboxed runner receives the shared, sanitized fixture through its environment.
-export TEST_RUNNER_DEVORA_HEALTH_FIXTURE_JSON="$(cat ../acceptance/fixtures/health-report.json)"
+TEST_RUNNER_DEVORA_HEALTH_FIXTURE_JSON="$(cat ../acceptance/fixtures/health-report.json)"
+export TEST_RUNNER_DEVORA_HEALTH_FIXTURE_JSON
 
 results=build/ui-tests.xcresult
 rm -rf "$results"

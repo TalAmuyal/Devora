@@ -45,15 +45,16 @@ run = "bash scripts/ci/flake-report.sh"
 [tasks.lint]
 run = """
 set -e
+bash scripts/lint-shell.sh
 bash scripts/ci/lint-swift-indentation.sh
 mise run -C project-core lint
 mise run -C project-judgess lint
 """
-description = "Check Swift indentation and Rust formatting/clippy (core, judgess; Ember has ember-lint)"
+description = "Lint every shell script, check Swift indentation and Rust formatting/clippy (core, judgess; Ember has ember-lint)"
 
 [tasks.lint-shell]
-run = "shellcheck install.sh scripts/test-install.sh bundler/macos-ember/populate-app-resources.sh bundler/macos-ember/install-completions.sh bundler/macos-ember/bundle-fingerprint.sh bundler/macos-ember/effective-version.sh bundler/macos-sapphire/*.sh"
-description = "Lint shell scripts with shellcheck"
+run = "bash scripts/lint-shell.sh"
+description = "Lint every shell script with shellcheck (found, not listed: *.sh and sh/bash executables; --list prints them)"
 
 [tasks.release]
 run = "./cut-release.sh"

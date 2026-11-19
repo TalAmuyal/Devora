@@ -96,7 +96,9 @@ fi
 # ── Pre-flight checks ────────────────────────────────────────────
 
 # Working tree is clean
-git diff --quiet && git diff --cached --quiet || die "Working tree is dirty. Commit or stash changes first."
+if ! { git diff --quiet && git diff --cached --quiet; }; then
+	die "Working tree is dirty. Commit or stash changes first."
+fi
 
 # Up to date with origin/master
 git fetch origin
@@ -119,7 +121,7 @@ if [ -n "$EXPLICIT_VERSION" ]; then
 	NEW_VERSION="$EXPLICIT_VERSION"
 else
 	if echo "$CURRENT_VERSION" | grep -q "^${TODAY}\."; then
-		CURRENT_PATCH=$(echo "$CURRENT_VERSION" | sed "s/^${TODAY}\\.//")
+		CURRENT_PATCH=${CURRENT_VERSION#"${TODAY}".}
 		NEW_PATCH=$((CURRENT_PATCH + 1))
 		NEW_VERSION="${TODAY}.${NEW_PATCH}"
 	else

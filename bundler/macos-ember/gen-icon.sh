@@ -60,30 +60,29 @@ fi
 echo -n "Generating icons..."
 
 TMP_WORK_DIR=$(mktemp -d)
-trap "rm -rf $TMP_WORK_DIR" EXIT
+trap 'rm -rf "$TMP_WORK_DIR"' EXIT
 
 TMP_ICONSET_DIR=$TMP_WORK_DIR/app.iconset
 
 mkdir -p "$TMP_ICONSET_DIR"
-rm -rf "$TMP_ICONSET_DIR/*"
 
+# Prints sips's output only when it fails. (Under `set -e`, a bare `output=$(sips ...)` would end the script there, silently.)
 quiet_sips() {
-	output=$(sips "$@" 2>&1)
-	exit_code=$?
-	if [ $exit_code -ne 0 ]; then
+	local output
+	if ! output=$(sips "$@" 2>&1); then
 		echo "$output"
-		return $exit_code
+		return 1
 	fi
 }
 
 sizes=(16 32 128 256 512)
 for size in "${sizes[@]}"; do
 	# Standard resolution
-	quiet_sips -z $size $size $BASE_ICON_PATH --out "$TMP_ICONSET_DIR/icon_${size}x${size}.png"
+	quiet_sips -z "$size" "$size" "$BASE_ICON_PATH" --out "$TMP_ICONSET_DIR/icon_${size}x${size}.png"
 
 	# Retina resolution (@2x)
 	double_size=$((size * 2))
-	quiet_sips -z $double_size $double_size $BASE_ICON_PATH --out "$TMP_ICONSET_DIR/icon_${size}x${size}@2x.png"
+	quiet_sips -z "$double_size" "$double_size" "$BASE_ICON_PATH" --out "$TMP_ICONSET_DIR/icon_${size}x${size}@2x.png"
 done
 
 OUTPUT_FILE_PATH="$OUTPUT_PATH/app.icns"
