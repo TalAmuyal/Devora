@@ -49,7 +49,8 @@ started=$(date '+%Y-%m-%d %H:%M:%S')
 # hang the same way, each for its full allowance.
 ./scripts/ui-test-watchdog.sh "$results" "$hang" "$$" xcodebuild &
 watchdog=$!
-trap 'kill "$watchdog" 2>/dev/null' EXIT
+# The watchdog has usually ended with xcodebuild already; under `set -e`, a failing kill here would fail the script.
+trap 'kill "$watchdog" 2>/dev/null || true' EXIT
 if ! xcodebuild -project App/DevoraSapphire.xcodeproj -scheme DevoraSapphire -configuration Release \
 	-derivedDataPath build/DerivedData -destination 'platform=macOS,arch=arm64' -resultBundlePath "$results" \
 	-test-timeouts-enabled YES -default-test-execution-time-allowance 300 \
