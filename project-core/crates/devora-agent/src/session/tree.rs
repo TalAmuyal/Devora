@@ -56,33 +56,19 @@ pub fn stop_tree(
     }
     table.signal(root.pid, Signal::Stop)?;
     let mut tree = vec![root];
-    let mut seen = BTreeSet::from([root.pid]);
-    loop {
-        let mut children: HashMap<u32, Vec<ProcessInfo>> = HashMap::new();
-        for process in table.list()? {
-            children.entry(process.ppid).or_default().push(process);
-        }
-        let found: Vec<CliProcess> = tree
-            .iter()
-            .flat_map(|parent| children.get(&parent.pid).into_iter().flatten())
-            .filter(|process| !seen.contains(&process.pid))
-            .map(|process| CliProcess::from(*process))
-            .collect();
-        if found.is_empty() {
-            break;
-        }
-        for process in found {
-            seen.insert(process.pid);
-            table.signal(process.pid, Signal::Stop)?;
-            tree.push(process);
-        }
-    }
+    // Whatever was frozen is killed even if the walk fails part way, since a
+    // frozen process would otherwise never run or exit again.
+    let walked = freeze_descendants(table, &mut tree);
+    let mut killed = Ok(());
     // The CLI last, so a descendant is never left behind with no parent to find it by.
     for process in tree.iter().rev() {
         if process.alive(table) {
-            table.signal(process.pid, Signal::Kill)?;
+            if let Err(error) = table.signal(process.pid, Signal::Kill) {
+                killed = killed.and(Err(error));
+            }
         }
     }
+    walked.and(killed)?;
     let deadline = Instant::now() + wait;
     while tree.iter().any(|process| process.alive(table)) {
         if Instant::now() > deadline {
@@ -96,6 +82,33 @@ pub fn stop_tree(
         std::thread::sleep(Duration::from_millis(10));
     }
     Ok(true)
+}
+
+/// Freezes every descendant of the processes in `tree`, adding them to it, and
+/// walks the parent links again until no new process turns up.
+fn freeze_descendants(table: &impl ProcessTable, tree: &mut Vec<CliProcess>) -> Result<(), String> {
+    let mut seen: BTreeSet<u32> = tree.iter().map(|process| process.pid).collect();
+    loop {
+        let mut children: HashMap<u32, Vec<ProcessInfo>> = HashMap::new();
+        for process in table.list()? {
+            children.entry(process.ppid).or_default().push(process);
+        }
+        let found: Vec<CliProcess> = tree
+            .iter()
+            .flat_map(|parent| children.get(&parent.pid).into_iter().flatten())
+            .filter(|process| !seen.contains(&process.pid))
+            .map(|process| CliProcess::from(*process))
+            .collect();
+        if found.is_empty() {
+            return Ok(());
+        }
+        for process in found {
+            seen.insert(process.pid);
+            // Collected before it's signalled, so a failed signal still gets the kill.
+            tree.push(process);
+            table.signal(process.pid, Signal::Stop)?;
+        }
+    }
 }
 
 #[cfg(test)]
@@ -124,6 +137,62 @@ mod tests {
             .read_line(&mut line)
             .unwrap();
         (parent, line.trim().parse().unwrap())
+    }
+
+    /// A table over a fixed tree, recording signals, whose listing fails after
+    /// the first walk.
+    struct FailingTable {
+        processes: Vec<ProcessInfo>,
+        listed: std::cell::Cell<u32>,
+        signals: std::cell::RefCell<Vec<(u32, Signal)>>,
+    }
+
+    impl ProcessTable for FailingTable {
+        fn list(&self) -> Result<Vec<ProcessInfo>, String> {
+            self.listed.set(self.listed.get() + 1);
+            if self.listed.get() > 1 {
+                return Err("listing processes failed".into());
+            }
+            Ok(self.processes.clone())
+        }
+        fn get(&self, pid: u32) -> Option<ProcessInfo> {
+            let killed = self.signals.borrow().contains(&(pid, Signal::Kill));
+            self.processes
+                .iter()
+                .find(|process| process.pid == pid && !killed)
+                .copied()
+        }
+        fn signal(&self, pid: u32, signal: Signal) -> Result<(), String> {
+            self.signals.borrow_mut().push((pid, signal));
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn a_walk_that_fails_part_way_still_kills_what_it_froze() {
+        let process = |pid, ppid| ProcessInfo {
+            pid,
+            ppid,
+            started: 1,
+        };
+        let table = FailingTable {
+            processes: vec![process(10, 1), process(11, 10), process(12, 11)],
+            listed: Default::default(),
+            signals: Default::default(),
+        };
+        let root = CliProcess::of(&table, 10).unwrap();
+        let error = stop_tree(&table, root, Duration::from_secs(1)).unwrap_err();
+        assert_eq!(error, "listing processes failed");
+        assert_eq!(
+            *table.signals.borrow(),
+            vec![
+                (10, Signal::Stop),
+                (11, Signal::Stop),
+                (11, Signal::Kill),
+                (10, Signal::Kill),
+            ],
+            "nothing it froze is left frozen"
+        );
     }
 
     #[test]
