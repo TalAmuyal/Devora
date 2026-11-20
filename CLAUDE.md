@@ -39,15 +39,31 @@ Repeating tasks should be added to `mise.toml` for easier execution.
 
 Inspect the root `mise.toml` (or the project-specific one) for available commands and tasks.
 
+## CLAUDE.md files
+
+A `CLAUDE.md` holds what an agent needs in order to work in its directory today: current behavior, conventions and gotchas, not history.
+Claude Code loads a nested `CLAUDE.md` only when it works with files in that directory, so knowledge sits as close to its code as it can:
+
+- On the type or module that owns it, when a comment there can say it.
+- In a `CLAUDE.md` at a subsystem's directory root, when it spans several files of that subsystem (e.g. `project-ember/src/ui/layers/CLAUDE.md`).
+- In a project's `CLAUDE.md`, only when anyone working in that project needs it: its layout, how to build and test it, its cross-cutting rules, and one line pointing to each subsystem's own file.
+
+Aim for about 100 lines per file; one that outgrows that should split by subsystem.
+The change that alters behavior updates the nearest `CLAUDE.md`.
+Don't tell an agent to go and read a specific `CLAUDE.md`: if that seems needed, the knowledge is in the wrong place.
+
 ## Architecture Decision Records
 
 ADRs document significant architectural decisions.
 They are stored in `docs/adrs/` and listed below.
 
-When making a new architectural decision, create a new ADR file following the format of existing ones and add it to this list.
+An ADR is for a decision that is expensive to reverse, so that it isn't argued again; not every feature needs one, and nothing a `CLAUDE.md` or a code comment can say belongs in one.
+The maintainer signs off an ADR before it is executed.
+When making such a decision, create a new ADR file following the format of existing ones (context, decision, alternatives considered, consequences) and add it to this list.
+A later change to a decision is a dated amendment in its ADR, or a new ADR that supersedes it; an accepted ADR isn't otherwise rewritten.
 
 An ADR records the *decision and its history*.
-Knowledge that describes *current* behavior belongs where it is implemented — on the type or module that owns it, or, when it spans several files of one subsystem, in a `CLAUDE.md` at that subsystem's directory root (e.g. `project-ember/src/ui/layers/CLAUDE.md`).
+Knowledge that describes *current* behavior belongs where it is implemented (see "CLAUDE.md files" above).
 Reference those homes rather than restating them.
 
 - [ADR-001: Ember Acceptance Testing Framework](docs/adrs/ADR-001-ember-bdd-testing-framework.md) — Eval bridge + Gherkin acceptance tests + Fake Claude API for testing the Tauri app
