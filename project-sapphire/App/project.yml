@@ -48,6 +48,8 @@ targets:
     platform: macOS
     sources:
       - path: ../UITests
+        # Agent documentation, not a resource of the test bundle.
+        excludes: ["CLAUDE.md"]
     dependencies:
       - target: DevoraSapphire
     settings:

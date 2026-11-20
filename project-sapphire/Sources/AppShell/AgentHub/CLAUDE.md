@@ -1,0 +1,47 @@
+# Agent Hub
+
+The Agent Spaces of the selected profile (ADR-012, `Sources/AppShell/AgentHub/`), on a page layer over the whole window, with the Workspace Hub's keyboard model.
+
+- `Ctrl+S` (`Surfaces.hubShortcut`) opens it when no other window surface is open; inside either hub it switches to the other, as the Agents | Workspaces toggle in both headers does (`HubSwitcher`), except while the Workspace Hub shows the first-run welcome.
+	The Command Palette's "Agent Hub" opens it too.
+- `AgentHubModel` loads the profiles, then lists the spaces (`Store.listAgentSpaces`); invalid ones (an interrupted creation, an unreadable database) show their error and can only be deleted.
+	Its keys: `j`/`k` and the arrows move, Enter opens, `n` creates, `d` deletes (with a confirmation; an open agent is paused and its tab closed first, since the core deletes only a stopped one), `R` lists again.
+- The New Agent dialog (`NewAgentDialogModel`) is a modal over the hub: the name, with the space's path under it, the template's fields (`agent_creation_fields`: the ones only the form fills, then the pre-filled ones with their source, then the derived ones, read-only, listed again as the name and repos change), the initial repos, the model and the effort.
+	Fields show user-facing labels (`AgentFieldLabel`) with their `{{placeholder}}` and source beneath; `agent.name` and `space.path` aren't listed, as the Name field and the path under it show them.
+	Editing a pre-filled field changes only this agent; its Save button writes the value to its source (`save_agent_field`: the global config for a global value, otherwise the profile).
+	The model is free text, starting at `opus`; the effort is a stepped slider from "Claude Code default" (no `--effort`) to max, starting at the effort the user set for the profile or in User Defaults (`agent_model_defaults`).
+	Both are stored with the agent and used for every launch.
+	"Include coding instructions" (on by default) appends the instructions to Claude Code's system prompt, keeping its coding instructions; off, they replace it.
+	The Preview beside the form shows the instructions as creation would render them (`agent_creation_preview`), or why it would fail, updated as the form changes.
+	Create shows the creation's progress (`Store.createAgentSpace`) in the dialog's place, cancellable; once created, the agent opens in its tab and the hub closes.
+- Opening an agent (`Store.openAgentSpace`) asks the core for the launch (`resolve_agent_launch`, the user's login shell), then `open_agent_space`, which opens its tab or activates the one it has.
+	A launch resumes the agents of restored tabs in the background (`restore_agent_spaces`), and quitting stops every agent first (`AppTermination.pauseAgents`, from `applicationShouldTerminate`), after waiting for those still working (Global Pause, in `../CLAUDE.md`).
+- An agent's tab shows its status emoji (`AgentStatusEmoji`: ⚙️ working, turning slowly unless Reduce Motion is on or the window inactive, ❓ waiting for the user, 💤 idle, ⏸️ pausing, ⚠️ failed), folded off the main actor from the core's chat events into `Store.agentStatuses`.
+	Its tab's stack holds `AgentChatPanel`, with the native transcript (`Packages/TranscriptKit/CLAUDE.md`) above an AppKit plain multi-line editor.
+
+## Agent chat
+
+`Store.AgentChat` folds the typed chat subscription for one tab and loads earlier pages with `agent_history_before`.
+The initial projection is the core's 200-item tail.
+Reading older history preserves a sequence/offset anchor, while following the bottom trims automatic live growth to 200 items.
+Permission answers carry the observed generation and request ID, and the facade validates that generation and the question's continued existence.
+Command+Y, Command+N and Command+Shift+Y answer the first active question through the tab layer, from the editor or transcript.
+
+Enter and Shift+Enter insert newlines by default.
+Command+Enter and Control+Enter send, and `agent.enter-sends` in the Settings Hub additionally enables unmodified Enter.
+The setting resolves against the agent's owning profile and refreshes when its editor regains focus.
+Drafts write through named core commands after 250 ms, with explicit flushes before send, tab close, deletion and Quit.
+A failed send keeps the draft, and a successful send clears only the submitted text if it is still unchanged.
+A failed flush cancels close or Quit and surfaces the storage error.
+Drafts and sequence/offset anchors use the canonical profile and space name, so closing and reopening the tab keeps them.
+Stop interrupts with no keyboard binding.
+Pause reserves a stop after the running turn, rejects new sends while pending, and leaves permission answers available.
+The facade queues `SpaceHandle::pause_after_turn` before returning, and the space actor makes the pause-versus-compaction decision.
+`AgentWidgetBar`, below the editor, holds the content-sized Context and Pause widgets on the left and Send on the right, whose tooltip and accessibility hint carry the Enter hint.
+A running turn replaces Send with Stop in that position.
+`AgentPauseWidget` maps the typed phase and pause flags through `AgentPausePresentation` into Pause, disabled Pausing…, Resume, or a system-colored Paused capsule, with the global resume hint in its tooltip and accessibility description.
+Keep paused is a native reversible switch that selects whether this globally held agent remains paused when Devora resumes.
+The widget uses native macOS controls and system colors, and exposes each state and its available actions to accessibility.
+Agents paused before the global hold show the switch on; once stopped, turning it off makes them resume with the others when Devora resumes (one stored pause flag; see `project-core/CLAUDE.md`).
+Its `AgentContextWidget` shows the actor's typed context usage as a percentage of the window and a ring, starting at 9 o'clock, that fills as the usage nears the compaction threshold, with the full numbers in its tooltip and the user's locale for both; an unknown usage or window grays it out and its tooltip says which is missing.
+Retry and Resume reopen the existing tab against its owning profile.
