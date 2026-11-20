@@ -2,7 +2,8 @@
 # Stops an XCUITest run at its first hang, naming the test, instead of letting every later test hang for its own allowance.
 # Usage: ui-test-watchdog.sh <result bundle> <evidence dir> <parent pid> <process name>
 # It watches the `<process name>` child of `<parent pid>` (test-ui.sh's xcodebuild), and reads the logs XCTest writes live
-# under the bundle's Staging/…/Diagnostics (xcodebuild's `-quiet` output holds them for its end summary). It fires on the first:
+# under the bundle's Staging/<action>/Diagnostics (xcodebuild's `-quiet` output holds them for its end summary); a run in which
+# it never finds that directory ends with a line saying it couldn't watch. It fires on the first:
 # - test that exceeds its execution time allowance;
 # - launch whose app never gets a process (XCTest's `isProcessIDValid` wait times out).
 # Then it writes the evidence (what fired, the test, a screenshot, samples of the app and the runner, the Diagnostics logs)
@@ -32,29 +33,40 @@ while [ -z "$target" ]; do
 done
 identity=$(started "$target")
 
-diagnostics="$results/Staging/1_Test/Diagnostics"
+# Every action's Diagnostics (`1_Test` today; another index or Xcode may name it differently).
+diagnostics() { find "$results/Staging" -mindepth 2 -maxdepth 2 -type d -name Diagnostics 2>/dev/null; }
 # The test a line names, as Class/test.
 test_of() { sed -E -n "s/.*Test Case '-\\[[A-Za-z0-9_]+\\.([A-Za-z0-9_]+) ([A-Za-z0-9_]+)\\]'.*/\\1\\/\\2/p" | tail -1; }
 
 reason=""
 hung=""
+watched=""
 while same "$target" "$identity" && kill -0 "$parent" 2>/dev/null; do
-	if [ -d "$diagnostics" ]; then
-		allowance=$(find "$diagnostics" -name 'StandardOutputAndStandardError.txt' -exec grep -h "exceeded execution time allowance" {} + 2>/dev/null | head -1)
+	watched=$(diagnostics)
+	if [ -n "$watched" ]; then
+		# shellcheck disable=SC2086 # One path per line; no Staging path has a space in it.
+		allowance=$(find $watched -name 'StandardOutputAndStandardError.txt' -exec grep -h "exceeded execution time allowance" {} + 2>/dev/null | head -1)
 		if [ -n "$allowance" ]; then
 			reason="exceeded its execution time allowance"
 			hung=$(printf '%s\n' "$allowance" | test_of)
 			break
 		fi
-		if find "$diagnostics" -name 'Session-*.log' -exec grep -l "reporting timed out failure with Expect value of 'isProcessIDValid'" {} + 2>/dev/null | grep -q .; then
+		# shellcheck disable=SC2086
+		if find $watched -name 'Session-*.log' -exec grep -l "reporting timed out failure with Expect value of 'isProcessIDValid'" {} + 2>/dev/null | grep -q .; then
 			reason="launched the app, which never got a process"
-			hung=$(find "$diagnostics" -name 'StandardOutputAndStandardError.txt' -exec grep -h "' started\\.$" {} + 2>/dev/null | test_of)
+			# shellcheck disable=SC2086
+			hung=$(find $watched -name 'StandardOutputAndStandardError.txt' -exec grep -h "' started\\.$" {} + 2>/dev/null | test_of)
 			break
 		fi
 	fi
 	sleep "$interval"
 done
-[ -n "$reason" ] || exit 0
+if [ -z "$reason" ]; then
+	if [ -z "$watched" ]; then
+		echo "UI test watchdog: found no live XCTest logs (Staging/*/Diagnostics) in $results, so it couldn't watch this run for hangs"
+	fi
+	exit 0
+fi
 
 mkdir -p "$evidence"
 message="UI test watchdog: ${hung:-a test} $reason; stopped the run, evidence in $evidence"
@@ -69,7 +81,9 @@ if [ "$capture" = 1 ]; then
 		done
 	done
 fi
-cp -R "$diagnostics" "$evidence/Diagnostics" 2>/dev/null
+for dir in $watched; do
+	cp -R "$dir" "$evidence/Diagnostics-$(basename "$(dirname "$dir")")" 2>/dev/null
+done
 
 if same "$target" "$identity"; then
 	kill -INT "$target" 2>/dev/null

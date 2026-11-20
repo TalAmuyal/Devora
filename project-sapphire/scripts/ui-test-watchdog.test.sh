@@ -13,17 +13,18 @@ fail() {
 	failures=$((failures + 1))
 }
 
-# A result bundle's Staging, as XCTest writes it during a run: the runner's output and its session log.
+# A result bundle's Staging, as XCTest writes it during a run: the runner's output and its session log, under the action's
+# directory (`1_Test` unless named).
 bundle() {
 	local results="$scratch/$1/ui-tests.xcresult"
-	local dir="$results/Staging/1_Test/Diagnostics/DevoraSapphireUITests-Iteration-1/DevoraSapphireUITests-1"
+	local dir="$results/Staging/${2:-1_Test}/Diagnostics/DevoraSapphireUITests-Iteration-1/DevoraSapphireUITests-1"
 	mkdir -p "$dir"
 	: >"$dir/StandardOutputAndStandardError.txt"
 	: >"$dir/Session-DevoraSapphireUITests-2026-11-20_170040-ki5ban.log"
 	echo "$results"
 }
-runner_output() { echo "$1/Staging/1_Test/Diagnostics/DevoraSapphireUITests-Iteration-1/DevoraSapphireUITests-1/StandardOutputAndStandardError.txt"; }
-session_log() { echo "$1/Staging/1_Test/Diagnostics/DevoraSapphireUITests-Iteration-1/DevoraSapphireUITests-1/Session-DevoraSapphireUITests-2026-11-20_170040-ki5ban.log"; }
+runner_output() { echo "$1/Staging/${2:-1_Test}/Diagnostics/DevoraSapphireUITests-Iteration-1/DevoraSapphireUITests-1/StandardOutputAndStandardError.txt"; }
+session_log() { echo "$1/Staging/${2:-1_Test}/Diagnostics/DevoraSapphireUITests-Iteration-1/DevoraSapphireUITests-1/Session-DevoraSapphireUITests-2026-11-20_170040-ki5ban.log"; }
 
 passed="Test Case '-[DevoraSapphireUITests.WorkspaceHubUITests testTheHubDrawsItsHeaderFilterAndHintsAsItOpens]' started.
 Test Case '-[DevoraSapphireUITests.WorkspaceHubUITests testTheHubDrawsItsHeaderFilterAndHintsAsItOpens]' passed (6.563 seconds)."
@@ -62,7 +63,7 @@ expected="UI test watchdog: WorkspaceHubUITests/testTypingInTheFilterNarrowsTheL
 	fail "the reason should name the test: $(cat "$scratch/allowance/hang/reason.txt" 2>/dev/null)"
 [ "$(cat "$scratch/allowance/hang/stopped-with.txt" 2>/dev/null)" = SIGINT ] ||
 	fail "a run that ends on SIGINT should be stopped with it: $(cat "$scratch/allowance/hang/stopped-with.txt" 2>/dev/null)"
-[ -f "$scratch/allowance/hang/Diagnostics/DevoraSapphireUITests-Iteration-1/DevoraSapphireUITests-1/StandardOutputAndStandardError.txt" ] ||
+[ -f "$scratch/allowance/hang/Diagnostics-1_Test/DevoraSapphireUITests-Iteration-1/DevoraSapphireUITests-1/StandardOutputAndStandardError.txt" ] ||
 	fail "the evidence should keep the Diagnostics logs"
 
 # 2. A launch with no process: fires at XCTest's timed-out pid wait, naming the test that started last.
@@ -77,15 +78,37 @@ ended "$dog" || fail "the watchdog outlived the run it stopped (no process)"
 grep -q "testTypingInTheFilterNarrowsTheListAndEscapeLeavesItBeforeClosing launched the app, which never got a process" "$scratch/no-pid/hang/reason.txt" 2>/dev/null ||
 	fail "the reason should name the test whose launch got no process: $(cat "$scratch/no-pid/hang/reason.txt" 2>/dev/null)"
 
-# 3. Passing tests: it never fires, and ends with the run.
+# 1b. Another action's directory name: it still finds the logs.
+results=$(bundle renamed 2_Test)
+stand_in 60
+"$watchdog" "$results" "$scratch/renamed/hang" "$$" sleep &
+dog=$!
+printf '%s\n%s\n' "$hung_start" "$allowance" >>"$(runner_output "$results" 2_Test)"
+ended "$run" || fail "a hang logged under Staging/2_Test didn't stop the run"
+ended "$dog" || fail "the watchdog outlived the run it stopped (2_Test)"
+grep -q "testTypingInTheFilterNarrowsTheListAndEscapeLeavesItBeforeClosing exceeded" "$scratch/renamed/hang/reason.txt" 2>/dev/null ||
+	fail "a hang under Staging/2_Test should name the test"
+
+# 3. Passing tests: it never fires, says nothing, and ends with the run.
 results=$(bundle passing)
 stand_in 1
-"$watchdog" "$results" "$scratch/passing/hang" "$$" sleep &
+"$watchdog" "$results" "$scratch/passing/hang" "$$" sleep >"$scratch/passing.out" &
 dog=$!
 printf '%s\n' "$passed" >>"$(runner_output "$results")"
 ended "$run" || fail "the stand-in for a passing run didn't end by itself"
 ended "$dog" || fail "the watchdog outlived a run that ended by itself"
 [ ! -e "$scratch/passing/hang" ] || fail "passing tests shouldn't leave evidence"
+[ ! -s "$scratch/passing.out" ] || fail "a watched run should end quietly: $(cat "$scratch/passing.out")"
+
+# 3b. No live logs at all (Xcode wrote them elsewhere): the run ends with a line saying it wasn't watched.
+mkdir -p "$scratch/unwatched/ui-tests.xcresult"
+stand_in 1
+"$watchdog" "$scratch/unwatched/ui-tests.xcresult" "$scratch/unwatched/hang" "$$" sleep >"$scratch/unwatched.out" &
+dog=$!
+ended "$run" || fail "the stand-in for an unwatched run didn't end by itself"
+ended "$dog" || fail "the watchdog outlived an unwatched run"
+grep -q "found no live XCTest logs (Staging/\*/Diagnostics)" "$scratch/unwatched.out" ||
+	fail "an unwatched run should say so: $(cat "$scratch/unwatched.out")"
 
 # 4. Its parent gone (test-ui.sh killed): it ends without signalling anything.
 results=$(bundle orphan)
