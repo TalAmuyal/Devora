@@ -45,7 +45,20 @@ project-ember/CLAUDE.md
 project-ember/src/ui/layers/CLAUDE.md
 project-judgess/CLAUDE.md
 project-sapphire/CLAUDE.md
+project-sapphire/Packages/TranscriptKit/CLAUDE.md
+project-sapphire/Sources/AppShell/AgentHub/CLAUDE.md
+project-sapphire/Sources/AppShell/CLAUDE.md
+project-sapphire/Sources/AppShell/Preview/CLAUDE.md
+project-sapphire/Sources/AppShell/Profiles/CLAUDE.md
+project-sapphire/Sources/AppShell/Repos/CLAUDE.md
+project-sapphire/Sources/AppShell/Settings/CLAUDE.md
+project-sapphire/Sources/AppShell/TaskCreation/CLAUDE.md
+project-sapphire/Sources/AppShell/WorkspaceHub/CLAUDE.md
 project-sapphire/Sources/Layers/CLAUDE.md
+project-sapphire/Sources/Store/CLAUDE.md
+project-sapphire/Tests/CLAUDE.md
+project-sapphire/UITests/CLAUDE.md
+project-sapphire/acceptance/CLAUDE.md
 project-team-work/CLAUDE.md
 web-renderer/CLAUDE.md"
 unpinned=$(git -C "$root" ls-files -- 'CLAUDE.md' '*/CLAUDE.md' | grep -vxF "$agent_docs")

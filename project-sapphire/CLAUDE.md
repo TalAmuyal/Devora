@@ -9,215 +9,18 @@ Keys go through one key router, which borrows ADR-003's routing model from Ember
 Double-tapping Shift opens the searchable Command Palette when no window surface is open; it offers workspace, session, profile and settings actions, including repurposing an idle workspace.
 Closing the window quits the app.
 
-## State and terminals
+## Where each subsystem is documented
 
-- The tabs are core-owned state (`devora-state`, ADR-008): the store dispatches a `StateCommand` to the core and changes `Store.app` only by folding the core's events.
-	The one early fold is a profile selection's own `ActiveProfileChanged`, applied as soon as `SetActiveProfile` succeeds so that the hub and the New Task dialog see it once the workspaces are listed; the core's copy of that event folds later and sets the same value.
-	It waits until the subscription's first event, the core's snapshot, has folded, folding it at once rather than on a frame: the snapshot replaces the whole state, so folding it after the early fold would undo the selection until the core's event arrived.
-- The core commits every command to `state.db` (SQLite) before its events go out, in `~/Library/Application Support/Devora Sapphire/`, or `Devora Sapphire <suffix>/` for a bundle with an install suffix; `DEVORA_STATE_DIR` replaces the directory (tests).
-	The core resolves that path (`sapphireStatePath`, from the bundle's `Resources`); `Store(configPath:state:log:)` takes `.app` for it, `.file` or `.inMemory` (tests).
-	A failed command, including one that couldn't be saved, takes no effect and shows as an error banner.
-- The app state has one writer: the core holds `state.db` exclusively while it runs, so a second instance on it gets `StartupProblem.stateInUse` and can only quit.
-	A state that can't be opened (corrupt, from a newer build) is `StartupProblem.stateUnreadable`: Quit leaves it untouched, Start Fresh (`Command.startFresh`) renames it, with its WAL, to `state-unreadable-<UTC time>.db` beside it and opens a fresh one.
-	Until the problem is answered, the store has no core and `StartupProblemView` fills the window.
-- The launch (`RootView`) runs once the state is open: the profiles and the selected profile's workspaces, then the Workspace Hub if the core has no tabs (`Store.hasNoTabs`, read from the core since the restored tabs fold on a later frame); restored tabs get fresh terminals from their specs (a terminal's contents aren't restored), and a workspace creation the app stopped in the middle of comes back as failed ("interrupted").
-- The store pulls the core's events through `Batches`, the `AsyncSequence` over a core subscription.
-	Long-lived state/error consumers resolve their weak store inside the main-actor hop, so queued delivery cannot keep a released store and its database alive. Cancelling the consumer closes its subscription through `Batches`.
-	Events wait in an off-main inbox until `FrameDriver`'s display link folds them into `Store.app`, once per frame and only while events are pending.
-	Without a display link (tests), they fold on the main actor's next turn.
-- `Terminals` (in `AppShell`) holds the live terminals, keyed by the terminal id of each tab's pane: it makes one when a tab appears and drops it when the tab leaves the state, which frees the libghostty surface and ends its process.
-	The terminal is at the bottom of its tab's stack at once, while its launch (the core's `terminalSpec`) loads; it runs once it has its launch and its view is in the window, when libghostty makes the surface and spawns the shell.
-	What is typed into it before then (keys, the bridge's lines, a paste) waits in its `TerminalSession` and goes to the surface in order once it exists; the PTY holds it until the shell reads it, as in any terminal.
-	Every tab's terminal stays in the view tree, so switching tabs keeps them running; a terminal whose process exits closes its tab, as in Ember.
-	A tab creating its workspace has no terminal until the workspace exists (its session is `CreatingWorkspace`, which has no terminal spec).
-- `Surfaces` (in `AppShell`) holds the key router and one layer stack per tab, with the tab's terminal as its bottom layer, under the progress page of a tab creating its workspace; the active tab's top layer has the keyboard focus unless a window surface is open.
+Each subsystem's current behavior is in a `CLAUDE.md` at its own root, which loads when you work there. Paths in those files are relative to `project-sapphire/`, as they are here:
 
-## Preview panes
-
-`debi preview <file>` sends a request to the core's loopback IPC server, whose port is supplied to each terminal alongside its stable pane ID. The core resolves the owning tab, commits an OpenPreview command and delivers PanesChanged through the normal subscription and per-frame fold. Unknown terminal IDs are warnings and no-ops. Preview panes are part of the tab's row, beside its terminal layer; opening one does not activate a background tab or take its terminal's focus. Closing one returns focus to the active tab's terminal unless a window surface owns it.
-
-Paths, pane IDs, display order, preferred widths and refresh revisions are SQLite-backed core state. Restoring a tab re-reads each file; missing or unreadable files show an in-pane error. A new path replaces all existing previews unless `--stack` appends it; any already-open path refreshes in place, preserving its ID, width, position and siblings with or without `--stack`. Markdown and themed Mermaid use WebContentView's revision-driven update path, shared with the guide. Rendered contents, web views and error text are transient UI models. HTML uses a separate HTMLPreviewView with a fresh nonpersistent WKWebView configuration, content JavaScript disabled and no renderer schemes, user scripts or message handlers. It installs a block-all content rule list before reading/loading inline HTML; setup failures never load the document and appear in the pane. An initial CSP permits inline styling but blocks scripts, resources, frames, connections, base URLs and forms. A nil base URL grants no directory access, the navigation delegate only admits the app's initial about:blank load, and popups are refused. HTML is static: linked images/styles/fonts and navigation are unavailable. Refresh and restore reuse the durable pane/file-error flow. `PreviewDivider` dispatches one ResizePreview command when a mouse drag ends, while the row shows the dragged width until the committed one folds; StackPreview and ResizePreview use the same PanesChanged subscription/fold as open and close. The core validates widths (200–16,384 logical points, default 320) and exports those bounds plus the terminal's 240-point minimum through previewLayoutRules. The terminal absorbs spare width. PreviewRowLayout temporarily constrains preferred widths in a smaller window without overwriting them; when even the minimum widths cannot fit, the row scrolls horizontally. The terminal stays in the same native view hierarchy through opening, resizing and closing panes; real UI tests check its shell PID as well as keyboard focus.
-
-The acceptance tests build a real Debi CLI with `test-tools` and run it inside the session's terminal, exercising its environment and the IPC server. Shared Markdown scenarios live in `acceptance/features/preview.feature`; the shared HTML scenario describes sandboxed content rather than an iframe; all preview scenarios now run on both builds. Sapphire additionally probes blocked scripts, local/remote resources, navigation/popups/forms, and HTML refresh/restore/format changes. Preview restore, missing-file and background-tab scenarios are Sapphire-specific. The test bridge exposes pane identity/error state and rendered DOM/SVG observations; the UI tests drag dividers, relaunch, check minimum widths, close stacked previews and verify the same shell process receives subsequent typing.
-
-## Workspace Hub
-
-Ember's home page (`Sources/AppShell/WorkspaceHub/`): the selected profile's workspaces, beside the focused one's details, on a page layer over the whole window.
-
-- `Surfaces.openWorkspaceHub` pushes it with a fresh `WorkspaceHubModel`, which holds what one opening has (the category, the filter, the cursor, the toast), so closing the hub forgets them, as Ember's `unload` does.
-	The profiles, the workspaces and their statuses are the store's; the hub loads them on opening, reloads them silently when a page over it closes (its `onReveal`), and reloads them with a toast on `R` ("Refreshing…" for at least 1 s, then "Refreshed successfully" for 3 s unless a call failed; the latest press wins).
-- The statuses (`Command.loadWorkspaceStatuses`) are one `workspace_status` core call per workspace, off the main actor and four workspaces at a time (each runs its repos' `git status` in parallel, at most five at once), the active workspaces first; each is kept as it arrives, so the list and the detail panel fill in progressively, and a workspace without one shows as pending.
-	A workspace whose status can't be read is invalid (an error dot, badge and message), with no banner; a failed call also has its banner.
-	Dropping the statuses (a fresh load, another profile) makes the loads still running drop theirs.
-- Its keys are in `WorkspaceHubModel.handleKey`; while the filter field has the focus, keys type into it and Escape leaves it, as Ember's editable-element guard does.
-	The cheatsheet (`?`) is a page of its own over the hub, scrolled by `VimScroll`, ADR-004's motions over a SwiftUI scroll view; `ListCursor` is the list's cursor.
-- The detail panel's buttons are Ember's: Open; Duplicate and Remove Task for an active workspace; Delete for an inactive or invalid one.
-	An active workspace also has Add Repo, a Sapphire addition alongside the Command Palette action (see Repos).
-	Remove Task (`Store.removeTask`, `remove_task`) goes ahead at once when every repo is known to be clean and on a detached HEAD (`RemoveTaskDecision`), and otherwise asks with a confirmation dialog listing what will be lost; Delete (`Store.deleteWorkspace`, `delete_workspace`) never asks.
-	Either one lists the workspaces again, keeping the filters and the cursor; a failure shows its banner.
-- The confirmation dialog (`ConfirmationDialog.swift`, `Surfaces.confirm`) is a modal layer over the window, with Ember's keys: Escape and `q` cancel, Enter confirms, Tab and Shift+Tab move between its two buttons without ever leaving it, and Space presses the focused one; it draws its own focus, so the Tab trap doesn't depend on the system's keyboard navigation setting.
-- The header has Ember's two dropdowns (`DropdownMenu.swift`): the profiles (each with its repo count, the selected one checked), and the burger menu, whose "Save loading latencies" writes the latest load's `LoadingLatencies` to `<profile>/diagnostics/hub-profile-<timestamp>.json` and shows the path in a toast.
-	An open dropdown is a popup layer (`Surfaces.toggleHubMenu`) whose content is empty: the hub draws the panel under its trigger, as Ember's caller-mounted popup, with a click anywhere else closing it.
-	Escape and `q` close only the dropdown; any other key closes it and reaches the hub.
-- `P`, the profile dropdown's "Manage Profiles…" and the burger menu's "Settings" open the Settings Hub, and "New Profile…" opens it on its New Profile row (see Settings Hub).
-- `H` and the burger menu open the Health Hub as a window-stack page. It runs the shared core health check off the main actor, cancels it on close or re-run (`r`), supports Vim scrolling, and copies fix hints with a toast.
-
-## Agent Hub
-
-The Agent Spaces of the selected profile (ADR-012, `Sources/AppShell/AgentHub/`), on a page layer over the whole window, with the Workspace Hub's keyboard model.
-
-- `Ctrl+S` (`Surfaces.hubShortcut`) opens it when no other window surface is open; inside either hub it switches to the other, as the Agents | Workspaces toggle in both headers does (`HubSwitcher`), except while the Workspace Hub shows the first-run welcome.
-	The Command Palette's "Agent Hub" opens it too.
-- `AgentHubModel` loads the profiles, then lists the spaces (`Store.listAgentSpaces`); invalid ones (an interrupted creation, an unreadable database) show their error and can only be deleted.
-	Its keys: `j`/`k` and the arrows move, Enter opens, `n` creates, `d` deletes (with a confirmation; an open agent is paused and its tab closed first, since the core deletes only a stopped one), `R` lists again.
-- The New Agent dialog (`NewAgentDialogModel`) is a modal over the hub: the name, with the space's path under it, the template's fields (`agent_creation_fields`: the ones only the form fills, then the pre-filled ones with their source, then the derived ones, read-only, listed again as the name and repos change), the initial repos, the model and the effort.
-	Fields show user-facing labels (`AgentFieldLabel`) with their `{{placeholder}}` and source beneath; `agent.name` and `space.path` aren't listed, as the Name field and the path under it show them.
-	Editing a pre-filled field changes only this agent; its Save button writes the value to its source (`save_agent_field`: the global config for a global value, otherwise the profile).
-	The model is free text, starting at `opus`; the effort is a stepped slider from "Claude Code default" (no `--effort`) to max, starting at the effort the user set for the profile or in User Defaults (`agent_model_defaults`).
-	Both are stored with the agent and used for every launch.
-	"Include coding instructions" (on by default) appends the instructions to Claude Code's system prompt, keeping its coding instructions; off, they replace it.
-	The Preview beside the form shows the instructions as creation would render them (`agent_creation_preview`), or why it would fail, updated as the form changes.
-	Create shows the creation's progress (`Store.createAgentSpace`) in the dialog's place, cancellable; once created, the agent opens in its tab and the hub closes.
-- Opening an agent (`Store.openAgentSpace`) asks the core for the launch (`resolve_agent_launch`, the user's login shell), then `open_agent_space`, which opens its tab or activates the one it has.
-	A launch resumes the agents of restored tabs in the background (`restore_agent_spaces`), and quitting stops every agent first (`AppTermination.pauseAgents`, from `applicationShouldTerminate`), after waiting for those still working (see Global Pause).
-- An agent's tab shows its status emoji (`AgentStatusEmoji`: ⚙️ working, turning slowly unless Reduce Motion is on or the window inactive, ❓ waiting for the user, 💤 idle, ⏸️ pausing, ⚠️ failed), folded off the main actor from the core's chat events into `Store.agentStatuses`.
-	Its tab's stack holds `AgentChatPanel`, with the native transcript (see Agent chat) above an AppKit plain multi-line editor.
-
-## Agent chat
-
-`Store.AgentChat` folds the typed chat subscription for one tab and loads earlier pages with `agent_history_before`.
-The initial projection is the core's 200-item tail.
-Reading older history preserves a sequence/offset anchor, while following the bottom trims automatic live growth to 200 items.
-Permission answers carry the observed generation and request ID, and the facade validates that generation and the question's continued existence.
-Command+Y, Command+N and Command+Shift+Y answer the first active question through the tab layer, from the editor or transcript.
-
-The transcript is native (ADR-014), its own module (`Packages/TranscriptKit`, whose entry point is `TranscriptView`); the web renderer draws only the guide, the previews and the transcript's Mermaid diagrams.
-Its colors are the Devora theme's, the ones the web renderer's Markdown takes (`TranscriptTheme`, from the panel's CSS variables: the page, text, quieter text, headings and quote edges, links, code blocks, borders and errors), each falling back to the system's; the page's darkness picks the dark or light appearance for what the theme doesn't color (buttons, scrollers); the kind dots and the Judgess badges keep their own colors.
-`TranscriptScrollView` is an `NSTableView` of `TranscriptCell`s hosting SwiftUI `TranscriptRow`s and permission cards, fed `AgentChat.items` and `questions`; `TranscriptChange` turns each update into a prepend, changes in place with rows added or dropped at either end, or a reload.
-It follows the bottom while the reader is within 24 pt of it, keeps the top visible row in place otherwise, asks for an older page within 80 pt of the top (saving the anchor first, so the chat stops trimming to its tail), and reports the anchor 250 ms after the reader's scrolls (the item's sequence and its top's offset, or none while following the bottom); its own adjustments don't count as the reader's.
-`RowHeights` holds the heights: exact for a row measured at its content and width, otherwise an estimate (its last height, or a guess from its kind and text calibrated by the measurements so far), so `NSTableView` never waits for a measurement.
-The table lays a row out at the height it was last given (`tableHeights`), which a measurement is compared with, since an estimate can change after the table took it; and it takes inserted rows' heights at once (`layOut`), since after some batch updates it would otherwise estimate part of them itself and move the rows below later, outside the anchoring, leaving the hosted rows' accessibility frames where the rows were.
-The visible rows are measured at once; the rest on idle frames, nearest first, 2 ms a frame, after which the display link stops; a width change makes every height an estimate again; every height change applies without animation and keeps the bottom in place, or else the first visible row that was already exact (so a row scrolled into view settles toward the side not yet seen), or a restored position's row.
-Links open only `http` and `https` URLs, never a file or another app's scheme.
-Wide code blocks scroll sideways; a mostly vertical scroll gesture over the transcript scrolls the transcript wherever it starts, a code block included, decided once per gesture and kept through its momentum (`WheelRouting`, through a local scroll-wheel monitor that takes only events whose hit test lands in the transcript, so not over a background tab or a layer drawn over it).
-User, assistant and thinking rows' Markdown is parsed once per content by `MarkdownDocument` (`swift-markdown`) into plain blocks and inline runs that `MarkdownView` draws (a collapsed thought only once it opens).
-A Mermaid block is drawn into an image by `MermaidRenderer`, one shared offscreen renderer: a hidden web view on the bundled web renderer (`WebDiagramDrawer`, in an offscreen window at the screen's scale), at the row's width and in the theme's colors, as the previews draw them; it draws one diagram at a time (callers waiting for the page are let through together), fails one that doesn't parse or takes over 5 s (dropping the page, so the next starts on a fresh one), starts a fresh page for a new theme, and keeps the drawings in a cache bounded by their pixels (48 MB), least recently shown first out.
-Until its image arrives a block is a placeholder of a stable height, and the arrival is a height correction like any other (`RowHeights` keys a measurement by a fingerprint of the row's diagrams too); a streaming reply shows the source, and a failed diagram its source under a warning in the theme's error color; a live resize waits for its end to ask for drawings at the new width.
-Thinking and tool rows start collapsed: a summary ("Thinking", or the tool's name and its Judgess badge) that a click toggles, keeping the row's top in place; the expansion is the view's, by sequence, so it survives updates, cell reuse and older pages, and `RowHeights` keys a measurement by expansion too.
-Each row's hover title shows its sequence.
-`KindMarker` draws the kind dots and the amber edge of an interrupted or failed item, in one place for the coming chat bubbles to replace.
-Each row's context menu has Copy, of the item as written (Markdown included; a tool's name, input and result).
-For VoiceOver each row is one element in reading order: its kind and state as the label ("Tool Bash, Judgess approve, collapsed"), its shown text as the value, and Expand or Collapse and its links as actions; a cell the table removed for reuse shows nothing, so it exposes no stale row.
-A question is a card, a row of its own that the host builds from `AgentChat.questions` (`TranscriptEntry.layout`, never from an item's content), right after its tool's row or at the end when that row isn't loaded: the tool, its input, the reason, the suggested rules as sentences ("Allow Bash(custom-tool), saved to localSettings"; what a sentence can't say in full stays JSON) with their JSON as the tooltip, and Allow ⌘Y, Deny ⌘N and Always allow ⌘⇧Y (only when it can), which call `AgentChat.answer` with the card's generation, as the keys do.
-Rows are keyed by sequence or request id, so a card is diffed, measured and pinned as any row; a saved position is an item's, so a card on top saves the row above it.
-The bridge's `GET /test/agent-chat` answers from the native view, under `dom` (`rows` with `chat-<kind>` kinds, the names the scenarios have read since the web transcript, `cards`, `text` with the cards' text in place, `diagrams` (drawn, failed, pending, or shown as source while streaming), `thinkingOpen`, `toolOpen`, `verdict`, `top`, `topSequence`; nothing native runs content, so markup shows as its text); `toggleThinking`, `toggleTool` and `scrollTop` act on it as the reader would.
-
-Enter and Shift+Enter insert newlines by default.
-Command+Enter and Control+Enter send, and `agent.enter-sends` in the Settings Hub additionally enables unmodified Enter.
-The setting resolves against the agent's owning profile and refreshes when its editor regains focus.
-Drafts write through named core commands after 250 ms, with explicit flushes before send, tab close, deletion and Quit.
-A failed send keeps the draft, and a successful send clears only the submitted text if it is still unchanged.
-A failed flush cancels close or Quit and surfaces the storage error.
-Drafts and sequence/offset anchors use the canonical profile and space name, so closing and reopening the tab keeps them.
-Stop interrupts with no keyboard binding.
-Pause reserves a stop after the running turn, rejects new sends while pending, and leaves permission answers available.
-The facade queues `SpaceHandle::pause_after_turn` before returning, and the space actor makes the pause-versus-compaction decision.
-`AgentWidgetBar`, below the editor, holds the content-sized Context and Pause widgets on the left and Send on the right, whose tooltip and accessibility hint carry the Enter hint.
-A running turn replaces Send with Stop in that position.
-`AgentPauseWidget` maps the typed phase and pause flags through `AgentPausePresentation` into Pause, disabled Pausing…, Resume, or a system-colored Paused capsule, with the global resume hint in its tooltip and accessibility description.
-Keep paused is a native reversible switch that selects whether this globally held agent remains paused when Devora resumes.
-The widget uses native macOS controls and system colors, and exposes each state and its available actions to accessibility.
-Agents paused before the global hold show the switch on; once stopped, turning it off makes them resume with the others when Devora resumes (one stored pause flag; see `project-core/CLAUDE.md`).
-Its `AgentContextWidget` shows the actor's typed context usage as a percentage of the window and a ring, starting at 9 o'clock, that fills as the usage nears the compaction threshold, with the full numbers in its tooltip and the user's locale for both; an unknown usage or window grays it out and its tooltip says which is missing.
-Retry and Resume reopen the existing tab against its owning profile.
-
-
-## Global Pause
-
-The title-bar toolbar and command palette dispatch `Command.setGlobalPaused` through Store.
-`AppState.globalPaused` is the core's durable, per-install hold, folded from the ordinary state subscription.
-While held, the toolbar shows "Pausing… (n of m)" until every agent's runtime has stopped, then "Paused" (`Store.pauseIndicator`), from the core's `RunningAgents`, which counts an agent whose tab was closed mid-turn until its runtime stops.
-The pause status and the Pause/Resume toggle are separate toolbar items, each in its own capsule; clicking the status opens the pause progress (`PauseProgress.swift`, `Surfaces.showPauseProgress`), an opaque native popover anchored to it that lists each agent still running and why (a turn, a permission question, stopping), with Show, which hides it and activates the agent's tab.
-The popover leaves the window, and so the agents' permission cards, usable; Escape or a click elsewhere only hides it.
-A quit (Cmd+Q, the bridge's quit, a system logout, or closing the window, which `WindowCloseQuits` routes through the quit) waits while an agent runs a turn or waits for an answer, or while the hold is still stopping someone (`Store.quitMustWait`): it holds Devora, shows the same popover with Cancel Quit (the default; the hold stays) and Interrupt and Quit, and quits by itself once no runtime is live (`Surfaces.finishPendingQuit`), even with the popover hidden.
-Interrupt and Quit stops the agents at once, as quitting used to; a quit with nothing working is immediate.
-What went wrong while stopping (a forced kill after the grace period, a repo update still running) is shown in the popover, whose Quit then quits; nothing is swallowed.
-The agents are stopped by then, so the problems are kept (`Surfaces.shutdownProblems`): the toolbar's status reads "Stopped" and reopens them, with their Quit, until the app quits.
-The hold stays committed after a graceful quit, so the next launch starts held (ADR-013).
-An agent tab shows Pausing… until its current turn ends and Paused afterward, using the paused emoji and matching accessibility description.
-`AgentChat.globallyPaused` disables sending and exposes the resume hint while drafts keep their normal persistence.
-The core also refuses sends during the hold.
-Permission responses and Stop remain available for a draining turn.
-The chat's Keep paused switch sets the core-owned, generation-scoped release choice without changing the held worker.
-The typed `globallyHeld` and `keepPaused` chat projections control its availability and selection.
-The choice survives a relaunch while globally paused and can be reversed before Devora resumes.
-The initial restored snapshot carries the global hold before agent restore launches work.
-After a restart, an agent's first launch sends it a notice to re-check its waits, shown as a system row ("Devora restarted: asked the agent to re-check its waits", "(resent)" when resent after a crash); see `project-core/CLAUDE.md`.
-
-## Profiles and the first run
-
-Ember's profile form and first-run welcome (`Sources/AppShell/Profiles/`).
-
-- The profile form (`ProfileFormModel`) has a name and a root path, with "Browse…" (an `NSOpenPanel` folder picker); it validates the path (`validate_profile_path`) 250 ms after the last edit, or at once when it is set (the initial path, a browsed folder), as a new profile, an existing one (whose own name locks the name field, and "Register Profile"), or an invalid path.
-	Submitting registers it (`register_profile`, which creates `config.json`, `repos/` and `workspaces/` for a new one), then the hub selects it and loads it from scratch.
-	Enter submits from a field or the submit button, Space presses the focused button, and Tab and Shift+Tab move through it, skipping a locked name and a disabled submit; it draws its buttons' focus itself, as the dialogs do.
-- With no profiles, a listing that succeeded makes the Workspace Hub show the first-run welcome (`WorkspaceHubModel.welcome`) instead of its list: the profile form, on `~/devora`, with no control focused, as in Ember.
-	The hub refuses `q` and Escape meanwhile (`dismissDecision`), as Ember's zero-profile lock does; Escape in a field leaves the field, and the hub's own keys do nothing.
-	The burger menu has no "Settings" and the header no profile dropdown, as in Ember.
-- The selected profile is the core's active profile (`AppState.activeProfile`, which `Store.selectedProfilePath` reads): selecting one dispatches `SetActiveProfile`, so a launch restores it, where Ember always starts on the first profile.
-	A load selects the restored profile while it is registered, otherwise the first profile, or none, and dispatches that in its place; it reads the active profile from the core, since the state's events fold on a later frame, and folds its own selection at once, so that the New Task dialog and the hub see it as soon as the workspaces are listed.
-
-## Settings Hub
-
-Ember's Settings Hub (`Sources/AppShell/Settings/`): the profiles beside the focused row's detail, on a page layer over the Workspace Hub (`Surfaces.openSettingsHub`), so that closing it (`q`, Escape, or what closes it below) reloads the hub.
-
-- `SettingsHubModel` holds one opening: the master list ("User Defaults" pinned first, the store's profiles with the active one's dot and their repo counts, "New Profile…" pinned last), its cursor, and the focused row's detail; it lists the profiles again on opening (`Store.listProfiles`) and focuses the active profile's row, or the New Profile row for "New Profile…".
-	Its keys are Ember's: `j`/`k` and the arrows move, Enter sets the focused profile active, `n` (or Enter on the New Profile row) gives the form's name field the focus on the main actor's next turn, and `d` deletes; a key typed into a card's input or the form's fields is theirs (Escape leaves the field), and `q` and Escape go on to the stack's dismissal.
-- A profile's detail: its path, its repo, workspace and active-task counts (`get_registered_repos` and `list_workspaces` the first time its row is focused), Set Active, Clone Repo (the Clone Repo dialog, after which the counts and repos load again) and Delete, and its Repos card.
-	Set Active and registering a new profile make it the core's active profile at once (`Store.activateProfile`) and close the Settings Hub; the Workspace Hub's reload then lists its workspaces, starting its cursor over.
-	Delete asks with Ember's confirmation (the directory "remains on disk"), or shows a notice (`Confirmation` with no `cancelLabel`) listing the open tabs that use the profile (`Store.tabs(usingProfile:)`); `Store.unregisterProfile` (`unregister_profile`) then loads again, which selects the first profile if the deleted one was selected, and deleting the last one closes the Settings Hub over the first-run welcome.
-- The New Profile row's detail is the profile form, whose Cancel goes back to the active profile's row; Tab and Shift+Tab move through it while it has the focus.
-- The User Defaults' and each profile's detail have Claude Launch Settings, Terminal & Session, Pull Requests and Task Tracker cards; the Asana settings and token row show while the provider resolves to Asana, an inherited one included.
-	`ClaudeSettingsModel` edits the three model tiers and permission mode as Custom/Default/None, effort as Default/levels/None, and Default model as On/Off (On stores `opusplan`, Off stores explicit None).
-	Custom reveals a draft seeded from the resolved value without writing; Enter or Save commits trimmed text, a blank commit inherits again, and drafts survive unrelated writes.
-	The core exports the effort levels and model/permission suggestions from `devora-config`; neither UI owns a copy of those lists, and suggestions never restrict custom ids.
-	`SettingsWriteQueue` serializes generic and Claude writes together because both update the same config file.
-	`AsanaTokenModel` reads only presence and clears its secure draft after a successful save; the credential is shared by both scopes and Debi, stored as service `devora-asana` for the login account.
-	The acceptance harness's `DEVORA_TEST_MODE=1` selects the core's in-memory credential backend in both Sapphire and Ember; model tests inject closures and Rust tests inject a `TokenStore`, so tests never read or modify the real login keychain.
-	`ConfigSettingsModel` is Ember's `settingsEditor` for one scope: it reads the scope (`get_config_settings`, the stored and the resolved values), writes one key at a time, in order (`set_config_setting`, where nil removes the key), and reads the scope again after each write.
-	"Default" removes the key, and shows the inherited value as a hint ("→ value", "Uses Devora default" when nothing applies; not for `pr.auto-merge`, whose per-repo override the hub can't see).
-	A text setting's Set reveals an input and focuses it, writing nothing; Enter or its Save button (shown only for a non-blank value that differs from the stored one) commits, trimmed except for the title prefix, and a blank value reverts to Default; what is typed stays across the reloads of other settings' writes, and comes back when Set is selected again.
-	The Agent card's `AgentSettingsModel` shares that write queue and scope reload. It edits compaction percentage, a template path with a file picker, multiline role/user-details/custom-sections and literal key/value template inputs. The existing Enter sends control is in the same card. Multiline Enter stays text and Save preserves whitespace and explicit empty strings. Default removes an override. Core-returned sources label effective values, and explicit legacy nulls remain visible as cleared overrides. Each input rename is one core write, and its row is disabled while its write is pending. A legacy null inputs map can be reset to Default before editing entries.
-	A profile's Agent card previews saved instructions through `agent_creation_preview` with an empty form, coding instructions included, and that card's owning profile. Each successful queued write rereads the settings and refreshes the preview. Unsaved drafts stay local. Preview failures are inline, and an older render cannot replace a newer reload. User Defaults points to the profile cards rather than rendering a prompt without a profile.
-
-## Task creation
-
-Ember's non-blocking task creation (`Sources/AppShell/TaskCreation/`): the New Task dialog hands the creation to a tab of its own, whose progress page shows it until the tab has its workspace.
-
-- `n` and "+ New Task" in the Workspace Hub open the New Task dialog (`NewTaskDialogModel`, `Surfaces.openNewTaskDialog`), a modal layer over the hub, once the profile's repos have loaded (`get_registered_repos`); Duplicate, on an active workspace, opens it titled "Duplicate Task", with the task's title and repos.
-	Its keys are Ember's: typing goes to its focused field (the title, then the repos' filter), Escape cancels and Enter creates, except that Enter toggles the active repo while the filter has the focus, where ↑ and ↓ move it; Tab and Shift+Tab cycle the title, "+ Clone Repo", the filter, Cancel and Create, and Space presses the focused button, whose focus the dialog draws itself.
-- Creating closes the dialog and the hub, then dispatches `Command.createTask`, and the core takes it from there (`create_workspace`, in `devora-ffi`'s `creation.rs`): it opens the tab as `CreatingWorkspace`, runs the creation on a worker thread, and records its outcome in the app state: `WorkspaceCreated`, `WorkspaceCreationFailed` (also reported to the log, so it has its banner), or closing the tab after a cancel, once the work is undone.
-	The store pulls the creation's progress (`CreationEvent`s, in batches) into `Store.creations`, by tab, folded by `CreationProgress`; a tab's progress goes when the tab has its workspace or closes.
-- The progress page (`CreationProgressPage`) is a page on its tab's own stack, pushed as soon as the tab is in the state, so it shows only while its tab is active and never blocks the tab shortcuts: the steps, a collapsible Output log of the latest 500 lines, which a failure opens, the failure, and Cancel, or Close once the creation has failed; Escape and `q` do what the button does, whatever has the focus.
-	When the tab has its workspace, its terminal goes in at the bottom of the stack, under the page, which is then removed, revealing it (`Surfaces.retireProgressPages`).
-- `Command.cancelCreation` cancels a tab's creation (`cancel_workspace_creation`); one asked for before `create_workspace` has returned its id is held and applied once it has, and closing the tab of a creation still running cancels it.
-- A creation the app stopped in the middle of comes back as `CreationFailed` with the reason "interrupted" (the core's restore), so its tab shows its progress page with that failure and Close.
-
-## Repos
-
-Ember's Add Repo and Clone Repo dialogs (`Sources/AppShell/Repos/`), modal layers over the window, each with its form, then the operation's progress in its place (`RepoOperationPhase`, as Ember's `driveCreationDialog`).
-
-The repo picker of the New Agent, New Task and Add Repo dialogs is one native list (`RepoListView`, a bordered SwiftUI `List`): the cursor row is the list's selection, the dialog passes its height, long names truncate in the middle with the full name as the tooltip, and no match shows the system's empty-search view.
-In New Agent and New Task each repo is a checkbox: the box or its name toggles it and makes it the cursor row, and a click on the row's empty area only moves the cursor (`activate`); in Add Repo the selection is the chosen repo.
-
-- Clone Repo (`CloneRepoDialogModel`, `Surfaces.openCloneRepoDialog`) opens from the New Task dialog's "+ Clone Repo", cloning into the selected profile; its "Clones to:" hint is the core's `clone_destination`, which parses the URL as the clone does.
-	Once cloned, the New Task dialog lists the profile's repos again with the clone selected, keeping its title and selection (`NewTaskDialogModel.reposChanged`, Ember's `refreshAfterClone`).
-- Add Repo (`AddRepoDialogModel`, `Surfaces.openAddRepoDialog`) adds a worktree of one of the profile's repos to a workspace, as `<repo>` or `<repo>-<postfix>` (`AddRepoTarget.worktreeDirName`); the core rejects a name the workspace has or one that leaves it, as the add's failure.
-	It takes an `AddRepoTarget`: the workspace and its own profile, whose repos it lists and whose prepare-command runs, whichever profile is selected.
-	The Command Palette opens it on the active tab's workspace (`Store.addRepoTargetOfActiveTab`, which refuses a tab without a workspace with Ember's banner); the Workspace Hub's Add Repo opens it on the focused workspace, then reloads that workspace's status.
-- Their keys are Ember's: Escape cancels and Enter confirms whatever has the focus, `q` cancels outside a field, Tab and Shift+Tab cycle the fields and buttons, and Space presses the focused button; during the progress, Escape, `q` and Space press its Cancel, or Close once it has failed.
-- `Store.startRepoOperation` starts either (`add_repo_to_workspace`, `clone_repo_into_profile` in `devora-ffi`'s `repos.rs`) and follows its progress into a `RepoOperationRun`; done or cancelled closes the dialog, and a failure, which also has its banner, stays in it until it is closed.
-	A cancel is `cancel_workspace_creation` (the operations' ids are a creation's), held until the id has arrived; the core undoes the work (the added worktree, the partial clone) before it reports the cancel.
+- `Sources/Store/`: the store, the app state and its fold.
+- `Sources/AppShell/`: the terminals, the surfaces and Global Pause.
+- `Sources/AppShell/WorkspaceHub/`, `AgentHub/` (with the agent chat), `Profiles/`, `Settings/` (with Repository Updates), `TaskCreation/`, `Repos/` and `Preview/`: each surface.
+- `Sources/Layers/`: the layer system.
+- `Packages/TranscriptKit/`: the native agent transcript.
+- `acceptance/`: the acceptance harness and the test bridge's routes.
+- `UITests/`: the XCUITests and their input rules.
+- `Tests/`: the unit tests' own rules.
 
 ## Errors and the log
 
@@ -255,16 +58,6 @@ Sapphire follows Ember's error reporting (ADR-002).
 - `scripts/build-core.sh`: `devora-ffi` → static library → bindings → `build/DevoraCoreFFI.xcframework`.
 - `build/` and `vendor/` (gitignored): the xcframeworks, DerivedData, and the Ghostty checkout.
 
-## Repository Updates
-
-The Repository Updates card appears only in User Defaults.
-It edits the shared core's enabled flag and positive interval in minutes, with Sapphire's enabled default shown in the inherited hint.
-Interval values are edited as text and stored as JSON numbers by the core.
-Run Repo Updates in the palette requests a manual round even with the periodic switch off.
-It uses the same Global Pause boundary as automatic rounds.
-The launch starts the single core worker, and the off-main termination closure shuts it down before awaiting the agents.
-Operational outcomes go to the app log without banners.
-
 ## Commands
 
 - `mise run bundle` (or root `sapphire-bundle`) builds the signed distribution with the shared tool/plugin/resource manifest into `build/bundle/Devora Sapphire.app`. Root `sapphire-install --path <directory> --suffix <name>` installs it; the suffix changes the visible name and core state directory. Plain `build` remains the development app, without the distribution resources. Health retains the core's PATH fallback and the guide retains its checkout fallback there.
@@ -286,41 +79,9 @@ The app reads the global config from `DEVORA_CONFIG_PATH` when set, as Ember doe
 
 ## Testing
 
-The shared `claude-hook-integration.feature` runs the real recorded Claude Code CLI in both apps. Sapphire's `acceptance/support/claude.ts` reuses Ember's fake server, cassette files and interactive CLI protocol through a typed terminal adapter; its teardown waits for `/exit` and verified process exit before ending PTYs or deleting workspaces. The background ownership scenario holds the PostToolUse hook on a fixture barrier until the second tab is active. Both desktop suites share the isolated CLI test config and must run sequentially on one machine. `test-tools` builds the real Rust CCC launcher as well as Go Debi; CI installs the same exact Claude version for both apps.
-
 Acceptance tests follow Ember's (ADR-001): Gherkin scenarios run by Cucumber.js against the real, built app, which they drive through a test bridge (ADR-011).
 `acceptance/PARITY.md` maps each Ember scenario Sapphire doesn't run to its Sapphire coverage, or lists it as a gap.
 Real input (key events, focus, the IME, libghostty's key path) is what the bridge can't drive, and what SwiftUI draws is what it can't see; XCUITests cover both.
-
-- The bridge (`Sources/AppShell/TestBridge.swift`) is a loopback HTTP server that starts only when `DEVORA_TEST_MODE=1`, once the launch is done, and prints `Devora test harness on port <port>` to stderr, as Ember's does.
-	It is compiled into every build, as Ember's is, and does nothing unless the variable is set.
-	Its routes: `GET /test/state` (profiles, workspaces, tabs with their terminal's status, focus, layers and progress page, the active tab, the window stack's layers, whether a text field has the focus, the open Workspace Hub as it shows (its list, cursor, filters, detail panel, toast, cheatsheet scrolling, profile label, open dropdown's rows and whether it shows the first-run welcome), the open confirmation dialog, the open New Task, Add Repo and Clone Repo dialogs, the open profile form (the Settings Hub's, or else the welcome's), the open Settings Hub (its rows, the focused profile's detail, and each shown setting's segment, input, Save button and inherited hint), the font size, the error banners, the log's path, the window's title and the startup problem); `POST /test/dispatch` with a store command (`{"command": "openShell"}`, `load`, `selectProfile` with `path`, `openWorkspace` with a workspace `id`, `activateTab` and `closeTab` with a tab `id`, `startFresh`, `dismissError` with a banner `id`); `POST /test/agent-hub` (`{"action": "newAgent"}`, or `open` and `delete` with a `name`) and `POST /test/new-agent` (`setName` and `setField` with a `key` and a `value`, `setKeepCodingInstructions` with a boolean `value`, `toggleRepo` with a `name`, `save` with a `key`, `create`, `cancel`), which click what the Agent Hub and the New Agent dialog draw, whose state is `agentHub` and `newAgent`, and each tab's `agentStatus`; `POST /test/hub`, which clicks what the open hub draws, running what the button runs (`{"action": "removeTask"}`, `delete`, `duplicate` or `addRepo` on the focused workspace, `newTask`, `toggleMenu` with a `menu`, `profiles` or `main`, and `menuItem` with the `label` of a row of the open dropdown, a 409 when it is disabled); `POST /test/dialog` with `{"button": "confirm"}` or `cancel`; `POST /test/new-task` with `{"action": "toggleRepo", "name"}`, `create`, `cancel` or `cloneRepo`, which clicks what the New Task dialog draws; `POST /test/add-repo` with `{"action": "selectRepo", "name"}`, `submit`, `cancel` or `progressAction` (the progress's Cancel or Close), and `POST /test/clone-repo` with `{"action": "setUrl", "value"}`, `submit`, `cancel` or `progressAction`, which do the same for the repo dialogs; `POST /test/profile-form` with `{"action": "setName", "value"}` or `setPath`, which fill in the open profile form's fields as typing does, `submit` (a 409 while it is disabled) or `cancel`; `POST /test/settings` with `{"action": "selectRow", "label"}`, `setActive`, `cloneRepo` or `delete` on the focused profile, or, on a setting of the focused row's scope, `selectSegment` with a `key` and a `label`, `type` with a `key` and a `value`, `commit` (Enter) or `save` (a 409 while its Save button is hidden); `POST /test/layers/clear` removes every window surface, the first-run welcome included, as Ember's teardown does; `POST /test/progress` with an optional `tab`, which clicks a progress page's Cancel or Close; `POST /test/snapshot` with `{"path"}` (captures the window to a PNG); `POST /test/errors/scrape` (the errors shown since the last scrape, which it clears, as Ember's `__scrapeErrors`); `POST /test/quit` (the app menu's Quit; the app may exit before it answers); `GET /test/terminal/text?tab=<id>` and `POST /test/terminal/type` with `{"line", "tab"}` (the active tab when `tab` is omitted; a 409 until the tab has its terminal, which holds the line until it runs); `POST /test/terminal/focus` with `{"tab"}` makes a tab's terminal the window's first responder.
-	A tab's `terminal` in the state is `none`, `starting`, `running` (its surface exists, so its shell has a PTY) or `failed: <reason>`.
-	`POST /test/pause-progress` clicks the toolbar's pause status (`{"action": "open"}`), hides the popover as Escape does (`hide`), presses the pause progress popover's button by its `title` (`{"action": "press"}`) or an agent's Show by its `name` (`{"action": "show"}`); the state has `pauseProgress` (its mode, buttons and problems), `pauseIndicator`, `quitPending` and `runningAgents`. `POST /test/quit` with `{"interrupt": true}` quits as Interrupt and Quit does, which the teardown uses, since a scenario may end mid-turn; `POST /test/window/close` closes the window as its close button does.
-	`POST /test/key` with `{"key", "modifiers"}` presses a key: it makes the key-down AppKit would (key code, characters, flags) and hands it to `LayerRouter.handle`, the monitor's own entry point, then, unless consumed, to the window's `sendEvent`, which delivers it to the first responder, and answers whether the router consumed it; it skips the event monitor's plumbing and the menu's key equivalents, which the XCUITests cover.
-	`POST /test/palette` exercises the shortcut tracker, changes the filter or blurs its field; `POST /test/repurpose` fills or submits the open Repurpose dialog. The state exposes their current models, including the same filtered command table the view uses.
-	It starts early when the launch meets a startup problem, so that a scenario can answer it.
-	State changes fold on the next frame, so steps poll `state` (`Bridge.waitFor`) rather than reading it once.
-- Every scenario launches a fresh app (`acceptance/support/hooks.ts`, `app.ts`), straight from the bundle's binary rather than through `open`, with a config and an app state of its own (`DEVORA_CONFIG_PATH`, `DEVORA_STATE_DIR`) and only a login session's environment, and starts once the launch has settled: the Workspace Hub it opens has loaded, or, after a relaunch, the restored tabs' terminals run.
-	Generated acceptance and native UI configs disable periodic repo updates to isolate repo fixtures, and updater tests opt in explicitly.
-	A scenario's config starts with no profiles, so the launch's hub is the first-run welcome, which refuses `q` and Escape: steps that need a known state remove it through the bridge ("Devora is running with no sessions open", as Ember's scenarios start after its teardown), and "the Workspace Hub is open" removes an open hub before opening it, so that it loads the profiles the scenario has made since.
-	Failed steps save a window screenshot (the bridge's `POST /test/snapshot`), the state, the active terminal's text and the app's stderr to `test-results/failures/` (`acceptance/support/failure-capture.ts`); the shared `failure-capture.feature` checks the screenshot and the terminal text.
-	As in Ember, a scenario fails if an error was shown that no step scraped ("the recorded errors should include").
-	Relaunches within a scenario (`persistence.feature`) keep its state directory.
-	Teardown uses the bridge's normal Quit and waits for owned fake agent children before removing fixtures. A bounded shutdown falls back to signals, retains shutdown failures and preserves fixtures if shutdown fails. Child matching includes the CLI session command to guard against PID reuse.
-	Agents run the core's deterministic fake CLI (`project-core/crates/devora-agent/tests/support/fake_cli.py`, through `DEVORA_TEST_CLAUDE_PROGRAM`), never Claude.
-- A hang Cucumber's step timeouts can't catch (a synchronous spawn that blocks the main thread, a hook with no timeout, a run that doesn't exit after its last scenario) names itself: `test-acceptance` and `test-bundle` run `../acceptance/hang-watchdog-formatter.ts`, whose watchdog thread stops the run after 5 minutes without a scenario, step or hook starting or finishing (the longest step timeout is 120 s), from the formatter's start (after Cucumber loads the support code) to the process's exit.
-	It first writes `test-results/failures/hang.txt` (uploaded with the failure captures): what was running, the processes under the run and the few above it (`with-ui-lock.sh` among them), the main thread's stack (`sample`), a screenshot and the end of the app's stderr; then it stops what the run started, then the run, with SIGKILL for whatever SIGTERM leaves.
-	`build/test-outcomes/acceptance-progress.txt` lists each scenario as it starts.
-- Scenarios shared with Ember live in `../acceptance/features/` (see `../acceptance/CLAUDE.md`); Sapphire's steps use the same phrases as Ember's, and reuse Ember's fixture helpers (`project-ember/tests/support/fixture-helper.ts`).
-- The XCUITests launch the app themselves, each on a state directory of its own; `scripts/test-ui.sh` skips them, saying why, when the screen is locked or `SAPPHIRE_SKIP_UI_TESTS=1`.
-	With little disk space left, macOS's cache_delete purges app container caches and has RunningBoard kill their apps, the UI test runner included, which XCTest reports only as "Test crashed with signal kill". When a run fails, `test-ui.sh` looks for that in the system log (`scripts/explain-ui-test-kill.sh`) and says so, with the free space: the cure is disk space, not the test.
-	Each test has at most 5 minutes (`-maximum-test-execution-time-allowance`; the slowest passing one takes about 1): one that hangs fails by name, with its screenshot (and a spindump, where the runner may take one) in the result bundle, and the run goes on. In CI, the Tests step has its own 40-minute limit for a hang between tests, and the result bundle and acceptance captures are kept when a run is cancelled too.
-	Those that close the launch's hub register a profile first (`writeConfigWithAProfile`), since the first-run welcome can't be closed.
-	Their runner is sandboxed, where git can't run, so `scripts/test-ui.sh` makes the git repo they copy into their fixtures (`SAPPHIRE_GIT_REPO`), and the template the Agent settings test chooses in the open panel (`SAPPHIRE_AGENT_TEMPLATE`).
-- The store tests run in parallel on the one main actor, where the store folds its events, so a test that blocks it (a `waitUntilExit()`, a synchronous wait) stalls every other test's `eventually`; their fixtures await git through `runGit` instead.
-	Opening a state another store holds blocks it for the core's busy timeout (1 s), which only `aStateHeldByAnotherStoreIsInUse` does.
-	The acceptance scenarios need an unlocked screen too: with the screen locked, the display link doesn't fire, so the app's events never fold.
 
 ### Waiting in tests
 
@@ -330,12 +91,6 @@ A test that waits decides on what it waits for, never on the clock: the unit tes
 - Otherwise use `eventually` (`Packages/TestSupport`, shared by the test targets; one overload takes an async condition): its budget is a number of looks, 10 ms apart while the main actor is free, so a busy machine only makes the looks come later.
 - Never `Task.sleep` to let work happen, nor to show that something doesn't: assert the synchronous state that would show it (nothing asked for, nothing queued), or wait for a later event that would have come after it.
 - Code under test that times out takes its wait as a parameter (`MermaidRenderer`'s `sleep`), so a test fires the timeout when it says (`TimeoutClock`), and other tests never time out on their own.
-- XCUITest's synthesized input has no timing guarantee: on a busy machine its events can arrive seconds apart, so a UI test never depends on how quickly two of them arrive. A timing rule of the app takes its window as a parameter and is unit-tested on exact timestamps: `ShiftDoubleTap`'s 0.5 s, which the UI tests that tap Shift-Shift widen with `allowSlowShiftDoubleTaps` (`DEVORA_TEST_SHIFT_TAP_WINDOW`).
-	`DEVORA_INPUT_TRACE` names a file where the app-wide shortcuts write each modifier event and how the double tap read it (`InputTrace`); `KeyRoutingUITests` attaches it, with whether the system still has Shift down, when Shift-Shift doesn't open the palette.
-- Right after a relaunch, XCUITest sometimes doesn't post a Shift release (the system still had Shift down seconds later), so no UI test taps Shift-Shift right after a relaunch: `GlobalPauseUITests` resumes with the toolbar, and real Shift-Shift is tested where nothing relaunches (`KeyRoutingUITests`).
-- A wheel scroll goes through `scrollWithPointer` (`UITests/Launch.swift`), never `scroll(byDeltaX:deltaY:)` directly: XCUITest posts a scroll's events at the pointer's position, and its move to the target can land after them, sending them where the pointer was (the editor the test last typed into). The helper moves the pointer there and waits until the system reports it there.
-- An XCUITest clicks only what's already in view, and brings a control there itself first (`scrollSettingsDetail(to:)`, built on `scrollWithPointer`): it never relies on XCUITest's own "scroll element to visible" before a click, which is the same wheel scroll, posted where the pointer rests.
-	`scripts/test-ui.sh` (so `stress-ui` too) fails a run whose activity log shows one, naming the test and the action it scrolled for (`scripts/check-ui-scrolls.sh`), so a click that forgets fails on its first run rather than flaking later.
 - A suite that waits has a `.timeLimit`, which is what catches a real hang.
 - Load reproduces CI's contention: `taskpolicy -c background swift test --filter AppShellTests` runs on the efficiency cores only, where a wall-clock wait fails within a run or two.
 - A PR that adds or changes an XCUITest, or an acceptance scenario or step, runs those tests 10 times under load first, and its description reports the tally ("10 of 10 passed under load"), or says why it couldn't: flakes are cheapest to catch when they're written.
@@ -345,5 +100,3 @@ A test that waits decides on what it waits for, never on the clock: the unit tes
 - Runs that launch an app or drive the real pointer and keyboard (`test-ui`, `stress-ui`, `test-acceptance`, `stress-acceptance`, and `test-bundle`'s scenarios and smoke) take a host-wide lock through `../scripts/with-ui-lock.sh`, since agents share one Mac and two such runs at once break each other.
 	A run that finds it held says what holds it (worktree, command, since when) and waits; it never fails for it, and the holder's exit, kill -9 included, frees it at once.
 	The lock is `/tmp/devora-ui-tests.lock`, which assumes every agent runs as the same macOS user (if not, it would need to be group-writable). Unit tests, Rust and lint don't take it, and in CI it's always free.
-- In the XCUITests, a web view's text is found with `waitForText` (`UITests/Snapshots.swift`), never a `value` predicate: WebKit puts a heading's text in its `value` on older macOS, and on newer ones in its `title`, with its level as a number in `value`, which makes `value CONTAINS` throw.
-- Every XCUITest action and query resolves through a snapshot of the app's accessibility tree, which is slow when the tree is big (an open panel listing a big directory has thousands of elements). Keep what a test shows small, with fixtures in `build/ui-test-fixtures` (made by `scripts/test-ui.sh`) rather than the runner's container, and check several things in one snapshot (`waitForSnapshot`) rather than one query each.

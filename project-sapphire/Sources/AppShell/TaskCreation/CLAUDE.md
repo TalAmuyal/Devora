@@ -1,0 +1,12 @@
+# Task creation
+
+Ember's non-blocking task creation (`Sources/AppShell/TaskCreation/`): the New Task dialog hands the creation to a tab of its own, whose progress page shows it until the tab has its workspace.
+
+- `n` and "+ New Task" in the Workspace Hub open the New Task dialog (`NewTaskDialogModel`, `Surfaces.openNewTaskDialog`), a modal layer over the hub, once the profile's repos have loaded (`get_registered_repos`); Duplicate, on an active workspace, opens it titled "Duplicate Task", with the task's title and repos.
+	Its keys are Ember's: typing goes to its focused field (the title, then the repos' filter), Escape cancels and Enter creates, except that Enter toggles the active repo while the filter has the focus, where ↑ and ↓ move it; Tab and Shift+Tab cycle the title, "+ Clone Repo", the filter, Cancel and Create, and Space presses the focused button, whose focus the dialog draws itself.
+- Creating closes the dialog and the hub, then dispatches `Command.createTask`, and the core takes it from there (`create_workspace`, in `devora-ffi`'s `creation.rs`): it opens the tab as `CreatingWorkspace`, runs the creation on a worker thread, and records its outcome in the app state: `WorkspaceCreated`, `WorkspaceCreationFailed` (also reported to the log, so it has its banner), or closing the tab after a cancel, once the work is undone.
+	The store pulls the creation's progress (`CreationEvent`s, in batches) into `Store.creations`, by tab, folded by `CreationProgress`; a tab's progress goes when the tab has its workspace or closes.
+- The progress page (`CreationProgressPage`) is a page on its tab's own stack, pushed as soon as the tab is in the state, so it shows only while its tab is active and never blocks the tab shortcuts: the steps, a collapsible Output log of the latest 500 lines, which a failure opens, the failure, and Cancel, or Close once the creation has failed; Escape and `q` do what the button does, whatever has the focus.
+	When the tab has its workspace, its terminal goes in at the bottom of the stack, under the page, which is then removed, revealing it (`Surfaces.retireProgressPages`).
+- `Command.cancelCreation` cancels a tab's creation (`cancel_workspace_creation`); one asked for before `create_workspace` has returned its id is held and applied once it has, and closing the tab of a creation still running cancels it.
+- A creation the app stopped in the middle of comes back as `CreationFailed` with the reason "interrupted" (the core's restore), so its tab shows its progress page with that failure and Close.
