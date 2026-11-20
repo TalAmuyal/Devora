@@ -13,6 +13,7 @@ bash scripts/ci/flake-report.test.sh
 bash scripts/with-ui-lock.test.sh
 bash project-sapphire/scripts/check-ui-scrolls.test.sh
 bash project-sapphire/scripts/explain-ui-test-kill.test.sh
+bash project-sapphire/scripts/ui-test-watchdog.test.sh
 bash acceptance/no-ssh.test.sh
 bash scripts/ci/modules.test.sh
 mise run -C project-core test
