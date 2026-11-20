@@ -66,6 +66,7 @@ Types of changes:
 
 ### Changed
 
+- Devora Sapphire's agent transcript and its Mermaid diagrams are drawn in the system's colors and follow the Appearance setting, light or dark, and the accent color, instead of the dark Catppuccin theme; code blocks have a visible edge in both
 - Devora no longer pins the Opus, Sonnet and Haiku tier models when you haven't set them, so Claude Code picks them: with the default `opusplan`, planning runs on Claude Code's current Opus, and execution moves from Opus 4.8 to Claude Code's current Sonnet, which may differ in cost and behavior. Models you set yourself stay as they are, and the outdated model suggestions are gone from the Claude Launch Settings
 - Pausing a Devora Sapphire agent that has background work (a background shell or subagent) now stops that work cleanly through Claude Code first, so the agent exits by itself instead of being killed after the grace period; when it resumes, it's told exactly what was stopped, to re-establish what it still needs
 - `debi pr submit` with nothing left to commit submits the commits already made on the detached HEAD, instead of failing with "Commit failed"; with no commits ahead of the default branch either, it says there's nothing to submit before creating a tracker task

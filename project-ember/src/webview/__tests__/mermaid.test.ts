@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // happy-dom has no SVG layout engine; inject a renderer to test the transform and fallback.
 import { markdownToHtml, renderMermaidDiagrams } from '../mermaid';
+import { mermaidConfig } from '@devora/web-renderer';
 
 const mermaidMock = { initialize: vi.fn(), render: vi.fn() };
 const loadMermaid = async () => mermaidMock as never;
@@ -79,5 +80,19 @@ describe('renderMermaidDiagrams', () => {
     await renderMermaidDiagrams(bodyFrom(await markdownToHtml('# Just text\n')), load);
     expect(load).not.toHaveBeenCalled();
     expect(mermaidMock.render).not.toHaveBeenCalled();
+  });
+});
+
+describe('mermaidConfig', () => {
+  // Ember's themes set no --color-scheme, and Sapphire's transcript sets it per appearance.
+  it('draws for a dark page unless the theme says light', () => {
+    const root = document.documentElement.style;
+    root.removeProperty('--color-scheme');
+    expect(mermaidConfig().themeVariables.darkMode).toBe(true);
+    root.setProperty('--color-scheme', 'light');
+    expect(mermaidConfig().themeVariables.darkMode).toBe(false);
+    root.setProperty('--color-scheme', 'dark');
+    expect(mermaidConfig().themeVariables.darkMode).toBe(true);
+    root.removeProperty('--color-scheme');
   });
 });

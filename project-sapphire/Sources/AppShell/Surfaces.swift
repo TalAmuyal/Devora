@@ -183,7 +183,7 @@ final class Surfaces {
 			guard case .agentSpace = tab.session.kind, let stack = tabStacks[tab.id],
 			      stack.find(AgentChatPanel.layerName) == nil else { continue }
 			guard let chat = store.agentChat(tab: tab.id) else { continue }
-			let model = AgentPanelModel(chat: chat, store: store)
+			let model = AgentPanelModel(chat: chat)
 			agentPanels[tab.id] = model
 			model.onEditorReady = { [weak self] in self?.router.focusActiveTab() }
 			var spec = pageLayer(LayerSpec(name: AgentChatPanel.layerName) { AgentChatPanel(model: model) })

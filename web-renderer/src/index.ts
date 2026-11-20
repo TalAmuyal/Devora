@@ -38,16 +38,18 @@ function cssVar(name: string, fallback: string): string {
 
 let mermaidInitialized = false;
 
-/** Initialize mermaid once, deriving diagram colors from the app's theme CSS variables. */
-function initMermaid(mermaid: typeof import('mermaid').default): void {
-  if (mermaidInitialized) return;
-  mermaid.initialize({
+/**
+ * Mermaid's configuration, with diagram colors from the app's theme CSS variables.
+ * `--color-scheme: light` draws for a light page; without it (Ember's themes) diagrams are drawn for a dark one.
+ */
+export function mermaidConfig() {
+  return {
     startOnLoad: false,
-    securityLevel: 'strict',
-    theme: 'base',
+    securityLevel: 'strict' as const,
+    theme: 'base' as const,
     fontFamily: cssVar('--font-ui', 'sans-serif'),
     themeVariables: {
-      darkMode: true,
+      darkMode: cssVar('--color-scheme', 'dark') !== 'light',
       background: cssVar('--color-bg', '#24273A'),
       primaryColor: cssVar('--color-surface0', '#363A4F'),
       primaryTextColor: cssVar('--color-text', '#CAD3F5'),
@@ -60,7 +62,13 @@ function initMermaid(mermaid: typeof import('mermaid').default): void {
       noteTextColor: cssVar('--color-text', '#CAD3F5'),
       noteBorderColor: cssVar('--color-accent', '#C6A0F6'),
     },
-  });
+  };
+}
+
+/** Initialize mermaid once (`mermaidConfig`). */
+function initMermaid(mermaid: typeof import('mermaid').default): void {
+  if (mermaidInitialized) return;
+  mermaid.initialize(mermaidConfig());
   mermaidInitialized = true;
 }
 
