@@ -5,6 +5,10 @@ experimental = true # Required for the 'deps' feature in sub-project tasks (mise
 shellcheck = "0.11.0"
 rust = { version = "1.99.1", components = "rustfmt,clippy" }
 
+# The checks only CI's Linux job runs (`test`, `lint`, ...) live in checks.toml, so changing one doesn't run the apps' jobs.
+[task_config]
+includes = ["checks.toml"]
+
 [tasks.build]
 run = """
 set -e
@@ -21,42 +25,6 @@ set -e
 rm -rf bin/
 """
 description = "Clean build artifacts"
-
-[tasks.test]
-run = """
-set -e
-bash scripts/test-install.sh
-bash scripts/ci/test-outcomes/test.sh
-bash scripts/ci/flake-report.test.sh
-bash scripts/with-ui-lock.test.sh
-bash project-sapphire/scripts/check-ui-scrolls.test.sh
-bash project-sapphire/scripts/explain-ui-test-kill.test.sh
-bash acceptance/no-ssh.test.sh
-bash scripts/ci/modules.test.sh
-mise run -C project-core test
-mise run -C project-debi test
-mise run -C project-judgess test
-mise run -C project-status-line test
-"""
-description = "Run tests for all sub-projects"
-
-[tasks.flake-report]
-description = "Each test's failures over the last CI runs (--runs N, default 30; --test <regex>), from the recorded test outcomes; uses gh's login"
-run = "bash scripts/ci/flake-report.sh"
-
-[tasks.lint]
-run = """
-set -e
-bash scripts/lint-shell.sh
-bash scripts/ci/lint-swift-indentation.sh
-mise run -C project-core lint
-mise run -C project-judgess lint
-"""
-description = "Lint every shell script, check Swift indentation and Rust formatting/clippy (core, judgess; Ember has ember-lint)"
-
-[tasks.lint-shell]
-run = "bash scripts/lint-shell.sh"
-description = "Lint every shell script with shellcheck (found, not listed: *.sh and sh/bash executables; --list prints them)"
 
 [tasks.release]
 run = "./cut-release.sh"

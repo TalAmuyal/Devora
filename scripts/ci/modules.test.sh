@@ -68,6 +68,56 @@ unpinned=$(git -C "$root" ls-files -- 'CLAUDE.md' '*/CLAUDE.md' | grep -vxF "$ag
 that no build, test or app reads, and add it to agent_docs in scripts/ci/modules.test.sh:
 $unpinned"
 
+# checks.toml is in `nothing`, which is right only while no macOS job runs its tasks: not in a ci.yml job but `test`
+# (Linux), not from a mise.toml's task or a script those jobs run (any `mise run <task>` without -C falls through to the
+# root's), and not as a root task's dependency. Comment lines and docs don't run anything. cd.yml is left out: the
+# release runs `mise run test` on macOS, but it isn't a pull request's selection, and it runs everything; so is this
+# file, whose fixture below holds such runs on purpose.
+# Prints each place under <repo> where a macOS job can reach a checks.toml task. Without mise (the changes job has
+# none): each task is a top-level `[name]` table there.
+reachable_checks() {
+	local repo=$1 checks_tasks task_names runs_check
+	checks_tasks=$(sed -nE 's/^\[([A-Za-z0-9_:-]+)\][[:space:]]*$/\1/p' "$repo/checks.toml")
+	[ -n "$checks_tasks" ] || { echo "checks.toml: no [task] tables (is it still in the root mise.toml's [task_config] includes?)"; return; }
+	task_names=$(printf '%s\n' "$checks_tasks" | paste -sd'|' -)
+	runs_check="mise( run| r)?( +--?[a-zA-Z-]+(=[^ ]+)?)* +($task_names)([[:space:]\"';)\`|&]|\$)"
+	# shellcheck disable=SC2016 # The `$` in the program are awk's fields, not the shell's.
+	(cd "$repo" && git ls-files -z -- '.github/workflows/*.yml' '*mise.toml' '*.sh' '*.ts' '*.mjs' '*.js' '*.py' \
+		':!.github/workflows/cd.yml' ':!scripts/ci/modules.test.sh' | xargs -0 awk -v pattern="$runs_check" '
+			FNR == 1 { job = "" }
+			FILENAME ~ /^\.github\/workflows\// && /^  [a-zA-Z0-9_-]+:[[:space:]]*$/ { job = $1; sub(/:$/, "", job) }
+			/^[[:space:]]*(#|\/\/)/ { next }
+			$0 ~ pattern && $0 !~ / -C / && !(FILENAME == ".github/workflows/ci.yml" && job == "test") {
+				print FILENAME ":" FNR ": " $0
+			}')
+	grep -nE "^[[:space:]]*depends[[:space:]]*=.*[\"'](${task_names})[\"']" "$repo/mise.toml" | sed 's/^/mise.toml:/'
+}
+reachable=$(reachable_checks "$root")
+[ -z "$reachable" ] || fail "a macOS job can reach a checks.toml task, which a change there wouldn't run (move the
+task to the root mise.toml, or run it with -C):
+$reachable"
+
+# The same check finds each kind of reach, with this machine's awk (CI's is mawk): a fixture repo with one of each,
+# beside the forms that don't reach (the Linux test job, -C, a comment, a task whose name only starts the same).
+fixture=$(mktemp -d)
+mkdir -p "$fixture/.github/workflows" "$fixture/project-app"
+printf '[lint]\nrun = "true"\n' > "$fixture/checks.toml"
+printf '[tasks.build]\ndepends = ["lint"]\nrun = "true"\n' > "$fixture/mise.toml"
+printf 'jobs:\n  test:\n    steps:\n      - run: mise run lint\n  app:\n    steps:\n      - run: mise run --no-deps lint && true\n' \
+	> "$fixture/.github/workflows/ci.yml"
+printf '[tasks.check]\nrun = "mise run -C .. lint"\n# mise run lint\n[tasks.lint-swift]\nrun = "mise run lint-swift"\n[tasks.all]\nrun = "mise lint"\n' \
+	> "$fixture/project-app/mise.toml"
+git -C "$fixture" init -q && git -C "$fixture" add -A
+found=$(reachable_checks "$fixture")
+expected=".github/workflows/ci.yml:7:       - run: mise run --no-deps lint && true
+project-app/mise.toml:7: run = \"mise lint\"
+mise.toml:2:depends = [\"lint\"]"
+[ "$found" = "$expected" ] || fail "the checks.toml reach check found, in its fixture:
+$found
+instead of:
+$expected"
+rm -rf "$fixture"
+
 # What an app bundles must always run its jobs, so a file that starts being bundled can't skip them silently.
 # Two exceptions, both in `nothing`:
 # - CHANGELOG.md is packed, but neither app reads it at runtime or in a test, and nearly every pull request touches it.
@@ -91,6 +141,11 @@ check ember true project-sapphire/Package.swift
 check ember true project-core/crates/devora-ffi/Cargo.toml
 check sapphire true a-new-top-level-dir/file.txt
 check ember true a-new-top-level-file.md
+
+# The checks only the Linux jobs run (checks.toml) run neither app; the root mise.toml, which pins the tools, runs both.
+check ember false checks.toml
+check sapphire false checks.toml
+check ember true mise.toml
 
 # Today's cases, from the classifiers this replaced.
 check sapphire true web-renderer/src/index.ts
