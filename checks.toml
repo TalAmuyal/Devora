@@ -1,0 +1,41 @@
+# The repo-wide checks only CI's Linux job runs (`mise run test`, `mise run lint`), and their helpers: the root mise.toml
+# includes this file. A change here runs neither app's CI jobs (scripts/ci/modules.toml lists it in `nothing`), which is
+# safe only because no macOS job runs these tasks. A task a macOS job runs, directly or through a script, belongs in
+# the root mise.toml; scripts/ci/modules.test.sh fails when one here is. mise reads only tasks from this file: tool
+# pins and env stay in the root mise.toml.
+
+[test]
+run = """
+set -e
+bash scripts/test-install.sh
+bash scripts/ci/test-outcomes/test.sh
+bash scripts/ci/flake-report.test.sh
+bash scripts/with-ui-lock.test.sh
+bash project-sapphire/scripts/check-ui-scrolls.test.sh
+bash project-sapphire/scripts/explain-ui-test-kill.test.sh
+bash acceptance/no-ssh.test.sh
+bash scripts/ci/modules.test.sh
+mise run -C project-core test
+mise run -C project-debi test
+mise run -C project-judgess test
+mise run -C project-status-line test
+"""
+description = "Run tests for all sub-projects"
+
+[flake-report]
+description = "Each test's failures over the last CI runs (--runs N, default 30; --test <regex>), from the recorded test outcomes; uses gh's login"
+run = "bash scripts/ci/flake-report.sh"
+
+[lint]
+run = """
+set -e
+bash scripts/lint-shell.sh
+bash scripts/ci/lint-swift-indentation.sh
+mise run -C project-core lint
+mise run -C project-judgess lint
+"""
+description = "Lint every shell script, check Swift indentation and Rust formatting/clippy (core, judgess; Ember has ember-lint)"
+
+[lint-shell]
+run = "bash scripts/lint-shell.sh"
+description = "Lint every shell script with shellcheck (found, not listed: *.sh and sh/bash executables; --list prints them)"

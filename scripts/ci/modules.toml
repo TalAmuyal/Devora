@@ -25,6 +25,8 @@ paths = [
 	"SECURITY.md",
 	"THIRD_PARTY_LICENSES.md",
 	"cut-release.sh",
+	# Checks only the Linux jobs run; scripts/ci/modules.test.sh fails if a macOS job can reach one of its tasks.
+	"checks.toml",
 ]
 names = ["CLAUDE.md"]
 

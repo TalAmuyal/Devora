@@ -11,7 +11,7 @@ If multiple runs are triggered for the same branch, the older in-progress run is
 
 ## What it tests
 
-The workflow runs `mise run test`, which executes the test suites for the following sub-projects (in order):
+The workflow runs `mise run test` (defined, like `mise run lint`, in the root `checks.toml`), which executes the test suites for the following sub-projects (in order):
 
 - **project-debi** (Go)
 - **project-judgess** (Rust)
