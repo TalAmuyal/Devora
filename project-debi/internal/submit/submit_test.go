@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"devora/internal/gh"
+	"devora/internal/git"
 	"devora/internal/process"
 	"devora/internal/tasktracker"
 )
@@ -65,11 +66,16 @@ type stubs struct {
 	getGHPRViewCalls  []string
 	newTrackerCalls   int
 	addCommitOptCount int
+	aheadCalls        int
 
 	// control values — tests overwrite these before calling Run.
 	currentBranch            string
 	currentBranchErr         error
 	addCommitErr             error
+	nothingStaged            bool // the tree is clean: commitAllIfAny commits nothing
+	commitsAhead             int
+	defaultBranch            string
+	commitsAheadErr          error
 	generateBranchReturn     string
 	createBranchErr          error
 	setBranchConfigErr       error
@@ -98,44 +104,47 @@ func stubSubmitDeps(t *testing.T) *stubs {
 	t.Helper()
 
 	orig := struct {
-		getCurrentBranchOrDetached func() (string, error)
-		addAllAndCommit            func(string, ...process.ExecOption) error
-		generateBranchName         func(string, string) string
-		createAndCheckoutBranch    func(string, ...process.ExecOption) error
-		setBranchConfig            func(string, string, string, ...process.ExecOption) error
-		pushSetUpstream            func(string, ...process.ExecOption) error
-		getGHRepo                  func() (gh.RepoInfo, error)
-		createGHPR                 func(string, string, bool) (string, error)
-		enableGHAutoMerge          func(string, ...process.ExecOption) error
-		newTracker                 func() (tasktracker.Tracker, error)
-		getBranchPrefix            func(string) string
-		getPrTitlePrefix           func() string
-		getRepoAutoMerge           func() (*bool, error)
-		getAutoMergeDefaultForRepo func(bool, func() (*bool, error)) bool
-		openBrowser                func(string) error
-		getGHPRView                func(string) (gh.PRSummary, error)
+		getCurrentBranchOrDetached  func() (string, error)
+		commitAllIfAny              func(string, ...process.ExecOption) (bool, error)
+		commitsAheadOfOriginDefault func(...process.ExecOption) (int, string, error)
+		generateBranchName          func(string, string) string
+		createAndCheckoutBranch     func(string, ...process.ExecOption) error
+		setBranchConfig             func(string, string, string, ...process.ExecOption) error
+		pushSetUpstream             func(string, ...process.ExecOption) error
+		getGHRepo                   func() (gh.RepoInfo, error)
+		createGHPR                  func(string, string, bool) (string, error)
+		enableGHAutoMerge           func(string, ...process.ExecOption) error
+		newTracker                  func() (tasktracker.Tracker, error)
+		getBranchPrefix             func(string) string
+		getPrTitlePrefix            func() string
+		getRepoAutoMerge            func() (*bool, error)
+		getAutoMergeDefaultForRepo  func(bool, func() (*bool, error)) bool
+		openBrowser                 func(string) error
+		getGHPRView                 func(string) (gh.PRSummary, error)
 	}{
-		getCurrentBranchOrDetached: getCurrentBranchOrDetached,
-		addAllAndCommit:            addAllAndCommit,
-		generateBranchName:         generateBranchName,
-		createAndCheckoutBranch:    createAndCheckoutBranch,
-		setBranchConfig:            setBranchConfig,
-		pushSetUpstream:            pushSetUpstream,
-		getGHRepo:                  getGHRepo,
-		createGHPR:                 createGHPR,
-		enableGHAutoMerge:          enableGHAutoMerge,
-		newTracker:                 newTracker,
-		getBranchPrefix:            getBranchPrefix,
-		getPrTitlePrefix:           getPrTitlePrefix,
-		getRepoAutoMerge:           getRepoAutoMerge,
-		getAutoMergeDefaultForRepo: getAutoMergeDefaultForRepo,
-		openBrowser:                openBrowser,
-		getGHPRView:                getGHPRView,
+		getCurrentBranchOrDetached:  getCurrentBranchOrDetached,
+		commitAllIfAny:              commitAllIfAny,
+		commitsAheadOfOriginDefault: commitsAheadOfOriginDefault,
+		generateBranchName:          generateBranchName,
+		createAndCheckoutBranch:     createAndCheckoutBranch,
+		setBranchConfig:             setBranchConfig,
+		pushSetUpstream:             pushSetUpstream,
+		getGHRepo:                   getGHRepo,
+		createGHPR:                  createGHPR,
+		enableGHAutoMerge:           enableGHAutoMerge,
+		newTracker:                  newTracker,
+		getBranchPrefix:             getBranchPrefix,
+		getPrTitlePrefix:            getPrTitlePrefix,
+		getRepoAutoMerge:            getRepoAutoMerge,
+		getAutoMergeDefaultForRepo:  getAutoMergeDefaultForRepo,
+		openBrowser:                 openBrowser,
+		getGHPRView:                 getGHPRView,
 	}
 
 	t.Cleanup(func() {
 		getCurrentBranchOrDetached = orig.getCurrentBranchOrDetached
-		addAllAndCommit = orig.addAllAndCommit
+		commitAllIfAny = orig.commitAllIfAny
+		commitsAheadOfOriginDefault = orig.commitsAheadOfOriginDefault
 		generateBranchName = orig.generateBranchName
 		createAndCheckoutBranch = orig.createAndCheckoutBranch
 		setBranchConfig = orig.setBranchConfig
@@ -160,15 +169,26 @@ func stubSubmitDeps(t *testing.T) *stubs {
 		repoInfo:             gh.RepoInfo{DefaultBranch: "main"},
 		getGHPRViewReturn:    gh.PRSummary{Number: 42, Title: "Msg"},
 		branchPrefix:         "feature",
+		defaultBranch:        "master",
 	}
 
 	getCurrentBranchOrDetached = func() (string, error) {
 		return s.currentBranch, s.currentBranchErr
 	}
-	addAllAndCommit = func(message string, opts ...process.ExecOption) error {
-		s.addCommitMessages = append(s.addCommitMessages, message)
+	commitAllIfAny = func(message string, opts ...process.ExecOption) (bool, error) {
 		s.addCommitOptCount = len(opts)
-		return s.addCommitErr
+		if s.addCommitErr != nil {
+			return false, s.addCommitErr
+		}
+		if s.nothingStaged {
+			return false, nil
+		}
+		s.addCommitMessages = append(s.addCommitMessages, message)
+		return true, nil
+	}
+	commitsAheadOfOriginDefault = func(opts ...process.ExecOption) (int, string, error) {
+		s.aheadCalls++
+		return s.commitsAhead, s.defaultBranch, s.commitsAheadErr
 	}
 	generateBranchName = func(prefix, msg string) string {
 		s.generatedBranchInput.prefix = prefix
@@ -1273,5 +1293,99 @@ func TestRun_QuietMode_AutoMergeFailureNotOnStdout(t *testing.T) {
 	}
 	if !strings.Contains(errBuf.String(), "auto-merge") {
 		t.Fatalf("expected auto-merge warning on stderr, got: %q", errBuf.String())
+	}
+}
+
+func TestRun_CleanTreeWithCommitsAhead_SubmitsWithoutCommitting(t *testing.T) {
+	s := stubSubmitDeps(t)
+	s.nothingStaged = true
+	s.commitsAhead = 2
+	s.newTrackerReturn = &fakeTracker{}
+
+	var buf bytes.Buffer
+	if err := Run(&buf, Options{Message: "Finish the feature"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(s.addCommitMessages) != 0 {
+		t.Fatalf("expected no commit, got %v", s.addCommitMessages)
+	}
+	if !strings.Contains(buf.String(), "Nothing to commit; submitting the existing commits") {
+		t.Fatalf("expected the existing-commits line, got:\n%s", buf.String())
+	}
+	if strings.Contains(buf.String(), "Committed") {
+		t.Fatalf("expected no 'Committed' line, got:\n%s", buf.String())
+	}
+	if len(s.pushedBranches) != 1 || len(s.createPRCalls) != 1 {
+		t.Fatalf("expected one push and one PR, got %d and %d", len(s.pushedBranches), len(s.createPRCalls))
+	}
+}
+
+func TestRun_CleanTreeWithNothingAhead_FailsBeforeTheTracker(t *testing.T) {
+	s := stubSubmitDeps(t)
+	s.nothingStaged = true
+	s.commitsAhead = 0
+	s.newTrackerReturn = &fakeTracker{}
+
+	var buf bytes.Buffer
+	err := Run(&buf, Options{Message: "Fix bug"})
+	if !errors.Is(err, ErrNothingToSubmit) {
+		t.Fatalf("expected ErrNothingToSubmit, got: %v", err)
+	}
+	if want := "nothing to submit: no changes and no commits ahead of origin/master"; err.Error() != want {
+		t.Fatalf("expected %q, got %q", want, err.Error())
+	}
+	if s.newTrackerCalls != 0 {
+		t.Fatalf("expected no tracker resolution, got %d calls", s.newTrackerCalls)
+	}
+	if len(s.createdBranches) != 0 || len(s.pushedBranches) != 0 || len(s.createPRCalls) != 0 {
+		t.Fatalf("expected no branch, push or PR, got %d, %d and %d", len(s.createdBranches), len(s.pushedBranches), len(s.createPRCalls))
+	}
+}
+
+func TestRun_CleanTreeWithUnknownOriginDefault_FailsBeforeTheTracker(t *testing.T) {
+	s := stubSubmitDeps(t)
+	s.nothingStaged = true
+	s.commitsAheadErr = git.ErrNoOriginDefault
+
+	var buf bytes.Buffer
+	err := Run(&buf, Options{Message: "Fix bug"})
+	if !errors.Is(err, git.ErrNoOriginDefault) {
+		t.Fatalf("expected git.ErrNoOriginDefault, got: %v", err)
+	}
+	if s.newTrackerCalls != 0 || len(s.createPRCalls) != 0 {
+		t.Fatalf("expected no tracker or PR, got %d and %d", s.newTrackerCalls, len(s.createPRCalls))
+	}
+}
+
+func TestRun_DirtyTree_CommitsWithoutCountingCommitsAhead(t *testing.T) {
+	s := stubSubmitDeps(t)
+
+	var buf bytes.Buffer
+	if err := Run(&buf, Options{Message: "Fix bug"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(s.addCommitMessages) != 1 {
+		t.Fatalf("expected one commit, got %v", s.addCommitMessages)
+	}
+	if s.aheadCalls != 0 {
+		t.Fatalf("expected no commits-ahead check after a commit, got %d", s.aheadCalls)
+	}
+}
+
+func TestRun_CleanTreeOnABranch_StillFailsWithErrNotDetached(t *testing.T) {
+	s := stubSubmitDeps(t)
+	s.currentBranch = "feature-earlier-work"
+	s.nothingStaged = true
+
+	var buf bytes.Buffer
+	err := Run(&buf, Options{Message: "Fix bug"})
+	if !errors.Is(err, ErrNotDetached) {
+		t.Fatalf("expected ErrNotDetached, got: %v", err)
+	}
+	if errors.Is(err, ErrNothingToSubmit) {
+		t.Fatalf("expected the detached-HEAD guard to decide first, got: %v", err)
+	}
+	if s.aheadCalls != 0 {
+		t.Fatalf("expected no commits-ahead check, got %d", s.aheadCalls)
 	}
 }

@@ -64,6 +64,8 @@ Types of changes:
 
 ### Changed
 
+- `debi pr submit` with nothing left to commit submits the commits already made on the detached HEAD, instead of failing with "Commit failed"; with no commits ahead of the default branch either, it says there's nothing to submit before creating a tracker task
+- `debi pr submit` stages the whole working tree wherever in the repository it runs, not only the current directory and below
 - Devora Sapphire's quit waits for agents to stop cleanly: while one is running a turn or waiting for an answer, quitting (or closing the window) holds Devora and shows who it waits for in a popover from the toolbar, with their questions still answerable, and quits by itself once they have stopped; "Cancel Quit" keeps the hold, and "Interrupt and Quit" cuts the work short. The toolbar shows "Pausing… (n of m)" until every agent has stopped, then "Paused", with the pause status and button evenly spaced, and what goes wrong while stopping is shown instead of ignored
 - Devora Ember and Devora Sapphire are signed with a stable certificate, in releases and in source installs that have it, so macOS keeps their permissions (such as access to Documents) across updates, rebuilds and install suffixes instead of asking again
 - Devora Sapphire's repo picker (New Agent, New Task and Add Repo) is a native Mac list, with checkboxes, the system selection highlight, one-line names truncated in the middle and a native "No Results" view; New Agent's list no longer overlaps the fields around it

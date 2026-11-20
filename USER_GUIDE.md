@@ -143,6 +143,8 @@ Highlights:
 - **PR**:
 	- `debi pr check` to check the status of the current branch's PR
 	- `debi pr submit` to create a PR from detached HEAD
+		- It commits the whole working tree, wherever in the repo you run it.
+		- With nothing left to commit, it submits the commits you already made on top of the default branch.
 	- `debi pr close` to close the current branch's PR and clean up branches
 - **Health check**: `debi health` verifies that all required dependencies are installed
 - **Read config**: `debi get-conf [--profile <name>] <key>` reads a resolved config value and prints it to stdout, intended for use in shell scripts

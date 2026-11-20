@@ -2,8 +2,10 @@ package git
 
 import (
 	"errors"
+	"fmt"
 	"os/exec"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"devora/internal/process"
@@ -32,11 +34,42 @@ func CurrentBranchOrDetached(opts ...process.ExecOption) (string, error) {
 	return "", err
 }
 
-func AddAllAndCommit(message string, opts ...process.ExecOption) error {
-	if err := process.RunPassthrough([]string{"git", "add", "."}, opts...); err != nil {
-		return err
+// CommitAllIfAny stages the whole working tree, wherever in it this runs, and commits it with message.
+// It reports false, committing nothing, when staging leaves nothing to commit.
+func CommitAllIfAny(message string, opts ...process.ExecOption) (bool, error) {
+	if err := process.RunPassthrough([]string{"git", "add", "-A"}, opts...); err != nil {
+		return false, err
 	}
-	return process.RunPassthrough([]string{"git", "commit", "-m", message}, opts...)
+	staged, err := process.GetOutput([]string{"git", "diff", "--cached", "--name-only"}, opts...)
+	if err != nil {
+		return false, err
+	}
+	if staged == "" {
+		return false, nil
+	}
+	return true, process.RunPassthrough([]string{"git", "commit", "-m", message}, opts...)
+}
+
+// ErrNoOriginDefault is returned when origin/HEAD doesn't name origin's default branch, so nothing says what HEAD is
+// ahead of. `git remote set-head origin --auto` sets it.
+var ErrNoOriginDefault = errors.New("origin/HEAD is not set, so origin's default branch is unknown (`git remote set-head origin --auto` sets it)")
+
+// CommitsAheadOfOriginDefault counts the commits on HEAD that origin's default branch (origin/HEAD) doesn't have, and
+// names that branch.
+func CommitsAheadOfOriginDefault(opts ...process.ExecOption) (int, string, error) {
+	defaultBranch, err := DefaultBranchName(opts...)
+	if err != nil {
+		return 0, "", fmt.Errorf("%w: %w", ErrNoOriginDefault, err)
+	}
+	count, err := process.GetOutput([]string{"git", "rev-list", "--count", "origin/" + defaultBranch + "..HEAD"}, opts...)
+	if err != nil {
+		return 0, defaultBranch, err
+	}
+	ahead, err := strconv.Atoi(count)
+	if err != nil {
+		return 0, defaultBranch, fmt.Errorf("parse `git rev-list --count` output %q: %w", count, err)
+	}
+	return ahead, defaultBranch, nil
 }
 
 func CreateAndCheckoutBranch(name string, opts ...process.ExecOption) error {

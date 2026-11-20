@@ -1,6 +1,7 @@
 package git_test
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -352,5 +353,106 @@ func TestRepoConfigBool_BareClone(t *testing.T) {
 	}
 	if *val != false {
 		t.Fatalf("expected false, got %v", *val)
+	}
+}
+
+// setupSubmitRepo is setupGitRepo on a detached HEAD, with a committer identity for the commits under test.
+func setupSubmitRepo(t *testing.T) string {
+	t.Helper()
+	dir := setupGitRepo(t)
+	runGitSetup(t, dir, [][]string{
+		{"git", "config", "user.name", "test"},
+		{"git", "config", "user.email", "test@test.com"},
+		{"git", "checkout", "--detach"},
+	})
+	return dir
+}
+
+func gitOutput(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	out, err := process.GetOutput(append([]string{"git"}, args...), process.WithCwd(dir))
+	if err != nil {
+		t.Fatalf("git %v: %v", args, err)
+	}
+	return out
+}
+
+func TestCommitAllIfAny_CleanTree_CommitsNothing(t *testing.T) {
+	dir := setupSubmitRepo(t)
+	before := gitOutput(t, dir, "rev-parse", "HEAD")
+
+	committed, err := git.CommitAllIfAny("Nothing here", process.WithCwd(dir), process.WithSilent())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if committed {
+		t.Fatal("expected nothing committed on a clean tree")
+	}
+	if after := gitOutput(t, dir, "rev-parse", "HEAD"); after != before {
+		t.Fatalf("expected HEAD to stay %s, got %s", before, after)
+	}
+}
+
+func TestCommitAllIfAny_FromASubdirectory_CommitsTheWholeTree(t *testing.T) {
+	dir := setupSubmitRepo(t)
+	sub := filepath.Join(dir, "sub")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{filepath.Join(dir, "outside.txt"), filepath.Join(sub, "inside.txt")} {
+		if err := os.WriteFile(path, []byte("change\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	committed, err := git.CommitAllIfAny("Add both", process.WithCwd(sub), process.WithSilent())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !committed {
+		t.Fatal("expected a commit")
+	}
+	if status := gitOutput(t, dir, "status", "--porcelain"); status != "" {
+		t.Fatalf("expected a clean tree after the commit, got:\n%s", status)
+	}
+	if files := gitOutput(t, dir, "show", "--name-only", "--format=", "HEAD"); files != "outside.txt\nsub/inside.txt" {
+		t.Fatalf("expected the commit to hold both files, got:\n%s", files)
+	}
+	if message := gitOutput(t, dir, "log", "-1", "--format=%s"); message != "Add both" {
+		t.Fatalf("expected the commit message 'Add both', got %q", message)
+	}
+}
+
+func TestCommitsAheadOfOriginDefault(t *testing.T) {
+	dir := setupSubmitRepo(t)
+
+	ahead, defaultBranch, err := git.CommitsAheadOfOriginDefault(process.WithCwd(dir))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if ahead != 0 || defaultBranch != "main" {
+		t.Fatalf("expected 0 ahead of main, got %d ahead of %q", ahead, defaultBranch)
+	}
+
+	runGitSetup(t, dir, [][]string{
+		{"git", "commit", "--allow-empty", "-m", "first part"},
+		{"git", "commit", "--allow-empty", "-m", "second part"},
+	})
+	ahead, defaultBranch, err = git.CommitsAheadOfOriginDefault(process.WithCwd(dir))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if ahead != 2 || defaultBranch != "main" {
+		t.Fatalf("expected 2 ahead of main, got %d ahead of %q", ahead, defaultBranch)
+	}
+}
+
+func TestCommitsAheadOfOriginDefault_OriginHeadUnset_FailsWithoutGuessing(t *testing.T) {
+	dir := setupSubmitRepo(t)
+	runGitSetup(t, dir, [][]string{{"git", "remote", "set-head", "origin", "--delete"}})
+
+	_, _, err := git.CommitsAheadOfOriginDefault(process.WithCwd(dir))
+	if !errors.Is(err, git.ErrNoOriginDefault) {
+		t.Fatalf("expected git.ErrNoOriginDefault, got: %v", err)
 	}
 }
