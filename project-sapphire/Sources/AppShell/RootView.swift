@@ -38,6 +38,7 @@ public struct RootView: View {
 	@State private var store: Store
 	@State private var terminals = Terminals()
 	@State private var surfaces: Surfaces
+	@State private var appearance: AppAppearance
 
 	/// Opened once per process; the app can't report anything without it, so it stops if it can't be opened, as Ember does.
 	private static let sessionLog: AppLog = {
@@ -52,6 +53,10 @@ public struct RootView: View {
 		let log = Self.sessionLog
 		TerminalRuntime.logWarning = { message in try? log.write(level: .warn, message: message) }
 		let store = Store(configPath: nil, state: .app, log: log)
+		// SwiftUI builds the window's content as the app finishes launching, before it shows the window.
+		let appearance = AppAppearance()
+		appearance.apply(store.appearance)
+		_appearance = State(initialValue: appearance)
 		_store = State(initialValue: store)
 		_surfaces = State(initialValue: Surfaces(store: store))
 	}
@@ -107,6 +112,7 @@ public struct RootView: View {
 			surfaces.finishPendingQuit()
 		}
 		.onChange(of: store.runningAgents) { _, _ in surfaces.finishPendingQuit() }
+		.onChange(of: store.appearance) { _, setting in appearance.apply(setting) }
 		.onReceive(NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didWakeNotification)) { _ in
 			Task { await store.repoUpdatesWoke() }
 		}
@@ -116,7 +122,7 @@ public struct RootView: View {
 				await launch()
 			} else if TestBridge.isEnabled {
 				// Early, so that the harness can see the problem and answer it.
-				TestBridge.start(store: store, terminals: terminals, surfaces: surfaces)
+				TestBridge.start(store: store, terminals: terminals, surfaces: surfaces, appearance: appearance)
 			}
 		}
 		.onChange(of: store.startupProblem) { problem, resolved in
@@ -147,7 +153,7 @@ public struct RootView: View {
 		}
 		// Started after the launch's commands, so that the harness finds them dispatched.
 		if TestBridge.isEnabled {
-			TestBridge.start(store: store, terminals: terminals, surfaces: surfaces)
+			TestBridge.start(store: store, terminals: terminals, surfaces: surfaces, appearance: appearance)
 		}
 		if let path = LaunchOptions.value("--snapshot") {
 			await Snapshot.run(store: store, terminals: terminals, to: path)

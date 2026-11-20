@@ -9,6 +9,10 @@
 	A tab creating its workspace has no terminal until the workspace exists (its session is `CreatingWorkspace`, which has no terminal spec).
 - `Surfaces` (in `AppShell`) holds the key router and one layer stack per tab, with the tab's terminal as its bottom layer, under the progress page of a tab creating its workspace; the active tab's top layer has the keyboard focus unless a window surface is open.
 
+## Appearance
+
+`AppAppearance` applies the User Defaults' Appearance (ADR-010) to `NSApp.appearance`: none on Automatic, so that the app follows the system, or aqua or darkAqua. `RootView.init` applies it before the window first shows (SwiftUI builds the window's content as the app finishes launching), so a user on Dark with a light system sees no light frame, and again whenever `Store.appearance` changes. Its `effective` appearance, light or dark, follows `NSApp.effectiveAppearance` (KVO), a system switch on Automatic included; it is what the panes Sapphire draws itself are to read. Today only native views follow it: the terminals are always dark. The bridge's state has `appearance`: the setting, the effective appearance and the system's.
+
 ## Global Pause
 
 The title-bar toolbar and command palette dispatch `Command.setGlobalPaused` through Store.

@@ -21,6 +21,10 @@ Ember's Settings Hub (`Sources/AppShell/Settings/`): the profiles beside the foc
 	The Agent card's `AgentSettingsModel` shares that write queue and scope reload. It edits compaction percentage, a template path with a file picker, multiline role/user-details/custom-sections and literal key/value template inputs. The existing Enter sends control is in the same card. Multiline Enter stays text and Save preserves whitespace and explicit empty strings. Default removes an override. Core-returned sources label effective values, and explicit legacy nulls remain visible as cleared overrides. Each input rename is one core write, and its row is disabled while its write is pending. A legacy null inputs map can be reset to Default before editing entries.
 	A profile's Agent card previews saved instructions through `agent_creation_preview` with an empty form, coding instructions included, and that card's owning profile. Each successful queued write rereads the settings and refreshes the preview. Unsaved drafts stay local. Preview failures are inline, and an older render cannot replace a newer reload. User Defaults points to the profile cards rather than rendering a prompt without a profile.
 
+## Appearance
+
+The Appearance card appears only in User Defaults, like Repository Updates: a field marked `userDefaultsOnly` (the core's `user_defaults_only`) is hidden in a profile's detail, and the core refuses it there. Automatic removes the core's `appearance` key; Light and Dark store `light` or `dark`. The store reads it (`Store.appearance`, the core's `appearance()`, where any other stored value reads as Automatic) when the core opens and after each write of the key, and `AppAppearance` applies it (see `../CLAUDE.md`).
+
 ## Repository Updates
 
 The Repository Updates card appears only in User Defaults.

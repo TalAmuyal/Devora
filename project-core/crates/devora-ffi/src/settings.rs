@@ -36,8 +36,33 @@ pub struct ConfigSettings {
     pub resolved: HashMap<String, Option<ConfigValue>>,
 }
 
+/// The app's Appearance, from the User Defaults (`devora_core::appearance`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum Appearance {
+    /// The system's.
+    Automatic,
+    Light,
+    Dark,
+}
+
+impl From<devora_core::appearance::Appearance> for Appearance {
+    fn from(appearance: devora_core::appearance::Appearance) -> Self {
+        use devora_core::appearance::Appearance as Stored;
+        match appearance {
+            Stored::Automatic => Self::Automatic,
+            Stored::Light => Self::Light,
+            Stored::Dark => Self::Dark,
+        }
+    }
+}
+
 #[uniffi::export]
 impl DevoraCore {
+    /// The app's Appearance; a value it doesn't know reads as Automatic.
+    pub fn appearance(&self) -> Result<Appearance, CoreError> {
+        Ok(devora_core::appearance::Appearance::read(&self.config_path)?.into())
+    }
+
     /// The config settings of a profile, or of the User Defaults without one.
     pub fn get_config_settings(
         &self,
