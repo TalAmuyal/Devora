@@ -1524,3 +1524,56 @@ fn across_a_held_restart_each_agent_gets_one_notice_when_it_launches_and_keeps_i
     });
     block_on(f.core.shutdown_agents()).unwrap();
 }
+
+#[test]
+fn the_agents_own_threshold_and_compact_now_reach_its_chat_and_a_paused_agent_refuses_them() {
+    let f = Fixture::new(false);
+    f.create("Threshold");
+    let tab = f.open("Threshold");
+    let events = f.core.subscribe_agent_chats().unwrap();
+    let chat = f.wait(&events, |c| {
+        c.phase == ChatPhase::Running && c.context.is_some()
+    });
+    let profile_default = chat.context.unwrap().default_threshold_percent;
+    block_on(
+        f.core
+            .set_agent_compact_threshold(tab, chat.generation, Some(45)),
+    )
+    .unwrap();
+    let set = f.wait(&events, |c| {
+        c.context.is_some_and(|c| c.threshold_percent == 45)
+    });
+    assert_eq!(
+        set.context.unwrap().default_threshold_percent,
+        profile_default
+    );
+    assert!(block_on(
+        f.core
+            .set_agent_compact_threshold(tab, chat.generation, Some(101))
+    )
+    .is_err());
+
+    block_on(f.core.send_agent_turn(tab, chat.generation, "hello".into())).unwrap();
+    f.wait(&events, |c| !c.turn_running && has_message(c, "result"));
+    block_on(f.core.compact_agent_now(tab, chat.generation)).unwrap();
+    f.wait(&events, |c| {
+        c.context
+            .is_some_and(|c| c.compaction == CompactionProgress::Underway)
+    });
+    let done = f.wait(&events, |c| {
+        !c.turn_running
+            && c.context
+                .is_some_and(|c| c.compaction == CompactionProgress::Idle)
+            && c.items.iter().any(|item| matches!(&item.content, TranscriptContent::System { kind: SystemKind::Compaction, text, .. } if text.contains("Devora compacts")))
+    });
+    assert!(done.items.iter().any(|item| matches!(&item.content, TranscriptContent::System { kind: SystemKind::Compaction, text, .. } if text.starts_with("Compaction requested"))));
+
+    f.core.pause_agent_after_turn(tab, chat.generation).unwrap();
+    f.wait(&events, |c| c.phase == ChatPhase::Paused);
+    assert!(block_on(f.core.compact_agent_now(tab, chat.generation)).is_err());
+    assert!(block_on(
+        f.core
+            .set_agent_compact_threshold(tab, chat.generation, None)
+    )
+    .is_err());
+}

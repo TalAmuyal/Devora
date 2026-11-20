@@ -13,6 +13,44 @@ func writeConfigWithAProfile(in dir: URL) throws -> URL {
 	return config
 }
 
+/// Launches the app over the fake CLI with a profile and a scratch state of its own, creates the agent "Echo" from the
+/// Agent Hub, and returns the app and the agent's prompt editor. Quitting in teardown reaps the fake agent before the
+/// scratch directory goes.
+@MainActor
+func launchWithANewAgent(_ test: XCTestCase, scratchName: String) throws -> (XCUIApplication, XCUIElement) {
+	let scratch = FileManager.default.temporaryDirectory.appending(path: "\(scratchName)-\(UUID().uuidString)")
+	try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
+	let config = try writeConfigWithAProfile(in: scratch)
+	let app = XCUIApplication()
+	app.launchEnvironment["DEVORA_TEST_MODE"] = "1"
+	app.launchEnvironment["DEVORA_CONFIG_PATH"] = config.path
+	app.launchEnvironment["DEVORA_STATE_DIR"] = scratch.appending(path: "state").path
+	for key in ["DEVORA_TEST_CLAUDE_PROGRAM", "DEVORA_FAKE_FIXTURES"] {
+		app.launchEnvironment[key] = try XCTUnwrap(ProcessInfo.processInfo.environment[key])
+	}
+	app.launchEnvironment["DEVORA_FAKE_REPORT"] = scratch.appending(path: "fake-report.jsonl").path
+	app.launch()
+	test.addTeardownBlock { @MainActor in
+		if app.state != .notRunning {
+			app.typeKey("q", modifierFlags: .command)
+			XCTAssertTrue(app.wait(for: .notRunning, timeout: 10), "Quit must reap the fake agent")
+		}
+		if app.state == .notRunning { try? FileManager.default.removeItem(at: scratch) }
+	}
+	XCTAssertTrue(app.hubHeader.waitForExistence(timeout: 10), "The launch hub must appear")
+	app.typeKey("s", modifierFlags: .control)
+	XCTAssertTrue(app.buttons["+ New Agent"].waitForExistence(timeout: 10), "The Agent Hub must open")
+	app.typeKey("n", modifierFlags: [])
+	let name = app.textFields["new-agent-name"]
+	XCTAssertTrue(name.waitForExistence(timeout: 10), "The New Agent dialog must open")
+	name.click()
+	name.typeText("Echo")
+	app.buttons["Create"].click()
+	let editor = app.textViews["agent-prompt"]
+	XCTAssertTrue(editor.waitForExistence(timeout: 15), "Creating an agent must open its editor")
+	return (app, editor)
+}
+
 extension XCUIApplication {
 	/// Has the app take two lone Shift taps as a double tap however far apart they arrive (`DEVORA_TEST_SHIFT_TAP_WINDOW`), for a test that taps Shift-Shift; set before launching.
 	/// XCUITest's synthesized taps can arrive seconds apart on a busy machine, past the 0.5 s a keyboard's double tap gets, which `ShiftDoubleTapTests` check on exact timestamps.

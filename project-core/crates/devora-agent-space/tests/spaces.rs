@@ -794,7 +794,7 @@ async fn a_real_v1_shape_lists_without_migration_then_upgrades_and_reopens_with_
         .is_empty());
     assert_eq!(version(), 1);
     let space = Space::open(&fixture.profile, "Legacy").unwrap();
-    assert_eq!(version(), 4);
+    assert_eq!(version(), 5);
     assert_eq!(space.instructions(), "Frozen legacy instructions");
     assert_eq!(space.identity().role, "Legacy role");
     assert_eq!(space.saved_session().session_id, previous_id);
@@ -832,7 +832,7 @@ async fn a_real_v1_shape_lists_without_migration_then_upgrades_and_reopens_with_
     }
     running.pause().await.unwrap();
     let reopened = Space::open(&fixture.profile, "Legacy").unwrap();
-    assert_eq!(version(), 4);
+    assert_eq!(version(), 5);
     assert!(reopened.history().unwrap().iter().any(|item| matches!(&item.content, devora_agent::transcript::TranscriptContent::User { text, .. } if text == "Legacy prompt")));
     assert_eq!(reopened.instructions(), "Frozen legacy instructions");
 }
@@ -1570,7 +1570,7 @@ async fn a_space_from_before_restart_notices_is_owed_one_on_its_first_launch_aft
     let connection = rusqlite::Connection::open(&database).unwrap();
     connection
         .execute_batch(
-            "ALTER TABLE space DROP COLUMN cli_process; ALTER TABLE space DROP COLUMN launched_run; ALTER TABLE space DROP COLUMN restart_notice; PRAGMA user_version = 2;",
+            "ALTER TABLE space DROP COLUMN compact_threshold; ALTER TABLE space DROP COLUMN cli_process; ALTER TABLE space DROP COLUMN launched_run; ALTER TABLE space DROP COLUMN restart_notice; PRAGMA user_version = 2;",
         )
         .unwrap();
     assert_eq!(
@@ -1583,7 +1583,7 @@ async fn a_space_from_before_restart_notices_is_owed_one_on_its_first_launch_aft
         connection
             .pragma_query_value::<u32, _>(None, "user_version", |row| row.get(0))
             .unwrap(),
-        4
+        5
     );
 }
 
@@ -1800,5 +1800,160 @@ async fn a_forced_stop_ends_the_cli_with_its_background_shell_and_owes_the_notic
             .await
             .len(),
         1
+    );
+}
+
+/// The context the space publishes next.
+async fn next_context(running: &mut RunningSpace) -> devora_agent_space::Context {
+    tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            match running.next_update().await {
+                Some(SpaceEvent::Context(context)) => return context,
+                Some(SpaceEvent::Session(SessionEvent::Failed(error))) => panic!("{error}"),
+                Some(_) => {}
+                None => panic!("the space stopped before publishing its context"),
+            }
+        }
+    })
+    .await
+    .unwrap()
+}
+
+#[tokio::test]
+async fn an_agents_own_threshold_outlives_a_restart_and_clearing_it_follows_the_profile_again() {
+    let fixture = Fixture::new();
+    std::fs::write(
+        fixture.profile.join("config.json"),
+        json!({"prepare-command":"true","agent":{"compact-threshold":70}}).to_string(),
+    )
+    .unwrap();
+    let context = fixture.context();
+    let log = Arc::new(Log::open(&fixture.root.path().join("log")).unwrap());
+    fixture.create(fixture.form("Delta")).unwrap();
+    let start = || async {
+        Space::open(&fixture.profile, "Delta")
+            .unwrap()
+            .start(&context, log.clone(), &fixture.run)
+            .await
+            .unwrap()
+    };
+
+    let mut running = start().await;
+    let first = next_context(&mut running).await;
+    assert_eq!(
+        (first.threshold_percent, first.default_threshold_percent),
+        (70, 70)
+    );
+    running
+        .handle()
+        .set_compact_threshold(Some(40))
+        .await
+        .unwrap();
+    assert_eq!(next_context(&mut running).await.threshold_percent, 40);
+    assert!(running
+        .handle()
+        .set_compact_threshold(Some(0))
+        .await
+        .is_err());
+    running.pause().await.unwrap();
+
+    let mut running = start().await;
+    let restarted = next_context(&mut running).await;
+    assert_eq!(
+        (
+            restarted.threshold_percent,
+            restarted.default_threshold_percent
+        ),
+        (40, 70),
+        "its own, beside the profile's"
+    );
+    running.handle().set_compact_threshold(None).await.unwrap();
+    assert_eq!(next_context(&mut running).await.threshold_percent, 70);
+    running.pause().await.unwrap();
+
+    let mut running = start().await;
+    assert_eq!(next_context(&mut running).await.threshold_percent, 70);
+    running.pause().await.unwrap();
+}
+
+#[tokio::test]
+async fn compact_now_saves_the_memory_then_compacts_under_the_threshold_once_at_a_time() {
+    let fixture = Fixture::new();
+    let context = fixture.context();
+    let space = fixture.create(fixture.form("Delta")).unwrap();
+    let log = Arc::new(Log::open(&fixture.root.path().join("log")).unwrap());
+    let mut running = space.start(&context, log, &fixture.run).await.unwrap();
+    // The recorded turn fills about 2% of its window, far under the default threshold.
+    let mut rows = BTreeMap::new();
+    running
+        .handle()
+        .send_turn("first turn".into())
+        .await
+        .unwrap();
+    turn_end(&mut running, &mut rows).await;
+
+    running.handle().compact_now().await.unwrap();
+    assert_eq!(
+        running.handle().compact_now().await.unwrap_err(),
+        "A compaction is already under way."
+    );
+    let mut progress = vec![];
+    let mut announcements = vec![];
+    let mut results = 0;
+    tokio::time::timeout(Duration::from_secs(10), async {
+        while let Some(update) = running.next_update().await {
+            match update {
+                SpaceEvent::Context(context) => progress.push(context.progress),
+                SpaceEvent::Transcript(TranscriptChange::Upsert { item }) => {
+                    if let TranscriptContent::System {
+                        kind: SystemKind::Compaction,
+                        text,
+                        ..
+                    } = item.content
+                    {
+                        announcements.push(text);
+                    }
+                }
+                SpaceEvent::Session(SessionEvent::Message(Message::Known(
+                    KnownMessage::Result(_),
+                ))) => {
+                    results += 1;
+                    // The memory save, then `/compact`.
+                    if results == 2 {
+                        break;
+                    }
+                }
+                SpaceEvent::Session(SessionEvent::Failed(error)) => panic!("{error}"),
+                _ => {}
+            }
+        }
+    })
+    .await
+    .unwrap();
+    running.pause().await.unwrap();
+
+    let report = std::fs::read_to_string(fixture.root.path().join("report.jsonl")).unwrap();
+    let prompts: Vec<String> = report
+        .lines()
+        .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
+        .filter(|entry| entry["kind"] == "user")
+        .map(|entry| entry["message"]["content"].as_str().unwrap().to_owned())
+        .collect();
+    assert_eq!(prompts.len(), 3, "{prompts:?}");
+    assert!(
+        prompts[1].contains("the user asked to compact"),
+        "{}",
+        prompts[1]
+    );
+    assert_eq!(prompts[2], "/compact");
+    assert!(
+        announcements[0].starts_with("Compaction requested at"),
+        "{announcements:?}"
+    );
+    assert!(announcements[1].contains("Devora compacts"));
+    assert_eq!(
+        progress.last(),
+        Some(&devora_agent_space::CompactionProgress::Idle),
+        "{progress:?}"
     );
 }

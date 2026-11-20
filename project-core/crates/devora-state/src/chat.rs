@@ -28,8 +28,22 @@ pub struct ChatContext {
     pub used_tokens: u64,
     /// Zero until the model's context window is known.
     pub window_tokens: u64,
-    /// Where Devora saves the agent's memory and compacts.
+    /// Where Devora saves the agent's memory and compacts: the agent's own
+    /// threshold, when it has one, else its profile's.
     pub threshold_percent: u8,
+    /// The profile's threshold, which the agent follows without one of its own.
+    pub default_threshold_percent: u8,
+    pub compaction: CompactionProgress,
+}
+
+/// Where an agent's compaction is, as far as the user can act on it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CompactionProgress {
+    Idle,
+    /// Asked for; it starts when the running turn ends.
+    Requested,
+    /// Its turns are running.
+    Underway,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

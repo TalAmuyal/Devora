@@ -20,7 +20,7 @@ mod store;
 
 pub use chat::{
     AgentActivity, Chat, ChatCommand, ChatContext, ChatEvent, ChatPhase, ChatUpdate,
-    PermissionQuestion, RunningAgent, RunningAgents,
+    CompactionProgress, PermissionQuestion, RunningAgent, RunningAgents,
 };
 pub use command::{Command, Event, StateError};
 pub use feed::{feed, Feed, Subscription};

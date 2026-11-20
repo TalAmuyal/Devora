@@ -135,7 +135,18 @@ final class TestBridge {
 				// `dom` keeps the name the scenarios read from the web transcript's page.
 				var observation: [String: Any] = ["dom": transcript.observation(), "draft": panel.chat.draft, "canSend": panel.chat.canSend]
 				observation["phase"] = panel.chat.chat.map { String(describing: $0.phase) } ?? "opening"
-				observation["context"] = panel.chat.chat?.context.map { ["used": String($0.usedTokens), "window": String($0.windowTokens), "threshold": $0.thresholdPercent] as [String: Any] } ?? NSNull()
+				observation["context"] = panel.chat.chat?.context.map {
+					[
+						"used": String($0.usedTokens), "window": String($0.windowTokens), "threshold": $0.thresholdPercent,
+						"defaultThreshold": $0.defaultThresholdPercent, "compaction": String(describing: $0.compaction),
+					] as [String: Any]
+				} ?? NSNull()
+				let compaction = panel.contextPresentation
+				observation["contextPopover"] = [
+					"compactTitle": compaction.compactTitle, "compactEnabled": compaction.compactAction != .none,
+					"compactsAt": compaction.compactsAt, "thresholdEnabled": compaction.unavailableReason == nil,
+					"thresholdNote": compaction.unavailableReason ?? compaction.thresholdNote,
+				] as [String: Any]
 				observation["enterSends"] = panel.chat.enterSends
 				observation["globallyPaused"] = panel.chat.globallyPaused
 				observation["globallyHeld"] = panel.chat.chat?.globallyHeld ?? false
@@ -160,6 +171,13 @@ final class TestBridge {
 				case "keepPaused":
 					guard let keep = body["value"] as? Bool else { throw BridgeError(status: 400, "missing Keep paused value") }
 					await panel.chat.setKeepPaused(keep)
+				// What the context popover's Compact Now and threshold slider (and its Reset) do, refused while they're disabled.
+				case "compactNow":
+					guard panel.contextPresentation.compactAction != .none else { throw BridgeError(status: 409, "Compact Now is disabled") }
+					await panel.chat.compactNow()
+				case "compactThreshold":
+					guard panel.contextPresentation.unavailableReason == nil else { throw BridgeError(status: 409, "the threshold slider is disabled") }
+					await panel.chat.setCompactThreshold((body["value"] as? Int).map(UInt8.init))
 				case "retry": await panel.chat.retry()
 				case "older": await panel.chat.older()
 				case "toggleThinking": panel.transcript?.toggleFirst(.thinking)

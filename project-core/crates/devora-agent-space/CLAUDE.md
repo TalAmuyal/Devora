@@ -6,6 +6,10 @@ After a restart, each agent gets one notice to re-establish its waits, since its
 
 A stop that was forced or interrupted a turn (`StopInfo`) also owes the notice, worded for the pause, at the agent's next launch in the same run; a clean, idle stop owes none.
 
+## The agent's compaction threshold
+
+Schema version 5 adds `space.compact_threshold`: the agent's own threshold (1 to 100), over its profile's `agent.compact-threshold`; null follows the profile. `SpaceHandle::set_compact_threshold` commits it and applies it at once, through the actor, which owns the database, so it needs a running agent. `SpaceHandle::compact_now` starts the save-memory and `/compact` steps on an idle agent, or flags them for the running turn's result, as reaching the threshold does; a failed or interrupted turn drops that request, as it abandons a compaction. The context the actor publishes carries the profile's threshold beside the agent's, and the compaction's progress (idle, requested, under way).
+
 ## The running CLI
 
 Schema version 4 adds `space.cli_process`: the running CLI's identity, its pid and start time (`devora_agent::session::CliProcess`, from `SessionEvent::Spawned`, which the space keeps to itself). It is cleared when the CLI ends under Devora's watch. A launch that finds a recorded CLI still running (an earlier Devora died without stopping it) stops its whole tree (`stop_tree`) before resuming, since two CLIs on one session fork it. A pid whose start time differs is another process and is left alone. An orphaned CLI can't run tools meanwhile, since its Judgess callback can't be answered.

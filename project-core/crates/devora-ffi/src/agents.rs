@@ -5,9 +5,9 @@ use devora_core::agents::{
     self, CreationForm, Field, LaunchContext, ModelChoice, PermissionAnswer, Scope, Source,
 };
 use devora_core::state::{
-    AgentActivity, Chat, ChatContext, ChatEvent, ChatPhase, ChatUpdate, ItemState,
-    PermissionQuestion, RunningAgent, RunningAgents, Subscription, SystemKind, ToolResult,
-    ToolVerdict, TranscriptChange, TranscriptContent, TranscriptItem,
+    AgentActivity, Chat, ChatContext, ChatEvent, ChatPhase, ChatUpdate, CompactionProgress,
+    ItemState, PermissionQuestion, RunningAgent, RunningAgents, Subscription, SystemKind,
+    ToolResult, ToolVerdict, TranscriptChange, TranscriptContent, TranscriptItem,
 };
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -277,6 +277,14 @@ pub struct ChatContext {
     pub used_tokens: u64,
     pub window_tokens: u64,
     pub threshold_percent: u8,
+    pub default_threshold_percent: u8,
+    pub compaction: CompactionProgress,
+}
+#[uniffi::remote(Enum)]
+pub enum CompactionProgress {
+    Idle,
+    Requested,
+    Underway,
 }
 #[uniffi::remote(Enum)]
 pub enum ChatUpdate {
@@ -544,6 +552,22 @@ impl DevoraCore {
     }
     pub async fn interrupt_agent(&self, tab: u64, generation: u64) -> Result<(), CoreError> {
         self.agents.interrupt(tab, generation).await?;
+        Ok(())
+    }
+    /// The agent's own compaction threshold (1 to 100), or nil to follow its profile's.
+    pub async fn set_agent_compact_threshold(
+        &self,
+        tab: u64,
+        generation: u64,
+        percent: Option<u8>,
+    ) -> Result<(), CoreError> {
+        self.agents
+            .set_compact_threshold(tab, generation, percent)
+            .await?;
+        Ok(())
+    }
+    pub async fn compact_agent_now(&self, tab: u64, generation: u64) -> Result<(), CoreError> {
+        self.agents.compact_now(tab, generation).await?;
         Ok(())
     }
     pub async fn answer_agent_permission(

@@ -44,4 +44,7 @@ Keep paused is a native reversible switch that selects whether this globally hel
 The widget uses native macOS controls and system colors, and exposes each state and its available actions to accessibility.
 Agents paused before the global hold show the switch on; once stopped, turning it off makes them resume with the others when Devora resumes (one stored pause flag; see `project-core/CLAUDE.md`).
 Its `AgentContextWidget` shows the actor's typed context usage as a percentage of the window and a ring, starting at 9 o'clock, that fills as the usage nears the compaction threshold, with the full numbers in its tooltip and the user's locale for both; an unknown usage or window grays it out and its tooltip says which is missing.
+Clicking it opens a native popover (`AgentContextPopover.swift`): the numbers, this agent's compaction threshold as a slider from 30 to 100% that applies on release (Reset follows the profile again), and Compact Now, which runs the threshold's steps now or, during a turn, as Compact After This Turn.
+`AgentContextPresentation` decides what it shows and allows: both controls need a running agent and are disabled with the reason otherwise, a configured threshold under 30% shows clamped with a note, and a threshold already passed on an idle agent says "Compacts after the next turn", since nothing starts until a turn ends.
+An agent with its own threshold shows a glyph beside the ring, and its tooltip names both thresholds.
 Retry and Resume reopen the existing tab against its owning profile.

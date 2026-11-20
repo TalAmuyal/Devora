@@ -15,21 +15,44 @@ pub struct Context {
     pub used_tokens: u64,
     /// Zero until the first result reports the model's context window.
     pub window_tokens: u64,
+    /// This agent's threshold: its own, when it has one, else the profile's.
     pub threshold_percent: u8,
+    /// The profile's threshold, which the agent follows without one of its own.
+    pub default_threshold_percent: u8,
+    pub progress: Progress,
+}
+
+/// Where a compaction is, as far as the user can act on it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Progress {
+    Idle,
+    /// The user asked for one, which starts when the running turn ends.
+    Requested,
+    /// Its turns are running (saving memory, compacting, refreshing memory).
+    Underway,
+}
+
+/// Why the agent saves its memory before a compaction.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Trigger {
+    Threshold,
+    Requested,
 }
 
 /// A turn Devora sends on the agent's behalf.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Step {
-    SaveMemory(String),
+    SaveMemory(Trigger),
     Compact,
-    RefreshMemory(String),
+    RefreshMemory,
 }
 
 impl Step {
     pub fn prompt(&self) -> String {
         match self {
-            Self::SaveMemory(text) | Self::RefreshMemory(text) => text.clone(),
+            Self::SaveMemory(Trigger::Threshold) => SAVE_MEMORY.into(),
+            Self::SaveMemory(Trigger::Requested) => SAVE_MEMORY_REQUESTED.into(),
+            Self::RefreshMemory => REFRESH_MEMORY.into(),
             Self::Compact => "/compact".into(),
         }
     }
@@ -37,12 +60,16 @@ impl Step {
     /// What the transcript says Devora did, before the turn it sends.
     pub fn announcement(&self, context: &Context) -> String {
         match self {
-            Self::SaveMemory(_) => format!(
+            Self::SaveMemory(Trigger::Threshold) => format!(
                 "The context is {}% full: Devora asks the agent to save its memory, then compacts.",
                 context.percent()
             ),
+            Self::SaveMemory(Trigger::Requested) => format!(
+                "Compaction requested at {}% full: Devora asks the agent to save its memory, then compacts.",
+                context.percent()
+            ),
             Self::Compact => "Devora compacts the conversation.".into(),
-            Self::RefreshMemory(_) => {
+            Self::RefreshMemory => {
                 "Claude compacted the conversation itself: Devora asks the agent to refresh its memory."
                     .into()
             }
@@ -71,22 +98,62 @@ enum Stage {
 pub struct Compaction {
     context: Context,
     stage: Stage,
+    /// The user asked for a compaction while a turn ran; it starts at that turn's result.
+    requested: bool,
 }
 
 impl Compaction {
-    pub fn new(threshold_percent: u8) -> Self {
+    pub fn new(threshold_percent: u8, default_threshold_percent: u8) -> Self {
         Self {
             context: Context {
                 used_tokens: 0,
                 window_tokens: 0,
                 threshold_percent,
+                default_threshold_percent,
+                progress: Progress::Idle,
             },
             stage: Stage::Idle,
+            requested: false,
         }
     }
 
     pub fn context(&self) -> Context {
-        self.context
+        Context {
+            progress: match (self.stage, self.requested) {
+                (Stage::Idle, false) => Progress::Idle,
+                (Stage::Idle, true) => Progress::Requested,
+                _ => Progress::Underway,
+            },
+            ..self.context
+        }
+    }
+
+    /// A new threshold for this agent; it is checked when the next turn ends, so
+    /// lowering it below the current usage starts nothing by itself.
+    pub fn set_threshold(&mut self, threshold_percent: u8) {
+        self.context.threshold_percent = threshold_percent;
+    }
+
+    /// The user asks for a compaction with no turn running: its first step, to
+    /// send now, unless one is already under way.
+    pub fn begin(&mut self) -> Option<Step> {
+        if self.stage != Stage::Idle {
+            return None;
+        }
+        self.requested = false;
+        self.stage = Stage::SavingMemory;
+        Some(Step::SaveMemory(Trigger::Requested))
+    }
+
+    /// The user asks for a compaction while a turn runs: it starts when that
+    /// turn's result arrives, as reaching the threshold does. False when one is
+    /// already under way.
+    pub fn request(&mut self) -> bool {
+        if self.stage != Stage::Idle {
+            return false;
+        }
+        self.requested = true;
+        true
     }
 
     /// A message's usage: everything the request sent, plus what it produced,
@@ -111,15 +178,21 @@ impl Compaction {
             self.context.window_tokens = window;
         }
         if result.is_error {
-            // An interrupted or failed step abandons the compaction; the next
-            // result over the threshold starts it again.
+            // An interrupted or failed turn abandons the compaction, and a
+            // request with it; the next result over the threshold starts it again.
             self.stage = Stage::Idle;
+            self.requested = false;
             return None;
         }
         match self.stage {
+            Stage::Idle if self.requested => {
+                self.requested = false;
+                self.stage = Stage::SavingMemory;
+                Some(Step::SaveMemory(Trigger::Requested))
+            }
             Stage::Idle if self.over_threshold() => {
                 self.stage = Stage::SavingMemory;
-                Some(Step::SaveMemory(SAVE_MEMORY.into()))
+                Some(Step::SaveMemory(Trigger::Threshold))
             }
             Stage::SavingMemory => {
                 self.stage = Stage::Compacting;
@@ -127,7 +200,7 @@ impl Compaction {
             }
             Stage::NeedsRefresh => {
                 self.stage = Stage::RefreshingMemory;
-                Some(Step::RefreshMemory(REFRESH_MEMORY.into()))
+                Some(Step::RefreshMemory)
             }
             Stage::Compacting | Stage::RefreshingMemory => {
                 self.stage = Stage::Idle;
@@ -154,6 +227,7 @@ impl Compaction {
     /// The process was replaced or stopped: any step in flight is gone.
     pub fn reset(&mut self) {
         self.stage = Stage::Idle;
+        self.requested = false;
     }
 
     fn over_threshold(&self) -> bool {
@@ -164,6 +238,8 @@ impl Compaction {
 }
 
 const SAVE_MEMORY: &str = "Devora: your context is nearly full, and Devora will compact the conversation after this turn. Before that, save to memory/ everything you will need afterwards: the current task and its state, decisions and their reasons, open questions, and your next steps. Reply briefly once it is saved.";
+
+const SAVE_MEMORY_REQUESTED: &str = "Devora: the user asked to compact the conversation, and Devora will compact it after this turn. Before that, save to memory/ everything you will need afterwards: the current task and its state, decisions and their reasons, open questions, and your next steps. Reply briefly once it is saved.";
 
 const REFRESH_MEMORY: &str = "Devora: the conversation was just compacted. Update memory/ from what you still know, so that nothing important is lost. Reply briefly once it is updated.";
 
@@ -200,7 +276,7 @@ mod tests {
 
     #[test]
     fn over_the_threshold_saves_memory_then_compacts_then_rests() {
-        let mut compaction = Compaction::new(80);
+        let mut compaction = Compaction::new(80, 80);
         compaction.usage(
             &json!({"input_tokens": 10, "cache_read_input_tokens": 700, "output_tokens": 50}),
         );
@@ -230,7 +306,7 @@ mod tests {
 
     #[test]
     fn an_interrupted_step_abandons_the_compaction() {
-        let mut compaction = Compaction::new(50);
+        let mut compaction = Compaction::new(50, 80);
         compaction.usage(&json!({"input_tokens": 600}));
         assert!(matches!(
             compaction.result(&result(false)),
@@ -245,19 +321,77 @@ mod tests {
 
     #[test]
     fn a_compaction_the_cli_made_itself_refreshes_memory_after_its_turn() {
-        let mut compaction = Compaction::new(80);
+        let mut compaction = Compaction::new(80, 80);
         compaction.compacted(&boundary("auto"));
         assert!(
-            matches!(
-                compaction.result(&result(false)),
-                Some(Step::RefreshMemory(_))
-            ),
+            matches!(compaction.result(&result(false)), Some(Step::RefreshMemory)),
             "after the turn it happened in"
         );
         assert_eq!(
             compaction.result(&result(false)),
             None,
             "the refresh turn's own result ends it"
+        );
+    }
+
+    #[test]
+    fn a_request_with_no_turn_running_starts_at_once_and_says_why() {
+        let mut compaction = Compaction::new(80, 80);
+        compaction.usage(&json!({"input_tokens": 100}));
+        assert_eq!(compaction.result(&result(false)), None, "10% is under 80%");
+        let step = compaction.begin();
+        assert_eq!(step, Some(Step::SaveMemory(Trigger::Requested)));
+        let step = step.unwrap();
+        assert!(step.prompt().contains("the user asked to compact"));
+        assert!(step
+            .announcement(&compaction.context())
+            .starts_with("Compaction requested at 10% full"));
+        assert_eq!(compaction.context().progress, Progress::Underway);
+        assert_eq!(compaction.begin(), None, "one compaction at a time");
+        assert!(!compaction.request(), "nor a second one queued behind it");
+        assert_eq!(compaction.result(&result(false)), Some(Step::Compact));
+        assert_eq!(compaction.result(&result(false)), None);
+        assert_eq!(compaction.context().progress, Progress::Idle);
+    }
+
+    #[test]
+    fn a_request_during_a_turn_starts_at_its_result_and_an_error_drops_it() {
+        let mut compaction = Compaction::new(80, 80);
+        assert!(compaction.request());
+        assert_eq!(compaction.context().progress, Progress::Requested);
+        assert_eq!(
+            compaction.result(&result(false)),
+            Some(Step::SaveMemory(Trigger::Requested)),
+            "under the threshold, but asked for"
+        );
+
+        let mut compaction = Compaction::new(80, 80);
+        assert!(compaction.request());
+        assert_eq!(compaction.result(&result(true)), None);
+        assert_eq!(compaction.context().progress, Progress::Idle);
+        assert_eq!(
+            compaction.result(&result(false)),
+            None,
+            "the interrupted turn took the request with it"
+        );
+    }
+
+    #[test]
+    fn a_new_threshold_is_checked_when_the_next_turn_ends() {
+        let mut compaction = Compaction::new(80, 80);
+        compaction.usage(&json!({"input_tokens": 600}));
+        assert_eq!(compaction.result(&result(false)), None, "60% is under 80%");
+        compaction.set_threshold(50);
+        assert_eq!(compaction.context().threshold_percent, 50);
+        assert_eq!(compaction.context().default_threshold_percent, 80);
+        assert_eq!(
+            compaction.context().progress,
+            Progress::Idle,
+            "lowering it starts nothing by itself"
+        );
+        assert_eq!(
+            compaction.result(&result(false)),
+            Some(Step::SaveMemory(Trigger::Threshold))
         );
     }
 }
