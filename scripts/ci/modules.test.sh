@@ -39,6 +39,8 @@ acceptance/CLAUDE.md
 bundler/CLAUDE.md
 project-code-cleanup/CLAUDE.md
 project-core/CLAUDE.md
+project-core/crates/devora-agent-space/CLAUDE.md
+project-core/crates/devora-agent/CLAUDE.md
 project-debi/CLAUDE.md
 project-detached-flow/CLAUDE.md
 project-ember/CLAUDE.md
