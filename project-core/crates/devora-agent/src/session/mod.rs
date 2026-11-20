@@ -157,6 +157,20 @@ impl SessionHandle {
             .await
     }
 
+    /// End one of the CLI's background tasks (`BackgroundTasksChanged`).
+    pub async fn stop_task(&self, task_id: String) -> Result<Value, String> {
+        self.call(|reply| {
+            Command::Control(
+                ControlRequest::StopTask {
+                    task_id,
+                    extra: Map::new(),
+                },
+                reply,
+            )
+        })
+        .await
+    }
+
     /// Change permission mode through the CLI's control channel.
     pub async fn set_permission_mode(&self, mode: String) -> Result<Value, String> {
         self.call(|reply| {

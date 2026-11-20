@@ -50,6 +50,15 @@ Feature: Agent chat panel
     When the user resumes the agent chat
     Then the agent "Echo" should be idle
 
+  Scenario: Pausing stops the agent's background work, and resuming tells it what was stopped
+    When the user sends the agent prompt "background-work"
+    Then the agent "Echo" should be idle
+    When the user requests Pause in the agent chat
+    Then the agent chat is paused
+    When the user resumes the agent chat
+    Then the agent transcript contains "Devora paused the agent and stopped a watcher (shell), a CI wait (subagent)"
+    And the agent "Echo" should be idle
+
   Scenario: Scrolling loads older history without moving the visible row and restores it on relaunch
     Given the agent chat has 90 completed test turns
     When the user scrolls up for older agent history

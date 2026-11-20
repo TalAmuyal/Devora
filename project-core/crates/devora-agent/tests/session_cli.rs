@@ -1176,3 +1176,129 @@ async fn pinned_cli_forced_stop_leaves_no_background_shell_running() {
     assert!(!running(), "the forced stop ended the background shell too");
     backend.stop().await;
 }
+
+// A pause stops the agent's background work through the CLI (#214's design):
+// the CLI lists it, `stop_task` ends a shell with no turn, and a stopped
+// subagent makes the CLI run a notification turn of its own, which Devora
+// interrupts as it starts. With Judgess's hook registered, as in production,
+// the tool the model answers that turn with (here 1.5 s later) never runs.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires CI-pinned Claude CLI, Node and Sapphire npm dependencies"]
+async fn pinned_cli_stops_background_work_and_its_interrupted_turn_runs_no_tool() {
+    use devora_agent::protocol::{BackgroundTask, System};
+    check_pin().await;
+    let fixture = Fixture::new();
+    let mut backend = Backend::start(fixture.root.path()).await;
+    let root = fixture.root.path().display().to_string();
+    let reacted = fixture.root.path().join("reacted");
+    // Durations no other process's command line has, to find what's left by.
+    let (shell_wait, agent_wait) = (100_000 + std::process::id(), 200_000 + std::process::id());
+    backend
+        .command(json!({"action":"configure",
+            "toolCommand": format!("sleep {shell_wait}"), "toolBackground": true,
+            "agentPrompt": format!("SUBAGENT_WORK {root}"),
+            "subagentCommand": format!("python3 -c 'import time; time.sleep({agent_wait})'"),
+            "notificationTool": {"command": format!("touch {}", reacted.display()), "delayMs": 1500}}))
+        .await;
+    let mut options = fixture.options(
+        backend.port,
+        Instructions::Append("Background work probe".into()),
+    );
+    // Auto mode's safety check can't run offline, and refuses the Agent tool without it.
+    options.permission_mode = "default".into();
+    options.settings["permissions"] = json!({"allow":["Bash","Agent"]});
+    let mut session = Session::start(options, fixture.log()).await.unwrap();
+    let handle = session.handle();
+    let mut tasks: Vec<BackgroundTask> = vec![];
+    // Waits for `done`, keeping the CLI's latest list of background work.
+    async fn until(
+        session: &mut Session,
+        tasks: &mut Vec<BackgroundTask>,
+        mut done: impl FnMut(&SessionEvent, &[BackgroundTask]) -> bool,
+    ) {
+        tokio::time::timeout(Duration::from_secs(45), async {
+            while let Some(event) = session.next_event().await {
+                if let SessionEvent::Message(Message::Known(KnownMessage::System(
+                    System::BackgroundTasksChanged { tasks: listed, .. },
+                ))) = &event
+                {
+                    *tasks = listed.clone();
+                }
+                if let SessionEvent::Failed(error) = &event {
+                    panic!("{error}");
+                }
+                if done(&event, tasks) {
+                    return;
+                }
+            }
+            panic!("CLI ended");
+        })
+        .await
+        .expect("offline CLI deadline")
+    }
+    let is_result = |event: &SessionEvent| {
+        matches!(
+            event,
+            SessionEvent::Message(Message::Known(KnownMessage::Result(_)))
+        )
+    };
+    for prompt in ["Start the shell.", "Start the subagent."] {
+        handle.send_turn(turn_id(), prompt.into()).await.unwrap();
+        until(&mut session, &mut tasks, |event, _| is_result(event)).await;
+    }
+    until(&mut session, &mut tasks, |_, tasks| tasks.len() == 2).await;
+    let id = |kind: &str| {
+        tasks
+            .iter()
+            .find(|task| task.task_type == kind)
+            .unwrap_or_else(|| panic!("no {kind} in {tasks:?}"))
+            .task_id
+            .clone()
+    };
+    let (shell, agent) = (id("local_bash"), id("local_agent"));
+    handle.stop_task(shell).await.unwrap();
+    until(&mut session, &mut tasks, |_, tasks| tasks.len() == 1).await;
+    handle.stop_task(agent).await.unwrap();
+    until(&mut session, &mut tasks, |event, _| {
+        matches!(
+            event,
+            SessionEvent::Message(Message::Known(KnownMessage::System(System::Init { .. })))
+        )
+    })
+    .await;
+    handle.interrupt().await.unwrap();
+    let mut interrupted = None;
+    until(&mut session, &mut tasks, |event, _| match event {
+        SessionEvent::Message(Message::Known(KnownMessage::Result(result))) => {
+            interrupted = Some(result.clone());
+            true
+        }
+        _ => false,
+    })
+    .await;
+    let interrupted = interrupted.unwrap();
+    assert!(interrupted.is_error, "{interrupted:?}");
+    assert!(!interrupted.extra.contains_key("user_message_uuids"));
+    tokio::time::sleep(Duration::from_secs(3)).await;
+    assert!(!reacted.exists(), "the interrupted turn ran no tool");
+    assert!(tasks.is_empty());
+    for work in [
+        format!("sleep {shell_wait}"),
+        format!("time.sleep.{agent_wait}."),
+    ] {
+        let left = std::process::Command::new("pgrep")
+            .args(["-f", &work])
+            .output()
+            .unwrap();
+        assert!(
+            !left.status.success(),
+            "the stopped work left nothing running: {work}"
+        );
+    }
+    let stopped = session.pause().await.unwrap();
+    assert!(
+        stopped.graceful,
+        "with nothing left running, the CLI exits by itself"
+    );
+    backend.stop().await;
+}

@@ -30,6 +30,13 @@ def emit(value):
         value["session_id"] = session_id
     print(json.dumps(value), flush=True)
 
+def unrequested_interrupted_result():
+    value = recorded("result")
+    value.update(subtype="error_during_execution", is_error=True, terminal_reason="aborted_streaming",
+        num_turns=1, origin={"kind":"task-notification"})
+    value.pop("user_message_uuids", None)
+    emit(value)
+
 sent_turn = None
 def result(interrupted=False):
     value = recorded("result")
@@ -56,6 +63,23 @@ def save(message):
         with open(project / f"{session_id}.jsonl", "a") as stream:
             stream.write(json.dumps({"type":"user","uuid":message.get("uuid"),"message":message["message"]}) + "\n")
 
+import threading
+output = threading.Lock()
+background = []
+# A stopped subagent's notification turn, running until it's interrupted.
+notification_turn = False
+
+def background_changed():
+    emit({"type":"system","subtype":"background_tasks_changed","session_id":session_id,"tasks":list(background)})
+
+def start_notification_turn():
+    global notification_turn
+    with output:
+        notification_turn = True
+        report({"kind":"notification_turn"})
+        emit(recorded("system"))
+        emit(recorded("stream_event"))
+
 def question():
     emit({"type":"control_request","request_id":"question","request":{
         "subtype":"can_use_tool","tool_name":"Bash","input":{"command":"custom-tool"},
@@ -74,6 +98,23 @@ for line in sys.stdin:
         subtype = request["subtype"]
         report({"kind":subtype})
         if subtype == "interrupt" and ignore_interrupt:
+            continue
+        if subtype == "stop_task":
+            task_id = request["task_id"]
+            report({"kind":"stop_task","task_id":task_id})
+            if os.environ.get("DEVORA_FAKE_STOP_FAILS") == task_id:
+                emit({"type":"control_response","response":{"subtype":"error","request_id":message["request_id"],"error":"the task won't stop"}})
+                continue
+            task = next(task for task in background if task["task_id"] == task_id)
+            background.remove(task)
+            emit({"type":"control_response","response":{"subtype":"success","request_id":message["request_id"],"response":{}}})
+            emit({"type":"system","subtype":"task_notification","session_id":session_id,"task_id":task_id,"status":"stopped"})
+            background_changed()
+            if task["task_type"] == "local_agent":
+                # As the CLI does: a turn of its own about the stopped subagent, here
+                # optionally starting only after a delay.
+                delay = float(os.environ.get("DEVORA_FAKE_AGENT_TURN_DELAY", "0"))
+                threading.Timer(delay, start_notification_turn).start()
             continue
         if subtype == "set_model" and request.get("model") == "hang":
             emit({"type":"fake_control_waiting"})
@@ -94,7 +135,10 @@ for line in sys.stdin:
         else:
             emit({"type":"control_response","response":{"subtype":"success","request_id":message["request_id"],
                 "response":{"subtype":subtype,"mode":request.get("mode"),"model":request.get("model")}}})
-            if subtype == "interrupt":
+            if subtype == "interrupt" and notification_turn:
+                notification_turn = False
+                unrequested_interrupted_result()
+            elif subtype == "interrupt":
                 result(True)
     elif kind == "control_response":
         if visual_tool:
@@ -170,6 +214,14 @@ for line in sys.stdin:
             unrequested_result()
             emit(recorded("stream_event"))
             emit({"type":"fake_stream_ready"})
+        elif text.startswith("background-work"):
+            # Background work as the CLI lists it: "background-work" starts a shell
+            # and a subagent, "background-work:shell" only the shell.
+            background.append({"task_id":"shell-1","task_type":"local_bash","description":"a watcher"})
+            if text != "background-work:shell":
+                background.append({"task_id":"agent-1","task_type":"local_agent","description":"a CI wait"})
+            background_changed()
+            result()
         elif text == "unrequested-result":
             unrequested_result()
             emit(recorded("stream_event"))
@@ -208,3 +260,5 @@ for line in sys.stdin:
             emit(recorded("assistant"))
             result()
 report({"kind":"eof"})
+# As the CLI does after an interrupted turn: it exits by itself, with code 1.
+sys.exit(int(os.environ.get("DEVORA_FAKE_EOF_EXIT", "0")))

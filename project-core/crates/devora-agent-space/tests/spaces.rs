@@ -1265,6 +1265,7 @@ fn notices(fixture: &Fixture) -> Vec<serde_json::Value> {
                 && entry["message"]["content"].as_str().is_some_and(|text| {
                     text.starts_with("Devora restarted your session")
                         || text.starts_with("Devora had to stop your session")
+                        || text.starts_with("Devora paused you")
                 })
         })
         .collect()
@@ -1975,4 +1976,135 @@ async fn compact_now_saves_the_memory_then_compacts_under_the_threshold_once_at_
         Some(&devora_agent_space::CompactionProgress::Idle),
         "{progress:?}"
     );
+}
+
+/// Launches in the fixture's run, starts the fake CLI's background work
+/// (`prompt`), lets the turn end, then pauses after it, as the Pause button does.
+async fn pause_with_background_work(
+    fixture: &Fixture,
+    context: &LaunchContext,
+    log: &Arc<Log>,
+    prompt: &str,
+) -> Vec<SpaceEvent> {
+    let mut running = Space::open(&fixture.profile, "Delta")
+        .unwrap()
+        .start(context, log.clone(), &fixture.run)
+        .await
+        .unwrap();
+    running.handle().send_turn(prompt.into()).await.unwrap();
+    let mut rows = std::collections::BTreeMap::new();
+    turn_end(&mut running, &mut rows).await;
+    let pausing = tokio::spawn(running.handle().pause_after_turn());
+    let mut updates = vec![];
+    tokio::time::timeout(Duration::from_secs(15), async {
+        while let Some(update) = running.next_update().await {
+            updates.push(update);
+        }
+    })
+    .await
+    .expect("the pause ends the space");
+    pausing.await.unwrap().unwrap();
+    updates
+}
+
+fn report_kinds(fixture: &Fixture) -> Vec<String> {
+    std::fs::read_to_string(fixture.root.path().join("report.jsonl"))
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
+        .filter(|entry| {
+            ["stop_task", "notification_turn", "interrupt", "eof"]
+                .contains(&entry["kind"].as_str().unwrap())
+        })
+        // The fake reports every control request by kind, and a stopped task again with its ID.
+        .filter(|entry| entry["kind"] != "stop_task" || entry["task_id"].is_string())
+        .map(|entry| match entry["task_id"].as_str() {
+            Some(task) => format!("stop_task {task}"),
+            None => entry["kind"].as_str().unwrap().to_owned(),
+        })
+        .collect()
+}
+
+// A pause stops the agent's background work through the CLI, shells first, cuts
+// a stopped subagent's notification turn short (else the agent could start the
+// work again), and only then closes the input, so the CLI exits by itself. The
+// next launch tells the agent exactly what was stopped. With
+// `DEVORA_FAKE_AGENT_TURN_DELAY` that turn starts only after the last
+// `stop_task` returns, and the input must still stay open for it.
+#[tokio::test]
+async fn a_pause_stops_background_work_first_and_the_notice_names_it() {
+    for late in [false, true] {
+        let fixture = Fixture::new();
+        let mut context = fixture.context();
+        if late {
+            context
+                .environment
+                .insert("DEVORA_FAKE_AGENT_TURN_DELAY".into(), "0.5".into());
+        }
+        let log = Arc::new(Log::open(&fixture.root.path().join("log")).unwrap());
+        fixture.create(fixture.form("Delta")).unwrap();
+        launch_and_settle(&fixture, &context, &log, &fixture.run).await;
+        let updates = pause_with_background_work(&fixture, &context, &log, "background-work").await;
+        let kinds = report_kinds(&fixture);
+        let start = kinds
+            .iter()
+            .position(|kind| kind.starts_with("stop_task"))
+            .unwrap();
+        assert_eq!(
+            kinds[start..],
+            [
+                "stop_task shell-1",
+                "stop_task agent-1",
+                "notification_turn",
+                "interrupt",
+                "eof"
+            ],
+            "late: {late}"
+        );
+        let stopped = updates
+            .iter()
+            .find_map(|update| match update {
+                SpaceEvent::Session(SessionEvent::Stopped(info)) => Some(info.clone()),
+                _ => None,
+            })
+            .unwrap();
+        assert!(
+            stopped.graceful,
+            "nothing was left running, so the CLI exited by itself"
+        );
+        assert_eq!(
+            launch_and_settle(&fixture, &context, &log, &fixture.run).await,
+            vec![(
+                "Devora paused the agent and stopped a watcher (shell), a CI wait (subagent): asked it to re-establish what it needs".into(),
+                false
+            )]
+        );
+        let sent = notices(&fixture);
+        assert_eq!(sent.len(), 1);
+        assert!(sent[0]["message"]["content"]
+            .as_str()
+            .unwrap()
+            .contains("a watcher (shell), a CI wait (subagent)"));
+    }
+}
+
+// A task that won't stop leaves the pause to the worker's grace and forced
+// stop, and the notice still names everything the pause set out to stop.
+#[tokio::test]
+async fn a_task_that_wont_stop_falls_back_to_the_pause_and_its_notice_still_names_the_work() {
+    let fixture = Fixture::new();
+    let mut context = fixture.context();
+    context
+        .environment
+        .insert("DEVORA_FAKE_STOP_FAILS".into(), "shell-1".into());
+    let log = Arc::new(Log::open(&fixture.root.path().join("log")).unwrap());
+    fixture.create(fixture.form("Delta")).unwrap();
+    launch_and_settle(&fixture, &context, &log, &fixture.run).await;
+    let updates =
+        pause_with_background_work(&fixture, &context, &log, "background-work:shell").await;
+    assert!(updates.iter().any(|update| matches!(update,
+        SpaceEvent::Session(SessionEvent::Warning(warning)) if warning.contains("couldn't stop a background task"))));
+    let rows = launch_and_settle(&fixture, &context, &log, &fixture.run).await;
+    assert_eq!(rows.len(), 1);
+    assert!(rows[0].0.contains("stopped a watcher (shell)"), "{rows:?}");
 }
