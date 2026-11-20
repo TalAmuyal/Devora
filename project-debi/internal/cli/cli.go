@@ -126,7 +126,7 @@ func runPR(args []string) error {
 
 	switch subcommand {
 	case "-h", "--help":
-		fmt.Println("usage: debi pr <subcommand>\n\nSubcommands:\n  check       Check the status of the PR for the current branch\n  submit      Commit, create tracker task and GitHub PR\n  close       Complete tracker task, delete branches\n  auto-merge  Manage the per-repo/profile/global pr.auto-merge default")
+		fmt.Println("usage: debi pr <subcommand>\n\nSubcommands:\n  check       Check the status of the PR for the current branch\n  submit      Commit (if needed), create tracker task and GitHub PR\n  close       Complete tracker task, delete branches\n  auto-merge  Manage the per-repo/profile/global pr.auto-merge default")
 		return nil
 	case "check":
 		return runPRCheck(subArgs)
@@ -187,6 +187,10 @@ const submitUsage = `usage: debi pr submit -m <message> [flags]
 Commit local changes, create a tracker task (if configured), create a feature
 branch, push it, open a GitHub PR, and optionally enable auto-merge. Must be
 run from a detached HEAD.
+
+Stages the whole working tree, wherever in it this runs. With nothing to
+commit, it submits the commits already on HEAD that origin's default branch
+(origin/HEAD) doesn't have, and fails if there are none.
 
 Auto-merge default comes from config (pr.auto-merge, profile-overridable,
 defaults to on when unset). Use --blocked to disable or --auto-merge to
@@ -379,7 +383,7 @@ func runSubmit(args []string) error {
 		return nil
 	}
 
-	if errors.Is(err, submit.ErrNotDetached) {
+	if errors.Is(err, submit.ErrNotDetached) || errors.Is(err, submit.ErrNothingToSubmit) || errors.Is(err, git.ErrNoOriginDefault) {
 		return &UsageError{Message: err.Error()}
 	}
 	if wrapped, ok := handleCredentialNotFound(err); ok {

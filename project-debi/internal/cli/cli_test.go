@@ -1126,6 +1126,22 @@ func TestRun_Submit_ErrNotDetached_ReturnsUsageError(t *testing.T) {
 	}
 }
 
+func TestRun_Submit_NothingToSubmitOrNoOriginDefault_ReturnsUsageError(t *testing.T) {
+	for _, sentinel := range []error{submit.ErrNothingToSubmit, git.ErrNoOriginDefault} {
+		stubSubmitRun(t, func(io.Writer, submit.Options) error {
+			return fmt.Errorf("%w: detail", sentinel)
+		})
+		err := Run([]string{"pr", "submit", "-m", "msg"})
+		var usageErr *UsageError
+		if !errors.As(err, &usageErr) {
+			t.Fatalf("expected UsageError for %v, got %T: %v", sentinel, err, err)
+		}
+		if !strings.Contains(err.Error(), sentinel.Error()) {
+			t.Fatalf("expected the message to keep %q, got: %s", sentinel.Error(), err.Error())
+		}
+	}
+}
+
 func TestRun_Submit_NotFoundError_PrintsHintAndReturnsEmptyUsageError(t *testing.T) {
 	stubSubmitRun(t, func(io.Writer, submit.Options) error {
 		return &credentials.NotFoundError{Provider: "asana", Service: "devora-asana", Account: "alice"}

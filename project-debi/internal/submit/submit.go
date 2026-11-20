@@ -1,4 +1,4 @@
-// Package submit implements `debi pr submit`: commit local changes, create a tracker task (if configured), create a feature branch, push it, open a GitHub PR, and optionally enable auto-merge.
+// Package submit implements `debi pr submit`: commit local changes (if any; earlier commits alone may be submitted), create a tracker task (if configured), create a feature branch, push it, open a GitHub PR, and optionally enable auto-merge.
 //
 // Run is the entry point.
 // All external dependencies are injected via package-level function vars so tests can stub them without touching the filesystem, network, or subprocess layer.
@@ -28,6 +28,10 @@ import (
 // The CLI layer detects it via errors.Is and translates to *cli.UsageError.
 var ErrNotDetached = errors.New("submit requires detached HEAD")
 
+// ErrNothingToSubmit is returned when the tree is clean and HEAD has no commits that origin's default branch lacks.
+// The CLI layer translates it to *cli.UsageError, as with ErrNotDetached.
+var ErrNothingToSubmit = errors.New("nothing to submit")
+
 // Options controls submit behavior.
 type Options struct {
 	Message        string // required: commit message, task title, PR title.
@@ -56,12 +60,13 @@ type JSONOutput struct {
 // --- Stubbable dependencies ---
 
 var (
-	getCurrentBranchOrDetached = defaultCurrentBranchOrDetached
-	addAllAndCommit            = git.AddAllAndCommit
-	generateBranchName         = git.GenerateBranchName
-	createAndCheckoutBranch    = git.CreateAndCheckoutBranch
-	setBranchConfig            = git.SetBranchConfig
-	pushSetUpstream            = git.PushSetUpstream
+	getCurrentBranchOrDetached  = defaultCurrentBranchOrDetached
+	commitAllIfAny              = git.CommitAllIfAny
+	commitsAheadOfOriginDefault = git.CommitsAheadOfOriginDefault
+	generateBranchName          = git.GenerateBranchName
+	createAndCheckoutBranch     = git.CreateAndCheckoutBranch
+	setBranchConfig             = git.SetBranchConfig
+	pushSetUpstream             = git.PushSetUpstream
 
 	getGHRepo         = gh.GetRepo
 	createGHPR        = gh.CreatePR
@@ -86,7 +91,7 @@ var stderr io.Writer = os.Stderr
 // Tests replace getCurrentBranchOrDetached with a zero-arg stub, so this adapter keeps the stubbable-var signature uniform.
 func defaultCurrentBranchOrDetached() (string, error) {
 	return git.CurrentBranchOrDetached()
-}//
+} //
 
 // defaultGetRepoAutoMerge reads the per-repo "devora.pr.auto-merge" local git config.
 // Used by shouldEnableAutoMerge via getRepoAutoMerge so the config package can stay free of internal/git imports.
@@ -172,7 +177,8 @@ func Run(w io.Writer, opts Options) error {
 			process.WithStderr(&commitStderr),
 		)
 	}
-	if err := addAllAndCommit(opts.Message, commitOpts...); err != nil {
+	committed, err := commitAllIfAny(opts.Message, commitOpts...)
+	if err != nil {
 		if !opts.Verbose {
 			if s := commitStdout.String(); s != "" {
 				fmt.Fprint(stderr, s)
@@ -184,7 +190,19 @@ func Run(w io.Writer, opts Options) error {
 		fmt.Fprintln(stderr, style.Error.Render("\u2717 Commit failed"))
 		return fmt.Errorf("commit changes: %w", err)
 	}
-	fmt.Fprintln(progress, style.Success.Render("\u2713 Committed"))
+	if committed {
+		fmt.Fprintln(progress, style.Success.Render("\u2713 Committed"))
+	} else {
+		// Earlier commits on this detached HEAD may be all there is to submit.
+		ahead, defaultBranch, err := commitsAheadOfOriginDefault(execOpts...)
+		if err != nil {
+			return err
+		}
+		if ahead == 0 {
+			return fmt.Errorf("%w: no changes and no commits ahead of origin/%s", ErrNothingToSubmit, defaultBranch)
+		}
+		fmt.Fprintln(progress, style.Success.Render("\u2713 Nothing to commit; submitting the existing commits"))
+	}
 
 	// Resolve tracker. SkipTracker forces nil.
 	var tracker tasktracker.Tracker

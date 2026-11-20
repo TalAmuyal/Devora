@@ -28,7 +28,8 @@ detached HEAD on origin/<default>
          ▼
    ┌──────────────────┐
    │  debi pr submit  │  1. Guard: HEAD must be detached
-   │   -m "..."       │  2. git add . && git commit -m "<message>"
+   │   -m "..."       │  2. git add -A && git commit -m "<message>"; with nothing
+   │                  │     staged, no commit, but HEAD must be ahead of origin/HEAD
    │                  │  3. (optional) tracker.CreateTask via tasktracker
    │                  │  4. git checkout -b <prefix>-<slug>; set branch.<name>.task-id
    │                  │  5. git push --set-upstream
