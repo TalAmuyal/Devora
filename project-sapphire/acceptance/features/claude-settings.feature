@@ -21,11 +21,17 @@ Feature: Claude settings and the shared Asana token
     Then the profile "Work" config should not have "claude.sonnet-model"
     And Claude "sonnet-model" should show "Default" with hint "→ future-model-id"
 
-  Scenario: A model suggestion commits its value
+  Scenario: An unset model tier leaves the model to Claude Code, with no suggestions
     When the user opens the "User Defaults" settings detail
-    And the user switches Claude "opus-model" to "Custom"
-    And the user selects the Claude "opus-model" suggestion "claude-sonnet-5"
-    Then the global config should have the Claude "opus-model" set to "claude-sonnet-5"
+    Then Claude "opus-model" should show "Default" with hint "→ Claude Code default"
+    When the user switches Claude "opus-model" to "Custom"
+    Then Claude "opus-model" should offer no suggestions
+
+  Scenario: A permission mode suggestion commits its value
+    When the user opens the "User Defaults" settings detail
+    And the user switches Claude "permission-mode" to "Custom"
+    And the user selects the Claude "permission-mode" suggestion "acceptEdits"
+    Then the global config should have the Claude "permission-mode" set to "acceptEdits"
 
   Scenario: An uncommitted custom draft survives an unrelated write
     When the user opens the "User Defaults" settings detail

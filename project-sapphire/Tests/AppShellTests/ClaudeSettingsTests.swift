@@ -12,7 +12,7 @@ private final class ClaudeScope {
 	func model(queue: SettingsWriteQueue = SettingsWriteQueue()) -> ClaudeSettingsModel {
 		ClaudeSettingsModel(
 			read: { [self] in ClaudeSettings(stored: stored, resolved: inherited.merging(stored) { _, value in value }) },
-			choices: { ClaudeSettingChoices(effortLevels: ["low", "max"], modelSuggestions: ["suggested-id"], permissionModeSuggestions: ["plan"]) },
+			choices: { ClaudeSettingChoices(effortLevels: ["low", "max"], permissionModeSuggestions: ["plan"]) },
 			write: { [self] key, value in
 				guard !fail else { return false }
 				writes.append((key, value))

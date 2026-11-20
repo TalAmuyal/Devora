@@ -602,7 +602,7 @@ final class TestBridge {
 				} else {
 					if action == "save", !claude.showsSave(key) { throw BridgeError(status: 409, "the Claude Save button isn't shown") }
 					if action == "suggest" {
-						let suggestions = key == "permission-mode" ? choices.permissionModeSuggestions : choices.modelSuggestions
+						let suggestions = key == "permission-mode" ? choices.permissionModeSuggestions : []
 						guard let label, suggestions.contains(label) else { throw BridgeError(status: 404, "no matching suggestion") }
 						claude.edit(key, label)
 					}
@@ -793,7 +793,7 @@ final class TestBridge {
 						"key": key, "segment": mode.label, "hint": claude.inheritedHint(key),
 						"input": mode == .custom ? claude.input(key) : NSNull(),
 						"showsSave": mode == .custom && claude.showsSave(key),
-						"suggestions": (key == "permission-mode" ? claude.choices?.permissionModeSuggestions : claude.choices?.modelSuggestions) ?? [],
+						"suggestions": (key == "permission-mode" ? claude.choices?.permissionModeSuggestions : nil) ?? [],
 					]
 				},
 			] as [String: Any]

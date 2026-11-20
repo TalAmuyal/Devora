@@ -69,6 +69,12 @@ Then('Claude {string} should show {string} with hint {string}', async function (
   await this.bridge.waitFor(`Claude ${key} to show ${segment} / ${hint}`, () => this.bridge.state(), (s) =>
     s.settings?.scope?.claude?.fields.some((f) => f.key === key && f.segment === segment && f.hint === hint) === true);
 });
+Then('Claude {string} should offer no suggestions', async function (this: SapphireWorld, key: string) {
+  const state = await this.bridge.waitFor(`Claude ${key} in Custom`, () => this.bridge.state(), (s) =>
+    s.settings?.scope?.claude?.fields.some((f) => f.key === key && f.segment === 'Custom') === true);
+  const field = state.settings!.scope!.claude!.fields.find((f) => f.key === key)!;
+  assert.deepEqual(field.suggestions, []);
+});
 Then('Claude {string} should have draft {string}', async function (this: SapphireWorld, key: string, value: string) {
   await this.bridge.waitFor(`Claude ${key} draft`, () => this.bridge.state(), (s) =>
     s.settings?.scope?.claude?.fields.some((f) => f.key === key && f.segment === 'Custom' && f.input === value && f.showsSave) === true);

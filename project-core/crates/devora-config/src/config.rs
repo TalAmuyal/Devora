@@ -163,42 +163,43 @@ pub fn get_git_shortcuts_enabled(profile_path: Option<&str>) -> bool {
 // The resolved values are injected as environment variables by the PTY layer (see commands.rs): the `ANTHROPIC_*` vars are read by Claude Code natively, while `DEVORA_CCC_*` vars are turned into CLI flags by `ccc` (`devora-agent`).
 
 /// One configurable Claude launch setting: its kebab-case config key (under the top-level `claude` object), the environment variable the PTY exports, and the Devora default value.
+/// The model tiers have no Devora default: unset at every scope, their variable isn't exported, and Claude Code picks the model.
 struct ClaudeSettingSpec {
     key: &'static str,
     env_var: &'static str,
-    default: &'static str,
+    default: Option<&'static str>,
 }
 
 const CLAUDE_SETTINGS: [ClaudeSettingSpec; 6] = [
     ClaudeSettingSpec {
         key: "opus-model",
         env_var: "ANTHROPIC_DEFAULT_OPUS_MODEL",
-        default: "claude-opus-4-8",
+        default: None,
     },
     ClaudeSettingSpec {
         key: "sonnet-model",
         env_var: "ANTHROPIC_DEFAULT_SONNET_MODEL",
-        default: "claude-opus-4-8",
+        default: None,
     },
     ClaudeSettingSpec {
         key: "haiku-model",
         env_var: "ANTHROPIC_DEFAULT_HAIKU_MODEL",
-        default: "claude-sonnet-5",
+        default: None,
     },
     ClaudeSettingSpec {
         key: "effort",
         env_var: "DEVORA_CCC_EFFORT",
-        default: "xhigh",
+        default: Some("xhigh"),
     },
     ClaudeSettingSpec {
         key: "default-model",
         env_var: "ANTHROPIC_MODEL",
-        default: "opusplan",
+        default: Some("opusplan"),
     },
     ClaudeSettingSpec {
         key: "permission-mode",
         env_var: "DEVORA_CCC_PERMISSION_MODE",
-        default: "plan",
+        default: Some("plan"),
     },
 ];
 
@@ -206,22 +207,18 @@ const CLAUDE_SETTINGS: [ClaudeSettingSpec; 6] = [
 /// Exported to both UI clients with the settings choices.
 pub const CLAUDE_EFFORT_LEVELS: [&str; 5] = ["low", "medium", "high", "xhigh", "max"];
 
-/// Suggestions only: launch settings accept any non-blank model id or permission mode.
-pub const CLAUDE_MODEL_SUGGESTIONS: [&str; 3] =
-    ["claude-fable-5", "claude-opus-4-8", "claude-sonnet-5"];
+/// Suggestions only: launch settings accept any non-blank permission mode (and any model id).
 pub const CLAUDE_PERMISSION_MODE_SUGGESTIONS: [&str; 3] = ["plan", "acceptEdits", "auto"];
 
 #[derive(Serialize)]
 pub struct ClaudeChoices {
     pub effort_levels: Vec<String>,
-    pub model_suggestions: Vec<String>,
     pub permission_mode_suggestions: Vec<String>,
 }
 
 pub fn claude_setting_choices() -> ClaudeChoices {
     ClaudeChoices {
         effort_levels: CLAUDE_EFFORT_LEVELS.map(str::to_owned).into(),
-        model_suggestions: CLAUDE_MODEL_SUGGESTIONS.map(str::to_owned).into(),
         permission_mode_suggestions: CLAUDE_PERMISSION_MODE_SUGGESTIONS.map(str::to_owned).into(),
     }
 }
@@ -300,7 +297,10 @@ fn resolve_one(
             _ => {} // absent / empty / malformed → fall through
         }
     }
-    ResolvedSetting::Value(spec.default.to_string())
+    match spec.default {
+        Some(default) => ResolvedSetting::Value(default.to_string()),
+        None => ResolvedSetting::None,
+    }
 }
 
 /// Resolves the Claude launch settings for a session and returns the environment variables the PTY should export.
@@ -964,11 +964,11 @@ mod tests {
         let permission_mode = "DEVORA_CCC_PERMISSION_MODE";
         let get = |env: &HashMap<String, String>, k: &str| env.get(k).cloned();
 
-        // 1. No config anywhere -> all Devora defaults are set.
+        // 1. No config anywhere -> Devora's defaults are set; the model tiers have none, so Claude Code picks them.
         let env = claude_launch_env(None);
-        assert_eq!(get(&env, opus).as_deref(), Some("claude-opus-4-8"));
-        assert_eq!(get(&env, sonnet).as_deref(), Some("claude-opus-4-8"));
-        assert_eq!(get(&env, haiku).as_deref(), Some("claude-sonnet-5"));
+        assert!(!env.contains_key(opus));
+        assert!(!env.contains_key(sonnet));
+        assert!(!env.contains_key(haiku));
         assert_eq!(get(&env, effort).as_deref(), Some("xhigh"));
         assert_eq!(get(&env, default_model).as_deref(), Some("opusplan"));
         assert_eq!(get(&env, permission_mode).as_deref(), Some("plan"));
@@ -990,8 +990,8 @@ mod tests {
         )
         .unwrap();
         let env = claude_launch_env(None);
-        assert_eq!(get(&env, opus).as_deref(), Some("claude-fable-5"));
-        assert_eq!(get(&env, sonnet).as_deref(), Some("claude-opus-4-8"));
+        assert_eq!(get(&env, opus).as_deref(), Some("claude-fable-5")); // a value set by the user is exported
+        assert!(!env.contains_key(sonnet)); // absent everywhere -> no default -> omitted
         assert!(!env.contains_key(haiku)); // null -> None -> omitted
         assert_eq!(get(&env, effort).as_deref(), Some("xhigh"));
 
@@ -1008,7 +1008,7 @@ mod tests {
         assert!(!env.contains_key(opus)); // profile null wins -> None
         assert_eq!(get(&env, effort).as_deref(), Some("max"));
         assert!(!env.contains_key(haiku)); // profile absent -> user null -> None
-        assert_eq!(get(&env, sonnet).as_deref(), Some("claude-opus-4-8")); // both absent -> default
+        assert!(!env.contains_key(sonnet)); // both absent -> no default -> omitted
 
         // 4. Malformed values (wrong type, blank string) fall through to the default.
         fs::write(
@@ -1017,7 +1017,7 @@ mod tests {
         )
         .unwrap();
         let env = claude_launch_env(None);
-        assert_eq!(get(&env, opus).as_deref(), Some("claude-opus-4-8"));
+        assert!(!env.contains_key(opus));
         assert_eq!(get(&env, effort).as_deref(), Some("xhigh"));
 
         // 5. read_claude_settings: `stored` distinguishes value / null / absent; `resolved` gives the effective value (string or null=None).
@@ -1037,10 +1037,7 @@ mod tests {
             settings.resolved.get("opus-model"),
             Some(&Value::String("claude-fable-5".into()))
         );
-        assert_eq!(
-            settings.resolved.get("sonnet-model"),
-            Some(&Value::String("claude-opus-4-8".into())) // default
-        );
+        assert_eq!(settings.resolved.get("sonnet-model"), Some(&Value::Null)); // no default: Claude Code's choice
         assert_eq!(settings.resolved.get("haiku-model"), Some(&Value::Null)); // None
 
         // 6. write_claude_setting round-trips value/none/default and preserves siblings.

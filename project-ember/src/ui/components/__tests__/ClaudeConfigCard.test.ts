@@ -10,7 +10,6 @@ const flush = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
 const SETTINGS = {
   choices: {
     effort_levels: ['low', 'medium', 'high', 'xhigh', 'max'],
-    model_suggestions: ['claude-fable-5', 'claude-opus-4-8', 'claude-sonnet-5'],
     permission_mode_suggestions: ['plan', 'acceptEdits', 'auto'],
   },
   stored: { 'opus-model': 'claude-fable-5', 'haiku-model': null },
@@ -79,17 +78,16 @@ function lastSetCall(): Record<string, unknown> | undefined {
 }
 
 describe('createClaudeConfigCard', () => {
-  it('renders effort and suggestions from backend metadata', async () => {
+  it('renders effort and permission suggestions from backend metadata, and no model chips', async () => {
     invokeMock.mockResolvedValue({
       ...SETTINGS,
-      choices: { effort_levels: ['next-effort'], model_suggestions: ['next-model'], permission_mode_suggestions: ['next-permission'] },
+      choices: { effort_levels: ['next-effort'], permission_mode_suggestions: ['next-permission'] },
     });
     const card = await mountCard();
-    expect(row(card, 0).textContent).toContain('next-model');
+    expect(row(card, 0).querySelectorAll('.config-chip').length).toBe(0);
     expect(row(card, 3).textContent).toContain('next-effort');
     clickSegment(row(card, 5), 'Custom');
     expect(row(card, 5).textContent).toContain('next-permission');
-    expect(row(card, 0).textContent).not.toContain('claude-fable-5');
   });
 
   it('renders one row per setting and loads from get_claude_settings', async () => {
@@ -189,20 +187,6 @@ describe('createClaudeConfigCard', () => {
       key: 'sonnet-model',
       state: 'value',
       value: 'claude-opus-4-7',
-    });
-  });
-
-  it('commits a suggestion chip click', async () => {
-    const card = await mountCard();
-    const chip = row(card, 0).querySelector<HTMLButtonElement>('.config-chip')!;
-    const expected = chip.textContent;
-    chip.click();
-    await flush();
-    expect(lastSetCall()).toEqual({
-      profilePath: null,
-      key: 'opus-model',
-      state: 'value',
-      value: expected,
     });
   });
 

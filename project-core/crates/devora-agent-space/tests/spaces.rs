@@ -542,6 +542,25 @@ fn a_held_creation_keeps_the_catalogue_available_for_other_spaces() {
 }
 
 #[test]
+fn with_no_model_tier_set_an_agent_launches_with_none_and_claude_code_picks() {
+    let fixture = Fixture::new();
+    std::fs::write(&fixture.global, json!({}).to_string()).unwrap();
+    let space = fixture.create(fixture.form("Delta")).unwrap();
+    let options = space.session_options(&fixture.context()).unwrap();
+    for tier in [
+        "ANTHROPIC_DEFAULT_OPUS_MODEL",
+        "ANTHROPIC_DEFAULT_SONNET_MODEL",
+        "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+    ] {
+        assert!(
+            options.settings["env"].get(tier).is_none(),
+            "{tier} in {}",
+            options.settings
+        );
+    }
+}
+
+#[test]
 fn profile_model_aliases_reach_inline_settings_and_explicit_host_values_win() {
     let fixture = Fixture::new();
     std::fs::write(
