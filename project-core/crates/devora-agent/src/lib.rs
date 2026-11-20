@@ -3,6 +3,8 @@
 //! [`ccc`] turns a `ccc` command line into what to run: Claude Code with Devora's plugins, the effort and permission mode Devora resolved for the session, and Devora's telemetry defaults.
 //! Today the session's settings arrive as `DEVORA_CCC_*` environment variables, injected into Ember's terminals from the user and profile config.
 
+/// The models Claude Code offers, from its initialize reply.
+pub mod models;
 /// Typed wire messages and forward-compatible parsing, verified against recorded CLI fixtures.
 pub mod protocol;
 /// Persistent process lifecycle, interactive control and in-process Judgess.

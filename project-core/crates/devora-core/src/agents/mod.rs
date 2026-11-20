@@ -4,6 +4,7 @@
 mod events;
 mod global_pause;
 mod launch;
+mod models;
 mod operations;
 mod running;
 
@@ -67,6 +68,8 @@ struct Inner {
     shutdown_problems: Vec<String>,
     /// The launch of the latest open, for reopening an agent from Keep paused.
     launch: Option<LaunchContext>,
+    /// The models each profile's agents are offered (`models`).
+    models: BTreeMap<PathBuf, models::Cached>,
     /// This app process, which an agent launched in another one was restarted
     /// from (its restart notice, `devora_agent_space::AppRun`).
     run: AppRun,
@@ -98,6 +101,7 @@ impl Agents {
             changed: Arc::new(Notify::new()),
             shutdown_problems: Vec::new(),
             launch: None,
+            models: BTreeMap::new(),
             run: AppRun::new(),
         }));
         let (stop, stopped) = oneshot::channel();
@@ -1036,6 +1040,9 @@ async fn run_session(
                 if let Some(error) = failed {
                     let _ = running.pause().await;
                     return Err(error);
+                }
+                if let SpaceEvent::Session(SessionEvent::Ready { capabilities, .. }) = &event {
+                    models::learned(inner, log, &key.profile, devora_agent::models::decode(capabilities));
                 }
                 publish(inner, state, key, generation, event);
             }

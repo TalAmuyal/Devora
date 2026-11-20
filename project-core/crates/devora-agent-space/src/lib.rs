@@ -476,17 +476,7 @@ impl Space {
             Some(choice) => (choice.model.clone(), choice.effort.clone()),
             None => (required("default-model")?, Some(required("effort")?)),
         };
-        let mut behavior = context.settings.clone();
-        let env = behavior
-            .as_object_mut()
-            .ok_or("settings must be a JSON object")?
-            .entry("env")
-            .or_insert_with(|| serde_json::json!({}))
-            .as_object_mut()
-            .ok_or("settings.env must be a JSON object")?;
-        for (key, value) in settings.model_alias_env() {
-            env.entry(key).or_insert(Value::String(value));
-        }
+        let behavior = launch_settings(context, &settings)?;
         Ok(SessionOptions {
             program: context.program.clone(),
             working_directory: self.path.clone(),
@@ -502,6 +492,30 @@ impl Space {
             settings: behavior,
             environment: context.environment.clone(),
             resume: Some(self.resume.clone()),
+        })
+    }
+
+    /// How to launch the CLI as an agent of `profile` would be, for asking it about itself rather than running a session
+    /// (`devora_agent::models`): that profile's settings, the host's environment, in the profile's directory.
+    pub fn probe_options(
+        context: &LaunchContext,
+        profile: &Path,
+    ) -> Result<SessionOptions, String> {
+        let settings = config::read_claude_settings_in(
+            &context.global_config,
+            Some(profile.to_str().ok_or("profile path is not UTF-8")?),
+        )?;
+        Ok(SessionOptions {
+            program: context.program.clone(),
+            working_directory: profile.to_path_buf(),
+            instructions: Instructions::Append(String::new()),
+            model: String::new(),
+            effort: None,
+            permission_mode: String::new(),
+            plugins: vec![],
+            settings: launch_settings(context, &settings)?,
+            environment: context.environment.clone(),
+            resume: None,
         })
     }
 
@@ -532,4 +546,23 @@ impl Space {
             compaction::Compaction::new(self.db.compact_threshold()?, profile_threshold);
         running::start(self, options, compaction, log, globally_paused, run).await
     }
+}
+
+/// The host's launch settings, with the profile's model tiers in their `env` unless the host set them already.
+fn launch_settings(
+    context: &LaunchContext,
+    settings: &config::ClaudeSettingsResponse,
+) -> Result<Value, String> {
+    let mut behavior = context.settings.clone();
+    let env = behavior
+        .as_object_mut()
+        .ok_or("settings must be a JSON object")?
+        .entry("env")
+        .or_insert_with(|| serde_json::json!({}))
+        .as_object_mut()
+        .ok_or("settings.env must be a JSON object")?;
+    for (key, value) in settings.model_alias_env() {
+        env.entry(key).or_insert(Value::String(value));
+    }
+    Ok(behavior)
 }

@@ -1302,3 +1302,148 @@ async fn pinned_cli_stops_background_work_and_its_interrupted_turn_runs_no_tool(
     );
     backend.stop().await;
 }
+
+/// Gives the fixture's home a user MCP server and a user-installed plugin with an MCP server of its own, each touching
+/// a marker when it starts; the fixture's settings already give SessionStart hooks (`user-loaded`, `project-loaded`).
+fn give_the_user_mcp_servers_and_a_plugin(fixture: &Fixture) {
+    let marker = |name: &str| fixture.root.path().join(name);
+    let server = |name: &str| json!({"type": "stdio", "command": "/bin/sh", "args": ["-c", format!("touch {}; cat >/dev/null", marker(name).display())]});
+    let mut config: Value = std::fs::read_to_string(fixture.home.join(".claude.json"))
+        .ok()
+        .and_then(|text| serde_json::from_str(&text).ok())
+        .unwrap_or_else(|| json!({}));
+    config["mcpServers"] = json!({"user-server": server("user-mcp-started")});
+    std::fs::write(fixture.home.join(".claude.json"), config.to_string()).unwrap();
+    let marketplace = fixture.root.path().join("marketplace");
+    let plugin = marketplace.join("probe-plugin");
+    std::fs::create_dir_all(marketplace.join(".claude-plugin")).unwrap();
+    std::fs::create_dir_all(plugin.join(".claude-plugin")).unwrap();
+    std::fs::write(
+        marketplace.join(".claude-plugin/marketplace.json"),
+        json!({"name": "local", "owner": {"name": "probe"}, "plugins": [{"name": "probe-plugin", "source": "./probe-plugin"}]}).to_string(),
+    )
+    .unwrap();
+    std::fs::write(
+        plugin.join(".claude-plugin/plugin.json"),
+        json!({"name": "probe-plugin", "version": "1.0.0"}).to_string(),
+    )
+    .unwrap();
+    std::fs::write(
+        plugin.join(".mcp.json"),
+        json!({"mcpServers": {"plugin-server": server("plugin-mcp-started")}}).to_string(),
+    )
+    .unwrap();
+    let settings_path = fixture.home.join(".claude/settings.json");
+    let mut settings: Value =
+        serde_json::from_str(&std::fs::read_to_string(&settings_path).unwrap()).unwrap();
+    settings["extraKnownMarketplaces"] =
+        json!({"local": {"source": {"source": "directory", "path": marketplace}}});
+    settings["enabledPlugins"] = json!({"probe-plugin@local": true});
+    std::fs::write(&settings_path, settings.to_string()).unwrap();
+}
+
+/// Whether a marker a background process touches appears, within a bounded number of looks: MCP servers start after
+/// the initialize reply.
+fn appears(path: &std::path::Path) -> bool {
+    (0..100).any(|_| {
+        let there = path.exists();
+        if !there {
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        there
+    })
+}
+
+/// An initialize-only launch with no isolation flags, as the probe would be without them; returns once it has replied.
+async fn plain_initialize(fixture: &Fixture, options: &SessionOptions) {
+    let mut child = Command::new(&options.program)
+        .args([
+            "-p",
+            "--input-format",
+            "stream-json",
+            "--output-format",
+            "stream-json",
+            "--verbose",
+        ])
+        .env_clear()
+        .envs(&options.environment)
+        .current_dir(&fixture.work)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .kill_on_drop(true)
+        .spawn()
+        .unwrap();
+    let mut input = child.stdin.take().unwrap();
+    let mut output = BufReader::new(child.stdout.take().unwrap()).lines();
+    input
+        .write_all(b"{\"type\":\"control_request\",\"request_id\":\"plain\",\"request\":{\"subtype\":\"initialize\",\"hooks\":{}}}\n")
+        .await
+        .unwrap();
+    tokio::time::timeout(Duration::from_secs(30), async {
+        while let Some(line) = output.next_line().await.unwrap() {
+            if line.contains("\"control_response\"") {
+                break;
+            }
+        }
+    })
+    .await
+    .expect("plain initialize deadline");
+    drop(input);
+    let _ = tokio::time::timeout(Duration::from_secs(20), child.wait()).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires CI-pinned Claude CLI, Node and Sapphire npm dependencies"]
+async fn listing_the_models_starts_none_of_the_users_hooks_mcp_servers_or_plugins_and_saves_no_session(
+) {
+    check_pin().await;
+    let server_root = tempfile::tempdir().unwrap();
+    let backend = Backend::start(server_root.path()).await;
+    let markers = [
+        "user-loaded",
+        "project-loaded",
+        "user-mcp-started",
+        "plugin-mcp-started",
+    ];
+
+    // The setup starts each of them in a plain launch, so their absence below is the probe's doing.
+    let control = Fixture::new();
+    give_the_user_mcp_servers_and_a_plugin(&control);
+    let options = control.options(backend.port, Instructions::Append(String::new()));
+    plain_initialize(&control, &options).await;
+    let started: Vec<_> = markers
+        .iter()
+        .filter(|name| appears(&control.root.path().join(name)))
+        .collect();
+    assert_eq!(
+        started.len(),
+        markers.len(),
+        "the plain launch should start them all, started only {started:?}"
+    );
+
+    let fixture = Fixture::new();
+    give_the_user_mcp_servers_and_a_plugin(&fixture);
+    let mut options = fixture.options(backend.port, Instructions::Append(String::new()));
+    options.settings = json!({});
+    let list = devora_agent::models::discover(&options).await.unwrap();
+    assert!(!list.models.is_empty(), "{list:?}");
+    assert!(list.cli_version.is_some());
+    for name in markers {
+        assert!(
+            !fixture.root.path().join(name).exists(),
+            "the probe started {name}"
+        );
+    }
+    let sessions = fixture.home.join(".claude/sessions");
+    let left: Vec<_> = std::fs::read_dir(&sessions)
+        .map(|entries| {
+            entries
+                .filter_map(Result::ok)
+                .map(|e| e.file_name())
+                .collect()
+        })
+        .unwrap_or_default();
+    assert!(left.is_empty(), "the probe left session files: {left:?}");
+    backend.stop().await;
+}

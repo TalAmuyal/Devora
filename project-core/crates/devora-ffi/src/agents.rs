@@ -70,6 +70,18 @@ impl AgentCreationForm {
     }
 }
 
+/// A model Claude Code offers an agent: `value` is what to store and pass (an alias such as `opus` follows the CLI to
+/// newer models), `resolved_model` what it resolves to today.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct AgentModelOption {
+    pub value: String,
+    pub resolved_model: Option<String>,
+    pub display_name: String,
+    pub description: Option<String>,
+    /// Lowest first; empty when it takes no effort.
+    pub effort_levels: Vec<String>,
+}
+
 impl AgentLaunch {
     fn context(self, global_config: PathBuf) -> Result<LaunchContext, CoreError> {
         let settings = serde_json::from_str(&self.settings_json)
@@ -550,6 +562,30 @@ impl DevoraCore {
     ) -> Result<(), CoreError> {
         self.agents.send_turn(tab, generation, text).await?;
         Ok(())
+    }
+    /// The models an agent of the profile is offered, from the CLI launched with `launch` (cached per profile and CLI
+    /// version, and refreshed daily): its aliases with what each resolves to, then any other models its login offers.
+    pub async fn agent_model_options(
+        &self,
+        profile_path: String,
+        launch: AgentLaunch,
+    ) -> Result<Vec<AgentModelOption>, CoreError> {
+        let context = launch.context(self.config_path.clone())?;
+        let list = self
+            .agents
+            .model_options(Path::new(&profile_path), context)
+            .await?;
+        Ok(list
+            .models
+            .into_iter()
+            .map(|model| AgentModelOption {
+                value: model.value,
+                resolved_model: model.resolved_model,
+                display_name: model.display_name,
+                description: model.description,
+                effort_levels: model.effort_levels,
+            })
+            .collect())
     }
     pub async fn interrupt_agent(&self, tab: u64, generation: u64) -> Result<(), CoreError> {
         self.agents.interrupt(tab, generation).await?;
