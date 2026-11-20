@@ -14,7 +14,7 @@ Every reader takes the version from here:
 
 Dependabot (`.github/dependabot.yml`) checks weekly and opens at most one PR, for this directory only, labelled `skip-changelog`.
 Each bump is a PR of its own, never batched with other work, so its CI is about the new version alone.
-Its paths count as affecting both apps (`scripts/ci/sapphire-affected.sh`, `scripts/ci/ember-affected.sh`), so the bump runs both apps' CI, about 47 macOS minutes.
+Its manifest is a build manifest, which the module map (`scripts/ci/modules.toml`) treats as affecting every app, so the bump runs both apps' CI, about 47 macOS minutes.
 
 When a bump's CI is green, it's merged as it is.
 

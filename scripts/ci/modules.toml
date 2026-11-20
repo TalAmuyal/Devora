@@ -1,0 +1,94 @@
+# The modules CI selects tests by (ADR-015): each module's own paths and the inputs no build graph shows.
+# `mise run ci-modules` derives scripts/ci/modules.lock.json from this file, the build graphs and the bundler's lists;
+# scripts/ci/affected.sh selects from that lock. Paths are relative to the repository root: a directory ends in `/`,
+# anything else is one file.
+#
+# A changed path is matched in this order:
+# 1. `nothing`: affects no test (its `names` match a file of that name in any directory).
+# 2. `everything`, or a build manifest (`manifests`, by file name): runs every module.
+# 3. A module whose inputs hold it: runs that module's jobs.
+# 4. Anything else is unmapped, and runs every module (scripts/ci/modules.test.sh keeps every tracked file mapped).
+
+[nothing]
+paths = [
+	"docs/",
+	"scripts/hooks/",
+	".github/workflows/cd.yml",
+	".github/workflows/changelog.yml",
+	".github/workflows/auto-tag.yml",
+	"AGENTS.md",
+	# Bundled, but neither app reads it at runtime or in a test, and nearly every pull request touches it.
+	"CHANGELOG.md",
+	"CONTRIBUTING.md",
+	"LICENSE",
+	"README.md",
+	"SECURITY.md",
+	"THIRD_PARTY_LICENSES.md",
+	"cut-release.sh",
+]
+names = ["CLAUDE.md"]
+
+[everything]
+paths = [
+	".github/",
+	".editorconfig",
+	".gitignore",
+	"mise.toml",
+	"scripts/ci/",
+	# What the derivation reads: a change to it can change the lock.
+	"bundler/macos-ember/populate-app-resources.sh",
+]
+manifests = [
+	"Cargo.lock",
+	"Cargo.toml",
+	"Package.resolved",
+	"Package.swift",
+	"go.mod",
+	"go.sum",
+	"mise.toml",
+	"package-lock.json",
+	"package.json",
+]
+
+[modules.sapphire]
+paths = ["project-sapphire/"]
+jobs = ["sapphire"]
+# Its app bundle: what bundler/macos-ember/populate-app-resources.sh --app sapphire packs.
+bundle = "sapphire"
+# The mise tasks' `sources` in this file are its build inputs.
+mise = "project-sapphire/mise.toml"
+# DevoraCoreFFI.xcframework is built from this crate (scripts/build-core.sh).
+crates = ["project-core/crates/devora-ffi/Cargo.toml"]
+inputs = [
+	# Its acceptance tests import Ember's fixture helpers.
+	"project-ember/tests/support/",
+	"acceptance/",
+	"bundler/",
+	"scripts/",
+	"themes/",
+	"web-renderer/",
+	"VERSION",
+	"project-code-cleanup/",
+	"project-detached-flow/",
+	"project-team-work/",
+]
+
+[modules.ember]
+paths = ["project-ember/"]
+jobs = ["test-ember", "test-ember-unit", "e2e-ember"]
+bundle = "ember"
+mise = "project-ember/mise.toml"
+crates = ["project-ember/src-tauri/Cargo.toml"]
+inputs = [
+	"acceptance/",
+	"bundler/",
+	"scripts/",
+	"themes/",
+	"web-renderer/",
+	"VERSION",
+	# The installer installs Ember's release.
+	"install.sh",
+	"project-code-cleanup/",
+	"project-detached-flow/",
+	"project-team-work/",
+]
