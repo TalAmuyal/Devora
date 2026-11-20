@@ -20,12 +20,11 @@ pub struct ClaudeSettings {
     pub resolved: HashMap<String, ClaudeValue>,
 }
 
-/// Choices owned by the Rust configuration module; model and permission suggestions are not validation lists.
+/// Choices owned by the Rust configuration module; permission suggestions are not a validation list.
 #[derive(Debug, PartialEq, uniffi::Record)]
 pub struct ClaudeSettingChoices {
     /// Lowest to highest.
     pub effort_levels: Vec<String>,
-    pub model_suggestions: Vec<String>,
     pub permission_mode_suggestions: Vec<String>,
 }
 
@@ -79,7 +78,6 @@ impl DevoraCore {
         let choices = config::claude_setting_choices();
         Ok(ClaudeSettingChoices {
             effort_levels: choices.effort_levels,
-            model_suggestions: choices.model_suggestions,
             permission_mode_suggestions: choices.permission_mode_suggestions,
         })
     }
@@ -152,6 +150,9 @@ mod tests {
         );
         let choices = core.get_claude_setting_choices().unwrap();
         assert_eq!(choices.effort_levels, config::CLAUDE_EFFORT_LEVELS);
-        assert_eq!(choices.model_suggestions, config::CLAUDE_MODEL_SUGGESTIONS);
+        assert_eq!(
+            choices.permission_mode_suggestions,
+            config::CLAUDE_PERMISSION_MODE_SUGGESTIONS
+        );
     }
 }

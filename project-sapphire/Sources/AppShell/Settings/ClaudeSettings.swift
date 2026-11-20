@@ -109,7 +109,8 @@ final class ClaudeSettingsModel {
 	func inheritedHint(_ key: String) -> String {
 		switch settings?.resolved[key] {
 		case .text(let value)?: "→ \(value)"
-		case .some(.none): "→ none"
+		// Nothing imposed at any scope (or an inherited None): Claude Code makes its own choice.
+		case .some(.none): "→ Claude Code default"
 		case nil: "Loading…"
 		}
 	}

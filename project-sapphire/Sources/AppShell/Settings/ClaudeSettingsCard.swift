@@ -77,8 +77,9 @@ struct ClaudeSettingsCard: View {
 		}
 	}
 
+	/// Only the permission mode has suggestions: a model tier's Custom takes any model ID.
 	private func suggestions(_ key: String) -> [String] {
-		key == "permission-mode" ? model.choices?.permissionModeSuggestions ?? [] : model.choices?.modelSuggestions ?? []
+		key == "permission-mode" ? model.choices?.permissionModeSuggestions ?? [] : []
 	}
 
 	private func suggestionButton(_ key: String, _ suggestion: String) -> some View {

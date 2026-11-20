@@ -1,7 +1,7 @@
 /**
  * Claude launch settings card: edits the default model, the Opus/Sonnet/Haiku model tiers, the effort level, and the permission mode for one scope (a profile, or `null` for user-level/global defaults).
  *
- * Most rows are a tri-state "combo" control (`Custom | Default | None`): a concrete value, "Default" (unset here → falls through profile → user → Devora default), or "None" (impose nothing, so Claude Code uses its own default). Custom values are free text (decoupled from Devora releases) with suggestion chips — used by the model tiers and the permission mode.
+ * Most rows are a tri-state "combo" control (`Custom | Default | None`): a concrete value, "Default" (unset here → falls through profile → user → Devora default), or "None" (impose nothing, so Claude Code uses its own default). Custom values are free text (decoupled from Devora releases), and the permission mode's Custom has suggestion chips; the model tiers have no Devora default, so their Default leaves the model to Claude Code.
  * The Effort row is a single segmented control listing every choice at once — "Default", the supported levels (highest → lowest), and "None" — since effort is a closed set rather than free text.
  * The Default model row is a 2-state On/Off toggle: On imposes `opusplan` (via ANTHROPIC_MODEL); Off omits the var so Claude Code picks its own model.
  *
@@ -44,7 +44,7 @@ const ROWS: RowSpec[] = [
 ];
 
 interface ClaudeSettings {
-  choices: { effort_levels: string[]; model_suggestions: string[]; permission_mode_suggestions: string[] };
+  choices: { effort_levels: string[]; permission_mode_suggestions: string[] };
   /** Raw value stored at this scope: a string, `null` (None), or the key is absent. */
   stored: Partial<Record<SettingKey, string | null>>;
   /** Effective value after full resolution: a string, or `null` meaning None. */
@@ -63,7 +63,7 @@ export function createClaudeConfigCard(options: ClaudeConfigCardOptions): HTMLEl
     getCommand: 'get_claude_settings',
     setCommand: 'set_claude_setting',
     profilePath: options.profilePath,
-    initial: { stored: {}, resolved: {} as Record<SettingKey, string | null>, choices: { effort_levels: [], model_suggestions: [], permission_mode_suggestions: [] } },
+    initial: { stored: {}, resolved: {} as Record<SettingKey, string | null>, choices: { effort_levels: [], permission_mode_suggestions: [] } },
     render: () => render(),
     afterLoad: (settings, ed) => {
       for (const row of ROWS) {
@@ -217,7 +217,8 @@ export function createClaudeConfigCard(options: ClaudeConfigCardOptions): HTMLEl
     const chips = document.createElement('div');
     chips.className = 'config-chips';
     const choices = editor.settings.choices;
-    const suggestions = row.key === 'permission-mode' ? choices?.permission_mode_suggestions : choices?.model_suggestions;
+    // Only the permission mode has suggestions: a model tier's Custom takes any model ID.
+    const suggestions = row.key === 'permission-mode' ? choices?.permission_mode_suggestions : [];
     for (const suggestion of suggestions ?? []) {
       const chip = document.createElement('button');
       chip.className = 'config-chip';

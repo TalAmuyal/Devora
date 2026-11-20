@@ -26,10 +26,10 @@ Feature: Claude launch configuration
     And "echo HAIKU=:$ANTHROPIC_DEFAULT_HAIKU_MODEL:" is typed in the terminal
     Then the terminal should contain "HAIKU=::"
 
-  Scenario: Unset settings fall back to the Devora defaults
+  Scenario: Unset settings fall back to the Devora defaults, and leave the model tiers to Claude Code
     When a new session is created
     And "echo DEFAULTS=:$ANTHROPIC_DEFAULT_OPUS_MODEL:$DEVORA_CCC_EFFORT:" is typed in the terminal
-    Then the terminal should contain "DEFAULTS=:claude-opus-4-8:xhigh:"
+    Then the terminal should contain "DEFAULTS=::xhigh:"
 
   Scenario: The default model is exported as opusplan by default
     When a new session is created

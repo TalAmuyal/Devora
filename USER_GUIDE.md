@@ -245,10 +245,10 @@ Run it from within a workspace to start a Claude Code session with all Devora in
 What it does:
 
 - **Default model**: Sets the default model to `opusplan` by default (Opus while planning, Sonnet during execution) -- toggle it off to let Claude Code pick its own model
-- **Model upgrades**: Default models are upgraded -- Sonnet is replaced with Opus, and Haiku with Sonnet
-	- This provides stronger reasoning out of the box
-	- The cost-per-token is higher, but that should be balanced by lower token usage due to better performance
-	- These defaults, and the effort level and permission mode below, are configurable (globally and per profile)
+- **Model tiers**: Claude Code picks the model behind each tier (Opus, Sonnet, Haiku) unless you set one
+	- Set a tier's model in the Claude Launch Settings, globally or per profile, to pin it (for example, Fable as Opus, and Opus as Sonnet)
+	- A model you already set there stays as it is
+	- The default model, and the effort level and permission mode below, are configurable too (globally and per profile)
 - **Effort level**: Sets the effort level to `xhigh` (extra-high) by default, so that Claude Code always tries to give a better result
 - **Plan mode**: Claude Code starts in plan permission mode by default, which requires explicit approval before making changes -- the permission mode is configurable
 - **Plugins**: Auto-loads Devora plugins (including Judgess -- see below)

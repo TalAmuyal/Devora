@@ -11,7 +11,7 @@ Ember's Settings Hub (`Sources/AppShell/Settings/`): the profiles beside the foc
 - The User Defaults' and each profile's detail have Claude Launch Settings, Terminal & Session, Pull Requests and Task Tracker cards; the Asana settings and token row show while the provider resolves to Asana, an inherited one included.
 	`ClaudeSettingsModel` edits the three model tiers and permission mode as Custom/Default/None, effort as Default/levels/None, and Default model as On/Off (On stores `opusplan`, Off stores explicit None).
 	Custom reveals a draft seeded from the resolved value without writing; Enter or Save commits trimmed text, a blank commit inherits again, and drafts survive unrelated writes.
-	The core exports the effort levels and model/permission suggestions from `devora-config`; neither UI owns a copy of those lists, and suggestions never restrict custom ids.
+	The core exports the effort levels and permission-mode suggestions from `devora-config`; neither UI owns a copy of those lists, and suggestions never restrict custom values. The model tiers have no suggestions and no Devora default: their Default shows "→ Claude Code default" when nothing is set at any scope.
 	`SettingsWriteQueue` serializes generic and Claude writes together because both update the same config file.
 	`AsanaTokenModel` reads only presence and clears its secure draft after a successful save; the credential is shared by both scopes and Debi, stored as service `devora-asana` for the login account.
 	The acceptance harness's `DEVORA_TEST_MODE=1` selects the core's in-memory credential backend in both Sapphire and Ember; model tests inject closures and Rust tests inject a `TokenStore`, so tests never read or modify the real login keychain.
