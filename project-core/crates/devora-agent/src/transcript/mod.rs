@@ -27,6 +27,8 @@ pub enum SystemKind {
     Judgement,
     Result,
     UnfinishedFirstPrompt,
+    /// Devora restarted the agent's session and asked it to re-check its waits.
+    RestartNotice,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

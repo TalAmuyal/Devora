@@ -18,6 +18,17 @@ When('the user sends the agent prompt {string}', async function (this: SapphireW
 Then('the agent transcript contains {string}', async function (this: SapphireWorld, text: string) {
   await this.bridge.waitFor(`transcript containing ${text}`, () => this.bridge.agentChat(), s => s.dom.text.includes(text));
 });
+// The restart notice's row, whose text a resent one extends with "(resent)".
+const restartNotice = 'Devora restarted: asked the agent to re-check its waits';
+Then('the agent has been told once that Devora restarted', async function (this: SapphireWorld) {
+  const chat = await this.bridge.waitFor('the restart notice, answered', () => this.bridge.agentChat(),
+    s => s.dom.text.includes(restartNotice) && !s.running);
+  assert.equal(chat.dom.text.split(restartNotice).length - 1, 1, 'exactly one restart notice');
+});
+Then('the agent has not been told that Devora restarted', async function (this: SapphireWorld) {
+  const chat = await this.bridge.agentChat();
+  assert.ok(!chat.dom.text.includes(restartNotice), 'no restart notice yet');
+});
 Then('the agent transcript has a {string} item', async function (this: SapphireWorld, kind: string) {
   await this.bridge.waitFor(`transcript kind ${kind}`, () => this.bridge.agentChat(), s => s.dom.rows.some(row => row.kind.includes(kind)));
 });

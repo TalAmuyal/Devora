@@ -39,12 +39,16 @@ Feature: Global Pause
     And the agent transcript contains "History before the hold"
     And the agent prompt draft is "After relaunch"
     And the agent CLI launch count is unchanged
+    And the agent has not been told that Devora restarted
     When the user toggles Global Pause from the palette
     Then Devora is globally running
+    And the agent has been told once that Devora restarted
     And the agent "Echo" should be idle
     And the agent prompt draft is "After relaunch"
 
   Scenario: Keep paused survives relaunch and can be reversed before Devora resumes
+    When the user sends the agent prompt "Before the hold"
+    Then the agent "Echo" should be idle
     When the user globally pauses Devora
     Then the agent chat is paused
     When the user keeps this agent paused through Global Pause
@@ -53,9 +57,11 @@ Feature: Global Pause
     Then Devora is globally paused
     And the Keep paused switch is on
     And the agent CLI launch count is unchanged
+    And the agent has not been told that Devora restarted
     When the user lets this agent resume with Devora
     And the user toggles Global Pause from the palette
     Then Devora is globally running
+    And the agent has been told once that Devora restarted
     And the agent "Echo" should be idle
     And the pause widget shows "Pause"
 

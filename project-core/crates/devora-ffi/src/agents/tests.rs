@@ -1415,3 +1415,112 @@ fn unticking_keep_paused_on_an_agent_paused_before_the_hold_resumes_it_with_the_
     assert_eq!(f.launches(), launches + 1);
     block_on(f.core.shutdown_agents()).unwrap();
 }
+
+/// The restart notice rows in a chat.
+fn restart_notices(chat: &Chat) -> usize {
+    chat.items
+        .iter()
+        .filter(|item| {
+            matches!(
+                item.content,
+                TranscriptContent::System {
+                    kind: SystemKind::RestartNotice,
+                    ..
+                }
+            )
+        })
+        .count()
+}
+
+#[test]
+fn across_a_held_restart_each_agent_gets_one_notice_when_it_launches_and_keeps_its_draft() {
+    let mut f = Fixture::new(true);
+    let events = f.core.subscribe_agent_chats().unwrap();
+    let mut tabs = std::collections::HashMap::new();
+    for name in ["Held", "Keep"] {
+        f.create(name);
+        let tab = f.open(name);
+        let chat = f.wait(&events, |c| c.tab == tab && c.phase == ChatPhase::Running);
+        block_on(f.core.send_agent_turn(tab, chat.generation, "hello".into())).unwrap();
+        f.wait(&events, |c| {
+            c.tab == tab && has_message(c, "result") && !c.turn_running
+        });
+        tabs.insert(name, tab);
+    }
+    let profile = fs::canonicalize(&f.profile.path)
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    f.core
+        .dispatch(Command::SetAgentDraft {
+            profile_path: profile,
+            name: "Held".into(),
+            text: "unsent draft".into(),
+        })
+        .unwrap();
+    f.core
+        .dispatch(Command::SetGlobalPaused { paused: true })
+        .unwrap();
+    let keep = tabs["Keep"];
+    let held = f.wait(&events, |c| {
+        c.tab == keep && c.globally_held && c.phase == ChatPhase::Paused
+    });
+    block_on(f.core.set_agent_keep_paused(keep, held.generation, true)).unwrap();
+    f.wait(&events, |c| c.tab == keep && c.keep_paused);
+    let held_tab = tabs["Held"];
+    f.wait(&events, |c| {
+        c.tab == held_tab && c.globally_held && c.phase == ChatPhase::Paused
+    });
+    block_on(f.core.shutdown_agents()).unwrap();
+    events.close().unwrap();
+
+    f.relaunch();
+    block_on(f.core.restore_agent_spaces(f.launch())).unwrap();
+    let events = f.core.subscribe_agent_chats().unwrap();
+    for tab in tabs.values() {
+        let chat = f.wait(&events, |c| c.tab == *tab && c.phase == ChatPhase::Paused);
+        assert_eq!(restart_notices(&chat), 0, "nothing while held");
+    }
+    f.core
+        .dispatch(Command::SetGlobalPaused { paused: false })
+        .unwrap();
+    let woke = f.wait(&events, |c| {
+        c.tab == held_tab && restart_notices(c) == 1 && !c.turn_running
+    });
+    assert_eq!(woke.phase, ChatPhase::Running);
+    let keep_chat = f
+        .core
+        .agent_chat_snapshot()
+        .unwrap()
+        .into_iter()
+        .find(|c| c.tab == keep)
+        .unwrap();
+    assert_eq!(keep_chat.phase, ChatPhase::Paused);
+    assert_eq!(
+        restart_notices(&keep_chat),
+        0,
+        "a kept-paused agent gets it on resuming"
+    );
+    let draft = |name: &str| {
+        f.core
+            .snapshot()
+            .unwrap()
+            .agent_views
+            .into_iter()
+            .find(|view| view.name == name)
+            .map(|view| view.draft)
+            .unwrap_or_default()
+    };
+    assert_eq!(
+        draft("Held"),
+        "unsent draft",
+        "the notice neither sends nor clears it"
+    );
+
+    // The user's own resume launches it, with its notice.
+    assert_eq!(f.open("Keep"), keep);
+    f.wait(&events, |c| {
+        c.tab == keep && restart_notices(c) == 1 && !c.turn_running
+    });
+    block_on(f.core.shutdown_agents()).unwrap();
+}

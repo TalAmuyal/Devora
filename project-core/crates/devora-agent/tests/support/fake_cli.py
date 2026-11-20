@@ -46,6 +46,16 @@ def unrequested_result():
     value.pop("user_message_uuids", None)
     emit(value)
 
+def save(message):
+    # Claude's saved session, where an accepted user turn keeps its uuid. Only
+    # with CLAUDE_CONFIG_DIR, so a run never writes into a real ~/.claude.
+    config = os.environ.get("CLAUDE_CONFIG_DIR")
+    if config:
+        project = pathlib.Path(config) / "projects" / "fake-project"
+        project.mkdir(parents=True, exist_ok=True)
+        with open(project / f"{session_id}.jsonl", "a") as stream:
+            stream.write(json.dumps({"type":"user","uuid":message.get("uuid"),"message":message["message"]}) + "\n")
+
 def question():
     emit({"type":"control_request","request_id":"question","request":{
         "subtype":"can_use_tool","tool_name":"Bash","input":{"command":"custom-tool"},
@@ -96,6 +106,15 @@ for line in sys.stdin:
         report({"kind":"user","message":message["message"],"uuid":message.get("uuid")})
         sent_turn = message.get("uuid")
         text = message["message"]["content"]
+        # Dies once on Devora's restart notice, before or after saving it, as a crash mid-delivery would.
+        marker = os.environ.get("DEVORA_FAKE_NOTICE_CRASH")
+        crash = (isinstance(text, str) and text.startswith("Devora restarted your session")
+            and marker and not pathlib.Path(marker).exists())
+        if not crash or os.environ.get("DEVORA_FAKE_NOTICE_SAVED"):
+            save(message)
+        if crash:
+            pathlib.Path(marker).touch()
+            os._exit(70)
         if text == "permission":
             question()
         elif text == "cancel-permission":
@@ -146,6 +165,11 @@ for line in sys.stdin:
         elif text == "mcp":
             emit({"type":"control_request","request_id":"mcp","request":{
                 "subtype":"mcp_message","server_name":"devora","message":{"jsonrpc":"2.0","id":1,"method":"tools/list"}}})
+        elif text.startswith("Devora restarted your session") and os.environ.get("DEVORA_FAKE_NOTICE_UNREQUESTED"):
+            # A resume's zero-turn result arriving after the notice was sent, then the notice's turn running on.
+            unrequested_result()
+            emit(recorded("stream_event"))
+            emit({"type":"fake_stream_ready"})
         elif text == "unrequested-result":
             unrequested_result()
             emit(recorded("stream_event"))

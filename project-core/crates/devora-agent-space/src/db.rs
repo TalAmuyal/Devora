@@ -1,3 +1,4 @@
+use crate::restart_notice::RestartNotice;
 use crate::{CreationForm, Identity};
 use devora_agent::session::Resume;
 use devora_agent::transcript::{TranscriptChange, TranscriptContent, TranscriptItem};
@@ -31,6 +32,13 @@ CREATE TABLE events (
 );
 ";
 
+// Version 3: the restart notice (`crate::restart_notice`).
+const RESTART_SCHEMA: &str = "
+ALTER TABLE space ADD COLUMN launched_run TEXT;
+ALTER TABLE space ADD COLUMN restart_notice TEXT;
+";
+const VERSION: u32 = 3;
+
 pub(crate) fn storage(error: impl std::fmt::Display) -> String {
     format!("agent space storage: {error}")
 }
@@ -53,9 +61,11 @@ impl Db {
         let tx = db.conn.transaction().map_err(storage)?;
         tx.execute_batch(SCHEMA).map_err(storage)?;
         tx.execute_batch(HISTORY_SCHEMA).map_err(storage)?;
-        tx.pragma_update(None, "user_version", 2).map_err(storage)?;
+        tx.execute_batch(RESTART_SCHEMA).map_err(storage)?;
+        tx.pragma_update(None, "user_version", VERSION)
+            .map_err(storage)?;
         tx.execute(
-            "INSERT INTO space VALUES (0,?1,?2,?3,?4,?5,0,0)",
+            "INSERT INTO space(id,name,role,form,instructions,session_id,has_conversation,ready) VALUES (0,?1,?2,?3,?4,?5,0,0)",
             params![
                 identity.name,
                 identity.role,
@@ -89,19 +99,19 @@ impl Db {
             .conn
             .pragma_query_value(None, "user_version", |r| r.get(0))
             .map_err(storage)?;
-        if !matches!(version, 1 | 2) {
+        if !(1..=VERSION).contains(&version) {
             return Err(format!("unsupported agent space schema version {version}"));
         }
         if !readonly {
             db.configure()?;
-            if version == 1 {
-                db.migrate_v1()?;
+            if version < VERSION {
+                db.migrate()?;
             }
         }
         Ok(db)
     }
 
-    fn migrate_v1(&mut self) -> Result<(), String> {
+    fn migrate(&mut self) -> Result<(), String> {
         let tx = self
             .conn
             .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
@@ -117,10 +127,14 @@ impl Db {
                 })
                 .map_err(storage)?;
             register_session(&tx, &id)?;
-            tx.pragma_update(None, "user_version", 2).map_err(storage)?;
-        } else if version != 2 {
+        } else if !(2..=VERSION).contains(&version) {
             return Err(format!("unsupported agent space schema version {version}"));
         }
+        if version < 3 {
+            tx.execute_batch(RESTART_SCHEMA).map_err(storage)?;
+        }
+        tx.pragma_update(None, "user_version", VERSION)
+            .map_err(storage)?;
         tx.commit().map_err(storage)
     }
 
@@ -182,7 +196,7 @@ impl Db {
         let whole: Vec<_> = changes
             .iter()
             .filter_map(|change| match change {
-                TranscriptChange::Upsert { item } => Some(item),
+                TranscriptChange::Upsert { item } => Some(&**item),
                 _ => None,
             })
             .collect();
@@ -200,23 +214,81 @@ impl Db {
             }
             register_session(&tx, &resume.session_id)?;
         }
-        for item in whole {
-            register_session(&tx, &item.cli_session)?;
-            let kind = match item.content {
-                TranscriptContent::User { .. } => "user",
-                TranscriptContent::Assistant { .. } => "assistant",
-                TranscriptContent::Thinking { .. } => "thinking",
-                TranscriptContent::Tool { .. } => "tool",
-                TranscriptContent::System { .. } => "system",
-                TranscriptContent::Unknown { .. } => "unknown",
-            };
-            let changed = tx.execute("INSERT INTO events(sequence,cli_session,kind,payload) VALUES(?1,?2,?3,?4) ON CONFLICT(sequence) DO UPDATE SET kind=excluded.kind,payload=excluded.payload WHERE events.cli_session=excluded.cli_session",
-                params![item.sequence, item.cli_session, kind, serde_json::to_string(item).map_err(storage)?]).map_err(storage)?;
-            if changed != 1 {
-                return Err("transcript sequence belongs to another CLI session".into());
-            }
-        }
+        save_items(&tx, &whole)?;
         tx.commit().map_err(storage)
+    }
+
+    /// The run that last launched this agent's CLI, and the restart notice it
+    /// is owed, if any.
+    pub fn launch_state(&self) -> Result<(Option<String>, Option<RestartNotice>), String> {
+        let (run, notice) = self
+            .conn
+            .query_row(
+                "SELECT launched_run,restart_notice FROM space WHERE id=0",
+                [],
+                |row| {
+                    Ok((
+                        row.get::<_, Option<String>>(0)?,
+                        row.get::<_, Option<String>>(1)?,
+                    ))
+                },
+            )
+            .map_err(storage)?;
+        let notice = notice
+            .map(|notice| serde_json::from_str(&notice))
+            .transpose()
+            .map_err(storage)?;
+        Ok((run, notice))
+    }
+
+    /// A launch in `run`, with what it owes, in one write.
+    pub fn record_launch(
+        &mut self,
+        run: &str,
+        notice: Option<&RestartNotice>,
+    ) -> Result<(), String> {
+        let notice = notice
+            .map(serde_json::to_string)
+            .transpose()
+            .map_err(storage)?;
+        self.conn
+            .execute(
+                "UPDATE space SET launched_run=?1, restart_notice=?2 WHERE id=0",
+                params![run, notice],
+            )
+            .map_err(storage)?;
+        Ok(())
+    }
+
+    /// The notice's transcript row and the attempt it is sent as, committed
+    /// together before the send.
+    pub fn save_notice_attempt(
+        &mut self,
+        change: &TranscriptChange,
+        notice: &RestartNotice,
+    ) -> Result<(), String> {
+        let TranscriptChange::Upsert { item } = change else {
+            return Err("a restart notice must be a whole item".into());
+        };
+        let tx = self.conn.transaction().map_err(storage)?;
+        save_items(&tx, &[item])?;
+        tx.execute(
+            "UPDATE space SET restart_notice=?1 WHERE id=0",
+            [serde_json::to_string(notice).map_err(storage)?],
+        )
+        .map_err(storage)?;
+        tx.commit().map_err(storage)
+    }
+
+    /// The CLI answered the notice sent as `attempt`.
+    pub fn notice_delivered(&mut self, attempt: &str) -> Result<(), String> {
+        self.conn
+            .execute(
+                "UPDATE space SET restart_notice=NULL WHERE id=0 AND json_extract(restart_notice,'$.attempt')=?1",
+                [attempt],
+            )
+            .map_err(storage)?;
+        Ok(())
     }
 
     pub fn history(&self, after: u64, limit: u32) -> Result<Vec<TranscriptItem>, String> {
@@ -340,6 +412,27 @@ impl Db {
             marked,
         ))
     }
+}
+
+/// Whole transcript items, each in its CLI session, in the caller's transaction.
+fn save_items(tx: &rusqlite::Transaction<'_>, whole: &[&TranscriptItem]) -> Result<(), String> {
+    for item in whole {
+        register_session(tx, &item.cli_session)?;
+        let kind = match item.content {
+            TranscriptContent::User { .. } => "user",
+            TranscriptContent::Assistant { .. } => "assistant",
+            TranscriptContent::Thinking { .. } => "thinking",
+            TranscriptContent::Tool { .. } => "tool",
+            TranscriptContent::System { .. } => "system",
+            TranscriptContent::Unknown { .. } => "unknown",
+        };
+        let changed = tx.execute("INSERT INTO events(sequence,cli_session,kind,payload) VALUES(?1,?2,?3,?4) ON CONFLICT(sequence) DO UPDATE SET kind=excluded.kind,payload=excluded.payload WHERE events.cli_session=excluded.cli_session",
+            params![item.sequence, item.cli_session, kind, serde_json::to_string(item).map_err(storage)?]).map_err(storage)?;
+        if changed != 1 {
+            return Err("transcript sequence belongs to another CLI session".into());
+        }
+    }
+    Ok(())
 }
 
 fn register_session(tx: &rusqlite::Transaction<'_>, id: &str) -> Result<(), String> {
