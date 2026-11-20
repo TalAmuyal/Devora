@@ -1,0 +1,97 @@
+{
+  "nothing": {
+    "paths": [
+      ".github/workflows/auto-tag.yml",
+      ".github/workflows/cd.yml",
+      ".github/workflows/changelog.yml",
+      "AGENTS.md",
+      "CHANGELOG.md",
+      "CONTRIBUTING.md",
+      "LICENSE",
+      "README.md",
+      "SECURITY.md",
+      "THIRD_PARTY_LICENSES.md",
+      "cut-release.sh",
+      "docs/",
+      "scripts/hooks/"
+    ],
+    "names": [
+      "CLAUDE.md"
+    ]
+  },
+  "everything": {
+    "paths": [
+      ".editorconfig",
+      ".github/",
+      ".gitignore",
+      "bundler/macos-ember/populate-app-resources.sh",
+      "mise.toml",
+      "scripts/ci/"
+    ],
+    "manifests": [
+      "Cargo.lock",
+      "Cargo.toml",
+      "Package.resolved",
+      "Package.swift",
+      "go.mod",
+      "go.sum",
+      "mise.toml",
+      "package-lock.json",
+      "package.json"
+    ]
+  },
+  "modules": {
+    "ember": {
+      "jobs": [
+        "test-ember",
+        "test-ember-unit",
+        "e2e-ember"
+      ],
+      "inputs": [
+        "CHANGELOG.md",
+        "USER_GUIDE.md",
+        "VERSION",
+        "acceptance/",
+        "base-icon-ember.png",
+        "bundler/",
+        "install.sh",
+        "project-code-cleanup/",
+        "project-core/",
+        "project-debi/",
+        "project-detached-flow/",
+        "project-ember/",
+        "project-judgess/",
+        "project-status-line/",
+        "project-team-work/",
+        "scripts/",
+        "themes/",
+        "web-renderer/"
+      ]
+    },
+    "sapphire": {
+      "jobs": [
+        "sapphire"
+      ],
+      "inputs": [
+        "CHANGELOG.md",
+        "USER_GUIDE.md",
+        "VERSION",
+        "acceptance/",
+        "base-icon-sapphire.png",
+        "bundler/",
+        "project-code-cleanup/",
+        "project-core/",
+        "project-debi/",
+        "project-detached-flow/",
+        "project-ember/tests/support/",
+        "project-judgess/",
+        "project-sapphire/",
+        "project-status-line/",
+        "project-team-work/",
+        "scripts/",
+        "themes/",
+        "web-renderer/"
+      ]
+    }
+  }
+}

@@ -184,7 +184,7 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
-  # Decides which macOS jobs a pull request can skip: Sapphire's when its changed files all can't affect Sapphire (scripts/ci/sapphire-affected.sh), and Ember's two when they all can't affect Ember (scripts/ci/ember-affected.sh); a push to master always runs them.
+  # Decides which macOS jobs a pull request can skip, from the module map (ADR-015, scripts/ci/modules.toml and its lock): Sapphire's when no changed file can affect Sapphire, and Ember's when none can affect Ember; a push to master always runs them.
   # A job skipped by its condition counts as passing for required checks.
   changes:
     runs-on: ubuntu-latest
@@ -196,10 +196,8 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Check the path classifiers
-        run: |
-          scripts/ci/sapphire-affected.test.sh
-          scripts/ci/ember-affected.test.sh
+      - name: Check the module map
+        run: scripts/ci/modules.test.sh
 
       - name: Classify the changed files
         id: affected
@@ -210,15 +208,12 @@ jobs:
         run: |
           # --no-renames: a moved file counts by both its old and new path, so moving a file out of an app still runs its jobs.
           if [ "$EVENT" = pull_request ] && changed=$(git diff --no-renames --name-only "$BASE...$HEAD"); then
-            sapphire=$(printf '%s\n' "$changed" | scripts/ci/sapphire-affected.sh)
-            ember=$(printf '%s\n' "$changed" | scripts/ci/ember-affected.sh)
+            affected=$(printf '%s\n' "$changed" | scripts/ci/affected.sh)
           else
-            sapphire=true
-            ember=true
+            affected=$(printf '%s\n' sapphire=true ember=true)
           fi
-          echo "sapphire=$sapphire" >> "$GITHUB_OUTPUT"
-          echo "ember=$ember" >> "$GITHUB_OUTPUT"
-          echo "Sapphire affected: $sapphire; Ember affected: $ember"
+          echo "$affected" >> "$GITHUB_OUTPUT"
+          echo "Affected: $(echo $affected)"
 
   sapphire:
     needs: changes
@@ -235,6 +230,11 @@ jobs:
       - uses: jdx/mise-action@v4
         with:
           experimental: true
+
+      # The changes job selects from the committed lock, and can't derive it (no Swift on Linux); this job runs whenever
+      # a change could make it stale (a manifest, scripts/ci/, or a push to master), so it checks it here.
+      - name: Check the module map's lock is current
+        run: mise run ci-modules --check
 
       - name: Resolve the GhosttyKit cache key
         id: ghostty-key

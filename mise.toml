@@ -32,6 +32,7 @@ bash scripts/with-ui-lock.test.sh
 bash project-sapphire/scripts/check-ui-scrolls.test.sh
 bash project-sapphire/scripts/explain-ui-test-kill.test.sh
 bash acceptance/no-ssh.test.sh
+bash scripts/ci/modules.test.sh
 mise run -C project-core test
 mise run -C project-debi test
 mise run -C project-judgess test
@@ -163,3 +164,8 @@ mv "$APP_SRC" "$APP_DEST"
 echo "Installed to $APP_DEST"
 ./bundler/macos-ember/install-completions.sh "$APP_DEST"
 """
+
+[tasks.ci-modules]
+description = "Derive scripts/ci/modules.lock.json from scripts/ci/modules.toml and the build graphs (ADR-015); --check fails if the committed lock is stale"
+tools = { python = "3.13" }
+run = 'python scripts/ci/modules.py "$@"'
