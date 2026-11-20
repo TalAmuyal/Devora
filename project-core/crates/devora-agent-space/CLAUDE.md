@@ -6,6 +6,10 @@ After a restart, each agent gets one notice to re-establish its waits, since its
 
 A stop that was forced or interrupted a turn (`StopInfo`) also owes the notice, worded for the pause, at the agent's next launch in the same run; a clean, idle stop owes none.
 
+## The agent's compaction threshold
+
+Schema version 5 adds `space.compact_threshold`: the agent's own threshold (1 to 100), over its profile's `agent.compact-threshold`; null follows the profile. `SpaceHandle::set_compact_threshold` commits it and applies it at once, through the actor, which owns the database, so it needs a running agent. `SpaceHandle::compact_now` starts the save-memory and `/compact` steps on an idle agent, or flags them for the running turn's result, as reaching the threshold does; a failed or interrupted turn drops that request, as it abandons a compaction. The context the actor publishes carries the threshold in force, the profile's (as read at launch), the agent's own as stored (which may equal the profile's, and still pins it), and the compaction's progress (idle, requested, under way).
+
 ## Pausing with background work
 
 The actor keeps the agent's background tasks as the CLI lists them (`System::BackgroundTasksChanged`). A pause whose agent has some doesn't close the CLI's input at the turn's boundary: it owes the notice naming them first (so a crash mid-pause still tells the agent), stops each one through the CLI (`stop_task`, shells first), interrupts the notification turn a stopped subagent makes the CLI start, and waits for that turn's result, since once the input is closed nothing can interrupt a turn. Then it closes the input, and the CLI exits by itself (`Preparing` in `running.rs`). Past `PREPARE_GRACE`, or when a task won't stop, the pause goes ahead and the worker's forced stop is the fallback, so at worst a pause takes `PREPARE_GRACE` plus the stop's own grace, about 10 s. An agent with no background work pauses as before, owing nothing. A process the agent daemonized isn't a task the CLI tracks, so it outlives the pause (ADR-013).

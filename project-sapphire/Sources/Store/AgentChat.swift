@@ -247,6 +247,18 @@ public final class AgentChat {
 		do { try core.pauseAgentAfterTurn(tab: tab, generation: generation) } catch { fail(error) }
 	}
 
+	/// This agent's own compaction threshold, or nil to follow its profile's.
+	public func setCompactThreshold(_ percent: UInt8?) async {
+		guard let generation = chat?.generation else { return }
+		do { try await core.setAgentCompactThreshold(tab: tab, generation: generation, percent: percent) } catch { fail(error) }
+	}
+
+	/// Compacts as reaching the threshold would: now, or when the running turn ends.
+	public func compactNow() async {
+		guard let generation = chat?.generation else { return }
+		do { try await core.compactAgentNow(tab: tab, generation: generation) } catch { fail(error) }
+	}
+
 	/// During a global hold, whether this agent stays paused when Devora resumes; unticking it on an agent paused before the hold makes it resume with the others.
 	public func setKeepPaused(_ keepPaused: Bool) async {
 		guard let generation = chat?.generation else { return }

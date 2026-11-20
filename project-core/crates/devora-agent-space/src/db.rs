@@ -41,7 +41,11 @@ ALTER TABLE space ADD COLUMN restart_notice TEXT;
 const CLI_SCHEMA: &str = "
 ALTER TABLE space ADD COLUMN cli_process TEXT;
 ";
-const VERSION: u32 = 4;
+// Version 5: the agent's own compaction threshold, over the profile's (`crate::compaction`).
+const THRESHOLD_SCHEMA: &str = "
+ALTER TABLE space ADD COLUMN compact_threshold INTEGER CHECK(compact_threshold BETWEEN 1 AND 100);
+";
+const VERSION: u32 = 5;
 
 pub(crate) fn storage(error: impl std::fmt::Display) -> String {
     format!("agent space storage: {error}")
@@ -67,6 +71,7 @@ impl Db {
         tx.execute_batch(HISTORY_SCHEMA).map_err(storage)?;
         tx.execute_batch(RESTART_SCHEMA).map_err(storage)?;
         tx.execute_batch(CLI_SCHEMA).map_err(storage)?;
+        tx.execute_batch(THRESHOLD_SCHEMA).map_err(storage)?;
         tx.pragma_update(None, "user_version", VERSION)
             .map_err(storage)?;
         tx.execute(
@@ -140,6 +145,9 @@ impl Db {
         }
         if version < 4 {
             tx.execute_batch(CLI_SCHEMA).map_err(storage)?;
+        }
+        if version < 5 {
+            tx.execute_batch(THRESHOLD_SCHEMA).map_err(storage)?;
         }
         tx.pragma_update(None, "user_version", VERSION)
             .map_err(storage)?;
@@ -260,6 +268,28 @@ impl Db {
         cli.map(|cli| serde_json::from_str(&cli))
             .transpose()
             .map_err(storage)
+    }
+
+    /// The agent's own compaction threshold, when it has one.
+    pub fn compact_threshold(&self) -> Result<Option<u8>, String> {
+        self.conn
+            .query_row(
+                "SELECT compact_threshold FROM space WHERE id=0",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(storage)
+    }
+
+    /// Sets the agent's own compaction threshold, or clears it to follow the profile's.
+    pub fn set_compact_threshold(&mut self, percent: Option<u8>) -> Result<(), String> {
+        self.conn
+            .execute(
+                "UPDATE space SET compact_threshold=?1 WHERE id=0",
+                [percent],
+            )
+            .map_err(storage)?;
+        Ok(())
     }
 
     /// Records the CLI running for this agent, or that none is.

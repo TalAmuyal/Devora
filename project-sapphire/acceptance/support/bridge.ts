@@ -4,7 +4,21 @@ export interface AgentChatState {
   globallyPaused: boolean;
   globallyHeld: boolean;
   pauseWidget: { label: string; tooltip: string; enabled: boolean; keepPaused: boolean; keptPaused: boolean };
-  context: { used: string; window: string; threshold: number } | null;
+  context: {
+    used: string;
+    window: string;
+    threshold: number;
+    defaultThreshold: number;
+    compaction: 'idle' | 'requested' | 'underway';
+  } | null;
+  /** What the Context widget's popover shows. */
+  contextPopover: {
+    compactTitle: string;
+    compactEnabled: boolean;
+    compactsAt: string;
+    thresholdEnabled: boolean;
+    thresholdNote: string;
+  };
   dom: {
     text: string;
     rows: { sequence: string; kind: string; text: string; offset: number }[];
@@ -361,6 +375,11 @@ export class Bridge {
 
   async chatAction(action: string, text?: string): Promise<void> {
     await this.request('POST', '/test/agent-chat', { action, text });
+  }
+
+  /** The context popover's threshold slider, or its Reset with `null`. */
+  async setCompactThreshold(value: number | null): Promise<void> {
+    await this.request('POST', '/test/agent-chat', { action: 'compactThreshold', value });
   }
 
   async setKeepPaused(value: boolean): Promise<void> {

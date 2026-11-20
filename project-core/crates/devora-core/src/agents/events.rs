@@ -1,5 +1,5 @@
 use devora_agent::session::SessionEvent;
-use devora_agent_space::SpaceEvent;
+use devora_agent_space::{CompactionProgress, SpaceEvent};
 use devora_state::{ChatCommand, ChatUpdate, PermissionQuestion, Store};
 
 pub(super) fn update(state: &Store, tab: u64, generation: u64, update: ChatUpdate) {
@@ -29,6 +29,15 @@ pub(super) fn publish(state: &Store, tab: u64, generation: u64, event: SpaceEven
                     used_tokens: context.used_tokens,
                     window_tokens: context.window_tokens,
                     threshold_percent: context.threshold_percent,
+                    default_threshold_percent: context.default_threshold_percent,
+                    own_threshold_percent: context.own_threshold_percent,
+                    compaction: match context.progress {
+                        CompactionProgress::Idle => devora_state::CompactionProgress::Idle,
+                        CompactionProgress::Requested => {
+                            devora_state::CompactionProgress::Requested
+                        }
+                        CompactionProgress::Underway => devora_state::CompactionProgress::Underway,
+                    },
                 },
             },
         ),

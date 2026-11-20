@@ -110,3 +110,16 @@ Feature: Agent chat panel
   Scenario: The context bar uses the actor's usage and profile threshold
     When the user sends the agent prompt "Context metrics"
     Then the agent context bar has a known window and threshold 80
+
+  Scenario: The context popover sets this agent's threshold and compacts on demand
+    When the user sends the agent prompt "Context metrics"
+    And the user sets the agent compaction threshold to 50
+    Then the agent compacts at 50 for this agent, over the profile threshold 80
+    When the user compacts the agent now
+    Then the agent transcript contains "Compaction requested"
+    And the agent compaction has finished
+    When the user resets the agent compaction threshold
+    Then the agent context bar has a known window and threshold 80
+    When the user requests Pause in the agent chat
+    Then the agent chat is paused
+    And the context popover refuses Compact Now with "This agent is paused"

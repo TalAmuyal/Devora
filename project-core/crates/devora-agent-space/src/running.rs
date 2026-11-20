@@ -41,12 +41,21 @@ const LEFT_RUNNING_WAIT: std::time::Duration = std::time::Duration::from_secs(5)
 pub type GlobalPauseCheck = Arc<dyn Fn() -> bool + Send + Sync>;
 
 enum Action {
-    Turn { id: String, text: String },
-    RestartNotice { id: String, notice: RestartNotice },
+    Turn {
+        id: String,
+        text: String,
+    },
+    RestartNotice {
+        id: String,
+        notice: RestartNotice,
+    },
     Interrupt,
     Permission(String, PermissionAnswer),
     PauseAfterTurn,
     GlobalPauseChanged,
+    /// The agent's own threshold, or none to follow the profile's.
+    SetCompactThreshold(Option<u8>),
+    CompactNow,
 }
 struct Command {
     action: Action,
@@ -115,6 +124,21 @@ impl SpaceHandle {
     pub async fn pause(&self) -> Result<StopInfo, String> {
         self.runtime.pause().await
     }
+    /// Sets this agent's compaction threshold, or clears it to follow the
+    /// profile's; committed before it applies, and checked when a turn ends.
+    pub async fn set_compact_threshold(&self, percent: Option<u8>) -> Result<(), String> {
+        if percent.is_some_and(|percent| !(1..=100).contains(&percent)) {
+            return Err("a compaction threshold is a whole percentage from 1 to 100".into());
+        }
+        self.call(Action::SetCompactThreshold(percent))
+            .await
+            .map(|_| ())
+    }
+    /// Compacts as reaching the threshold would: now with no turn running, else
+    /// when the running turn ends.
+    pub async fn compact_now(&self) -> Result<(), String> {
+        self.call(Action::CompactNow).await.map(|_| ())
+    }
     /// Lets the running turn finish, then pauses, with no compaction step after
     /// it; with no turn running, pauses at once. Queues immediately, and the
     /// returned future resolves once the agent has paused.
@@ -177,7 +201,7 @@ impl RunningSpace {
 pub(crate) async fn start(
     mut space: Space,
     options: SessionOptions,
-    compact_threshold: u8,
+    mut compaction: Compaction,
     log: Arc<Log>,
     globally_paused: GlobalPauseCheck,
     run: &AppRun,
@@ -268,7 +292,7 @@ pub(crate) async fn start(
             &mut space,
             &mut session,
             &mut transcript,
-            &mut Compaction::new(compact_threshold),
+            &mut compaction,
             &events,
             received_commands,
             globally_paused,
@@ -386,9 +410,10 @@ fn begin(
             "Interrupt requested".into(),
             json!({}),
         ),
-        Action::PauseAfterTurn | Action::GlobalPauseChanged => {
-            return Err("pause after turn is not a transport action".into())
-        }
+        Action::PauseAfterTurn
+        | Action::GlobalPauseChanged
+        | Action::SetCompactThreshold(_)
+        | Action::CompactNow => return Err("the pump handles this action itself".into()),
         Action::Permission(id, answer) => {
             let (text, decision) = match answer {
                 PermissionAnswer::Allow => ("Permission allow requested", json!({"kind":"allow"})),
@@ -443,9 +468,10 @@ fn begin(
                 .answer_permission(id, answer)
                 .await
                 .map(|_| Value::Null),
-            Action::PauseAfterTurn | Action::GlobalPauseChanged => {
-                unreachable!("handled by the pump")
-            }
+            Action::PauseAfterTurn
+            | Action::GlobalPauseChanged
+            | Action::SetCompactThreshold(_)
+            | Action::CompactNow => unreachable!("handled by the pump"),
         };
         let _ = completions.send(Completion {
             sequence,
@@ -510,6 +536,7 @@ async fn pump(
         {
             stopping = true;
             compaction.reset();
+            let _ = events.send(SpaceEvent::Context(compaction.context()));
             let reply = pause_after_turn
                 .take()
                 .unwrap_or_else(|| oneshot::channel().0);
@@ -638,18 +665,11 @@ async fn pump(
                     // Every pause reason uses the same boundary before compaction.
                     step = None;
                     compaction.reset();
+                    let _ = events.send(SpaceEvent::Context(compaction.context()));
                 }
                 if let Some(step) = step {
-                    let announcement = transcript.system(SystemKind::Compaction, step.announcement(&compaction.context()), json!({}));
-                    space.db.save_changes(None, std::slice::from_ref(&announcement))?;
-                    let _ = events.send(SpaceEvent::Transcript(announcement));
-                    // Nobody waits for the outcome; it is recorded like any turn's.
-                    let (reply, _) = oneshot::channel();
-                    let id = uuid::Uuid::new_v4().to_string();
-                    begin(space,transcript,Command { action: Action::Turn { id: id.clone(), text: step.prompt() }, reply },session.handle(),completed.clone(),events)?;
+                    turn_running = Some(send_step(space,transcript,compaction,&step,session.handle(),completed.clone(),events)?);
                     pending += 1;
-                    turn_running = Some(id);
-                    let _ = events.send(SpaceEvent::TurnStarted);
                 }
                 if terminal {
                     if let Some(reply) = pause_after_turn.take() {
@@ -671,6 +691,37 @@ async fn pump(
                     }
                     Some(Command { action: Action::GlobalPauseChanged, reply }) => {
                         let _ = reply.send(Ok(Value::Bool(stopping)));
+                    }
+                    Some(Command { action: Action::SetCompactThreshold(percent), reply }) => {
+                        let outcome = space.db.set_compact_threshold(percent).map(|()| {
+                            compaction.set_threshold(percent);
+                            let _ = events.send(SpaceEvent::Context(compaction.context()));
+                            Value::Null
+                        });
+                        let _ = reply.send(outcome);
+                    }
+                    Some(Command { action: Action::CompactNow, reply }) if globally_paused() || stopping || pause_after_turn.is_some() => {
+                        let _ = reply.send(Err("This agent is pausing. It compacts once it resumes and you ask again.".into()));
+                    }
+                    Some(Command { action: Action::CompactNow, reply }) if turn_running.is_some() => {
+                        let outcome = if compaction.request() {
+                            let _ = events.send(SpaceEvent::Context(compaction.context()));
+                            Ok(Value::Null)
+                        } else {
+                            Err("A compaction is already under way.".into())
+                        };
+                        let _ = reply.send(outcome);
+                    }
+                    Some(Command { action: Action::CompactNow, reply }) => {
+                        match compaction.begin() {
+                            Some(step) => {
+                                let sent = send_step(space,transcript,compaction,&step,session.handle(),completed.clone(),events);
+                                let _ = reply.send(sent.as_ref().map(|_| Value::Null).map_err(Clone::clone));
+                                turn_running = Some(sent?);
+                                pending += 1;
+                            }
+                            None => { let _ = reply.send(Err("A compaction is already under way.".into())); }
+                        }
                     }
                     Some(command) if matches!(command.action, Action::Turn { .. } | Action::RestartNotice { .. }) && (globally_paused() || stopping || pause_after_turn.is_some()) => {
                         let _ = command.reply.send(Err("This agent is pausing. It starts no new turn until it resumes.".into()));
@@ -698,6 +749,48 @@ async fn pump(
             }
         }
     }
+}
+
+/// Announces a compaction step in the transcript and sends its turn, publishing
+/// the context, whose progress it changed; returns the turn's ID.
+fn send_step(
+    space: &mut Space,
+    transcript: &mut Transcript,
+    compaction: &Compaction,
+    step: &crate::compaction::Step,
+    runtime: SessionHandle,
+    completions: mpsc::UnboundedSender<Completion>,
+    events: &mpsc::UnboundedSender<SpaceEvent>,
+) -> Result<String, String> {
+    let announcement = transcript.system(
+        SystemKind::Compaction,
+        step.announcement(&compaction.context()),
+        json!({}),
+    );
+    space
+        .db
+        .save_changes(None, std::slice::from_ref(&announcement))?;
+    let _ = events.send(SpaceEvent::Transcript(announcement));
+    let _ = events.send(SpaceEvent::Context(compaction.context()));
+    // Nobody waits for the outcome; it is recorded like any turn's.
+    let (reply, _) = oneshot::channel();
+    let id = uuid::Uuid::new_v4().to_string();
+    begin(
+        space,
+        transcript,
+        Command {
+            action: Action::Turn {
+                id: id.clone(),
+                text: step.prompt(),
+            },
+            reply,
+        },
+        runtime,
+        completions,
+        events,
+    )?;
+    let _ = events.send(SpaceEvent::TurnStarted);
+    Ok(id)
 }
 
 /// Pauses without waiting in the pump, which goes on draining the session's

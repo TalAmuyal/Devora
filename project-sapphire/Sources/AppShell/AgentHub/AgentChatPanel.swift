@@ -28,6 +28,12 @@ final class AgentPanelModel {
 			keepPausedSelected: chat.chat?.keepPaused == true)
 	}
 
+	var contextPresentation: AgentContextPresentation {
+		AgentContextPresentation(
+			context: chat.chat?.context, phase: chat.chat?.phase, pauseRequested: chat.chat?.pauseRequested == true,
+			globallyPaused: chat.globallyPaused, turnRunning: chat.chat?.turnRunning == true)
+	}
+
 	func focus() {
 		Task { await chat.refreshSettings() }
 		if let editor { editor.window?.makeFirstResponder(editor) }
@@ -91,11 +97,14 @@ struct AgentChatPanel: View {
 			AgentWidgetBar(
 				context: model.chat.chat?.context, enterSends: model.chat.enterSends,
 				pause: model.pausePresentation,
+				compaction: model.contextPresentation,
 				turnRunning: model.chat.chat?.turnRunning == true,
 				canSend: model.chat.canSend, onSend: { Task { await model.chat.send() } },
 				onStop: { Task { await model.chat.stop() } },
 				onPause: { model.chat.pause() }, onResume: { Task { await model.chat.retry() } },
-				onKeepPaused: { keep in Task { await model.chat.setKeepPaused(keep) } }
+				onKeepPaused: { keep in Task { await model.chat.setKeepPaused(keep) } },
+				onThreshold: { percent in Task { await model.chat.setCompactThreshold(percent) } },
+				onCompactNow: { Task { await model.chat.compactNow() } }
 			)
 			.padding(.horizontal, 12).padding(.bottom, 10)
 		}
@@ -179,6 +188,7 @@ struct AgentWidgetBar: View {
 	let context: ChatContext?
 	let enterSends: Bool
 	let pause: AgentPausePresentation
+	let compaction: AgentContextPresentation
 	let turnRunning: Bool
 	let canSend: Bool
 	let onSend: () -> Void
@@ -186,6 +196,8 @@ struct AgentWidgetBar: View {
 	let onPause: () -> Void
 	let onResume: () -> Void
 	let onKeepPaused: (Bool) -> Void
+	let onThreshold: (UInt8?) -> Void
+	let onCompactNow: () -> Void
 
 	var sendHint: String {
 		enterSends ? "Enter sends · Shift+Enter newline" : "⌘Enter / Ctrl+Enter sends · Enter newline"
@@ -194,6 +206,7 @@ struct AgentWidgetBar: View {
 	var body: some View {
 		HStack(spacing: 12) {
 			AgentContextWidget(context: context)
+				.popover(compaction, onThreshold: onThreshold, onCompactNow: onCompactNow)
 			AgentPauseWidget(presentation: pause, onPause: onPause, onResume: onResume, onKeepPaused: onKeepPaused)
 			Spacer(minLength: 12)
 			if turnRunning {
@@ -227,25 +240,50 @@ struct AgentContextWidget: View {
 		return min(1, fraction * 100 / Double(context.thresholdPercent))
 	}
 
-	var text: String {
-		guard let fraction else { return "Context unknown" }
-		// The number in the user's format, with the % sign right after it, as in "15.1%" (some locales put a space before it).
-		let percent = (fraction * 100).formatted(.number.precision(.fractionLength(1)).locale(locale))
-		return "Context \(percent)%"
+	/// The share in the user's format, with the % sign right after it, as in "15.1%" (some locales put a space before it).
+	func percent(_ fraction: Double) -> String {
+		"\((fraction * 100).formatted(.number.precision(.fractionLength(1)).locale(locale)))%"
 	}
 
-	var tooltip: String {
+	var text: String {
+		guard let fraction else { return "Context unknown" }
+		return "Context \(percent(fraction))"
+	}
+
+	/// The usage, and the window once it's known.
+	var tokens: String {
 		guard let context else { return "Waiting for context usage" }
 		let used = context.usedTokens.formatted(.number.locale(locale))
 		guard context.windowTokens > 0 else { return "\(used) tokens · window size not known yet" }
-		let window = context.windowTokens.formatted(.number.locale(locale))
-		return "\(used) / \(window) tokens · compaction at \(context.thresholdPercent)%"
+		return "\(used) / \(context.windowTokens.formatted(.number.locale(locale))) tokens"
+	}
+
+	/// Whether this agent has a compaction threshold of its own stored, over its profile's, even an equal one.
+	var overridden: Bool { context?.ownThresholdPercent != nil }
+
+	var tooltip: String {
+		guard let context else { return tokens }
+		guard context.windowTokens > 0 else { return tokens }
+		let threshold = overridden
+			? "compaction at \(context.thresholdPercent)% for this agent (profile: \(context.defaultThresholdPercent)%)"
+			: "compaction at \(context.thresholdPercent)%"
+		return "\(tokens) · \(threshold)"
 	}
 
 	var body: some View {
+		// A constant width: the text reserves its widest forms and the glyph its place, so the widget never moves the
+		// context popover anchored to it (a moved anchor re-presents the popover) nor the Pause widget beside it.
 		HStack(spacing: 6) {
-			Text(text).monospacedDigit()
+			ZStack(alignment: .leading) {
+				Text("Context \(percent(1))").hidden()
+				Text("Context unknown").hidden()
+				Text(text)
+			}
+			.monospacedDigit()
 			ContextRing(fraction: ringFraction).frame(width: 20, height: 20)
+			Image(systemName: "slider.horizontal.2.square").foregroundStyle(.secondary)
+				.opacity(overridden ? 1 : 0)
+				.accessibilityHidden(true)
 		}
 		.font(.callout)
 		.foregroundStyle(fraction == nil ? .secondary : .primary)
@@ -258,10 +296,37 @@ struct AgentContextWidget: View {
 	}
 }
 
+extension AgentContextWidget {
+	/// Opens the context popover on a click, as a plain button around the widget.
+	func popover(
+		_ presentation: AgentContextPresentation, onThreshold: @escaping (UInt8?) -> Void,
+		onCompactNow: @escaping () -> Void
+	) -> some View {
+		ContextButton(widget: self, presentation: presentation, onThreshold: onThreshold, onCompactNow: onCompactNow)
+	}
+}
+
+private struct ContextButton: View {
+	let widget: AgentContextWidget
+	let presentation: AgentContextPresentation
+	let onThreshold: (UInt8?) -> Void
+	let onCompactNow: () -> Void
+	@State private var shown = false
+
+	var body: some View {
+		Button { shown.toggle() } label: { widget }
+			.buttonStyle(.plain)
+			.popover(isPresented: $shown, arrowEdge: .top) {
+				AgentContextPopover(
+					widget: widget, presentation: presentation, onThreshold: onThreshold, onCompactNow: onCompactNow)
+			}
+	}
+}
+
 /// A ring filling clockwise from 9 o'clock (a circle's trim starts at 3 o'clock, hence the half turn).
 struct ContextRing: View {
 	let fraction: Double
-	private let lineWidth: CGFloat = 3
+	var lineWidth: CGFloat = 3
 
 	var body: some View {
 		ZStack {

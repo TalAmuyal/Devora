@@ -10,7 +10,9 @@ mod inputs;
 mod restart_notice;
 mod running;
 pub mod template;
-pub use compaction::{Context, DEFAULT_THRESHOLD as DEFAULT_COMPACT_THRESHOLD};
+pub use compaction::{
+    Context, Progress as CompactionProgress, DEFAULT_THRESHOLD as DEFAULT_COMPACT_THRESHOLD,
+};
 pub use inputs::{fields, preview, Field, Source};
 pub use restart_notice::AppRun;
 pub use running::{GlobalPauseCheck, RunningSpace, SpaceEvent, SpaceHandle};
@@ -523,9 +525,11 @@ impl Space {
         run: &AppRun,
     ) -> Result<RunningSpace, String> {
         let options = self.session_options(context)?;
-        let threshold = devora_config::agent::read(&context.global_config, &self.profile)?
+        let profile_threshold = devora_config::agent::read(&context.global_config, &self.profile)?
             .compact_threshold
             .unwrap_or(compaction::DEFAULT_THRESHOLD);
-        running::start(self, options, threshold, log, globally_paused, run).await
+        let compaction =
+            compaction::Compaction::new(self.db.compact_threshold()?, profile_threshold);
+        running::start(self, options, compaction, log, globally_paused, run).await
     }
 }

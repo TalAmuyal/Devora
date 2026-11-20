@@ -48,7 +48,7 @@ struct AgentChatTests {
 		#expect(model.items[0].content == .assistant(text: "Hello"))
 		model.apply(.updated(tab: tab.id, generation: 6, update: .failure(message: "stale")))
 		#expect(model.chat?.phase == .running)
-		let context = ChatContext(usedTokens: 2500, windowTokens: 200000, thresholdPercent: 75)
+		let context = ChatContext(usedTokens: 2500, windowTokens: 200000, thresholdPercent: 75, defaultThresholdPercent: 75, ownThresholdPercent: nil, compaction: .idle)
 		model.apply(.updated(tab: tab.id, generation: 7, update: .context(context: context)))
 		#expect(model.chat?.context == context)
 		model.draft = "new turn"

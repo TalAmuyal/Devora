@@ -751,6 +751,33 @@ impl Agents {
         received.await.map_err(|e| e.to_string())?
     }
 
+    /// Sets the agent's own compaction threshold, or clears it to follow its
+    /// profile's. Needs the agent running: its actor owns the space's database.
+    pub async fn set_compact_threshold(
+        &self,
+        tab: u64,
+        generation: u64,
+        percent: Option<u8>,
+    ) -> Result<(), String> {
+        let handle = self.handle(tab, generation)?;
+        let (reply, received) = oneshot::channel();
+        self.runtime.spawn(async move {
+            let _ = reply.send(handle.set_compact_threshold(percent).await);
+        });
+        received.await.map_err(|e| e.to_string())?
+    }
+
+    /// Compacts the agent's conversation as reaching its threshold would: now,
+    /// or when its running turn ends.
+    pub async fn compact_now(&self, tab: u64, generation: u64) -> Result<(), String> {
+        let handle = self.handle(tab, generation)?;
+        let (reply, received) = oneshot::channel();
+        self.runtime.spawn(async move {
+            let _ = reply.send(handle.compact_now().await);
+        });
+        received.await.map_err(|e| e.to_string())?
+    }
+
     pub async fn answer_permission(
         &self,
         tab: u64,

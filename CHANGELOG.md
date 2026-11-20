@@ -20,6 +20,7 @@ Types of changes:
 
 ### Added
 
+- Devora Sapphire's Context widget opens a popover to compact an agent's conversation now, or set a compaction threshold for that agent only
 - Ember has configurable background repository updates, a Run Repo Updates palette command and a persisted Global Pause control with a Paused hint.
 
 - Sapphire can periodically update clean, detached parent clones across profiles, with User Defaults controls, a manual palette action and graceful Global Pause integration.

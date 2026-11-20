@@ -137,6 +137,29 @@ When('the user stops the agent turn', async function (this: SapphireWorld) { awa
 Then('the agent context bar has a known window and threshold {int}', async function (this: SapphireWorld, threshold: number) {
   await this.bridge.waitFor('typed context metrics', () => this.bridge.agentChat(), s => s.context !== null && BigInt(s.context.window) > 0n && BigInt(s.context.used) > 0n && s.context.threshold === threshold);
 });
+When('the user sets the agent compaction threshold to {int}', async function (this: SapphireWorld, percent: number) {
+  await this.bridge.setCompactThreshold(percent);
+});
+When('the user resets the agent compaction threshold', async function (this: SapphireWorld) {
+  await this.bridge.setCompactThreshold(null);
+});
+When('the user compacts the agent now', async function (this: SapphireWorld) {
+  await this.bridge.chatAction('compactNow');
+});
+Then('the agent compacts at {int} for this agent, over the profile threshold {int}', async function (this: SapphireWorld, threshold: number, profile: number) {
+  const chat = await this.bridge.waitFor('the agent threshold', () => this.bridge.agentChat(), s => s.context?.threshold === threshold);
+  assert.equal(chat.context?.defaultThreshold, profile);
+  assert.equal(chat.contextPopover.thresholdNote, `This agent only · profile default is ${profile}%`);
+});
+Then('the agent compaction has finished', async function (this: SapphireWorld) {
+  await this.bridge.waitFor('the compaction to finish', () => this.bridge.agentChat(), s => !s.running && s.context?.compaction === 'idle' && s.dom.text.includes('Devora compacts the conversation.'));
+});
+Then('the context popover refuses Compact Now with {string}', async function (this: SapphireWorld, note: string) {
+  const chat = await this.bridge.agentChat();
+  assert.equal(chat.contextPopover.compactEnabled, false);
+  assert.equal(chat.contextPopover.thresholdEnabled, false);
+  assert.equal(chat.contextPopover.thresholdNote, note);
+});
 Then('the agent transcript draws its Mermaid diagram', async function (this: SapphireWorld) {
   await this.bridge.waitFor('Mermaid diagram drawn', () => this.bridge.agentChat(), s => s.dom.diagrams.drawn === 1 && s.dom.diagrams.failed === 0);
 });
