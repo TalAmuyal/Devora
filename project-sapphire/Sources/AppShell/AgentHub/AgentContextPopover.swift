@@ -21,7 +21,9 @@ struct AgentContextPresentation {
 
 	var threshold: UInt8 { context?.thresholdPercent ?? 0 }
 	var defaultThreshold: UInt8 { context?.defaultThresholdPercent ?? 0 }
-	var overridden: Bool { context.map { $0.thresholdPercent != $0.defaultThresholdPercent } ?? false }
+	/// Whether the agent has a threshold of its own stored, which a change to its profile's doesn't reach, even when
+	/// the two are equal.
+	var overridden: Bool { context?.ownThresholdPercent != nil }
 
 	/// Why the controls can't act, or nil when they can.
 	var unavailableReason: String? {

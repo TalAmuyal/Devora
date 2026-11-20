@@ -19,6 +19,8 @@ pub struct Context {
     pub threshold_percent: u8,
     /// The profile's threshold, which the agent follows without one of its own.
     pub default_threshold_percent: u8,
+    /// The agent's own threshold, as stored, even when it equals the profile's.
+    pub own_threshold_percent: Option<u8>,
     pub progress: Progress,
 }
 
@@ -103,13 +105,15 @@ pub struct Compaction {
 }
 
 impl Compaction {
-    pub fn new(threshold_percent: u8, default_threshold_percent: u8) -> Self {
+    /// The agent's own threshold (`own`), if it has one, over its profile's.
+    pub fn new(own: Option<u8>, default_threshold_percent: u8) -> Self {
         Self {
             context: Context {
                 used_tokens: 0,
                 window_tokens: 0,
-                threshold_percent,
+                threshold_percent: own.unwrap_or(default_threshold_percent),
                 default_threshold_percent,
+                own_threshold_percent: own,
                 progress: Progress::Idle,
             },
             stage: Stage::Idle,
@@ -128,10 +132,12 @@ impl Compaction {
         }
     }
 
-    /// A new threshold for this agent; it is checked when the next turn ends, so
-    /// lowering it below the current usage starts nothing by itself.
-    pub fn set_threshold(&mut self, threshold_percent: u8) {
-        self.context.threshold_percent = threshold_percent;
+    /// The agent's own threshold, or none to follow the profile's; it is checked
+    /// when the next turn ends, so lowering it below the current usage starts
+    /// nothing by itself.
+    pub fn set_threshold(&mut self, own: Option<u8>) {
+        self.context.own_threshold_percent = own;
+        self.context.threshold_percent = own.unwrap_or(self.context.default_threshold_percent);
     }
 
     /// The user asks for a compaction with no turn running: its first step, to
@@ -276,7 +282,7 @@ mod tests {
 
     #[test]
     fn over_the_threshold_saves_memory_then_compacts_then_rests() {
-        let mut compaction = Compaction::new(80, 80);
+        let mut compaction = Compaction::new(None, 80);
         compaction.usage(
             &json!({"input_tokens": 10, "cache_read_input_tokens": 700, "output_tokens": 50}),
         );
@@ -306,7 +312,7 @@ mod tests {
 
     #[test]
     fn an_interrupted_step_abandons_the_compaction() {
-        let mut compaction = Compaction::new(50, 80);
+        let mut compaction = Compaction::new(Some(50), 80);
         compaction.usage(&json!({"input_tokens": 600}));
         assert!(matches!(
             compaction.result(&result(false)),
@@ -321,7 +327,7 @@ mod tests {
 
     #[test]
     fn a_compaction_the_cli_made_itself_refreshes_memory_after_its_turn() {
-        let mut compaction = Compaction::new(80, 80);
+        let mut compaction = Compaction::new(None, 80);
         compaction.compacted(&boundary("auto"));
         assert!(
             matches!(compaction.result(&result(false)), Some(Step::RefreshMemory)),
@@ -336,7 +342,7 @@ mod tests {
 
     #[test]
     fn a_request_with_no_turn_running_starts_at_once_and_says_why() {
-        let mut compaction = Compaction::new(80, 80);
+        let mut compaction = Compaction::new(None, 80);
         compaction.usage(&json!({"input_tokens": 100}));
         assert_eq!(compaction.result(&result(false)), None, "10% is under 80%");
         let step = compaction.begin();
@@ -356,7 +362,7 @@ mod tests {
 
     #[test]
     fn a_request_during_a_turn_starts_at_its_result_and_an_error_drops_it() {
-        let mut compaction = Compaction::new(80, 80);
+        let mut compaction = Compaction::new(None, 80);
         assert!(compaction.request());
         assert_eq!(compaction.context().progress, Progress::Requested);
         assert_eq!(
@@ -365,7 +371,7 @@ mod tests {
             "under the threshold, but asked for"
         );
 
-        let mut compaction = Compaction::new(80, 80);
+        let mut compaction = Compaction::new(None, 80);
         assert!(compaction.request());
         assert_eq!(compaction.result(&result(true)), None);
         assert_eq!(compaction.context().progress, Progress::Idle);
@@ -378,12 +384,13 @@ mod tests {
 
     #[test]
     fn a_new_threshold_is_checked_when_the_next_turn_ends() {
-        let mut compaction = Compaction::new(80, 80);
+        let mut compaction = Compaction::new(None, 80);
         compaction.usage(&json!({"input_tokens": 600}));
         assert_eq!(compaction.result(&result(false)), None, "60% is under 80%");
-        compaction.set_threshold(50);
+        compaction.set_threshold(Some(50));
         assert_eq!(compaction.context().threshold_percent, 50);
         assert_eq!(compaction.context().default_threshold_percent, 80);
+        assert_eq!(compaction.context().own_threshold_percent, Some(50));
         assert_eq!(
             compaction.context().progress,
             Progress::Idle,
@@ -393,5 +400,21 @@ mod tests {
             compaction.result(&result(false)),
             Some(Step::SaveMemory(Trigger::Threshold))
         );
+    }
+
+    #[test]
+    fn an_own_threshold_equal_to_the_profiles_is_still_the_agents_own() {
+        let mut compaction = Compaction::new(None, 80);
+        compaction.set_threshold(Some(80));
+        let context = compaction.context();
+        assert_eq!(context.threshold_percent, 80);
+        assert_eq!(
+            context.own_threshold_percent,
+            Some(80),
+            "pinned at the profile's value, not following it"
+        );
+        compaction.set_threshold(None);
+        assert_eq!(compaction.context().own_threshold_percent, None);
+        assert_eq!(compaction.context().threshold_percent, 80);
     }
 }

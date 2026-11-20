@@ -30,6 +30,7 @@ pub(super) fn publish(state: &Store, tab: u64, generation: u64, event: SpaceEven
                     window_tokens: context.window_tokens,
                     threshold_percent: context.threshold_percent,
                     default_threshold_percent: context.default_threshold_percent,
+                    own_threshold_percent: context.own_threshold_percent,
                     compaction: match context.progress {
                         CompactionProgress::Idle => devora_state::CompactionProgress::Idle,
                         CompactionProgress::Requested => {

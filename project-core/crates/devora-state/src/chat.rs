@@ -33,6 +33,8 @@ pub struct ChatContext {
     pub threshold_percent: u8,
     /// The profile's threshold, which the agent follows without one of its own.
     pub default_threshold_percent: u8,
+    /// The agent's own threshold, as stored, even when it equals the profile's.
+    pub own_threshold_percent: Option<u8>,
     pub compaction: CompactionProgress,
 }
 

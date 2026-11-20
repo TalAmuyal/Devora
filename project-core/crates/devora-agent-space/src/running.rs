@@ -591,7 +591,7 @@ async fn pump(
                     }
                     Some(Command { action: Action::SetCompactThreshold(percent), reply }) => {
                         let outcome = space.db.set_compact_threshold(percent).map(|()| {
-                            compaction.set_threshold(percent.unwrap_or(compaction.context().default_threshold_percent));
+                            compaction.set_threshold(percent);
                             let _ = events.send(SpaceEvent::Context(compaction.context()));
                             Value::Null
                         });

@@ -1841,8 +1841,22 @@ async fn an_agents_own_threshold_outlives_a_restart_and_clearing_it_follows_the_
     let mut running = start().await;
     let first = next_context(&mut running).await;
     assert_eq!(
-        (first.threshold_percent, first.default_threshold_percent),
-        (70, 70)
+        (
+            first.threshold_percent,
+            first.default_threshold_percent,
+            first.own_threshold_percent
+        ),
+        (70, 70, None)
+    );
+    running
+        .handle()
+        .set_compact_threshold(Some(70))
+        .await
+        .unwrap();
+    assert_eq!(
+        next_context(&mut running).await.own_threshold_percent,
+        Some(70),
+        "the profile's value, but the agent's own: a later profile change won't reach it"
     );
     running
         .handle()
@@ -1862,13 +1876,18 @@ async fn an_agents_own_threshold_outlives_a_restart_and_clearing_it_follows_the_
     assert_eq!(
         (
             restarted.threshold_percent,
-            restarted.default_threshold_percent
+            restarted.default_threshold_percent,
+            restarted.own_threshold_percent
         ),
-        (40, 70),
+        (40, 70, Some(40)),
         "its own, beside the profile's"
     );
     running.handle().set_compact_threshold(None).await.unwrap();
-    assert_eq!(next_context(&mut running).await.threshold_percent, 70);
+    let cleared = next_context(&mut running).await;
+    assert_eq!(
+        (cleared.threshold_percent, cleared.own_threshold_percent),
+        (70, None)
+    );
     running.pause().await.unwrap();
 
     let mut running = start().await;

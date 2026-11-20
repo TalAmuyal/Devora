@@ -186,7 +186,8 @@ debi completion zsh > ~/.zsh/completions/_debi
 The Context widget below an agent's prompt shows how full its context is.
 Near the compaction threshold (`agent.compact-threshold`, 80% by default), Devora asks the agent to save its memory, then compacts the conversation.
 Click the widget to see the numbers, set a threshold for this agent only, or compact now.
-The slider applies when you release it, and Reset makes the agent follow its profile's threshold again; the widget shows a small mark while an agent has its own.
+The slider applies when you release it, and Reset makes the agent follow its profile's threshold again; the widget shows a small mark while an agent has its own, even one equal to the profile's.
+An agent reads its profile's threshold when it starts, so a change to the profile's reaches a running agent at its next start.
 Compact Now runs the same steps the threshold does: right away on an idle agent, or when the current turn ends.
 A paused agent shows its context, but its threshold and Compact Now wait until it runs.
 

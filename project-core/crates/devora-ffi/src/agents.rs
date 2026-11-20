@@ -278,6 +278,7 @@ pub struct ChatContext {
     pub window_tokens: u64,
     pub threshold_percent: u8,
     pub default_threshold_percent: u8,
+    pub own_threshold_percent: Option<u8>,
     pub compaction: CompactionProgress,
 }
 #[uniffi::remote(Enum)]

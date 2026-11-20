@@ -8,7 +8,7 @@ A stop that was forced or interrupted a turn (`StopInfo`) also owes the notice, 
 
 ## The agent's compaction threshold
 
-Schema version 5 adds `space.compact_threshold`: the agent's own threshold (1 to 100), over its profile's `agent.compact-threshold`; null follows the profile. `SpaceHandle::set_compact_threshold` commits it and applies it at once, through the actor, which owns the database, so it needs a running agent. `SpaceHandle::compact_now` starts the save-memory and `/compact` steps on an idle agent, or flags them for the running turn's result, as reaching the threshold does; a failed or interrupted turn drops that request, as it abandons a compaction. The context the actor publishes carries the profile's threshold beside the agent's, and the compaction's progress (idle, requested, under way).
+Schema version 5 adds `space.compact_threshold`: the agent's own threshold (1 to 100), over its profile's `agent.compact-threshold`; null follows the profile. `SpaceHandle::set_compact_threshold` commits it and applies it at once, through the actor, which owns the database, so it needs a running agent. `SpaceHandle::compact_now` starts the save-memory and `/compact` steps on an idle agent, or flags them for the running turn's result, as reaching the threshold does; a failed or interrupted turn drops that request, as it abandons a compaction. The context the actor publishes carries the threshold in force, the profile's (as read at launch), the agent's own as stored (which may equal the profile's, and still pins it), and the compaction's progress (idle, requested, under way).
 
 ## The running CLI
 

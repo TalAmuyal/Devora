@@ -258,8 +258,8 @@ struct AgentContextWidget: View {
 		return "\(used) / \(context.windowTokens.formatted(.number.locale(locale))) tokens"
 	}
 
-	/// Whether this agent has a compaction threshold of its own, over its profile's.
-	var overridden: Bool { context.map { $0.thresholdPercent != $0.defaultThresholdPercent } ?? false }
+	/// Whether this agent has a compaction threshold of its own stored, over its profile's, even an equal one.
+	var overridden: Bool { context?.ownThresholdPercent != nil }
 
 	var tooltip: String {
 		guard let context else { return tokens }

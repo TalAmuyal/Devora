@@ -528,10 +528,8 @@ impl Space {
         let profile_threshold = devora_config::agent::read(&context.global_config, &self.profile)?
             .compact_threshold
             .unwrap_or(compaction::DEFAULT_THRESHOLD);
-        let compaction = compaction::Compaction::new(
-            self.db.compact_threshold()?.unwrap_or(profile_threshold),
-            profile_threshold,
-        );
+        let compaction =
+            compaction::Compaction::new(self.db.compact_threshold()?, profile_threshold);
         running::start(self, options, compaction, log, globally_paused, run).await
     }
 }
