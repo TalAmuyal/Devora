@@ -143,19 +143,26 @@ impl RestartNotice {
         }
     }
 
-    /// One notice for both: the more specific cause, every stopped task, and
-    /// whatever attempt the stored one (`self`) has in flight.
+    /// One notice for both: the more specific cause and every stopped task.
+    /// One that tells the agent more is owed afresh, dropping the stored
+    /// one's (`self`) attempt: that attempt can be stale (its turn ended by
+    /// the CLI exiting, not by its result), and a launch finding it saved
+    /// would drop the whole notice. A late result for it then leaves the new
+    /// one owed.
     pub fn merge(self, other: Self) -> Self {
-        let mut stopped = self.stopped;
+        let cause = self.cause.max(other.cause);
+        let mut stopped = self.stopped.clone();
         for task in other.stopped {
             if !stopped.contains(&task) {
                 stopped.push(task);
             }
         }
+        let tells_more = cause != self.cause || stopped != self.stopped;
         Self {
-            cause: self.cause.max(other.cause),
+            attempt: if tells_more { None } else { self.attempt },
+            recovery: self.recovery,
+            cause,
             stopped,
-            ..self
         }
     }
 
@@ -302,8 +309,8 @@ mod tests {
         );
     }
 
-    // One stored notice: the more specific cause words it, every stopped task
-    // is kept, and the stored one's attempt in flight stays.
+    // One stored notice: the more specific cause words it, and every stopped
+    // task is kept.
     #[test]
     fn notices_owed_together_merge_into_the_most_specific() {
         let restart = owed(false).unwrap();
@@ -322,20 +329,47 @@ mod tests {
             restart.clone().merge(RestartNotice::after_stop()).cause,
             NoticeCause::Stop
         );
-        let attempted = RestartNotice {
-            attempt: Some("turn".into()),
-            ..restart
-        };
-        let merged = attempted.merge(RestartNotice::after_pause(vec![watcher()]));
-        assert_eq!(merged.attempt.as_deref(), Some("turn"));
+        let merged = pause.clone().merge(pause.clone());
         assert_eq!(
-            merged
-                .clone()
-                .merge(RestartNotice::after_pause(vec![watcher()]))
-                .stopped,
+            merged.stopped,
             vec![watcher()],
             "a task stopped twice is named once"
         );
+    }
+
+    // A notice sent once, whose turn the CLI's exit ended so its attempt was
+    // never cleared, then a pause stopping work: the next launch finds the old
+    // attempt saved, and must still tell the agent what the pause stopped.
+    #[test]
+    fn a_pause_after_a_stale_attempt_is_still_owed_at_the_next_launch() {
+        let stale = RestartNotice {
+            attempt: Some("turn".into()),
+            ..owed(false).unwrap()
+        };
+        let merged = stale.merge(RestartNotice::after_pause(vec![watcher()]));
+        let owed = RestartNotice::at_launch(Some(merged), true, false, true).unwrap();
+        assert_eq!(owed.cause, NoticeCause::Pause);
+        assert_eq!(owed.stopped, vec![watcher()]);
+    }
+
+    // Owing what is already owed adds nothing, so an attempt in flight stays
+    // and its result still clears the notice.
+    #[test]
+    fn owing_nothing_new_keeps_the_attempt_in_flight() {
+        let attempted = RestartNotice {
+            attempt: Some("turn".into()),
+            ..RestartNotice::after_pause(vec![watcher()])
+        };
+        for again in [
+            RestartNotice::after_pause(vec![watcher()]),
+            RestartNotice::after_stop(),
+            owed(false).unwrap(),
+        ] {
+            assert_eq!(
+                attempted.clone().merge(again).attempt.as_deref(),
+                Some("turn")
+            );
+        }
     }
 
     #[test]

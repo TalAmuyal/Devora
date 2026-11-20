@@ -468,7 +468,10 @@ struct Preparing {
     deadline: tokio::time::Instant,
     /// `stop_task` requests not answered yet.
     stops: usize,
-    /// Stopped subagents whose notification turn hasn't ended yet.
+    /// Stopped subagents whose notification turn hasn't ended yet. The CLI
+    /// runs one per subagent, even when several are stopped at once and their
+    /// turns are interrupted (probed on the pinned CLI); were it ever to
+    /// batch them, the pause would only wait out `deadline`.
     agent_turns: usize,
     reply: oneshot::Sender<Result<Value, String>>,
 }
