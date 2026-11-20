@@ -1099,8 +1099,8 @@ async fn pause_after_turn_waits_for_the_turn_and_wins_over_compaction() {
         prompts, 1,
         "the turn's result is over the threshold, but the pause wins: {report}"
     );
-    // Already paused; this only waits for the space to release its ownership.
-    assert!(running.pause().await.is_err());
+    // Already paused: it reports that stop and waits for the space to release its ownership.
+    assert!(running.pause().await.unwrap().graceful);
 
     // An idle agent pauses at once.
     let idle = Space::open(&fixture.profile, "Delta").unwrap();
@@ -1976,6 +1976,51 @@ async fn compact_now_saves_the_memory_then_compacts_under_the_threshold_once_at_
         Some(&devora_agent_space::CompactionProgress::Idle),
         "{progress:?}"
     );
+}
+
+// A quit asks every agent to pause, including one whose own pause after its
+// turn (a hold's, say) has already stopped it. That isn't a problem: it gets
+// the stop the actor recorded, graceful or forced, and only that one stop, so
+// a forced one is reported and owes one notice.
+#[tokio::test]
+async fn pausing_an_agent_its_own_pause_already_stopped_reports_that_stop() {
+    for forced in [false, true] {
+        let fixture = Fixture::new();
+        let mut context = fixture.context();
+        let log = Arc::new(Log::open(&fixture.root.path().join("log")).unwrap());
+        fixture.create(fixture.form("Delta")).unwrap();
+        launch_and_settle(&fixture, &context, &log, &fixture.run).await;
+        if forced {
+            context
+                .environment
+                .insert("DEVORA_FAKE_HANG_AT_EOF".into(), "1".into());
+        }
+        let mut running = Space::open(&fixture.profile, "Delta")
+            .unwrap()
+            .start(&context, log.clone(), &fixture.run)
+            .await
+            .unwrap();
+        tokio::time::timeout(Duration::from_secs(15), running.handle().pause_after_turn())
+            .await
+            .unwrap()
+            .unwrap();
+        let stop = running.pause().await.unwrap();
+        assert_eq!(stop.graceful, !forced);
+        let mut persisted = vec![];
+        while let Some(update) = running.next_update().await {
+            if let SpaceEvent::Session(SessionEvent::Stopped(info)) = update {
+                persisted.push(info);
+            }
+        }
+        assert_eq!(
+            persisted,
+            vec![stop],
+            "one stop, the one the actor persisted"
+        );
+        context.environment.remove("DEVORA_FAKE_HANG_AT_EOF");
+        let rows = launch_and_settle(&fixture, &context, &log, &fixture.run).await;
+        assert_eq!(rows.len(), usize::from(forced), "{rows:?}");
+    }
 }
 
 /// Launches in the fixture's run, starts the fake CLI's background work

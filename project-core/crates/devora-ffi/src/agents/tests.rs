@@ -1284,6 +1284,25 @@ fn shutdown_reports_a_terminated_agent_during_a_global_hold_too() {
     );
 }
 
+// A quit right after a hold: the hold's own pause may already have stopped the
+// agent when the quit asks it to pause, and that clean stop isn't a problem.
+#[test]
+fn a_quit_right_after_a_hold_reports_no_problem_for_an_agent_it_already_stopped() {
+    let f = Fixture::new(false);
+    let events = f.core.subscribe_agent_chats().unwrap();
+    f.create("Delta");
+    let tab = f.open("Delta");
+    let chat = f.wait(&events, |c| c.tab == tab && c.phase == ChatPhase::Running);
+    block_on(f.core.send_agent_turn(tab, chat.generation, "hello".into())).unwrap();
+    f.wait(&events, |c| {
+        c.tab == tab && has_message(c, "result") && !c.turn_running
+    });
+    f.core
+        .dispatch(Command::SetGlobalPaused { paused: true })
+        .unwrap();
+    block_on(f.core.shutdown_agents()).unwrap();
+}
+
 #[test]
 fn across_a_held_restart_only_the_plainly_held_agent_launches_on_release() {
     let mut f = Fixture::new(true);

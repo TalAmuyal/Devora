@@ -169,7 +169,8 @@ impl SpaceHandle {
 pub struct RunningSpace {
     handle: SpaceHandle,
     events: mpsc::UnboundedReceiver<SpaceEvent>,
-    worker: Option<JoinHandle<Result<(), String>>>,
+    /// Ends with the stop the actor persisted, when it stopped the session itself.
+    worker: Option<JoinHandle<Result<Option<StopInfo>, String>>>,
 }
 impl RunningSpace {
     pub fn handle(&self) -> SpaceHandle {
@@ -187,14 +188,18 @@ impl RunningSpace {
         }
         None
     }
+    /// A session the actor has already stopped (its own pause after a turn)
+    /// can't be asked again, so it answers with the stop the actor recorded,
+    /// graceful or forced.
     pub async fn pause(&mut self) -> Result<StopInfo, String> {
-        let stopped = self.handle.pause().await;
-        if let Some(worker) = self.worker.take() {
-            worker
+        let requested = self.handle.pause().await;
+        let recorded = match self.worker.take() {
+            Some(worker) => worker
                 .await
-                .map_err(|e| format!("agent space worker failed: {e}"))??;
-        }
-        stopped
+                .map_err(|e| format!("agent space worker failed: {e}"))??,
+            None => None,
+        };
+        requested.or_else(|error| recorded.ok_or(error))
     }
 }
 
@@ -516,7 +521,7 @@ async fn pump(
     events: &mpsc::UnboundedSender<SpaceEvent>,
     mut commands: mpsc::UnboundedReceiver<Command>,
     globally_paused: GlobalPauseCheck,
-) -> Result<(), String> {
+) -> Result<Option<StopInfo>, String> {
     let (completed, mut completions) = mpsc::unbounded_channel::<Completion>();
     let mut pending = 0usize;
     // The turn running, by the ID the CLI answers it with, and a pause waiting for it to end.
@@ -586,9 +591,9 @@ async fn pump(
             biased;
             _ = events.closed() => {
                 let pause = session.pause().await;
-                let mut stopped = false;
+                let mut stopped = None;
                 while let Some(event) = session.next_event().await {
-                    stopped |= matches!(event,SessionEvent::Stopped(_));
+                    if let SessionEvent::Stopped(info) = &event { stopped = Some(info.clone()); }
                     persist(space,transcript,&event,events)?;
                 }
                 while pending > 0 {
@@ -597,7 +602,7 @@ async fn pump(
                         pending -= 1;
                     }
                 }
-                return if stopped { Ok(()) } else { pause.map(|_|()) };
+                return match stopped { Some(info) => Ok(Some(info)), None => pause.map(Some) };
             }
             stopped = stops.recv(), if preparing.is_some() => {
                 let prepared = preparing.as_mut().expect("checked");
@@ -622,7 +627,7 @@ async fn pump(
                 }
             }
             event = session.next_event() => {
-                let Some(event) = event else { return Ok(()); };
+                let Some(event) = event else { return Ok(None); };
                 persist(space,transcript,&event,events)?;
                 if let SessionEvent::Message(Message::Known(KnownMessage::System(System::BackgroundTasksChanged { tasks, .. }))) = &event {
                     background = tasks.clone();
@@ -642,6 +647,7 @@ async fn pump(
                     }
                 }
                 let terminal = matches!(event,SessionEvent::Stopped(_) | SessionEvent::Failed(_));
+                let stop = match &event { SessionEvent::Stopped(info) => Some(info.clone()), _ => None };
                 // A crash ends the turn too; recovery resumes without it.
                 let ended = turn_running.as_deref().is_some_and(|id| match &event {
                     SessionEvent::Message(Message::Known(KnownMessage::Result(result))) => result.answers(id),
@@ -681,7 +687,7 @@ async fn pump(
                             pending -= 1;
                         }
                     }
-                    return Ok(());
+                    return Ok(stop);
                 }
             }
             command = commands.recv() => {

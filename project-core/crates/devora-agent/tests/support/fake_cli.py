@@ -5,6 +5,7 @@ import json
 import os
 import pathlib
 import sys
+import time
 
 if "--version" in sys.argv:
     print(os.environ.get("DEVORA_FAKE_VERSION", "2.1.316 (Claude Code)"))
@@ -260,5 +261,8 @@ for line in sys.stdin:
             emit(recorded("assistant"))
             result()
 report({"kind":"eof"})
+# A CLI that won't exit, for a stop that has to be forced.
+if os.environ.get("DEVORA_FAKE_HANG_AT_EOF"):
+    time.sleep(3600)
 # As the CLI does after an interrupted turn: it exits by itself, with code 1.
 sys.exit(int(os.environ.get("DEVORA_FAKE_EOF_EXIT", "0")))
