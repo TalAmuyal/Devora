@@ -64,6 +64,7 @@ Reference those homes rather than restating them.
 - [ADR-012: Agent Spaces](docs/adrs/ADR-012-agent-spaces.md) — a persistent agent per `<profile>/agent-spaces/<name>/`, with its own `memory/` and SQLite database; opened from the Agent Hub as a tab with a chat panel; closing the tab pauses the agent and reopening resumes it
 - [ADR-013: Global Pause](docs/adrs/ADR-013-global-pause.md) — a durable per-app hold with subscribed integrations and graceful work boundaries
 - [ADR-014: Native Agent Transcript](docs/adrs/ADR-014-native-agent-transcript.md) — Sapphire's chat transcript as an `NSTableView` of hosted SwiftUI rows with estimated-then-measured heights, Markdown through `swift-markdown`, landing behind a switch first
+- [ADR-015: One Module Map for CI Test Selection](docs/adrs/ADR-015-ci-module-map.md) — CI runs a module's tests only when its inputs changed: modules declared once (`scripts/ci/modules.toml`), their inputs derived from the build graphs and the bundler's list into a committed, checked lock; selection in bash and jq, conservative by rule, and a test that leaves no file unmapped
 
 ## Vision
 
