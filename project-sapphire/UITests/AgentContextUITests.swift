@@ -26,12 +26,16 @@ final class AgentContextUITests: XCTestCase {
 		let slider = app.sliders["agent-compact-threshold"]
 		waitFor("Compact Now and the slider are available on an idle agent") { compactNow.isEnabled && slider.isEnabled }
 		capture(popover, "the context popover")
+		let anchored = popover.frame
 
 		// The middle of 30–100% in steps of 5 is 65%.
 		slider.adjust(toNormalizedSliderPosition: 0.5)
 		waitFor("Releasing the slider gives this agent its own threshold") {
 			(context.value as? String)?.contains("for this agent (profile: 80%)") == true
 		}
+		// The popover stays open, still anchored where it was: the widget keeps its width as the glyph appears.
+		XCTAssertEqual(app.popovers.count, 1, "Setting the threshold must leave the popover open, and only it")
+		XCTAssertEqual(popover.frame, anchored, "The popover must not move: the widget it's anchored to keeps its width")
 		capture(popover, "the context popover with this agent's own threshold")
 		app.typeKey(.escape, modifierFlags: [])
 		XCTAssertTrue(popover.waitForNonExistence(timeout: 10), "Escape must close the popover")

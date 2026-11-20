@@ -47,4 +47,5 @@ Its `AgentContextWidget` shows the actor's typed context usage as a percentage o
 Clicking it opens a native popover (`AgentContextPopover.swift`): the numbers, this agent's compaction threshold as a slider from 30 to 100% that applies on release (Reset follows the profile again), and Compact Now, which runs the threshold's steps now or, during a turn, as Compact After This Turn.
 `AgentContextPresentation` decides what it shows and allows: both controls need a running agent and are disabled with the reason otherwise, a configured threshold under 30% shows clamped with a note, and a threshold already passed on an idle agent says "Compacts after the next turn", since nothing starts until a turn ends.
 An agent with its own threshold stored (the context's `ownThresholdPercent`, even when it equals the profile's) shows a glyph beside the ring, and its tooltip names both thresholds.
+The widget keeps one width whatever it shows (the text reserves its widest forms, the glyph its place): the popover is anchored to it, and a moved anchor makes SwiftUI present the popover anew, as a new window.
 Retry and Resume reopen the existing tab against its owning profile.

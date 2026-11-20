@@ -271,13 +271,19 @@ struct AgentContextWidget: View {
 	}
 
 	var body: some View {
+		// A constant width: the text reserves its widest forms and the glyph its place, so the widget never moves the
+		// context popover anchored to it (a moved anchor re-presents the popover) nor the Pause widget beside it.
 		HStack(spacing: 6) {
-			Text(text).monospacedDigit()
-			ContextRing(fraction: ringFraction).frame(width: 20, height: 20)
-			if overridden {
-				Image(systemName: "slider.horizontal.2.square").foregroundStyle(.secondary)
-					.accessibilityHidden(true)
+			ZStack(alignment: .leading) {
+				Text("Context \(percent(1))").hidden()
+				Text("Context unknown").hidden()
+				Text(text)
 			}
+			.monospacedDigit()
+			ContextRing(fraction: ringFraction).frame(width: 20, height: 20)
+			Image(systemName: "slider.horizontal.2.square").foregroundStyle(.secondary)
+				.opacity(overridden ? 1 : 0)
+				.accessibilityHidden(true)
 		}
 		.font(.callout)
 		.foregroundStyle(fraction == nil ? .secondary : .primary)
