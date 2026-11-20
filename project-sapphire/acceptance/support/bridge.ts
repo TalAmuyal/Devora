@@ -333,6 +333,8 @@ export interface AppState {
   tabs: TabState[];
   /** The terminals' font size, in points. */
   fontSize: number;
+  /** The User Defaults' Appearance, the app's effective appearance, and the system's. */
+  appearance: { setting: 'automatic' | 'light' | 'dark'; effective: 'light' | 'dark'; system: 'light' | 'dark' };
   /** The names of the layers on the window stack, bottom to top. */
   windowLayers: string[];
   /** Whether a text field or text view has the keyboard focus. */

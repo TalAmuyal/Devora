@@ -89,6 +89,9 @@ public final class Store {
 	/// Asks the window's display link to call `foldPending()` on its next frame; without one, events fold on the main actor's next turn.
 	@ObservationIgnored public var requestFrame: (@MainActor () -> Void)?
 
+	/// The User Defaults' Appearance, which the app applies (ADR-010); read when the core opens, and again after it's written.
+	public private(set) var appearance: Appearance = .automatic
+
 	@ObservationIgnored public let log: AppLog
 	@ObservationIgnored private let configPath: String?
 	@ObservationIgnored var core: DevoraCore?
@@ -136,6 +139,7 @@ public final class Store {
 			let core = try DevoraCore(configPath: configPath, statePath: statePath, log: log)
 			previewLayoutRules = try core.previewLayoutRules()
 			self.core = core
+			readAppearance(core)
 			stateEvents = pullStateEvents(from: try core.subscribe())
 			agentChats = pullAgentStatuses(from: try core.subscribeAgentChats())
 		} catch CoreError.StateInUse(let path, _) {
@@ -389,7 +393,14 @@ public final class Store {
 	@discardableResult
 	public func setConfigSetting(profilePath: String?, key: String, value: String?) async -> Bool {
 		guard let core else { return false }
-		return (try? await call("set_config_setting") { try core.setConfigSetting(profilePath: profilePath, key: key, value: value) }) != nil
+		let stored = (try? await call("set_config_setting") { try core.setConfigSetting(profilePath: profilePath, key: key, value: value) }) != nil
+		if stored, key == "appearance" { readAppearance(core) }
+		return stored
+	}
+
+	/// A config that can't be read keeps the appearance as it is, without a banner of its own: listing the profiles reports it.
+	private func readAppearance(_ core: DevoraCore) {
+		if let appearance = try? core.appearance() { self.appearance = appearance }
 	}
 
 	/// Reads Claude settings against this store's user config; errors follow the normal banner path.

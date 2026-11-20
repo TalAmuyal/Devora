@@ -7,3 +7,6 @@ pub mod profile;
 pub mod agent;
 
 pub mod repo_update;
+
+/// The app's Appearance (User Defaults).
+pub mod appearance;

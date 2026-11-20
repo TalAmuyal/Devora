@@ -30,6 +30,8 @@ struct ConfigField {
 	var note: String?
 	/// Shown only while the task tracker resolves to Asana, which a profile may inherit.
 	var needsAsana = false
+	/// The app's, not a profile's (the core's `user_defaults_only`): shown only in the User Defaults.
+	var userDefaultsOnly = false
 
 	static func text(_ key: String, _ label: String, hint: String? = nil, placeholder: String = "") -> ConfigField {
 		ConfigField(key: key, label: label, hint: hint, kind: .text(placeholder: placeholder, whitespace: .trim))
@@ -80,16 +82,31 @@ struct ConfigCard {
 		asana(.text("task-tracker.asana.section-id", "Section ID", hint: "optional")),
 	])
 
+	static let appearance = ConfigCard(title: "Appearance", fields: [
+		ConfigField(
+			key: "appearance", label: "Appearance", hint: "Automatic follows the system",
+			kind: .choice([.init(label: "Automatic", value: nil), .init(label: "Light", value: "light"), .init(label: "Dark", value: "dark")]),
+			showsInherited: false, userDefaultsOnly: true),
+	])
+
 	static let agent = ConfigCard(title: "Agent", fields: [
 		ConfigField(key: "agent.enter-sends", label: "Enter sends", hint: "Shift+Enter always inserts a newline", kind: .bool),
 	])
 
 	static let repoUpdates = ConfigCard(title: "Repository Updates", fields: [
-		ConfigField(key: "repo-update.enabled", label: "Periodic updates", hint: "clean, detached parent clones in every profile", kind: .bool),
-		.text("repo-update.interval-minutes", "Interval", hint: "positive number of minutes", placeholder: "60"),
+		ConfigField(
+			key: "repo-update.enabled", label: "Periodic updates", hint: "clean, detached parent clones in every profile", kind: .bool,
+			userDefaultsOnly: true),
+		userDefaultsOnly(.text("repo-update.interval-minutes", "Interval", hint: "positive number of minutes", placeholder: "60")),
 	])
 
-	static let all = [agent, terminal, pullRequests, taskTracker, repoUpdates]
+	static let all = [appearance, agent, terminal, pullRequests, taskTracker, repoUpdates]
+
+	private static func userDefaultsOnly(_ field: ConfigField) -> ConfigField {
+		var field = field
+		field.userDefaultsOnly = true
+		return field
+	}
 
 	private static func asana(_ field: ConfigField) -> ConfigField {
 		var field = field
@@ -188,7 +205,7 @@ final class ConfigSettingsModel {
 	var usesAsana: Bool { resolved("task-tracker.provider") == .text(value: "asana") }
 
 	func isVisible(_ field: ConfigField) -> Bool {
-		(profilePath == nil || !field.key.hasPrefix("repo-update.")) && (!field.needsAsana || usesAsana)
+		(profilePath == nil || !field.userDefaultsOnly) && (!field.needsAsana || usesAsana)
 	}
 
 	// MARK: Text settings

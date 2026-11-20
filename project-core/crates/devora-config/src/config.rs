@@ -479,7 +479,10 @@ enum ConfigFieldKind {
     Fragment,
     Bool,
     PositiveInteger,
+    /// One of these, or `""` for an explicit "none"; any other stored string passes through.
     Enum(&'static [&'static str]),
+    /// Exactly one of these: no "none", and a stored value outside the set reads as absent (a hand-edited or newer value falls back to the default).
+    Choice(&'static [&'static str]),
 }
 
 /// Devora's built-in default for a field, shown as the resolved "Default" hint when nothing is stored at any scope.
@@ -495,78 +498,100 @@ struct ConfigFieldSpec {
     key: &'static str,
     kind: ConfigFieldKind,
     builtin_default: BuiltinDefault,
+    /// The app's, not a profile's: stored only in the User Defaults, and not listed for a profile.
+    user_defaults_only: bool,
 }
 
 const CONFIG_FIELDS: &[ConfigFieldSpec] = &[
     ConfigFieldSpec {
+        key: crate::appearance::KEY,
+        kind: ConfigFieldKind::Choice(&["light", "dark"]),
+        builtin_default: BuiltinDefault::None, // absent = Automatic, the system's
+        user_defaults_only: true,
+    },
+    ConfigFieldSpec {
         key: "repo-update.enabled",
         kind: ConfigFieldKind::Bool,
         builtin_default: BuiltinDefault::None,
+        user_defaults_only: true,
     },
     ConfigFieldSpec {
         key: "repo-update.interval-minutes",
         kind: ConfigFieldKind::PositiveInteger,
         builtin_default: BuiltinDefault::Integer(crate::repo_update::INTERVAL_MINUTES),
+        user_defaults_only: true,
     },
     ConfigFieldSpec {
         key: "agent.enter-sends",
         kind: ConfigFieldKind::Bool,
         builtin_default: BuiltinDefault::Bool(false),
+        user_defaults_only: false,
     },
     ConfigFieldSpec {
         key: "terminal.default-app",
         kind: ConfigFieldKind::Text,
         builtin_default: BuiltinDefault::None, // unset = bare login shell
+        user_defaults_only: false,
     },
     ConfigFieldSpec {
         key: "terminal.git-shortcuts",
         kind: ConfigFieldKind::Bool,
         builtin_default: BuiltinDefault::Bool(DEFAULT_GIT_SHORTCUTS),
+        user_defaults_only: false,
     },
     ConfigFieldSpec {
         key: "prepare-command",
         kind: ConfigFieldKind::Text,
         builtin_default: BuiltinDefault::None,
+        user_defaults_only: false,
     },
     ConfigFieldSpec {
         key: "pr.auto-merge",
         kind: ConfigFieldKind::Bool,
         builtin_default: BuiltinDefault::None, // Debi owns the default (and a per-repo tier exists)
+        user_defaults_only: false,
     },
     ConfigFieldSpec {
         key: "pr.title-prefix",
         kind: ConfigFieldKind::Fragment,
         builtin_default: BuiltinDefault::None, // Debi owns the default (no prefix)
+        user_defaults_only: false,
     },
     ConfigFieldSpec {
         key: "feature.branch-prefix",
         kind: ConfigFieldKind::Text,
         builtin_default: BuiltinDefault::None,
+        user_defaults_only: false,
     },
     ConfigFieldSpec {
         key: "task-tracker.provider",
         kind: ConfigFieldKind::Enum(&["asana"]),
         builtin_default: BuiltinDefault::None,
+        user_defaults_only: false,
     },
     ConfigFieldSpec {
         key: "task-tracker.asana.workspace-id",
         kind: ConfigFieldKind::Text,
         builtin_default: BuiltinDefault::None,
+        user_defaults_only: false,
     },
     ConfigFieldSpec {
         key: "task-tracker.asana.project-id",
         kind: ConfigFieldKind::Text,
         builtin_default: BuiltinDefault::None,
+        user_defaults_only: false,
     },
     ConfigFieldSpec {
         key: "task-tracker.asana.cli-tag",
         kind: ConfigFieldKind::Text,
         builtin_default: BuiltinDefault::None,
+        user_defaults_only: false,
     },
     ConfigFieldSpec {
         key: "task-tracker.asana.section-id",
         kind: ConfigFieldKind::Text,
         builtin_default: BuiltinDefault::None,
+        user_defaults_only: false,
     },
 ];
 
@@ -596,6 +621,10 @@ fn stored_config_value(cfg: Option<&Value>, spec: &ConfigFieldSpec) -> Option<Va
         ConfigFieldKind::Text | ConfigFieldKind::Fragment | ConfigFieldKind::Enum(_) => {
             val.as_str().map(|s| Value::String(s.to_string()))
         }
+        ConfigFieldKind::Choice(allowed) => val
+            .as_str()
+            .filter(|s| allowed.contains(s))
+            .map(|s| Value::String(s.to_string())),
     }
 }
 
@@ -645,7 +674,7 @@ pub fn read_config_settings_in(
     let mut stored = serde_json::Map::new();
     let mut resolved = serde_json::Map::new();
     for spec in CONFIG_FIELDS {
-        if profile_path.is_some() && crate::repo_update::is_key(spec.key) {
+        if profile_path.is_some() && spec.user_defaults_only {
             continue;
         }
         if let Some(v) = stored_config_value(own_cfg, spec) {
@@ -700,6 +729,16 @@ fn coerce_config_value(spec: &ConfigFieldSpec, value: Option<&str>) -> Result<Va
             }
             Ok(Value::String(raw.to_string()))
         }
+        ConfigFieldKind::Choice(allowed) => {
+            if !allowed.contains(&raw) {
+                return Err(format!(
+                    "invalid value for {}: {raw} (expected one of {})",
+                    spec.key,
+                    allowed.join(", ")
+                ));
+            }
+            Ok(Value::String(raw.to_string()))
+        }
     }
 }
 
@@ -724,7 +763,7 @@ pub fn write_config_setting_in(
 ) -> Result<(), String> {
     let _write = lock_config_writes();
     let spec = config_field(key).ok_or_else(|| format!("unknown config key: {key}"))?;
-    if profile_path.is_some() && crate::repo_update::is_key(key) {
+    if profile_path.is_some() && spec.user_defaults_only {
         return Err(format!("{key} belongs to User Defaults"));
     }
 

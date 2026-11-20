@@ -138,6 +138,19 @@ Then('the global config should have {string} set to {string}', async function (t
   await expectConfig(this.testConfigPath, key, value);
 });
 
+Then('the global config should not have {string}', async function (this: SapphireWorld, key: string) {
+  await expectConfig(this.testConfigPath, key, undefined);
+});
+
+Then('the app should appear {string}', async function (this: SapphireWorld, effective: string) {
+  await this.bridge.waitFor(`the app to appear ${effective}`, () => this.bridge.state(), (s) => s.appearance.effective === effective);
+});
+
+// Whatever the machine's appearance: Automatic is the system's.
+Then("the app should appear as the system does", async function (this: SapphireWorld) {
+  await this.bridge.waitFor('the app to appear as the system does', () => this.bridge.state(), (s) => s.appearance.setting === 'automatic' && s.appearance.effective === s.appearance.system);
+});
+
 Then('the profile {string} config should have {string} set to {string}', async function (this: SapphireWorld, name: string, key: string, value: string) {
   await expectConfig(profileConfig(this, name), key, value);
 });

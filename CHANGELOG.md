@@ -20,6 +20,7 @@ Types of changes:
 
 ### Added
 
+- Devora Sapphire has an Appearance setting in User Defaults: Automatic (the system's, the default), Light or Dark, applied at once and from the first frame at launch. Native views (dialogs, hubs, settings, the toolbar and agent chats' controls) follow it today; the terminals stay dark, and the transcript and web panes don't follow it yet
 - Devora Sapphire's Context widget opens a popover to compact an agent's conversation now, or set a compaction threshold for that agent only
 - Ember has configurable background repository updates, a Run Repo Updates palette command and a persisted Global Pause control with a Paused hint.
 

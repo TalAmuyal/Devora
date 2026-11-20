@@ -22,13 +22,14 @@ final class TestBridge {
 	private let store: Store
 	private let terminals: Terminals
 	private let surfaces: Surfaces
+	private let appearance: AppAppearance
 	private let listener: NWListener
 
 	/// Starts the bridge, unless it is running, and prints its port to stderr, where the harness reads it, as Ember does.
-	static func start(store: Store, terminals: Terminals, surfaces: Surfaces) {
+	static func start(store: Store, terminals: Terminals, surfaces: Surfaces, appearance: AppAppearance) {
 		guard running == nil else { return }
 		do {
-			let bridge = try TestBridge(store: store, terminals: terminals, surfaces: surfaces)
+			let bridge = try TestBridge(store: store, terminals: terminals, surfaces: surfaces, appearance: appearance)
 			running = bridge
 			bridge.listen()
 		} catch {
@@ -36,10 +37,11 @@ final class TestBridge {
 		}
 	}
 
-	private init(store: Store, terminals: Terminals, surfaces: Surfaces) throws {
+	private init(store: Store, terminals: Terminals, surfaces: Surfaces, appearance: AppAppearance) throws {
 		self.store = store
 		self.terminals = terminals
 		self.surfaces = surfaces
+		self.appearance = appearance
 		let parameters = NWParameters.tcp
 		parameters.requiredLocalEndpoint = .hostPort(host: .ipv4(.loopback), port: .any)
 		listener = try NWListener(using: parameters)
@@ -1064,6 +1066,11 @@ final class TestBridge {
 			"profileForm": profileFormState(),
 			"settings": settingsState(),
 			"fontSize": TerminalRuntime.shared.fontSize,
+			"appearance": [
+				"setting": "\(store.appearance)",
+				"effective": appearance.effective.rawValue,
+				"system": AppAppearance.system.rawValue,
+			],
 			"windowLayers": surfaces.windowStack.layers.map(\.spec.name),
 			"editingText": surfaces.router.isEditingText,
 			"windowTitle": NSApp.windows.first(where: { $0.isVisible && $0.contentView != nil })?.title ?? NSNull(),

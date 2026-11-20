@@ -53,3 +53,18 @@ Feature: Settings Hub settings cards
     When the user switches "task-tracker.provider" to "None"
     Then the profile "Work" config should have "task-tracker.provider" set to ""
     And the setting "task-tracker.asana.project-id" should not be shown
+
+  Scenario: Appearance is the User Defaults' and applies at once
+    When the user opens the "User Defaults" settings detail
+    Then the app should appear as the system does
+    When the user switches "appearance" to "Dark"
+    Then the global config should have "appearance" set to "dark"
+    And the app should appear "dark"
+    When the user switches "appearance" to "Light"
+    Then the global config should have "appearance" set to "light"
+    And the app should appear "light"
+    When the user switches "appearance" to "Automatic"
+    Then the global config should not have "appearance"
+    And the app should appear as the system does
+    When the user opens the "Work" settings detail
+    Then the setting "appearance" should not be shown

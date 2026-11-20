@@ -16,9 +16,9 @@ final class FakeScope {
 	/// Holds each write until the test lets it through, to check the order they land in.
 	var writeGate: (() async -> Void)?
 
-	func model() -> ConfigSettingsModel {
+	func model(profilePath: String? = "/work") -> ConfigSettingsModel {
 		ConfigSettingsModel(
-			profilePath: "/work",
+			profilePath: profilePath,
 			read: { [self] in
 				reads += 1
 				let keys = Set(stored.keys).union(inherited.keys)
@@ -187,6 +187,30 @@ struct ConfigDisplayTests {
 		model.selectOption(.init(label: "None", value: ""), for: "task-tracker.provider")
 		await model.settled()
 		#expect(!model.isVisible(projectID))
+	}
+
+	/// The app's settings (Appearance, Repository Updates) are the User Defaults'; Automatic removes the key and says nothing inherited.
+	@Test func appearanceIsChosenInTheUserDefaultsOnly() async {
+		let field = ConfigCard.appearance.fields[0]
+		guard case .choice(let options) = field.kind else { Issue.record("Appearance is a choice"); return }
+		let interval = ConfigCard.repoUpdates.fields[1]
+		#expect(!scope.model().isVisible(field))
+		#expect(!scope.model().isVisible(interval))
+
+		let model = scope.model(profilePath: nil)
+		await model.reload()
+		#expect(model.isVisible(field))
+		#expect(model.isVisible(interval))
+		#expect(model.chosenOption(options, for: field.key)?.label == "Automatic")
+		#expect(model.inheritedHint(field) == nil)
+
+		model.selectOption(options[2], for: field.key)
+		await model.settled()
+		#expect(model.chosenOption(options, for: field.key)?.label == "Dark")
+		model.selectOption(options[0], for: field.key)
+		await model.settled()
+		#expect(scope.writes.map(\.value) == ["dark", nil])
+		#expect(model.chosenOption(options, for: field.key)?.label == "Automatic")
 	}
 }
 
