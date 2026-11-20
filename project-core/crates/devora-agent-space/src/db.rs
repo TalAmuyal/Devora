@@ -1,6 +1,6 @@
 use crate::restart_notice::RestartNotice;
 use crate::{CreationForm, Identity};
-use devora_agent::session::Resume;
+use devora_agent::session::{CliProcess, Resume};
 use devora_agent::transcript::{TranscriptChange, TranscriptContent, TranscriptItem};
 use rusqlite::{params, Connection, OpenFlags};
 use std::path::Path;
@@ -37,7 +37,11 @@ const RESTART_SCHEMA: &str = "
 ALTER TABLE space ADD COLUMN launched_run TEXT;
 ALTER TABLE space ADD COLUMN restart_notice TEXT;
 ";
-const VERSION: u32 = 3;
+// Version 4: the running CLI's identity, for stopping one an earlier Devora left behind.
+const CLI_SCHEMA: &str = "
+ALTER TABLE space ADD COLUMN cli_process TEXT;
+";
+const VERSION: u32 = 4;
 
 pub(crate) fn storage(error: impl std::fmt::Display) -> String {
     format!("agent space storage: {error}")
@@ -62,6 +66,7 @@ impl Db {
         tx.execute_batch(SCHEMA).map_err(storage)?;
         tx.execute_batch(HISTORY_SCHEMA).map_err(storage)?;
         tx.execute_batch(RESTART_SCHEMA).map_err(storage)?;
+        tx.execute_batch(CLI_SCHEMA).map_err(storage)?;
         tx.pragma_update(None, "user_version", VERSION)
             .map_err(storage)?;
         tx.execute(
@@ -132,6 +137,9 @@ impl Db {
         }
         if version < 3 {
             tx.execute_batch(RESTART_SCHEMA).map_err(storage)?;
+        }
+        if version < 4 {
+            tx.execute_batch(CLI_SCHEMA).map_err(storage)?;
         }
         tx.pragma_update(None, "user_version", VERSION)
             .map_err(storage)?;
@@ -241,6 +249,31 @@ impl Db {
         Ok((run, notice))
     }
 
+    /// The CLI last recorded running for this agent.
+    pub fn cli_process(&self) -> Result<Option<CliProcess>, String> {
+        let cli: Option<String> = self
+            .conn
+            .query_row("SELECT cli_process FROM space WHERE id=0", [], |row| {
+                row.get(0)
+            })
+            .map_err(storage)?;
+        cli.map(|cli| serde_json::from_str(&cli))
+            .transpose()
+            .map_err(storage)
+    }
+
+    /// Records the CLI running for this agent, or that none is.
+    pub fn record_cli(&mut self, cli: Option<&CliProcess>) -> Result<(), String> {
+        let cli = cli
+            .map(serde_json::to_string)
+            .transpose()
+            .map_err(storage)?;
+        self.conn
+            .execute("UPDATE space SET cli_process=?1 WHERE id=0", [cli])
+            .map_err(storage)?;
+        Ok(())
+    }
+
     /// A launch in `run`, with what it owes, in one write.
     pub fn record_launch(
         &mut self,
@@ -278,6 +311,17 @@ impl Db {
         )
         .map_err(storage)?;
         tx.commit().map_err(storage)
+    }
+
+    /// Owes `notice` unless one is owed already, which covers it.
+    pub fn owe_notice(&mut self, notice: &RestartNotice) -> Result<(), String> {
+        self.conn
+            .execute(
+                "UPDATE space SET restart_notice=?1 WHERE id=0 AND restart_notice IS NULL",
+                [serde_json::to_string(notice).map_err(storage)?],
+            )
+            .map_err(storage)?;
+        Ok(())
     }
 
     /// The CLI answered the notice sent as `attempt`.

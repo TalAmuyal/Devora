@@ -1,8 +1,10 @@
+use super::tree::{stop_tree, CliProcess};
 use super::{
     judging, Command, PermissionAnswer, Reply, SessionEvent, SessionOptions, StopInfo, UsageSource,
 };
 use crate::protocol::*;
 use devora_app::log::{Level, Log};
+use devora_platform::processes::SystemProcessTable;
 use serde_json::{json, Map, Value};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::process::Stdio;
@@ -48,6 +50,8 @@ pub(super) async fn check_version(options: &SessionOptions) -> Result<(), String
 
 struct Process {
     child: Child,
+    /// The CLI's identity, for stopping its whole process tree.
+    cli: Option<CliProcess>,
     stdin: Option<ChildStdin>,
     stdout: Lines<BufReader<ChildStdout>>,
     stderr: Lines<BufReader<ChildStderr>>,
@@ -74,7 +78,11 @@ impl Process {
             .kill_on_drop(true)
             .spawn()
             .map_err(|error| format!("couldn't start Claude: {error}"))?;
+        let cli = child
+            .id()
+            .and_then(|pid| CliProcess::of(&SystemProcessTable, pid));
         Ok(Self {
+            cli,
             stdin: child.stdin.take(),
             stdout: BufReader::new(child.stdout.take().expect("piped stdout")).lines(),
             stderr: BufReader::new(child.stderr.take().expect("piped stderr")).lines(),
@@ -97,9 +105,25 @@ impl Process {
         result
     }
 
-    async fn kill(&mut self) {
+    /// A forced stop: the CLI and every process under it, since its background
+    /// shells would otherwise run on unheard from (`stop_tree`). Returns what
+    /// went wrong stopping the tree, for the log.
+    async fn kill(&mut self) -> Option<String> {
         self.stdin.take();
+        let problem = match self.cli {
+            Some(cli) => {
+                tokio::task::spawn_blocking(move || stop_tree(&SystemProcessTable, cli, STOP_GRACE))
+                    .await
+                    .map_err(|error| error.to_string())
+                    .and_then(|stopped| stopped)
+                    .err()
+                    .map(|error| format!("couldn't stop Claude's processes: {error}"))
+            }
+            None => None,
+        };
+        // Reaps it, or kills it if its tree couldn't be stopped.
         let _ = self.child.kill().await;
+        problem
     }
 }
 
@@ -113,6 +137,8 @@ struct Stopping {
     reply: Option<Reply<StopInfo>>,
     deadline: Instant,
     interrupt_pending: bool,
+    /// A turn was running when the stop began, so it was interrupted.
+    interrupted_turn: bool,
 }
 
 struct Worker {
@@ -202,6 +228,10 @@ pub(super) async fn run(
                 return;
             }
         };
+        // One that exited at once has nothing to record; its exit is reported as usual.
+        if let Some(cli) = process.cli {
+            worker.emit(SessionEvent::Spawned(cli));
+        }
         let initialize = ControlRequest::Initialize {
             hooks: Nullable::Value(BTreeMap::from_iter([(
                 "PreToolUse".into(),
@@ -219,14 +249,18 @@ pub(super) async fn run(
         };
         let result = if matches!(result, Ok(End::Unresponsive)) {
             worker.warn("Claude control request timed out; terminating it".into());
-            process.kill().await;
+            if let Some(problem) = process.kill().await {
+                worker.warn(problem);
+            }
             Ok(End::Eof(None, false))
         } else {
             result
         };
         match result {
             Ok(End::ForcedStop) => {
-                process.kill().await;
+                if let Some(problem) = process.kill().await {
+                    worker.warn(problem);
+                }
                 worker.finish_stop(false);
                 return;
             }
@@ -258,7 +292,9 @@ pub(super) async fn run(
                 }
             }
             Err(error) => {
-                process.kill().await;
+                if let Some(problem) = process.kill().await {
+                    worker.warn(problem);
+                }
                 worker.fail(error);
                 return;
             }
@@ -313,6 +349,10 @@ impl Worker {
             session_id: self.id.clone(),
             has_conversation: self.has_conversation,
             graceful,
+            interrupted_turn: self
+                .stopping
+                .as_ref()
+                .is_some_and(|stopping| stopping.interrupted_turn),
         };
         if let Some(stopping) = self.stopping.take() {
             if let Some(reply) = stopping.reply {
@@ -385,7 +425,9 @@ impl Worker {
                             let status = match timeout(STOP_GRACE,process.child.wait()).await {
                                 Ok(status) => status.map_err(|error|format!("couldn't reap Claude: {error}"))?,
                                 Err(_) => {
-                                    process.kill().await;
+                                    if let Some(problem) = process.kill().await {
+                    self.warn(problem);
+                }
                                     return Ok(End::Eof(None,false));
                                 }
                             };
@@ -427,6 +469,7 @@ impl Worker {
             reply,
             deadline: Instant::now() + STOP_GRACE,
             interrupt_pending: self.active_turn.is_some(),
+            interrupted_turn: self.active_turn.is_some(),
         });
         if self.active_turn.is_some() {
             self.control(
@@ -832,6 +875,7 @@ mod tests {
             reply: None,
             deadline: now + STOP_GRACE,
             interrupt_pending: true,
+            interrupted_turn: true,
         });
         assert_eq!(next_deadline(&pending, &stopping), Some(now + STOP_GRACE));
     }

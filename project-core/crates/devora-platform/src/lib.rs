@@ -5,3 +5,5 @@ pub mod credentials;
 pub mod priority;
 
 pub mod clock;
+
+pub mod processes;

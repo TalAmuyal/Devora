@@ -65,7 +65,7 @@ def question():
 
 ignore_interrupt = False
 visual_tool = False
-report({"kind":"start","args":args,"environment":dict(os.environ),"cwd":os.getcwd()})
+report({"kind":"start","args":args,"environment":dict(os.environ),"cwd":os.getcwd(),"pid":os.getpid()})
 for line in sys.stdin:
     message = json.loads(line)
     kind = message["type"]
@@ -172,6 +172,15 @@ for line in sys.stdin:
             emit({"type":"fake_stream_ready"})
         elif text == "unrequested-result":
             unrequested_result()
+            emit(recorded("stream_event"))
+            emit({"type":"fake_stream_ready"})
+        elif text == "background-shell":
+            # A background shell that leads its own session, as Claude Code's do,
+            # in a turn that ignores the interrupt, so only a forced stop ends it.
+            import subprocess
+            shell = subprocess.Popen(["sleep", "60"], start_new_session=True)
+            report({"kind":"background","pid":shell.pid})
+            ignore_interrupt = True
             emit(recorded("stream_event"))
             emit({"type":"fake_stream_ready"})
         elif text in ("stream", "ignore-interrupt"):

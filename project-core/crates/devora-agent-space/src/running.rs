@@ -2,12 +2,14 @@ use crate::compaction::{Compaction, Context};
 use crate::restart_notice::{AppRun, RestartNotice};
 use crate::Space;
 use devora_agent::protocol::{KnownMessage, Message};
+use devora_agent::session::stop_tree;
 use devora_agent::session::{
     saved_turn, PermissionAnswer, Resume, Session, SessionEvent, SessionHandle, SessionOptions,
     StopInfo, UsageSource,
 };
 use devora_agent::transcript::{SystemKind, Transcript, TranscriptChange, TranscriptItem};
 use devora_app::log::{Level, Log};
+use devora_platform::processes::SystemProcessTable;
 use serde_json::{json, Value};
 use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot};
@@ -26,6 +28,9 @@ pub enum SpaceEvent {
     /// produces by itself (background work finishing, a resume) end nothing.
     TurnEnded,
 }
+
+/// How long a launch waits for a CLI left running by an earlier Devora to exit after `SIGKILL`.
+const LEFT_RUNNING_WAIT: std::time::Duration = std::time::Duration::from_secs(5);
 
 /// Observes the host-owned global hold at turn admission and turn boundaries.
 /// The host callback may also record eligibility and publish hold status.
@@ -182,6 +187,26 @@ pub(crate) async fn start(
         space.db.save_changes(None, &interrupted)?;
         transcript.release_completed();
         let history = space.history()?;
+        // A CLI an earlier Devora left running (it died without stopping it) would
+        // write the same session as the one resumed now, forking it.
+        if let Some(cli) = space.db.cli_process()? {
+            match stop_tree(&SystemProcessTable, cli, LEFT_RUNNING_WAIT) {
+                Ok(true) => launch_log.write(
+                    Level::Warn,
+                    &format!(
+                        "stopped Claude Code (pid {}) that an earlier Devora left running",
+                        cli.pid
+                    ),
+                ),
+                Ok(false) => {}
+                Err(error) => {
+                    return Err(format!(
+                        "Claude Code left running by an earlier Devora couldn't be stopped: {error}"
+                    ))
+                }
+            }
+            space.db.record_cli(None)?;
+        }
         let (launched, stored) = space.db.launch_state()?;
         let attempt_saved = match stored.as_ref().and_then(|notice| notice.attempt.as_deref()) {
             Some(attempt) => {
@@ -280,6 +305,20 @@ fn persist(
     event: &SessionEvent,
     events: &mpsc::UnboundedSender<SpaceEvent>,
 ) -> Result<(), String> {
+    match event {
+        SessionEvent::Spawned(cli) => space.db.record_cli(Some(cli))?,
+        // A stop that had to end the agent's background work owes it the notice
+        // to re-establish what it needs, at its next launch.
+        SessionEvent::Stopped(info) => {
+            space.db.record_cli(None)?;
+            if !info.graceful || info.interrupted_turn {
+                space.db.owe_notice(&RestartNotice::after_stop())?;
+            }
+        }
+        // It ended under Devora's watch, so there's nothing left to stop at the next launch.
+        SessionEvent::Exited { .. } | SessionEvent::Failed(_) => space.db.record_cli(None)?,
+        _ => {}
+    }
     let resume = match event {
         SessionEvent::Ready {
             session_id,
@@ -374,7 +413,7 @@ fn begin(
             &change,
             &RestartNotice {
                 attempt: Some(id.clone()),
-                recovery: notice.recovery,
+                ..notice.clone()
             },
         ),
         _ => space.db.save_changes(None, std::slice::from_ref(&change)),
@@ -489,7 +528,8 @@ async fn pump(
                     }
                     turn_running = None;
                 }
-                let _ = events.send(SpaceEvent::Session(event));
+                // A spawn is the space's own bookkeeping (the CLI it records), not the host's.
+                if !matches!(event, SessionEvent::Spawned(_)) { let _ = events.send(SpaceEvent::Session(event)); }
                 if ended { let _ = events.send(SpaceEvent::TurnEnded); }
                 if ended && (pause_after_turn.is_some() || globally_paused()) {
                     // Every pause reason uses the same boundary before compaction.

@@ -99,6 +99,7 @@ Types of changes:
 
 ### Fixed
 
+- A Devora Sapphire agent's Claude Code left running by a Devora that crashed is stopped before the agent resumes, instead of both writing its session and forking the conversation; and stopping an agent by force now ends its background shells too, which used to keep running unheard from, and tells the agent at its next launch to re-establish its waits
 - A Devora Sapphire agent's turn now ends only with its own result: a result Claude Code produces by itself (when background work finishes, or on resuming) no longer marks a running turn finished, starts compaction early or lets a pause stop the agent mid-turn
 - A Devora Sapphire agent you paused stays paused across a restart, with or without a global pause, until you resume it; during a global pause, its Keep paused switch can now be turned off to resume it with the others
 - Devora Sapphire's window title shows its real version instead of "0.1.0", and the install suffix of a side-by-side install, as Ember's does
