@@ -64,6 +64,7 @@ Types of changes:
 
 ### Changed
 
+- Pausing a Devora Sapphire agent that has background work (a background shell or subagent) now stops that work cleanly through Claude Code first, so the agent exits by itself instead of being killed after the grace period; when it resumes, it's told exactly what was stopped, to re-establish what it still needs
 - `debi pr submit` with nothing left to commit submits the commits already made on the detached HEAD, instead of failing with "Commit failed"; with no commits ahead of the default branch either, it says there's nothing to submit before creating a tracker task
 - `debi pr submit` stages the whole working tree wherever in the repository it runs, not only the current directory and below
 - Devora Sapphire's quit waits for agents to stop cleanly: while one is running a turn or waiting for an answer, quitting (or closing the window) holds Devora and shows who it waits for in a popover from the toolbar, with their questions still answerable, and quits by itself once they have stopped; "Cancel Quit" keeps the hold, and "Interrupt and Quit" cuts the work short. The toolbar shows "Pausing… (n of m)" until every agent has stopped, then "Paused", with the pause status and button evenly spaced, and what goes wrong while stopping is shown instead of ignored

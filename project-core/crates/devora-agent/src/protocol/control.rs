@@ -27,6 +27,13 @@ pub enum ControlRequest {
         #[serde(flatten)]
         extra: Map<String, Value>,
     },
+    /// Ends one background task: its processes stop, with no model turn for a
+    /// shell, while a stopped subagent makes the CLI run a notification turn.
+    StopTask {
+        task_id: String,
+        #[serde(flatten)]
+        extra: Map<String, Value>,
+    },
     CanUseTool(PermissionRequest),
     HookCallback {
         callback_id: String,

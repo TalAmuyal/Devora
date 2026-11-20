@@ -55,17 +55,17 @@ function interaction() {
   };
 }
 
-function toolInteraction(command: string) {
+function toolUse(name: string, input: object) {
   const response = interaction();
   const startWire = response.response.sse_events.find((wire: string) => wire.startsWith('event: message_start\n'))!;
   const event = (type: string, fields: object) => 'event: ' + type + '\ndata: ' + JSON.stringify({ type, ...fields }) + '\n\n';
-  const tool = { type: 'tool_use', id: 'toolu_devora_' + sequence, name: 'Bash', input: {} };
+  const tool = { type: 'tool_use', id: 'toolu_devora_' + sequence, name, input: {} };
   return {
     ...response,
     response: { ...response.response, sse_events: [
       startWire,
       event('content_block_start', { index: 0, content_block: tool }),
-      event('content_block_delta', { index: 0, delta: { type: 'input_json_delta', partial_json: JSON.stringify(toolBackground ? { command, run_in_background: true, description: 'background' } : { command }) } }),
+      event('content_block_delta', { index: 0, delta: { type: 'input_json_delta', partial_json: JSON.stringify(input) } }),
       event('content_block_stop', { index: 0 }),
       event('message_delta', { delta: { stop_reason: 'tool_use', stop_sequence: null }, usage: { output_tokens: 20 } }),
       event('message_stop', {}),
@@ -73,11 +73,30 @@ function toolInteraction(command: string) {
   };
 }
 
+function toolInteraction(command: string) {
+  return toolUse('Bash', toolBackground ? { command, run_in_background: true, description: 'background' } : { command });
+}
+
+// A background subagent started by the main turn after the shell's, and what
+// it runs; and a tool call answering the CLI's own task-notification turn after
+// `delayMs`, as a model would after thinking. Requests for these are routed by
+// their content, outside the main sequence.
+let agentPrompt: string | undefined;
+let subagentCommand: string | undefined;
+let notificationTool: { command: string; delayMs: number } | undefined;
+
+function userText(message: any): string {
+  return typeof message?.content === 'string' ? message.content : JSON.stringify(message?.content ?? '');
+}
+
 function reset() {
   requests = [];
   peer.interactionIndex = 0;
   const interactions = [
     ...(toolCommand === undefined ? [] : [toolInteraction(toolCommand)]),
+    ...(agentPrompt === undefined ? [] : [interaction(), toolUse('Agent', {
+      description: 'a CI wait', prompt: agentPrompt, subagent_type: 'general-purpose', run_in_background: true,
+    })]),
     ...Array.from({ length: 50 }, interaction),
   ];
   if (errorAt !== undefined) interactions.splice(errorAt, 0, {
@@ -94,6 +113,39 @@ function reset() {
 }
 reset();
 const handle = peer.handleRequest.bind(server);
+const { Readable } = await import('node:stream');
+const send = (response: any, events: string[]) => {
+  response.writeHead(200, { 'content-type': 'text/event-stream' });
+  for (const wire of events) response.write(wire);
+  response.end();
+};
+const route = (request: any, response: any) => {
+  const chunks: Buffer[] = [];
+  request.on('data', (chunk: Buffer) => chunks.push(chunk));
+  request.on('end', () => {
+    const raw = Buffer.concat(chunks);
+    const body = JSON.parse(raw.toString('utf8'));
+    const users = body.messages.filter((message: any) => message.role === 'user');
+    const first = userText(users[0]);
+    const last = userText(users[users.length - 1]);
+    if (agentPrompt !== undefined && subagentCommand !== undefined && first.includes(agentPrompt)) {
+      send(response, last.includes('tool_result')
+        ? interaction().response.sse_events
+        : toolUse('Bash', { command: subagentCommand, description: 'the CI wait' }).response.sse_events);
+      return;
+    }
+    if (notificationTool !== undefined && last.includes('<task-notification>')) {
+      const tool = toolUse('Bash', { command: notificationTool.command, description: 'react' }).response.sse_events;
+      setTimeout(() => { if (!response.destroyed) send(response, tool); }, notificationTool.delayMs);
+      return;
+    }
+    const replay: any = Readable.from([raw]);
+    replay.url = request.url;
+    replay.method = request.method;
+    replay.headers = request.headers;
+    handle(replay, response);
+  });
+};
 peer.handleRequest = (request: any, response: any) => {
   if (request.url?.startsWith('/v1/messages')) {
     const chunks: Buffer[] = [];
@@ -121,6 +173,10 @@ peer.handleRequest = (request: any, response: any) => {
     request.resume();
     return;
   }
+  if (request.url?.startsWith('/v1/messages') && (agentPrompt !== undefined || notificationTool !== undefined)) {
+    route(request, response);
+    return;
+  }
   handle(request, response);
 };
 await server.start();
@@ -134,6 +190,9 @@ for await (const line of lines) {
     toolBackground = command.toolBackground ?? false;
     errorAt = command.errorAt;
     holdStream = command.holdStream ?? false;
+    agentPrompt = command.agentPrompt;
+    subagentCommand = command.subagentCommand;
+    notificationTool = command.notificationTool;
     reset();
     process.stdout.write(JSON.stringify({ type: 'configured' }) + '\n');
   } else if (command.action === 'snapshot') {

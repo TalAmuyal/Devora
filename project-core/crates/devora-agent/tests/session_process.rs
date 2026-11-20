@@ -772,3 +772,23 @@ async fn the_session_reports_the_cli_it_spawned() {
     assert_eq!(json!(cli.pid), started["pid"]);
     session.pause().await.unwrap();
 }
+
+// A stop is graceful when the CLI exits by itself within the grace, whatever its
+// exit code: the CLI exits 1 after an interrupted turn, which mustn't read as a
+// forced stop (and so as a shutdown problem).
+#[tokio::test]
+async fn a_cli_that_exits_by_itself_with_an_error_code_stopped_gracefully() {
+    let fixture = Fixture::new();
+    let mut options = fixture.options();
+    options
+        .environment
+        .insert("DEVORA_FAKE_EOF_EXIT".into(), "1".into());
+    let mut session = Session::start(options, fixture.log()).await.unwrap();
+    session
+        .handle()
+        .send_turn(turn_id(), "first".into())
+        .await
+        .unwrap();
+    turn_ended(&mut session).await;
+    assert!(session.pause().await.unwrap().graceful);
+}

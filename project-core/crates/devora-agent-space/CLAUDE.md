@@ -6,6 +6,10 @@ After a restart, each agent gets one notice to re-establish its waits, since its
 
 A stop that was forced or interrupted a turn (`StopInfo`) also owes the notice, worded for the pause, at the agent's next launch in the same run; a clean, idle stop owes none.
 
+## Pausing with background work
+
+The actor keeps the agent's background tasks as the CLI lists them (`System::BackgroundTasksChanged`). A pause whose agent has some doesn't close the CLI's input at the turn's boundary: it owes the notice naming them first (so a crash mid-pause still tells the agent), stops each one through the CLI (`stop_task`, shells first), interrupts the notification turn a stopped subagent makes the CLI start, and waits for that turn's result, since once the input is closed nothing can interrupt a turn. Then it closes the input, and the CLI exits by itself (`Preparing` in `running.rs`). Past `PREPARE_GRACE`, or when a task won't stop, the pause goes ahead and the worker's forced stop is the fallback, so at worst a pause takes `PREPARE_GRACE` plus the stop's own grace, about 10 s. An agent with no background work pauses as before, owing nothing. A process the agent daemonized isn't a task the CLI tracks, so it outlives the pause (ADR-013).
+
 ## The running CLI
 
 Schema version 4 adds `space.cli_process`: the running CLI's identity, its pid and start time (`devora_agent::session::CliProcess`, from `SessionEvent::Spawned`, which the space keeps to itself). It is cleared when the CLI ends under Devora's watch. A launch that finds a recorded CLI still running (an earlier Devora died without stopping it) stops its whole tree (`stop_tree`) before resuming, since two CLIs on one session fork it. A pid whose start time differs is another process and is left alone. An orphaned CLI can't run tools meanwhile, since its Judgess callback can't be answered.

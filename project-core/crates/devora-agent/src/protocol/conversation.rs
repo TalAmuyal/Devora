@@ -89,6 +89,23 @@ pub enum System {
         #[serde(flatten)]
         extra: Map<String, Value>,
     },
+    /// The live list of the agent's background work, whenever it changes.
+    BackgroundTasksChanged {
+        tasks: Vec<BackgroundTask>,
+        #[serde(flatten)]
+        extra: Map<String, Value>,
+    },
+}
+
+/// One piece of background work the CLI tracks: a background shell
+/// (`local_bash`) or a background subagent (`local_agent`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BackgroundTask {
+    pub task_id: String,
+    pub task_type: String,
+    pub description: String,
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
 }
 
 /// The compaction boundary supplied by the CLI. Token counts beyond the original

@@ -1,7 +1,7 @@
 use crate::compaction::{Compaction, Context};
-use crate::restart_notice::{AppRun, RestartNotice};
+use crate::restart_notice::{AppRun, RestartNotice, StoppedTask};
 use crate::Space;
-use devora_agent::protocol::{KnownMessage, Message};
+use devora_agent::protocol::{BackgroundTask, KnownMessage, Message, System};
 use devora_agent::session::stop_tree;
 use devora_agent::session::{
     saved_turn, PermissionAnswer, Resume, Session, SessionEvent, SessionHandle, SessionOptions,
@@ -28,6 +28,10 @@ pub enum SpaceEvent {
     /// produces by itself (background work finishing, a resume) end nothing.
     TurnEnded,
 }
+
+/// How long a pause waits for the agent's background tasks to stop, and a
+/// stopped subagent's notification turn to end, before closing the CLI's input.
+const PREPARE_GRACE: std::time::Duration = std::time::Duration::from_secs(5);
 
 /// How long a launch waits for a CLI left running by an earlier Devora to exit after `SIGKILL`.
 const LEFT_RUNNING_WAIT: std::time::Duration = std::time::Duration::from_secs(5);
@@ -312,7 +316,7 @@ fn persist(
         SessionEvent::Stopped(info) => {
             space.db.record_cli(None)?;
             if !info.graceful || info.interrupted_turn {
-                space.db.owe_notice(&RestartNotice::after_stop())?;
+                space.db.owe_notice(RestartNotice::after_stop())?;
             }
         }
         // It ended under Devora's watch, so there's nothing left to stop at the next launch.
@@ -374,7 +378,7 @@ fn begin(
         Action::Turn { text, .. } => transcript.submit(text.clone()),
         Action::RestartNotice { id, notice } => transcript.intention(
             SystemKind::RestartNotice,
-            notice.row().into(),
+            notice.row(),
             json!({"turn": id, "recovery": notice.recovery}),
         ),
         Action::Interrupt => transcript.intention(
@@ -453,6 +457,31 @@ fn begin(
     Ok(())
 }
 
+/// A pause stopping the agent's background tasks before it closes the CLI's
+/// input, so the CLI then exits by itself and the pause is only a pause.
+/// A stopped subagent makes the CLI run a notification turn of its own, in
+/// which the agent could start the work again, so that turn is interrupted, and
+/// the input stays open until it has ended: once the input is closed nothing
+/// can interrupt a turn. Past `deadline`, the pause goes ahead, and the worker's
+/// grace and forced stop are the fallback.
+struct Preparing {
+    deadline: tokio::time::Instant,
+    /// `stop_task` requests not answered yet.
+    stops: usize,
+    /// Stopped subagents whose notification turn hasn't ended yet. The CLI
+    /// runs one per subagent, even when several are stopped at once and their
+    /// turns are interrupted (probed on the pinned CLI); were it ever to
+    /// batch them, the pause would only wait out `deadline`.
+    agent_turns: usize,
+    reply: oneshot::Sender<Result<Value, String>>,
+}
+
+impl Preparing {
+    fn done(&self, background: &[BackgroundTask]) -> bool {
+        self.stops == 0 && self.agent_turns == 0 && background.is_empty()
+    }
+}
+
 async fn pump(
     space: &mut Space,
     session: &mut Session,
@@ -472,6 +501,10 @@ async fn pump(
     let _ = events.send(SpaceEvent::Context(compaction.context()));
     // The restart notice's turn, until its result delivers it.
     let mut notice_turn: Option<String> = None;
+    // The agent's background work, as the CLI last listed it.
+    let mut background: Vec<BackgroundTask> = vec![];
+    let mut preparing: Option<Preparing> = None;
+    let (stop_sent, mut stops) = mpsc::unbounded_channel::<Result<Value, String>>();
     loop {
         if turn_running.is_none() && !stopping && (pause_after_turn.is_some() || globally_paused())
         {
@@ -480,8 +513,48 @@ async fn pump(
             let reply = pause_after_turn
                 .take()
                 .unwrap_or_else(|| oneshot::channel().0);
-            pause(session.handle(), reply);
+            if background.is_empty() {
+                pause(session.handle(), reply);
+            } else {
+                // Shells first: a stopped subagent starts a turn, which is cut short.
+                let mut tasks = background.clone();
+                tasks.sort_by_key(|task| task.task_type == "local_agent");
+                // Owed before anything stops, so a crash mid-pause still tells the agent.
+                space.db.owe_notice(RestartNotice::after_pause(
+                    tasks
+                        .iter()
+                        .map(|task| StoppedTask {
+                            task_type: task.task_type.clone(),
+                            description: task.description.clone(),
+                        })
+                        .collect(),
+                ))?;
+                for task in &tasks {
+                    let runtime = session.handle();
+                    let sent = stop_sent.clone();
+                    let id = task.task_id.clone();
+                    tokio::spawn(async move {
+                        let _ = sent.send(runtime.stop_task(id).await);
+                    });
+                }
+                preparing = Some(Preparing {
+                    deadline: tokio::time::Instant::now() + PREPARE_GRACE,
+                    stops: tasks.len(),
+                    agent_turns: tasks
+                        .iter()
+                        .filter(|task| task.task_type == "local_agent")
+                        .count(),
+                    reply,
+                });
+            }
         }
+        if preparing
+            .as_ref()
+            .is_some_and(|prepared| prepared.done(&background))
+        {
+            pause(session.handle(), preparing.take().expect("checked").reply);
+        }
+        let deadline = preparing.as_ref().map(|prepared| prepared.deadline);
         tokio::select! {
             biased;
             _ = events.closed() => {
@@ -499,6 +572,19 @@ async fn pump(
                 }
                 return if stopped { Ok(()) } else { pause.map(|_|()) };
             }
+            stopped = stops.recv(), if preparing.is_some() => {
+                let prepared = preparing.as_mut().expect("checked");
+                prepared.stops -= 1;
+                if let Some(Err(error)) = stopped {
+                    // A task that won't stop leaves the pause to the worker's grace and forced stop.
+                    space.db.owe_notice(RestartNotice::after_stop())?;
+                    let _ = events.send(SpaceEvent::Session(SessionEvent::Warning(format!("couldn't stop a background task: {error}"))));
+                    pause(session.handle(), preparing.take().expect("checked").reply);
+                }
+            }
+            _ = tokio::time::sleep_until(deadline.unwrap_or_else(tokio::time::Instant::now)), if deadline.is_some() => {
+                pause(session.handle(), preparing.take().expect("checked").reply);
+            }
             completion = completions.recv(), if pending > 0 => {
                 if let Some(completion) = completion {
                     if completion.failed_turn {
@@ -511,6 +597,23 @@ async fn pump(
             event = session.next_event() => {
                 let Some(event) = event else { return Ok(()); };
                 persist(space,transcript,&event,events)?;
+                if let SessionEvent::Message(Message::Known(KnownMessage::System(System::BackgroundTasksChanged { tasks, .. }))) = &event {
+                    background = tasks.clone();
+                }
+                if let Some(prepared) = preparing.as_mut().filter(|prepared| prepared.agent_turns > 0) {
+                    match &event {
+                        // A stopped subagent's notification turn starting: the agent mustn't act on it.
+                        SessionEvent::Message(Message::Known(KnownMessage::System(System::Init { .. }))) => {
+                            let runtime = session.handle();
+                            tokio::spawn(async move { let _ = runtime.interrupt().await; });
+                        }
+                        // Its result names no turn of ours.
+                        SessionEvent::Message(Message::Known(KnownMessage::Result(_))) if turn_running.is_none() => {
+                            prepared.agent_turns -= 1;
+                        }
+                        _ => {}
+                    }
+                }
                 let terminal = matches!(event,SessionEvent::Stopped(_) | SessionEvent::Failed(_));
                 // A crash ends the turn too; recovery resumes without it.
                 let ended = turn_running.as_deref().is_some_and(|id| match &event {
