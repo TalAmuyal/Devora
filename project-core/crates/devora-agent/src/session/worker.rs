@@ -431,7 +431,9 @@ impl Worker {
                                     return Ok(End::Eof(None,false));
                                 }
                             };
-                            return Ok(End::Eof(status.code(),status.success()));
+                            // It exited by itself, so the stop was graceful whatever its code:
+                            // the CLI exits 1 after an interrupted turn, which isn't a forced stop.
+                            return Ok(End::Eof(status.code(),true));
                         }
                     }
                 }
@@ -827,6 +829,7 @@ fn drift_kind(message: &Message) -> Option<String> {
                     | "interrupt"
                     | "set_permission_mode"
                     | "set_model"
+                    | "stop_task"
                     | "can_use_tool"
                     | "hook_callback"
                     | "mcp_message"

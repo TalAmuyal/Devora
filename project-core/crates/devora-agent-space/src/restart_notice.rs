@@ -31,6 +31,10 @@ impl Default for AppRun {
 /// - **Owed:** the first launch in a new app run of an agent with a conversation
 ///   owes one. So does a stop that was forced or interrupted a turn, since it
 ///   ended the agent's background work too, while a clean, idle stop owes none.
+///   A pause that stopped the agent's background tasks owes one naming them
+///   (`stopped`). Owing again merges into the one stored (`merge`): a pause's
+///   named tasks win over a forced or interrupted stop, which wins over a
+///   restart, and every stopped task is kept.
 ///   A launch in the same run (a resume, a crash-restart) owes none of its own,
 ///   and a notice still owed covers whatever comes after it.
 /// - **Attempt:** the notice's transcript row and the ID it is sent with commit
@@ -56,14 +60,31 @@ pub(crate) struct RestartNotice {
     /// was a restart's.
     #[serde(default)]
     pub cause: NoticeCause,
+    /// The background work a pause stopped, for the notice to name.
+    #[serde(default)]
+    pub stopped: Vec<StoppedTask>,
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+/// Why a notice is owed, from the least to the most specific. When two apply,
+/// one notice is kept and the more specific cause words it: a pause that
+/// stopped named tasks says exactly what to re-establish, a forced or
+/// interrupted stop says the work is gone, and a restart only that it may be.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub(crate) enum NoticeCause {
     #[default]
     Restart,
     /// A pause that had to stop the agent: forced, or interrupting a turn.
     Stop,
+    /// A pause that stopped the agent's background tasks (`stopped`) first.
+    Pause,
+}
+
+/// A background task a pause stopped: a shell (`local_bash`) or a subagent
+/// (`local_agent`), with the description the agent gave it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct StoppedTask {
+    pub task_type: String,
+    pub description: String,
 }
 
 impl RestartNotice {
@@ -83,14 +104,14 @@ impl RestartNotice {
             Some(Self {
                 attempt: Some(_), ..
             }) if attempt_saved => None,
-            Some(Self {
-                attempt: Some(_),
-                cause,
-                ..
-            }) => Some(Self {
+            Some(
+                notice @ Self {
+                    attempt: Some(_), ..
+                },
+            ) => Some(Self {
                 attempt: None,
                 recovery: true,
-                cause,
+                ..notice
             }),
             other => other,
         };
@@ -98,6 +119,7 @@ impl RestartNotice {
             attempt: None,
             recovery: false,
             cause: NoticeCause::Restart,
+            stopped: vec![],
         }))
     }
 
@@ -107,6 +129,33 @@ impl RestartNotice {
             attempt: None,
             recovery: false,
             cause: NoticeCause::Stop,
+            stopped: vec![],
+        }
+    }
+
+    /// What a pause that stopped `stopped` owes.
+    pub fn after_pause(stopped: Vec<StoppedTask>) -> Self {
+        Self {
+            attempt: None,
+            recovery: false,
+            cause: NoticeCause::Pause,
+            stopped,
+        }
+    }
+
+    /// One notice for both: the more specific cause, every stopped task, and
+    /// whatever attempt the stored one (`self`) has in flight.
+    pub fn merge(self, other: Self) -> Self {
+        let mut stopped = self.stopped;
+        for task in other.stopped {
+            if !stopped.contains(&task) {
+                stopped.push(task);
+            }
+        }
+        Self {
+            cause: self.cause.max(other.cause),
+            stopped,
+            ..self
         }
     }
 
@@ -121,6 +170,11 @@ impl RestartNotice {
                 (watchers, builds, CI waits, background shells and subagents) was stopped, and \
                 notifications about it won't arrive. Check what you were waiting on and \
                 re-establish whatever you still need.",
+            NoticeCause::Pause => &format!(
+                "Devora paused you and stopped your background work: {}. Notifications about it \
+                 won't arrive. Re-establish what you still need.",
+                self.stopped_list()
+            ),
         };
         if self.recovery {
             format!("{notice} This may repeat a notice you already got; if so, there's nothing more to do.")
@@ -130,33 +184,50 @@ impl RestartNotice {
     }
 
     /// The transcript row, which shows why the agent woke.
-    pub fn row(&self) -> &'static str {
-        match (self.cause, self.recovery) {
-            (NoticeCause::Restart, false) => {
-                "Devora restarted: asked the agent to re-check its waits"
+    pub fn row(&self) -> String {
+        let row = match self.cause {
+            NoticeCause::Restart => {
+                "Devora restarted: asked the agent to re-check its waits".into()
             }
-            (NoticeCause::Restart, true) => {
-                "Devora restarted: asked the agent to re-check its waits (resent)"
+            NoticeCause::Stop => {
+                "Devora stopped the agent to pause it: asked it to re-check its waits".into()
             }
-            (NoticeCause::Stop, false) => {
-                "Devora stopped the agent to pause it: asked it to re-check its waits"
-            }
-            (NoticeCause::Stop, true) => {
-                "Devora stopped the agent to pause it: asked it to re-check its waits (resent)"
-            }
+            NoticeCause::Pause => format!(
+                "Devora paused the agent and stopped {}: asked it to re-establish what it needs",
+                self.stopped_list()
+            ),
+        };
+        if self.recovery {
+            format!("{row} (resent)")
+        } else {
+            row
         }
+    }
+
+    /// "a watcher (shell), a CI wait (subagent)".
+    fn stopped_list(&self) -> String {
+        self.stopped
+            .iter()
+            .map(|task| match task.task_type.as_str() {
+                "local_bash" => format!("{} (shell)", task.description),
+                "local_agent" => format!("{} (subagent)", task.description),
+                other => format!("{} ({other})", task.description),
+            })
+            .collect::<Vec<_>>()
+            .join(", ")
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{NoticeCause, RestartNotice};
+    use super::{NoticeCause, RestartNotice, StoppedTask};
 
     fn owed(recovery: bool) -> Option<RestartNotice> {
         Some(RestartNotice {
             attempt: None,
             recovery,
             cause: NoticeCause::Restart,
+            stopped: vec![],
         })
     }
 
@@ -165,6 +236,7 @@ mod tests {
             attempt: Some("turn".into()),
             recovery: false,
             cause: NoticeCause::Restart,
+            stopped: vec![],
         })
     }
 
@@ -205,6 +277,65 @@ mod tests {
         assert!(resent.recovery);
         assert!(resent.row().contains("(resent)"));
         assert!(resent.prompt().contains("to pause it"));
+    }
+
+    fn watcher() -> StoppedTask {
+        StoppedTask {
+            task_type: "local_bash".into(),
+            description: "a watcher".into(),
+        }
+    }
+
+    #[test]
+    fn a_pause_notice_names_what_it_stopped() {
+        let ci = StoppedTask {
+            task_type: "local_agent".into(),
+            description: "a CI wait".into(),
+        };
+        let notice = RestartNotice::after_pause(vec![watcher(), ci]);
+        assert!(notice
+            .prompt()
+            .contains("stopped your background work: a watcher (shell), a CI wait (subagent)."));
+        assert_eq!(
+            notice.row(),
+            "Devora paused the agent and stopped a watcher (shell), a CI wait (subagent): asked it to re-establish what it needs"
+        );
+    }
+
+    // One stored notice: the more specific cause words it, every stopped task
+    // is kept, and the stored one's attempt in flight stays.
+    #[test]
+    fn notices_owed_together_merge_into_the_most_specific() {
+        let restart = owed(false).unwrap();
+        let pause = RestartNotice::after_pause(vec![watcher()]);
+        for (first, second) in [
+            (restart.clone(), pause.clone()),
+            (pause.clone(), restart.clone()),
+            (pause.clone(), RestartNotice::after_stop()),
+            (RestartNotice::after_stop(), pause.clone()),
+        ] {
+            let merged = first.merge(second);
+            assert_eq!(merged.cause, NoticeCause::Pause);
+            assert_eq!(merged.stopped, vec![watcher()]);
+        }
+        assert_eq!(
+            restart.clone().merge(RestartNotice::after_stop()).cause,
+            NoticeCause::Stop
+        );
+        let attempted = RestartNotice {
+            attempt: Some("turn".into()),
+            ..restart
+        };
+        let merged = attempted.merge(RestartNotice::after_pause(vec![watcher()]));
+        assert_eq!(merged.attempt.as_deref(), Some("turn"));
+        assert_eq!(
+            merged
+                .clone()
+                .merge(RestartNotice::after_pause(vec![watcher()]))
+                .stopped,
+            vec![watcher()],
+            "a task stopped twice is named once"
+        );
     }
 
     #[test]

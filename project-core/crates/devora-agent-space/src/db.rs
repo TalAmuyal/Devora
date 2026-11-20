@@ -313,15 +313,26 @@ impl Db {
         tx.commit().map_err(storage)
     }
 
-    /// Owes `notice` unless one is owed already, which covers it.
-    pub fn owe_notice(&mut self, notice: &RestartNotice) -> Result<(), String> {
-        self.conn
-            .execute(
-                "UPDATE space SET restart_notice=?1 WHERE id=0 AND restart_notice IS NULL",
-                [serde_json::to_string(notice).map_err(storage)?],
-            )
+    /// Owes `notice`, merged into one already owed (`RestartNotice::merge`).
+    pub fn owe_notice(&mut self, notice: RestartNotice) -> Result<(), String> {
+        let tx = self.conn.transaction().map_err(storage)?;
+        let stored: Option<String> = tx
+            .query_row("SELECT restart_notice FROM space WHERE id=0", [], |row| {
+                row.get(0)
+            })
             .map_err(storage)?;
-        Ok(())
+        let owed = match stored {
+            Some(stored) => serde_json::from_str::<RestartNotice>(&stored)
+                .map_err(storage)?
+                .merge(notice),
+            None => notice,
+        };
+        tx.execute(
+            "UPDATE space SET restart_notice=?1 WHERE id=0",
+            [serde_json::to_string(&owed).map_err(storage)?],
+        )
+        .map_err(storage)?;
+        tx.commit().map_err(storage)
     }
 
     /// The CLI answered the notice sent as `attempt`.
