@@ -38,15 +38,34 @@ export TEST_RUNNER_DEVORA_HEALTH_FIXTURE_JSON
 
 results=build/ui-tests.xcresult
 rm -rf "$results"
+# Where the watchdog leaves what it saw when it stops a hung run (uploaded with the result bundle in CI).
+hang=build/ui-test-hang
+rm -rf "$hang" "$hang.watched"
 passed=true
 # Local time, the form `log show --start` takes.
 started=$(date '+%Y-%m-%d %H:%M:%S')
-# Each test gets at most 5 minutes (the slowest passing one takes about 1): one that hangs fails by name, with its screenshot (and a spindump, where the runner may take one) in the result bundle, and the run goes on.
+# Each test gets at most 5 minutes (the slowest passing one takes about 1). The first one that exceeds that, or whose app
+# launch never gets a process, stops the run (scripts/ui-test-watchdog.sh): once one hangs, the following ones usually
+# hang the same way, each for its full allowance.
+./scripts/ui-test-watchdog.sh "$results" "$hang" "$$" xcodebuild &
+watchdog=$!
+# The watchdog has usually ended with xcodebuild already; under `set -e`, a failing kill here would fail the script.
+trap 'kill "$watchdog" 2>/dev/null || true' EXIT
 if ! xcodebuild -project App/DevoraSapphire.xcodeproj -scheme DevoraSapphire -configuration Release \
 	-derivedDataPath build/DerivedData -destination 'platform=macOS,arch=arm64' -resultBundlePath "$results" \
 	-test-timeouts-enabled YES -default-test-execution-time-allowance 300 \
 	-maximum-test-execution-time-allowance 300 "$@" test -quiet; then
+	xcodebuild_failed=true
+else
+	xcodebuild_failed=false
+fi
+# Said here rather than by the watchdog, which test-ui.sh may stop before its next look.
+if [ ! -e "$hang.watched" ]; then
+	echo "UI test watchdog: found no live XCTest logs (Staging/*/Diagnostics) in $results, so it couldn't watch this run for hangs"
+fi
+if [ "$xcodebuild_failed" = true ]; then
 	passed=false
+	if [ -f "$hang/reason.txt" ]; then cat "$hang/reason.txt"; fi
 	# `-quiet` names the failing tests but not why they failed; the result bundle has the messages.
 	xcrun xcresulttool get test-results summary --path "$results" --compact |
 		jq -r '.testFailures[] | "\(.testIdentifierString): \(.failureText)"' || true

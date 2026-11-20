@@ -331,6 +331,17 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+      # What the XCUITest watchdog saw when it stopped a hung run (project-sapphire/scripts/ui-test-watchdog.sh): the test, a
+      # screenshot, samples of the app and the runner, and XCTest's live logs.
+      - name: Upload native UI hang evidence
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sapphire-ui-hang-evidence
+          path: project-sapphire/build/ui-test-hang/
+          if-no-files-found: ignore
+          retention-days: 14
+
       - name: Disk usage
         if: always()
         run: df -h . && du -sh project-sapphire/build project-sapphire/vendor project-sapphire/.build project-core/target 2>/dev/null || true
