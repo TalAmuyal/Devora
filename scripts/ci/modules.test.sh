@@ -32,6 +32,27 @@ unmapped=$(git -C "$root" ls-files | jq -r -R -s --slurpfile lock "$lock" '
 [ -z "$unmapped" ] || fail "tracked files in no module, \`everything\` or \`nothing\` (add them to scripts/ci/modules.toml):
 $unmapped"
 
+# `nothing` matches any file named CLAUDE.md, so each one is pinned here: a new one that the product or a test reads
+# (an agent's instructions template, a fixture) must not skip both apps unnoticed.
+agent_docs="CLAUDE.md
+acceptance/CLAUDE.md
+bundler/CLAUDE.md
+project-code-cleanup/CLAUDE.md
+project-core/CLAUDE.md
+project-debi/CLAUDE.md
+project-detached-flow/CLAUDE.md
+project-ember/CLAUDE.md
+project-ember/src/ui/layers/CLAUDE.md
+project-judgess/CLAUDE.md
+project-sapphire/CLAUDE.md
+project-sapphire/Sources/Layers/CLAUDE.md
+project-team-work/CLAUDE.md
+web-renderer/CLAUDE.md"
+unpinned=$(git -C "$root" ls-files -- 'CLAUDE.md' '*/CLAUDE.md' | grep -vxF "$agent_docs")
+[ -z "$unpinned" ] || fail "new CLAUDE.md files, which CI treats as affecting no app: confirm each is agent documentation
+that no build, test or app reads, and add it to agent_docs in scripts/ci/modules.test.sh:
+$unpinned"
+
 # What an app bundles must always run its jobs, so a file that starts being bundled can't skip them silently.
 # Two exceptions, both in `nothing`:
 # - CHANGELOG.md is packed, but neither app reads it at runtime or in a test, and nearly every pull request touches it.
