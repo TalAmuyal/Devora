@@ -723,6 +723,7 @@ name = "devora-agent"
 version = "0.1.0"
 dependencies = [
  "devora-app",
+ "devora-platform",
  "judgess",
  "serde",
  "serde_json",
@@ -737,6 +738,7 @@ dependencies = [
  "devora-agent",
  "devora-app",
  "devora-config",
+ "devora-platform",
  "devora-workspace",
  "fs2",
  "rusqlite",

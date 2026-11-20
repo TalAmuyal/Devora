@@ -1135,3 +1135,44 @@ async fn pinned_cli_results_name_the_turn_they_answer() {
     resumed.pause().await.unwrap();
     backend.stop().await;
 }
+
+// Claude Code makes each background shell a session leader of its own, so only
+// stopping the CLI's whole process tree ends it. A forced stop (the command
+// outlives the stop's grace) must leave nothing of it running.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires CI-pinned Claude CLI, Node and Sapphire npm dependencies"]
+async fn pinned_cli_forced_stop_leaves_no_background_shell_running() {
+    check_pin().await;
+    let fixture = Fixture::new();
+    let mut backend = Backend::start(fixture.root.path()).await;
+    let marker = fixture.root.path().join("background-marker");
+    backend
+        .command(json!({"action":"configure",
+            "toolCommand":format!("sleep 60 # {}", marker.display()), "toolBackground":true}))
+        .await;
+    let mut options = fixture.options(
+        backend.port,
+        Instructions::Append("Forced stop probe".into()),
+    );
+    options.settings["permissions"] = json!({"allow":["Bash"]});
+    let mut session = Session::start(options, fixture.log()).await.unwrap();
+    session
+        .handle()
+        .send_turn(turn_id(), "Start the background command.".into())
+        .await
+        .unwrap();
+    result(&mut session).await;
+    let running = || {
+        std::process::Command::new("pgrep")
+            .args(["-f", &marker.display().to_string()])
+            .output()
+            .unwrap()
+            .status
+            .success()
+    };
+    assert!(running(), "the background command runs");
+    let stopped = session.pause().await.unwrap();
+    assert!(!stopped.graceful, "the CLI waits for it past the grace");
+    assert!(!running(), "the forced stop ended the background shell too");
+    backend.stop().await;
+}

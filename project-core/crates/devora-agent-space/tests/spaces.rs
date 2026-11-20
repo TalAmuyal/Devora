@@ -1,11 +1,12 @@
 use devora_agent::protocol::{KnownMessage, Message};
-use devora_agent::session::SessionEvent;
+use devora_agent::session::{stop_tree, CliProcess, SessionEvent};
 use devora_agent::transcript::{SystemKind, TranscriptChange, TranscriptContent};
 use devora_agent_space::{
     model_defaults, template, AppRun, CreationForm, LaunchContext, ModelChoice, RunningSpace,
     Space, SpaceEvent,
 };
 use devora_app::log::Log;
+use devora_platform::processes::{ProcessTable, SystemProcessTable};
 use devora_workspace::creation::{CreationHandle, EventSink};
 use serde_json::json;
 use std::collections::BTreeMap;
@@ -793,7 +794,7 @@ async fn a_real_v1_shape_lists_without_migration_then_upgrades_and_reopens_with_
         .is_empty());
     assert_eq!(version(), 1);
     let space = Space::open(&fixture.profile, "Legacy").unwrap();
-    assert_eq!(version(), 3);
+    assert_eq!(version(), 4);
     assert_eq!(space.instructions(), "Frozen legacy instructions");
     assert_eq!(space.identity().role, "Legacy role");
     assert_eq!(space.saved_session().session_id, previous_id);
@@ -831,7 +832,7 @@ async fn a_real_v1_shape_lists_without_migration_then_upgrades_and_reopens_with_
     }
     running.pause().await.unwrap();
     let reopened = Space::open(&fixture.profile, "Legacy").unwrap();
-    assert_eq!(version(), 3);
+    assert_eq!(version(), 4);
     assert!(reopened.history().unwrap().iter().any(|item| matches!(&item.content, devora_agent::transcript::TranscriptContent::User { text, .. } if text == "Legacy prompt")));
     assert_eq!(reopened.instructions(), "Frozen legacy instructions");
 }
@@ -1253,7 +1254,7 @@ async fn a_result_nobody_asked_for_leaves_the_sent_turn_running() {
     assert!(interrupt < eof, "the pause waited for the turn: {kinds:?}");
 }
 
-/// The restart notices the fake CLI received, in order.
+/// The notices (after a restart, or a stop) the fake CLI received, in order.
 fn notices(fixture: &Fixture) -> Vec<serde_json::Value> {
     std::fs::read_to_string(fixture.root.path().join("report.jsonl"))
         .unwrap()
@@ -1261,9 +1262,10 @@ fn notices(fixture: &Fixture) -> Vec<serde_json::Value> {
         .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
         .filter(|entry| {
             entry["kind"] == "user"
-                && entry["message"]["content"]
-                    .as_str()
-                    .is_some_and(|text| text.starts_with("Devora restarted your session"))
+                && entry["message"]["content"].as_str().is_some_and(|text| {
+                    text.starts_with("Devora restarted your session")
+                        || text.starts_with("Devora had to stop your session")
+                })
         })
         .collect()
 }
@@ -1568,7 +1570,7 @@ async fn a_space_from_before_restart_notices_is_owed_one_on_its_first_launch_aft
     let connection = rusqlite::Connection::open(&database).unwrap();
     connection
         .execute_batch(
-            "ALTER TABLE space DROP COLUMN launched_run; ALTER TABLE space DROP COLUMN restart_notice; PRAGMA user_version = 2;",
+            "ALTER TABLE space DROP COLUMN cli_process; ALTER TABLE space DROP COLUMN launched_run; ALTER TABLE space DROP COLUMN restart_notice; PRAGMA user_version = 2;",
         )
         .unwrap();
     assert_eq!(
@@ -1581,6 +1583,222 @@ async fn a_space_from_before_restart_notices_is_owed_one_on_its_first_launch_aft
         connection
             .pragma_query_value::<u32, _>(None, "user_version", |row| row.get(0))
             .unwrap(),
-        3
+        4
+    );
+}
+
+/// A stand-in for a CLI an earlier Devora left running: a parent whose child
+/// made itself a session leader, as Claude Code's background shells do.
+/// Returns the parent and the child's pid.
+fn left_running() -> (std::process::Child, u32) {
+    use std::io::BufRead;
+    let mut parent = Command::new("python3")
+        .args([
+            "-c",
+            "import os, time\n\
+             pid = os.fork()\n\
+             if pid == 0:\n    os.setsid(); time.sleep(60); os._exit(0)\n\
+             print(pid, flush=True); time.sleep(60)",
+        ])
+        .stdout(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut line = String::new();
+    std::io::BufReader::new(parent.stdout.as_mut().unwrap())
+        .read_line(&mut line)
+        .unwrap();
+    (parent, line.trim().parse().unwrap())
+}
+
+fn record_cli(fixture: &Fixture, cli: Option<&CliProcess>) {
+    rusqlite::Connection::open(fixture.profile.join("agent-spaces/Delta/.agent-space.db"))
+        .unwrap()
+        .execute(
+            "UPDATE space SET cli_process=?1",
+            [cli.map(|cli| serde_json::to_string(cli).unwrap())],
+        )
+        .unwrap();
+}
+
+fn recorded_cli(fixture: &Fixture) -> Option<CliProcess> {
+    rusqlite::Connection::open(fixture.profile.join("agent-spaces/Delta/.agent-space.db"))
+        .unwrap()
+        .query_row("SELECT cli_process FROM space", [], |row| {
+            row.get::<_, Option<String>>(0)
+        })
+        .unwrap()
+        .map(|cli| serde_json::from_str(&cli).unwrap())
+}
+
+#[tokio::test]
+async fn a_launch_stops_a_cli_an_earlier_devora_left_running_before_resuming() {
+    let fixture = Fixture::new();
+    let context = fixture.context();
+    let log = Arc::new(Log::open(&fixture.root.path().join("log")).unwrap());
+    fixture.create(fixture.form("Delta")).unwrap();
+    launch_and_settle(&fixture, &context, &log, &fixture.run).await;
+
+    let table = SystemProcessTable;
+    let (mut orphan, shell) = left_running();
+    let cli = CliProcess::of(&table, orphan.id()).unwrap();
+    record_cli(&fixture, Some(&cli));
+    let mut running = Space::open(&fixture.profile, "Delta")
+        .unwrap()
+        .start(&context, log.clone(), &fixture.run)
+        .await
+        .unwrap();
+    // Stopped before the new CLI started, so there is never a second writer.
+    assert_eq!(table.get(orphan.id()), None);
+    assert_eq!(table.get(shell), None, "its session-leading shell too");
+    orphan.wait().unwrap();
+    settle(&mut running).await;
+    running.pause().await.unwrap();
+    assert!(std::fs::read_to_string(fixture.root.path().join("log"))
+        .unwrap()
+        .contains(&format!(
+            "stopped Claude Code (pid {}) that an earlier Devora left running",
+            cli.pid
+        )));
+}
+
+#[tokio::test]
+async fn a_recorded_pid_that_another_process_now_has_is_left_alone() {
+    let fixture = Fixture::new();
+    let context = fixture.context();
+    let log = Arc::new(Log::open(&fixture.root.path().join("log")).unwrap());
+    fixture.create(fixture.form("Delta")).unwrap();
+    launch_and_settle(&fixture, &context, &log, &fixture.run).await;
+
+    let table = SystemProcessTable;
+    let (mut other, shell) = left_running();
+    let live = CliProcess::of(&table, other.id()).unwrap();
+    record_cli(
+        &fixture,
+        Some(&CliProcess {
+            started: live.started + 1,
+            ..live
+        }),
+    );
+    launch_and_settle(&fixture, &context, &log, &fixture.run).await;
+    assert_eq!(table.get(other.id()).map(CliProcess::from), Some(live));
+    assert!(table.get(shell).is_some());
+    stop_tree(&table, live, Duration::from_secs(5)).unwrap();
+    other.wait().unwrap();
+}
+
+#[tokio::test]
+async fn the_running_cli_is_recorded_and_cleared_once_it_stops_under_devoras_watch() {
+    let fixture = Fixture::new();
+    let context = fixture.context();
+    let log = Arc::new(Log::open(&fixture.root.path().join("log")).unwrap());
+    fixture.create(fixture.form("Delta")).unwrap();
+    let mut running = Space::open(&fixture.profile, "Delta")
+        .unwrap()
+        .start(&context, log.clone(), &fixture.run)
+        .await
+        .unwrap();
+    settle(&mut running).await;
+    let started = std::fs::read_to_string(fixture.root.path().join("report.jsonl"))
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
+        .find(|report| report["kind"] == "start")
+        .unwrap();
+    assert_eq!(
+        recorded_cli(&fixture).map(|cli| serde_json::json!(cli.pid)),
+        Some(started["pid"].clone())
+    );
+    running.pause().await.unwrap();
+    assert_eq!(recorded_cli(&fixture), None);
+}
+
+/// Starts the agent's launch in `run`, sends `prompt`, waits until the fake CLI
+/// holds that turn open, and pauses: the stop interrupts the turn.
+async fn stop_mid_turn(fixture: &Fixture, context: &LaunchContext, log: &Arc<Log>, prompt: &str) {
+    let mut running = Space::open(&fixture.profile, "Delta")
+        .unwrap()
+        .start(context, log.clone(), &fixture.run)
+        .await
+        .unwrap();
+    running.handle().send_turn(prompt.into()).await.unwrap();
+    tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            if let SpaceEvent::Session(SessionEvent::Message(Message::Raw(value))) =
+                running.next_update().await.unwrap()
+            {
+                if value["type"] == "fake_stream_ready" {
+                    return;
+                }
+            }
+        }
+    })
+    .await
+    .unwrap();
+    running.pause().await.unwrap();
+}
+
+// In one run: a clean idle stop owes nothing, while a stop that interrupted a
+// turn, or had to be forced, ended the agent's background work and owes it the
+// notice at its next launch.
+#[tokio::test]
+async fn a_stop_that_interrupted_a_turn_owes_the_notice_and_a_clean_idle_stop_none() {
+    let fixture = Fixture::new();
+    let context = fixture.context();
+    let log = Arc::new(Log::open(&fixture.root.path().join("log")).unwrap());
+    fixture.create(fixture.form("Delta")).unwrap();
+    launch_and_settle(&fixture, &context, &log, &fixture.run).await;
+    assert!(
+        launch_and_settle(&fixture, &context, &log, &fixture.run)
+            .await
+            .is_empty(),
+        "a clean idle stop owes nothing"
+    );
+    stop_mid_turn(&fixture, &context, &log, "stream").await;
+    assert_eq!(
+        launch_and_settle(&fixture, &context, &log, &fixture.run).await,
+        vec![(
+            "Devora stopped the agent to pause it: asked it to re-check its waits".into(),
+            false
+        )]
+    );
+    assert!(launch_and_settle(&fixture, &context, &log, &fixture.run)
+        .await
+        .is_empty());
+    let sent = notices(&fixture);
+    assert_eq!(sent.len(), 1);
+    assert!(sent[0]["message"]["content"]
+        .as_str()
+        .unwrap()
+        .contains("to pause it"));
+}
+
+// A forced stop (here the turn ignores the interrupt) stops the CLI's whole
+// tree, its session-leading background shell included, and owes the notice.
+#[tokio::test]
+async fn a_forced_stop_ends_the_cli_with_its_background_shell_and_owes_the_notice() {
+    let fixture = Fixture::new();
+    let context = fixture.context();
+    let log = Arc::new(Log::open(&fixture.root.path().join("log")).unwrap());
+    fixture.create(fixture.form("Delta")).unwrap();
+    launch_and_settle(&fixture, &context, &log, &fixture.run).await;
+    stop_mid_turn(&fixture, &context, &log, "background-shell").await;
+    let shell = std::fs::read_to_string(fixture.root.path().join("report.jsonl"))
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
+        .find(|report| report["kind"] == "background")
+        .unwrap()["pid"]
+        .as_u64()
+        .unwrap() as u32;
+    assert_eq!(
+        SystemProcessTable.get(shell),
+        None,
+        "a forced stop leaves no background shell running"
+    );
+    assert_eq!(
+        launch_and_settle(&fixture, &context, &log, &fixture.run)
+            .await
+            .len(),
+        1
     );
 }

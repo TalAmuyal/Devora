@@ -750,3 +750,25 @@ async fn only_the_result_naming_the_sent_turn_ends_it() {
         "the CLI receives the turn's ID as its uuid"
     );
 }
+
+#[tokio::test]
+async fn the_session_reports_the_cli_it_spawned() {
+    let fixture = Fixture::new();
+    let mut session = Session::start(fixture.options(), fixture.log())
+        .await
+        .unwrap();
+    let SessionEvent::Spawned(cli) = event(&mut session, |event| {
+        matches!(event, SessionEvent::Spawned(_))
+    })
+    .await
+    else {
+        unreachable!()
+    };
+    let started = fixture
+        .reports()
+        .into_iter()
+        .find(|report| report["kind"] == "start")
+        .unwrap();
+    assert_eq!(json!(cli.pid), started["pid"]);
+    session.pause().await.unwrap();
+}

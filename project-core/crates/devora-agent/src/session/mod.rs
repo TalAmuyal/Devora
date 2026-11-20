@@ -22,6 +22,7 @@
 mod judging;
 mod launch;
 mod saved;
+mod tree;
 mod worker;
 
 use crate::protocol::{
@@ -34,6 +35,7 @@ use serde_json::{Map, Value};
 use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot, watch};
 use tokio::task::JoinHandle;
+pub use tree::{stop_tree, CliProcess};
 
 /// Which CLI message supplied a token-usage update.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -48,6 +50,8 @@ pub enum UsageSource {
 /// transcript/history policy, alongside lifecycle and interactive-control events.
 #[derive(Debug, Clone)]
 pub enum SessionEvent {
+    /// A CLI process started (the first, or after a crash), before it is ready.
+    Spawned(CliProcess),
     Ready {
         session_id: String,
         resumed: bool,
@@ -92,6 +96,8 @@ pub struct StopInfo {
     /// an unfinished first session can reopen with a fresh UUID.
     pub has_conversation: bool,
     pub graceful: bool,
+    /// The stop interrupted a running turn.
+    pub interrupted_turn: bool,
 }
 
 /// The answers supported by an inline permission question. Suggested rules are

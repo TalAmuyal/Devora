@@ -321,7 +321,7 @@ impl Transcript {
                 json!({"request_id":request_id,"server_name":server_name,"message":message}),
                 None,
             )],
-            SessionEvent::Usage { .. } => vec![],
+            SessionEvent::Usage { .. } | SessionEvent::Spawned(_) => vec![],
         }
     }
 
