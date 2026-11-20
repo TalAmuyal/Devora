@@ -89,7 +89,7 @@ ended "$dog" || fail "the watchdog outlived the run it stopped (2_Test)"
 grep -q "testTypingInTheFilterNarrowsTheListAndEscapeLeavesItBeforeClosing exceeded" "$scratch/renamed/hang/reason.txt" 2>/dev/null ||
 	fail "a hang under Staging/2_Test should name the test"
 
-# 3. Passing tests: it never fires, says nothing, and ends with the run.
+# 3. Passing tests: it never fires, marks the run as watched, and ends with it.
 results=$(bundle passing)
 stand_in 1
 "$watchdog" "$results" "$scratch/passing/hang" "$$" sleep >"$scratch/passing.out" &
@@ -99,16 +99,31 @@ ended "$run" || fail "the stand-in for a passing run didn't end by itself"
 ended "$dog" || fail "the watchdog outlived a run that ended by itself"
 [ ! -e "$scratch/passing/hang" ] || fail "passing tests shouldn't leave evidence"
 [ ! -s "$scratch/passing.out" ] || fail "a watched run should end quietly: $(cat "$scratch/passing.out")"
+[ -e "$scratch/passing/hang.watched" ] || fail "a run whose live logs it found should be marked as watched"
 
-# 3b. No live logs at all (Xcode wrote them elsewhere): the run ends with a line saying it wasn't watched.
+# 3b. No live logs at all (Xcode wrote them elsewhere): no mark, so test-ui.sh says the run wasn't watched.
 mkdir -p "$scratch/unwatched/ui-tests.xcresult"
 stand_in 1
-"$watchdog" "$scratch/unwatched/ui-tests.xcresult" "$scratch/unwatched/hang" "$$" sleep >"$scratch/unwatched.out" &
+"$watchdog" "$scratch/unwatched/ui-tests.xcresult" "$scratch/unwatched/hang" "$$" sleep &
 dog=$!
 ended "$run" || fail "the stand-in for an unwatched run didn't end by itself"
 ended "$dog" || fail "the watchdog outlived an unwatched run"
-grep -q "found no live XCTest logs (Staging/\*/Diagnostics)" "$scratch/unwatched.out" ||
-	fail "an unwatched run should say so: $(cat "$scratch/unwatched.out")"
+[ ! -e "$scratch/unwatched/hang.watched" ] || fail "a run with no live logs shouldn't be marked as watched"
+
+# 3c. Live logs found, then gone before the run ends (Staging folded into the finished bundle): still marked as watched.
+results=$(bundle folded)
+stand_in 60
+"$watchdog" "$results" "$scratch/folded/hang" "$$" sleep &
+dog=$!
+for _ in $(seq 1 50); do
+	[ -e "$scratch/folded/hang.watched" ] && break
+	sleep 0.1
+done
+[ -e "$scratch/folded/hang.watched" ] || fail "a run whose live logs it found should be marked as watched (folded)"
+rm -rf "$results/Staging"
+kill -TERM "$run"
+ended "$dog" || fail "the watchdog outlived a run whose Staging was folded"
+[ -e "$scratch/folded/hang.watched" ] || fail "the mark should outlive the Staging it was made from"
 
 # 4. Its parent gone (test-ui.sh killed): it ends without signalling anything.
 results=$(bundle orphan)

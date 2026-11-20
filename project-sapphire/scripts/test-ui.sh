@@ -40,7 +40,7 @@ results=build/ui-tests.xcresult
 rm -rf "$results"
 # Where the watchdog leaves what it saw when it stops a hung run (uploaded with the result bundle in CI).
 hang=build/ui-test-hang
-rm -rf "$hang"
+rm -rf "$hang" "$hang.watched"
 passed=true
 # Local time, the form `log show --start` takes.
 started=$(date '+%Y-%m-%d %H:%M:%S')
@@ -54,6 +54,15 @@ if ! xcodebuild -project App/DevoraSapphire.xcodeproj -scheme DevoraSapphire -co
 	-derivedDataPath build/DerivedData -destination 'platform=macOS,arch=arm64' -resultBundlePath "$results" \
 	-test-timeouts-enabled YES -default-test-execution-time-allowance 300 \
 	-maximum-test-execution-time-allowance 300 "$@" test -quiet; then
+	xcodebuild_failed=true
+else
+	xcodebuild_failed=false
+fi
+# Said here rather than by the watchdog, which test-ui.sh may stop before its next look.
+if [ ! -e "$hang.watched" ]; then
+	echo "UI test watchdog: found no live XCTest logs (Staging/*/Diagnostics) in $results, so it couldn't watch this run for hangs"
+fi
+if [ "$xcodebuild_failed" = true ]; then
 	passed=false
 	if [ -f "$hang/reason.txt" ]; then cat "$hang/reason.txt"; fi
 	# `-quiet` names the failing tests but not why they failed; the result bundle has the messages.

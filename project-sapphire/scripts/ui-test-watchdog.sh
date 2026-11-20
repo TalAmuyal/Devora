@@ -2,8 +2,8 @@
 # Stops an XCUITest run at its first hang, naming the test, instead of letting every later test hang for its own allowance.
 # Usage: ui-test-watchdog.sh <result bundle> <evidence dir> <parent pid> <process name>
 # It watches the `<process name>` child of `<parent pid>` (test-ui.sh's xcodebuild), and reads the logs XCTest writes live
-# under the bundle's Staging/<action>/Diagnostics (xcodebuild's `-quiet` output holds them for its end summary); a run in which
-# it never finds that directory ends with a line saying it couldn't watch. It fires on the first:
+# under the bundle's Staging/<action>/Diagnostics (xcodebuild's `-quiet` output holds them for its end summary). The first time it
+# finds them it creates `<evidence dir>.watched`, so that test-ui.sh can say when a run was never watched. It fires on the first:
 # - test that exceeds its execution time allowance;
 # - launch whose app never gets a process (XCTest's `isProcessIDValid` wait times out).
 # Then it writes the evidence (what fired, the test, a screenshot, samples of the app and the runner, the Diagnostics logs)
@@ -44,6 +44,7 @@ watched=""
 while same "$target" "$identity" && kill -0 "$parent" 2>/dev/null; do
 	watched=$(diagnostics)
 	if [ -n "$watched" ]; then
+		[ -e "$evidence.watched" ] || touch "$evidence.watched"
 		# shellcheck disable=SC2086 # One path per line; no Staging path has a space in it.
 		allowance=$(find $watched -name 'StandardOutputAndStandardError.txt' -exec grep -h "exceeded execution time allowance" {} + 2>/dev/null | head -1)
 		if [ -n "$allowance" ]; then
@@ -61,12 +62,7 @@ while same "$target" "$identity" && kill -0 "$parent" 2>/dev/null; do
 	fi
 	sleep "$interval"
 done
-if [ -z "$reason" ]; then
-	if [ -z "$watched" ]; then
-		echo "UI test watchdog: found no live XCTest logs (Staging/*/Diagnostics) in $results, so it couldn't watch this run for hangs"
-	fi
-	exit 0
-fi
+[ -n "$reason" ] || exit 0
 
 mkdir -p "$evidence"
 message="UI test watchdog: ${hung:-a test} $reason; stopped the run, evidence in $evidence"
