@@ -82,6 +82,7 @@ struct WebContentView: NSViewRepresentable {
 			palette = WebPalette.variables(for: webView.effectiveAppearance, page: .textBackgroundColor)
 			let json = (try? JSONSerialization.data(withJSONObject: palette)).flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
 			let controller = webView.configuration.userContentController
+			// The palette's script is the configuration's only user script: one added later would be removed here too.
 			controller.removeAllUserScripts()
 			controller.addUserScript(WKUserScript(
 				source: "for (const [name, value] of Object.entries(\(json))) document.documentElement.style.setProperty(name, value);",
