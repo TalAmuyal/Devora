@@ -171,10 +171,15 @@ pub struct RunningSpace {
     events: mpsc::UnboundedReceiver<SpaceEvent>,
     /// Ends with the stop the actor persisted, when it stopped the session itself.
     worker: Option<JoinHandle<Result<Option<StopInfo>, String>>>,
+    settings: Value,
 }
 impl RunningSpace {
     pub fn handle(&self) -> SpaceHandle {
         self.handle.clone()
+    }
+    /// The settings the CLI was launched with (`SessionOptions::settings`): the host's, with the profile's model tiers.
+    pub fn launch_settings(&self) -> &Value {
+        &self.settings
     }
     pub async fn next_update(&mut self) -> Option<SpaceEvent> {
         self.events.recv().await
@@ -212,6 +217,7 @@ pub(crate) async fn start(
     run: &AppRun,
 ) -> Result<RunningSpace, String> {
     let run = run.clone();
+    let settings = options.settings.clone();
     let launch = options.clone();
     let launch_log = log.clone();
     let (mut space, mut transcript, history, notice) = tokio::task::spawn_blocking(move || {
@@ -329,6 +335,7 @@ pub(crate) async fn start(
         handle,
         events: received,
         worker: Some(worker),
+        settings,
     })
 }
 

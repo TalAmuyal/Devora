@@ -1042,7 +1042,7 @@ async fn run_session(
                     return Err(error);
                 }
                 if let SpaceEvent::Session(SessionEvent::Ready { capabilities, .. }) = &event {
-                    models::learned(inner, log, &key.profile, devora_agent::models::decode(capabilities));
+                    models::learned(inner, log, &key.profile, running.launch_settings(), devora_agent::models::decode(capabilities));
                 }
                 publish(inner, state, key, generation, event);
             }
