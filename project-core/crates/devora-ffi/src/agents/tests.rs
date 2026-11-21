@@ -1600,11 +1600,16 @@ fn the_agents_own_threshold_and_compact_now_reach_its_chat_and_a_paused_agent_re
 #[test]
 fn the_models_a_profile_is_offered_come_from_its_cli_and_list_the_aliases_first() {
     let f = Fixture::new(false);
-    let options = block_on(
+    let list = block_on(
         f.core
             .agent_model_options(f.profile.path_string(), f.launch()),
     )
     .unwrap();
+    assert!(
+        list.cli_version.is_some(),
+        "the CLI's version comes with its list"
+    );
+    let options = &list.models;
     let values: Vec<_> = options.iter().map(|o| o.value.as_str()).collect();
     assert_eq!(
         &values[..5],

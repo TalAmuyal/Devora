@@ -50,6 +50,8 @@ final class NewAgentDialogModel {
 	var keepCodingInstructions = true
 	/// The model every launch of the agent uses: free text, so an alias or a full model name both work. Empty until the core's default arrives.
 	var model = ""
+	/// The models Claude Code offers, suggested in the model field once they arrive; nil until then, or when it can't be asked.
+	private(set) var modelSuggestions: ModelSuggestions?
 	/// The effort every launch uses; `nil` leaves it to Claude Code.
 	private(set) var effort: String?
 	/// The efforts the slider offers after "Claude Code default", low → max.
@@ -78,6 +80,10 @@ final class NewAgentDialogModel {
 		Task { [weak self, store] in
 			guard let defaults = await store.agentModelDefaults() else { return }
 			self?.applyModelDefaults(defaults)
+		}
+		Task { [weak self, store] in
+			let suggestions = await store.modelSuggestions()
+			self?.modelSuggestions = suggestions
 		}
 	}
 
@@ -282,11 +288,13 @@ struct NewAgentDialogView: View {
 						}
 						.frame(maxHeight: formHeight)
 						.scrollBounceBehavior(.basedOnSize)
-						buttons
 					}
 					.frame(minWidth: 260, maxWidth: 330)
 					.padding(.trailing, 500)
 					.overlay(alignment: .trailing) { preview.frame(width: 480) }
+					// Across the dialog: the model field's suggestions menu is as wide as the field, and its rows need the room.
+					launchSettings
+					buttons
 				}
 			}
 			.padding(20)
@@ -343,15 +351,30 @@ struct NewAgentDialogView: View {
 				isSelected: { model.selected.contains($0.path) }, click: model.click, activate: model.activate,
 				identifierPrefix: "new-agent-repo-", height: 140)
 		}
-		label("Model")
-		TextField("e.g. opus, sonnet or a full model name", text: $model.model)
-			.textFieldStyle(.roundedBorder)
-			.focused($field, equals: .model)
-			.accessibilityIdentifier("new-agent-model")
-		effortSlider
 		Toggle("Include coding instructions", isOn: $model.keepCodingInstructions)
 			.help("On: the instructions are appended to Claude Code's own system prompt, with its coding instructions. Off: they replace it.")
 			.accessibilityIdentifier("new-agent-keep-coding-instructions")
+	}
+
+	/// What every launch of the agent runs: its model and effort.
+	private var launchSettings: some View {
+		HStack(alignment: .top, spacing: 20) {
+			VStack(alignment: .leading, spacing: 10) {
+				label("Model")
+				TextField("e.g. opus, sonnet or a full model name", text: $model.model)
+					.textFieldStyle(.roundedBorder)
+					.focused($field, equals: .model)
+					.modelSuggestions(model.modelSuggestions?.sections(for: .agentModel, typed: model.model) ?? [])
+					.accessibilityIdentifier("new-agent-model")
+				Text(ModelSuggestions.note(for: model.model, listedBy: model.modelSuggestions))
+					.font(.caption).foregroundStyle(.secondary)
+					.accessibilityIdentifier("new-agent-model-note")
+			}
+			.frame(width: 480)
+			VStack(alignment: .leading, spacing: 10) { effortSlider }
+				.frame(minWidth: 260, maxWidth: 330)
+		}
+		.padding(.horizontal, 6)
 	}
 
 	private var buttons: some View {

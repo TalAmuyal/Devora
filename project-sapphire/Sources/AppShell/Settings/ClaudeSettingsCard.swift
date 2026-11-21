@@ -48,10 +48,11 @@ struct ClaudeSettingsCard: View {
 			}
 			if mode == .custom {
 				HStack(spacing: 6) {
-					TextField(key == "permission-mode" ? "permission mode, then Enter" : "model id, then Enter", text: Binding(get: { model.input(key) }, set: { model.edit(key, $0) }))
+					TextField(key == "permission-mode" ? "permission mode, then Enter" : "model ID, then Enter", text: Binding(get: { model.input(key) }, set: { model.edit(key, $0) }))
 						.textFieldStyle(.roundedBorder)
 						.frame(maxWidth: 340)
 						.focused($focus, equals: key)
+						.modelSuggestions(key == "permission-mode" ? [] : model.suggestions(forTier: key))
 						.onSubmit { model.commit(key) }
 						.accessibilityIdentifier("claude-input-\(key)")
 					if model.showsSave(key) {
@@ -77,7 +78,8 @@ struct ClaudeSettingsCard: View {
 		}
 	}
 
-	/// Only the permission mode has suggestions: a model tier's Custom takes any model ID.
+	/// The permission mode's suggestions are buttons; a model tier's are its field's menu (`modelSuggestions`), as a
+	/// subscription offers too many models for buttons.
 	private func suggestions(_ key: String) -> [String] {
 		key == "permission-mode" ? model.choices?.permissionModeSuggestions ?? [] : []
 	}

@@ -18,26 +18,39 @@ final class ClaudeSettingsModel {
 	private(set) var choices: ClaudeSettingChoices?
 	private(set) var drafts: [String: String] = [:]
 	private(set) var pending: Set<String> = []
+	/// The models Claude Code offers, suggested in a tier's Custom field; nil until they arrive, or when it can't be asked.
+	private(set) var modelSuggestions: ModelSuggestions?
 	var focusedKey: String?
 
 	@ObservationIgnored private let read: () async -> ClaudeSettings?
 	@ObservationIgnored private let readChoices: () async -> ClaudeSettingChoices?
 	@ObservationIgnored private let write: (String, ClaudeValue?) async -> Bool
+	@ObservationIgnored private let suggest: () async -> ModelSuggestions?
 	@ObservationIgnored private let writes: SettingsWriteQueue
 
 	init(
 		read: @escaping () async -> ClaudeSettings?, choices: @escaping () async -> ClaudeSettingChoices?,
-		write: @escaping (String, ClaudeValue?) async -> Bool, writes: SettingsWriteQueue
+		write: @escaping (String, ClaudeValue?) async -> Bool, writes: SettingsWriteQueue,
+		suggest: @escaping () async -> ModelSuggestions?
 	) {
 		self.read = read
 		self.readChoices = choices
 		self.write = write
+		self.suggest = suggest
 		self.writes = writes
 	}
 
 	func reload() async {
 		if choices == nil { choices = await readChoices() }
 		if let settings = await read() { self.settings = settings }
+		// Asked again after every write: a changed tier changes what the aliases resolve to (the core keys its cache by it).
+		modelSuggestions = await suggest()
+	}
+
+	/// The suggestions for a model tier's Custom field (full IDs, the tier's own family first), narrowed to what's typed.
+	func suggestions(forTier key: String) -> [ModelSuggestions.Section] {
+		guard let family = key.split(separator: "-").first.map(String.init) else { return [] }
+		return modelSuggestions?.sections(for: .tier(family: family), typed: input(key)) ?? []
 	}
 
 	func mode(_ key: String) -> ClaudeMode {
@@ -130,7 +143,8 @@ extension ClaudeSettingsModel {
 		self.init(
 			read: { await store.claudeSettings(profilePath: profilePath) },
 			choices: { await store.claudeSettingChoices() },
-			write: { await store.setClaudeSetting(profilePath: profilePath, key: $0, value: $1) }, writes: writes)
+			write: { await store.setClaudeSetting(profilePath: profilePath, key: $0, value: $1) }, writes: writes,
+			suggest: { await store.modelSuggestions(profilePath: profilePath) })
 	}
 }
 

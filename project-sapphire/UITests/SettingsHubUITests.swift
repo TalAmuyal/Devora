@@ -21,6 +21,7 @@ final class SettingsHubUITests: XCTestCase {
 		app = XCUIApplication()
 		app.launchEnvironment["DEVORA_CONFIG_PATH"] = config.path
 		app.launchEnvironment["DEVORA_STATE_DIR"] = scratch.appending(path: "state").path
+		try app.useTheFakeClaude(reportingIn: scratch)
 		app.launch()
 		addTeardownBlock { @MainActor [app] in app?.terminate() }
 		XCTAssertTrue(app.hubHeader.waitForExistence(timeout: 10))
@@ -63,7 +64,7 @@ final class SettingsHubUITests: XCTestCase {
 		app = XCUIApplication()
 		app.launchEnvironment["DEVORA_CONFIG_PATH"] = config.path
 		app.launchEnvironment["DEVORA_STATE_DIR"] = scratch.appending(path: "state").path
-		app.launchEnvironment["DEVORA_TEST_MODE"] = "1"
+		try app.useTheFakeClaude(reportingIn: scratch)
 		app.launch()
 		addTeardownBlock { @MainActor [app] in app?.terminate() }
 		XCTAssertTrue(app.hubHeader.waitForExistence(timeout: 10))

@@ -99,13 +99,9 @@ final class NativeTranscriptUITests: XCTestCase {
 		let scratch = FileManager.default.temporaryDirectory.appending(path: "sapphire-transcript-uitest-\(UUID().uuidString)")
 		try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
 		let app = XCUIApplication()
-		app.launchEnvironment["DEVORA_TEST_MODE"] = "1"
 		app.launchEnvironment["DEVORA_CONFIG_PATH"] = try writeConfigWithAProfile(in: scratch).path
 		app.launchEnvironment["DEVORA_STATE_DIR"] = scratch.appending(path: "state").path
-		for key in ["DEVORA_TEST_CLAUDE_PROGRAM", "DEVORA_FAKE_FIXTURES"] {
-			app.launchEnvironment[key] = try XCTUnwrap(ProcessInfo.processInfo.environment[key])
-		}
-		app.launchEnvironment["DEVORA_FAKE_REPORT"] = scratch.appending(path: "fake-report.jsonl").path
+		try app.useTheFakeClaude(reportingIn: scratch)
 		wheelTrace = scratch.appending(path: "wheel-trace.log")
 		app.launchEnvironment["DEVORA_WHEEL_TRACE"] = wheelTrace?.path
 		app.launch()

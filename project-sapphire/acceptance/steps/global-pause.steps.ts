@@ -1,8 +1,7 @@
 import assert from 'node:assert/strict';
-import * as fs from 'node:fs';
-import * as path from 'node:path';
 import { When, Then } from '@cucumber/cucumber';
 import { exited, hasExited } from '../support/app';
+import { agentLaunches } from '../support/fake-cli';
 import { SapphireWorld } from '../support/world';
 
 When('the user globally pauses Devora', async function (this: SapphireWorld) {
@@ -41,8 +40,7 @@ When('the user toggles Global Pause from the palette', async function (this: Sap
 
 const launches = new WeakMap<SapphireWorld, number>();
 function launchCount(world: SapphireWorld): number {
-  const file = path.join(path.dirname(world.testConfigPath), 'fake-claude.jsonl');
-  return fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).map(line => JSON.parse(line)).filter(record => record.kind === 'start').length;
+  return agentLaunches(world).length;
 }
 When('the current agent CLI launch count is recorded', function (this: SapphireWorld) { launches.set(this, launchCount(this)); });
 Then('the agent CLI launch count is unchanged', function (this: SapphireWorld) { assert.equal(launchCount(this), launches.get(this)); });

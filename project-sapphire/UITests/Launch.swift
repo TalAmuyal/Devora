@@ -24,13 +24,9 @@ func launchWithANewAgent(_ test: XCTestCase, scratchName: String) throws -> (XCU
 	try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
 	let config = try writeConfigWithAProfile(in: scratch)
 	let app = XCUIApplication()
-	app.launchEnvironment["DEVORA_TEST_MODE"] = "1"
 	app.launchEnvironment["DEVORA_CONFIG_PATH"] = config.path
 	app.launchEnvironment["DEVORA_STATE_DIR"] = scratch.appending(path: "state").path
-	for key in ["DEVORA_TEST_CLAUDE_PROGRAM", "DEVORA_FAKE_FIXTURES"] {
-		app.launchEnvironment[key] = try XCTUnwrap(ProcessInfo.processInfo.environment[key])
-	}
-	app.launchEnvironment["DEVORA_FAKE_REPORT"] = scratch.appending(path: "fake-report.jsonl").path
+	try app.useTheFakeClaude(reportingIn: scratch)
 	app.launch()
 	test.addTeardownBlock { @MainActor in
 		if app.state != .notRunning {
@@ -54,6 +50,17 @@ func launchWithANewAgent(_ test: XCTestCase, scratchName: String) throws -> (XCU
 }
 
 extension XCUIApplication {
+	/// Runs the core's fake Claude CLI (`scripts/test-ui.sh` names it) wherever the app would run Claude: an agent's
+	/// session, and the probe that lists the models Claude Code offers, which the New Agent dialog and the Claude card start.
+	/// Without it, those would run the user's own `claude`. Its report goes to `fake-report.jsonl` in `scratch`.
+	func useTheFakeClaude(reportingIn scratch: URL) throws {
+		launchEnvironment["DEVORA_TEST_MODE"] = "1"
+		for key in ["DEVORA_TEST_CLAUDE_PROGRAM", "DEVORA_FAKE_FIXTURES"] {
+			launchEnvironment[key] = try XCTUnwrap(ProcessInfo.processInfo.environment[key])
+		}
+		launchEnvironment["DEVORA_FAKE_REPORT"] = scratch.appending(path: "fake-report.jsonl").path
+	}
+
 	/// Has the app take two lone Shift taps as a double tap however far apart they arrive (`DEVORA_TEST_SHIFT_TAP_WINDOW`), for a test that taps Shift-Shift; set before launching.
 	/// XCUITest's synthesized taps can arrive seconds apart on a busy machine, past the 0.5 s a keyboard's double tap gets, which `ShiftDoubleTapTests` check on exact timestamps.
 	@MainActor

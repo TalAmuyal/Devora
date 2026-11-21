@@ -110,3 +110,9 @@ Then('neither scope should store the fixture token on disk', function (this: Sap
     assert.equal(fs.readFileSync(file, 'utf8').includes(FIXTURE_TOKEN), false, 'tokens belong to the credential store');
   }
 });
+
+Then('Claude {string} should suggest the model ID {string} under {string}', async function (this: SapphireWorld, key: string, id: string, section: string) {
+  await this.bridge.waitFor(`Claude ${key} suggesting ${id} under ${section}`, () => this.bridge.state(), (s) =>
+    s.settings?.scope?.claude?.fields.some((f) => f.key === key && f.segment === 'Custom' &&
+      f.modelSuggestions.some((m) => m.title === section && m.rows.some((row) => row.completion === id))) === true);
+});

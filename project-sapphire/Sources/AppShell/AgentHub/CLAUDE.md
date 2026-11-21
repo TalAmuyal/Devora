@@ -9,7 +9,7 @@ The Agent Spaces of the selected profile (ADR-012, `Sources/AppShell/AgentHub/`)
 - The New Agent dialog (`NewAgentDialogModel`) is a modal over the hub: the name, with the space's path under it, the template's fields (`agent_creation_fields`: the ones only the form fills, then the pre-filled ones with their source, then the derived ones, read-only, listed again as the name and repos change), the initial repos, the model and the effort.
 	Fields show user-facing labels (`AgentFieldLabel`) with their `{{placeholder}}` and source beneath; `agent.name` and `space.path` aren't listed, as the Name field and the path under it show them.
 	Editing a pre-filled field changes only this agent; its Save button writes the value to its source (`save_agent_field`: the global config for a global value, otherwise the profile).
-	The model is free text, starting at `opus`; the effort is a stepped slider from "Claude Code default" (no `--effort`) to max, starting at the effort the user set for the profile or in User Defaults (`agent_model_defaults`).
+	The model is free text, starting at `opus`, with the models Claude Code offers as its suggestions menu once they arrive (`ModelSuggestions`, below); the effort is a stepped slider from "Claude Code default" (no `--effort`) to max, starting at the effort the user set for the profile or in User Defaults (`agent_model_defaults`).
 	Both are stored with the agent and used for every launch.
 	"Include coding instructions" (on by default) appends the instructions to Claude Code's system prompt, keeping its coding instructions; off, they replace it.
 	The Preview beside the form shows the instructions as creation would render them (`agent_creation_preview`), or why it would fail, updated as the form changes.
@@ -18,6 +18,13 @@ The Agent Spaces of the selected profile (ADR-012, `Sources/AppShell/AgentHub/`)
 	A launch resumes the agents of restored tabs in the background (`restore_agent_spaces`), and quitting stops every agent first (`AppTermination.pauseAgents`, from `applicationShouldTerminate`), after waiting for those still working (Global Pause, in `../CLAUDE.md`).
 - An agent's tab shows its status emoji (`AgentStatusEmoji`: ⚙️ working, turning slowly unless Reduce Motion is on or the window inactive, ❓ waiting for the user, 💤 idle, ⏸️ pausing, ⚠️ failed), folded off the main actor from the core's chat events into `Store.agentStatuses`.
 	Its tab's stack holds `AgentChatPanel`, with the native transcript (`Packages/TranscriptKit/CLAUDE.md`) above an AppKit plain multi-line editor.
+
+## Model suggestions
+
+`Store.modelSuggestions` asks the core for the models Claude Code offers a profile (`agent_model_options`, cached by the core, so only a cold call waits for the CLI) and wraps them in `ModelSuggestions`, the one object every model field takes (the New Agent dialog, the Claude card's tiers, later an agent's model widget): it groups, labels and narrows them, and the views only draw it (`modelSuggestions(_:)`, SwiftUI's native `textInputSuggestions` menu).
+An agent's model is offered Claude Code's aliases (each with its name, the alias it stores, and the full ID it resolves to today; `default` reads "Claude Code's recommended", so it isn't taken for Devora's Default), then other models' full IDs; a tier, which is what an alias resolves to, only full IDs, its own family first.
+Each row has its name on the left and its full ID on the right, in a monospaced column as wide as the longest ID.
+The field works at once and takes any name: no suggestions (none yet, or Claude Code couldn't be asked, a warning in the log, never a banner) leave it a plain text field, and the note under the New Agent field never calls a value wrong (`opusplan`, the profile's default, which the list doesn't name, says what it does).
 
 ## Agent chat
 

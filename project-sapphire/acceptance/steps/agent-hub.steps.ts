@@ -5,6 +5,7 @@ import { Given, When, Then } from '@cucumber/cucumber';
 import type { AgentHubState, AppState, NewAgentState } from '../support/bridge';
 import { SapphireWorld } from '../support/world';
 import { closeWindowSurfaces } from './workspace-hub.steps';
+import { agentLaunches } from '../support/fake-cli';
 
 // The Agent Hub is Sapphire's (ADR-012). It opens with Ctrl+S, as a user opens it, and is clicked through the bridge's `agent-hub` and `new-agent` routes.
 
@@ -161,10 +162,9 @@ Then('the New Agent preview should contain {string}', async function (this: Sapp
   await waitForDialog(this, `the preview to contain ${text}`, (dialog) => dialog.preview?.text?.includes(text) === true);
 });
 
-/** The arguments of the first Claude launch, which the fake CLI reports (`app.ts` puts its report beside the config). */
+/** The arguments of the agent's first Claude launch. */
 function firstLaunchArgs(world: SapphireWorld): string[] {
-  const report = fs.readFileSync(path.join(path.dirname(world.testConfigPath), 'fake-claude.jsonl'), 'utf8');
-  return report.split('\n').filter(Boolean).map((line) => JSON.parse(line)).find((entry) => entry.kind === 'start').args;
+  return agentLaunches(world)[0];
 }
 
 /** The value after `flag` in `args`, or undefined when the flag is absent. */
@@ -202,4 +202,18 @@ Then('Claude should have been launched with the model {string} and no effort', f
   const args = firstLaunchArgs(this);
   assert.equal(flagValue(args, '--model'), model, JSON.stringify(args));
   assert.ok(!args.includes('--effort'), JSON.stringify(args));
+});
+
+When('the user types {string} as the new agent\'s model', async function (this: SapphireWorld, model: string) {
+  await this.bridge.newAgent({ action: 'setModel', value: model });
+});
+
+Then('the New Agent model field should suggest {string} as {string} under {string}', async function (this: SapphireWorld, completion: string, label: string, section: string) {
+  await waitForDialog(this, `${completion} suggested as ${label} under ${section}`, (dialog) =>
+    dialog.modelSuggestions.some((s) => s.title === section && s.rows.some((row) =>
+      row.completion === completion && [row.name, row.alias].filter(Boolean).join(' · ') + ' ' + row.modelID === label)));
+});
+
+Then('the New Agent model note should read {string}', async function (this: SapphireWorld, note: string) {
+  await waitForDialog(this, `the model note "${note}"`, (dialog) => dialog.modelNote === note);
 });
