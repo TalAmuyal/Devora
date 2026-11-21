@@ -61,6 +61,9 @@ export function mermaidConfig() {
       noteBkgColor: cssVar('--color-surface1', '#494D64'),
       noteTextColor: cssVar('--color-text', '#CAD3F5'),
       noteBorderColor: cssVar('--color-accent', '#C6A0F6'),
+      // A page that names its scheme (Sapphire's transcript) gets edge labels on its own color, not Mermaid's boxes;
+      // Ember's themes name none, so their labels are unchanged.
+      ...(cssVar('--color-scheme', '') ? { edgeLabelBackground: cssVar('--color-bg', '#24273A') } : {}),
     },
   };
 }

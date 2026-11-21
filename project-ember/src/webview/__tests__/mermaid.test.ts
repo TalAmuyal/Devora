@@ -95,4 +95,15 @@ describe('mermaidConfig', () => {
     expect(mermaidConfig().themeVariables.darkMode).toBe(true);
     root.removeProperty('--color-scheme');
   });
+
+  it('puts edge labels on the page color only for a page that names its scheme', () => {
+    const root = document.documentElement.style;
+    root.setProperty('--color-bg', '#ECECEC');
+    root.removeProperty('--color-scheme');
+    expect(mermaidConfig().themeVariables).not.toHaveProperty('edgeLabelBackground');
+    root.setProperty('--color-scheme', 'light');
+    expect(mermaidConfig().themeVariables).toMatchObject({ edgeLabelBackground: '#ECECEC' });
+    root.removeProperty('--color-scheme');
+    root.removeProperty('--color-bg');
+  });
 });

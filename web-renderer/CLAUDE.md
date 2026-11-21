@@ -7,4 +7,4 @@ The renderer signals readiness to the host before receiving its content and them
 `mise run -C project-sapphire web-renderer` builds the standalone bundle and `scripts/check-web-renderer.mjs` verifies its generated assets before packaging.
 
 Sapphire's agent transcript is native; its Mermaid diagrams are drawn by this renderer in a hidden web view (`devoraRender`), as the previews draw them.
-Mermaid's colors come from the page's CSS variables (`mermaidConfig`); `--color-scheme: light` draws for a light page, and without it (Ember's themes) diagrams are drawn for a dark one.
+Mermaid's colors come from the page's CSS variables (`mermaidConfig`); `--color-scheme: light` draws for a light page, and without it (Ember's themes) diagrams are drawn for a dark one; a page that names its scheme also gets edge labels on its own color (`--color-bg`) rather than Mermaid's boxes.
