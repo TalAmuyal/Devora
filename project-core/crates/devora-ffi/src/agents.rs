@@ -82,6 +82,13 @@ pub struct AgentModelOption {
     pub effort_levels: Vec<String>,
 }
 
+/// The models Claude Code offers an agent, with the version of the CLI that listed them.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct AgentModelList {
+    pub cli_version: Option<String>,
+    pub models: Vec<AgentModelOption>,
+}
+
 impl AgentLaunch {
     fn context(self, global_config: PathBuf) -> Result<LaunchContext, CoreError> {
         let settings = serde_json::from_str(&self.settings_json)
@@ -564,28 +571,32 @@ impl DevoraCore {
         Ok(())
     }
     /// The models an agent of the profile is offered, from the CLI launched with `launch` (cached per profile and CLI
-    /// version, and refreshed daily): its aliases with what each resolves to, then any other models its login offers.
+    /// version, and refreshed daily): its aliases with what each resolves to, then any other models its login offers, with
+    /// the CLI's version.
     pub async fn agent_model_options(
         &self,
         profile_path: String,
         launch: AgentLaunch,
-    ) -> Result<Vec<AgentModelOption>, CoreError> {
+    ) -> Result<AgentModelList, CoreError> {
         let context = launch.context(self.config_path.clone())?;
         let list = self
             .agents
             .model_options(Path::new(&profile_path), context)
             .await?;
-        Ok(list
-            .models
-            .into_iter()
-            .map(|model| AgentModelOption {
-                value: model.value,
-                resolved_model: model.resolved_model,
-                display_name: model.display_name,
-                description: model.description,
-                effort_levels: model.effort_levels,
-            })
-            .collect())
+        Ok(AgentModelList {
+            cli_version: list.cli_version,
+            models: list
+                .models
+                .into_iter()
+                .map(|model| AgentModelOption {
+                    value: model.value,
+                    resolved_model: model.resolved_model,
+                    display_name: model.display_name,
+                    description: model.description,
+                    effort_levels: model.effort_levels,
+                })
+                .collect(),
+        })
     }
     pub async fn interrupt_agent(&self, tab: u64, generation: u64) -> Result<(), CoreError> {
         self.agents.interrupt(tab, generation).await?;

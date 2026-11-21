@@ -154,7 +154,7 @@ export interface SettingsState {
   /** The focused row's settings, for the User Defaults (`profilePath` null) or a profile; `fields` are the ones shown. */
   scope: {
     profilePath: string | null; loaded: boolean; fields?: SettingState[];
-    claude?: { loaded: boolean; effort: string; effortLevels: string[]; defaultModelOn: boolean; fields: { key: string; segment: string; hint: string; input: string | null; showsSave: boolean; suggestions: string[] }[] };
+    claude?: { loaded: boolean; effort: string; effortLevels: string[]; defaultModelOn: boolean; fields: { key: string; segment: string; hint: string; input: string | null; showsSave: boolean; suggestions: string[]; modelSuggestions: ModelSuggestionRow[] }[] };
     asana?: { isSet: boolean | null; canSave: boolean; hasDraft: boolean };
     agent?: { loaded: boolean; inputsCleared: boolean; savingInputs: string[]; canPreview: boolean; previewText: string | null; previewError: string | null; inputs: { key: string; inputKey: string; value: string; stored: boolean; hint: string }[] };
   } | null;
@@ -264,6 +264,14 @@ export interface AgentHubState {
   items: { name: string; role: string | null; error: string | null }[];
 }
 
+/** A row of a model field's suggestions menu, in the menu's order: what it shows, and what picking it puts in the field. */
+export interface ModelSuggestionRow {
+  name: string;
+  alias: string | null;
+  modelID: string;
+  completion: string;
+}
+
 export interface NewAgentState {
   name: string;
   focus: string;
@@ -274,6 +282,8 @@ export interface NewAgentState {
   progress: { steps: string[]; outcome: string | null } | null;
   keepCodingInstructions: boolean;
   model: string;
+  modelNote: string;
+  modelSuggestions: ModelSuggestionRow[];
   effort: string | null;
   effortLevels: string[];
   spacePath: string | null;

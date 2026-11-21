@@ -48,8 +48,12 @@ final class NewAgentDialogModel {
 	}
 	/// Whether the instructions keep Claude Code's own coding instructions, appended to them, or replace them.
 	var keepCodingInstructions = true
-	/// The model every launch of the agent uses: free text, so an alias or a full model name both work. Empty until the core's default arrives.
-	var model = ""
+	/// The model every launch of the agent uses: free text, so an alias or a full model name both work. It starts as the
+	/// latest Opus, by its alias, which follows Claude Code to the next Opus, so it's right before the suggestions arrive or
+	/// when they can't. A model is required.
+	var model = "opus"
+	/// The models Claude Code offers, suggested in the model field once they arrive; nil until then, or when it can't be asked.
+	private(set) var modelSuggestions: ModelSuggestions?
 	/// The effort every launch uses; `nil` leaves it to Claude Code.
 	private(set) var effort: String?
 	/// The efforts the slider offers after "Claude Code default", low → max.
@@ -79,11 +83,14 @@ final class NewAgentDialogModel {
 			guard let defaults = await store.agentModelDefaults() else { return }
 			self?.applyModelDefaults(defaults)
 		}
+		Task { [weak self, store] in
+			let suggestions = await store.modelSuggestions()
+			self?.modelSuggestions = suggestions
+		}
 	}
 
 	private func applyModelDefaults(_ defaults: AgentModelDefaults) {
 		effortLevels = defaults.effortLevels
-		if model.isEmpty { model = defaults.choice.model }
 		if !effortChosen { effort = defaults.choice.effort }
 	}
 
@@ -347,7 +354,12 @@ struct NewAgentDialogView: View {
 		TextField("e.g. opus, sonnet or a full model name", text: $model.model)
 			.textFieldStyle(.roundedBorder)
 			.focused($field, equals: .model)
+			// Names only: the menu is as wide as the field, and the form's column is narrow.
+			.modelSuggestions(model.modelSuggestions?.rows(for: .agentModel, typed: model.model) ?? [], showsModelIDs: false)
 			.accessibilityIdentifier("new-agent-model")
+		Text(ModelSuggestions.note(for: model.model, listedBy: model.modelSuggestions))
+			.font(.caption).foregroundStyle(.secondary)
+			.accessibilityIdentifier("new-agent-model-note")
 		effortSlider
 		Toggle("Include coding instructions", isOn: $model.keepCodingInstructions)
 			.help("On: the instructions are appended to Claude Code's own system prompt, with its coding instructions. Off: they replace it.")

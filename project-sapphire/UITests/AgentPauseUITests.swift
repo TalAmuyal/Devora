@@ -8,13 +8,9 @@ final class AgentPauseUITests: XCTestCase {
 		try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
 		let config = try writeConfigWithAProfile(in: scratch)
 		let app = XCUIApplication()
-		app.launchEnvironment["DEVORA_TEST_MODE"] = "1"
 		app.launchEnvironment["DEVORA_CONFIG_PATH"] = config.path
 		app.launchEnvironment["DEVORA_STATE_DIR"] = scratch.appending(path: "state").path
-		for key in ["DEVORA_TEST_CLAUDE_PROGRAM", "DEVORA_FAKE_FIXTURES"] {
-			app.launchEnvironment[key] = try XCTUnwrap(ProcessInfo.processInfo.environment[key])
-		}
-		app.launchEnvironment["DEVORA_FAKE_REPORT"] = scratch.appending(path: "fake-report.jsonl").path
+		try app.useTheFakeClaude(reportingIn: scratch)
 		app.launch()
 		addTeardownBlock { @MainActor in
 			if app.state != .notRunning {

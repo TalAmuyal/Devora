@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { Given, When, Then } from '@cucumber/cucumber';
+import { DataTable, Given, When, Then } from '@cucumber/cucumber';
 import { SapphireWorld } from '../support/world';
 
 function setClaude(world: SapphireWorld, key: string, value: string | null): void {
@@ -109,4 +109,11 @@ Then('neither scope should store the fixture token on disk', function (this: Sap
   for (const file of [this.testConfigPath, path.join(this.fixtureRoot!, 'Work', 'config.json')]) {
     assert.equal(fs.readFileSync(file, 'utf8').includes(FIXTURE_TOKEN), false, 'tokens belong to the credential store');
   }
+});
+
+Then('Claude {string} should suggest the model IDs, in order:', async function (this: SapphireWorld, key: string, table: DataTable) {
+  const expected = table.raw().map(([id]) => id);
+  await this.bridge.waitFor(`Claude ${key} suggesting ${JSON.stringify(expected)}`, () => this.bridge.state(), (s) =>
+    s.settings?.scope?.claude?.fields.some((f) => f.key === key && f.segment === 'Custom' &&
+      JSON.stringify(f.modelSuggestions.map((row) => row.completion)) === JSON.stringify(expected)) === true);
 });

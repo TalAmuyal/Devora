@@ -11,9 +11,9 @@ final class AgentSettingsUITests: XCTestCase {
 		// Made by scripts/test-ui.sh in a small directory, so the picker's tree stays small: in the runner's container, Go to Folder would list all of ~/Library on the way.
 		let template = URL(fileURLWithPath: try XCTUnwrap(ProcessInfo.processInfo.environment["SAPPHIRE_AGENT_TEMPLATE"]))
 		let app = XCUIApplication()
-		app.launchEnvironment["DEVORA_TEST_MODE"] = "1"
 		app.launchEnvironment["DEVORA_CONFIG_PATH"] = config.path
 		app.launchEnvironment["DEVORA_STATE_DIR"] = scratch.appending(path: "state").path
+		try app.useTheFakeClaude(reportingIn: scratch)
 		app.launch()
 		addTeardownBlock { @MainActor in
 			app.terminate()

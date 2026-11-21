@@ -796,6 +796,7 @@ final class TestBridge {
 						"input": mode == .custom ? claude.input(key) : NSNull(),
 						"showsSave": mode == .custom && claude.showsSave(key),
 						"suggestions": (key == "permission-mode" ? claude.choices?.permissionModeSuggestions : nil) ?? [],
+						"modelSuggestions": key == "permission-mode" ? [] : Self.suggestionsState(claude.suggestions(forTier: key)),
 					]
 				},
 			] as [String: Any]
@@ -884,6 +885,13 @@ final class TestBridge {
 	}
 
 	/// The New Agent dialog's form and its creation's progress.
+	/// A model field's suggestions menu, in its order: each row's name, alias, ID and what picking it puts in the field.
+	private static func suggestionsState(_ rows: [ModelSuggestions.Row]) -> [[String: Any]] {
+		rows.map { row in
+			["name": row.name, "alias": row.alias ?? NSNull(), "modelID": row.modelID, "completion": row.completion] as [String: Any]
+		}
+	}
+
 	private func newAgentState() -> Any {
 		guard let dialog = surfaces.newAgent else { return NSNull() }
 		return [
@@ -891,6 +899,8 @@ final class TestBridge {
 			"focus": "\(dialog.focus)",
 			"keepCodingInstructions": dialog.keepCodingInstructions,
 			"model": dialog.model,
+			"modelNote": ModelSuggestions.note(for: dialog.model, listedBy: dialog.modelSuggestions),
+			"modelSuggestions": Self.suggestionsState(dialog.modelSuggestions?.rows(for: .agentModel, typed: dialog.model) ?? []),
 			"effort": dialog.effort ?? NSNull(),
 			"effortLevels": dialog.effortLevels,
 			"spacePath": dialog.spacePath ?? NSNull(),

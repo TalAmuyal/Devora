@@ -18,7 +18,7 @@ private final class ClaudeScope {
 				writes.append((key, value))
 				stored[key] = value
 				return true
-			}, writes: queue)
+			}, writes: queue, suggest: { nil })
 	}
 }
 

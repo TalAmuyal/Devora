@@ -75,6 +75,36 @@ Feature: Agent Hub
     Then the agent "Echo" should be idle
     And Claude should have been launched with the model "opus" and no effort
 
+  Scenario: The model field suggests the models Claude Code offers, and any other name still works
+    Given the Agent Hub is open
+    When the user opens the New Agent dialog
+    And the user names the new agent "Echo"
+    Then the New Agent model field should suggest, in order:
+      | name       | stores                    |
+      | Opus 5.5   | opus                      |
+      | Sonnet 5.5 | sonnet                    |
+      | Haiku 5.5  | haiku                     |
+      | Fable 5.1  | fable                     |
+      | Fable 5    | claude-fable-5            |
+      | Opus 5     | claude-opus-5             |
+      | Sonnet 5   | claude-sonnet-5           |
+      | Opus 4.8   | claude-opus-4-8           |
+      | Opus 4.7   | claude-opus-4-7           |
+      | Opus 4.6   | claude-opus-4-6           |
+      | Sonnet 4.6 | claude-sonnet-4-6         |
+      | Haiku 4.5  | claude-haiku-4-5-20251001 |
+    And the New Agent model note should read "Suggestions from Claude Code 2.1.312. Any model name works."
+    When the user types "opusplan" as the new agent's model
+    Then the New Agent model note should read "Opus while planning, Sonnet for the rest."
+    When the user types "" as the new agent's model
+    Then the New Agent model note should read "Required: pick a model or type its name."
+    And the New Agent dialog should not allow Create
+    When the user types "my-proxy-model" as the new agent's model
+    Then the New Agent model note should read "Any model name works."
+    When the user creates the agent
+    Then the agent "Echo" should be idle
+    And Claude should have been launched with the model "my-proxy-model" and no effort
+
   Scenario: A chosen model and effort are what Claude is launched with
     Given the Agent Hub is open
     When the user opens the New Agent dialog
