@@ -545,6 +545,7 @@ public final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NS
 		WheelTrace.note(
 			"after the wheel: top \(contentView.bounds.minY), the furthest \(table.bounds.height - contentView.bounds.height) "
 				+ "(document \(table.bounds.height), visible \(contentView.bounds.height)), following \(following)")
+		WheelTrace.noteFramesAfterWheel(in: self)
 		return true
 	}
 
