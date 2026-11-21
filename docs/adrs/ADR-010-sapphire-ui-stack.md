@@ -103,6 +103,7 @@ All of it sits over the shared core (ADR-007) and its state model (ADR-008).
 	- A User Defaults setting, Appearance, picks Automatic (the system's, the default), Light or Dark, and applies live; every pane repaints when the effective appearance changes.
 	- There is no theme choice: one look per appearance keeps Sapphire simple, and a themed surface beside native controls reads as two apps in one window.
 	- The one exception is the embedded Neovim editor, which keeps its own colorscheme and follows the appearance through its `background` option.
+	- Amended on 2026-11-21: the terminals are a second exception. The user chooses among the terminal palettes Devora ships (Selenized, the default, Catppuccin and Gruvbox), each with a light and a dark variant that follows the appearance. Devora takes no custom or imported palettes, and nothing but the terminals draws from them.
 	- Ember keeps its themes, and the core keeps loading them for Ember; Sapphire stops reading them as each surface moves to the system's colors.
 - **Native controls first** (amended on 2026-11-18)
 	- A surface that macOS has a control for uses that control: a sheet for a window-modal dialog, a popover for details anchored to a control, an alert for a confirmation, a menu for a dropdown.

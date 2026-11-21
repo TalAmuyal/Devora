@@ -113,6 +113,9 @@ public struct RootView: View {
 		}
 		.onChange(of: store.runningAgents) { _, _ in surfaces.finishPendingQuit() }
 		.onChange(of: store.appearance) { _, setting in appearance.apply(setting) }
+		// The terminals follow the effective appearance and the chosen palette, live.
+		.onChange(of: appearance.effective, initial: true) { _, _ in applyTerminalPalette() }
+		.onChange(of: store.terminalPalette) { _, _ in applyTerminalPalette() }
 		.onReceive(NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didWakeNotification)) { _ in
 			Task { await store.repoUpdatesWoke() }
 		}
@@ -128,6 +131,11 @@ public struct RootView: View {
 		.onChange(of: store.startupProblem) { problem, resolved in
 			if problem != nil, resolved == nil { Task { await launch() } }
 		}
+	}
+
+	private func applyTerminalPalette() {
+		let family = TerminalPalette.Family(store.terminalPalette)
+		TerminalRuntime.shared.apply(light: family.light, dark: family.dark, isDark: appearance.effective == .dark)
 	}
 
 	/// Runs once the app state is open: the restored tabs are already in the core, and the Workspace Hub opens when there are none, as Ember's launch always opens it.

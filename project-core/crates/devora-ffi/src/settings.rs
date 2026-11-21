@@ -56,8 +56,32 @@ impl From<devora_core::appearance::Appearance> for Appearance {
     }
 }
 
+/// The terminals' palette, from the User Defaults (`devora_core::terminal_palette`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum TerminalPaletteName {
+    Selenized,
+    Catppuccin,
+    Gruvbox,
+}
+
+impl From<devora_core::terminal_palette::TerminalPalette> for TerminalPaletteName {
+    fn from(palette: devora_core::terminal_palette::TerminalPalette) -> Self {
+        use devora_core::terminal_palette::TerminalPalette as Stored;
+        match palette {
+            Stored::Selenized => Self::Selenized,
+            Stored::Catppuccin => Self::Catppuccin,
+            Stored::Gruvbox => Self::Gruvbox,
+        }
+    }
+}
+
 #[uniffi::export]
 impl DevoraCore {
+    /// The terminals' palette; a value it doesn't know reads as Selenized.
+    pub fn terminal_palette(&self) -> Result<TerminalPaletteName, CoreError> {
+        Ok(devora_core::terminal_palette::TerminalPalette::read(&self.config_path)?.into())
+    }
+
     /// The app's Appearance; a value it doesn't know reads as Automatic.
     pub fn appearance(&self) -> Result<Appearance, CoreError> {
         Ok(devora_core::appearance::Appearance::read(&self.config_path)?.into())

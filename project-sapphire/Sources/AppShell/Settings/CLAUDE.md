@@ -25,6 +25,8 @@ Ember's Settings Hub (`Sources/AppShell/Settings/`): the profiles beside the foc
 
 The Appearance card appears only in User Defaults, like Repository Updates: a field marked `userDefaultsOnly` (the core's `user_defaults_only`) is hidden in a profile's detail, and the core refuses it there. Automatic removes the core's `appearance` key; Light and Dark store `light` or `dark`. The store reads it (`Store.appearance`, the core's `appearance()`, where any other stored value reads as Automatic) when the core opens and after each write of the key, and `AppAppearance` applies it (see `../CLAUDE.md`).
 
+The Terminal & Session card's Terminal colors (`terminal.palette`) is User Defaults only too: Selenized (the default, which removes the key), Catppuccin or Gruvbox; any other stored value reads as Selenized.
+
 ## Repository Updates
 
 The Repository Updates card appears only in User Defaults.

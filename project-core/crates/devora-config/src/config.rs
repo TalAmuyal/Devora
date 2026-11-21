@@ -504,6 +504,12 @@ struct ConfigFieldSpec {
 
 const CONFIG_FIELDS: &[ConfigFieldSpec] = &[
     ConfigFieldSpec {
+        key: crate::terminal_palette::KEY,
+        kind: ConfigFieldKind::Choice(&["catppuccin", "gruvbox"]),
+        builtin_default: BuiltinDefault::None, // absent = Selenized
+        user_defaults_only: true,
+    },
+    ConfigFieldSpec {
         key: crate::appearance::KEY,
         kind: ConfigFieldKind::Choice(&["light", "dark"]),
         builtin_default: BuiltinDefault::None, // absent = Automatic, the system's

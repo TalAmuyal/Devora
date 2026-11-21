@@ -10,3 +10,6 @@ pub mod repo_update;
 
 /// The app's Appearance (User Defaults).
 pub mod appearance;
+
+/// The terminals' palette (User Defaults).
+pub mod terminal_palette;

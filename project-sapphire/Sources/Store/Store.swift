@@ -91,6 +91,8 @@ public final class Store {
 
 	/// The User Defaults' Appearance, which the app applies (ADR-010); read when the core opens, and again after it's written.
 	public private(set) var appearance: Appearance = .automatic
+	/// The User Defaults' terminal palette, which the terminals draw in; read as `appearance` is.
+	public private(set) var terminalPalette: TerminalPaletteName = .selenized
 
 	@ObservationIgnored public let log: AppLog
 	@ObservationIgnored private let configPath: String?
@@ -139,7 +141,7 @@ public final class Store {
 			let core = try DevoraCore(configPath: configPath, statePath: statePath, log: log)
 			previewLayoutRules = try core.previewLayoutRules()
 			self.core = core
-			readAppearance(core)
+			readLook(core)
 			stateEvents = pullStateEvents(from: try core.subscribe())
 			agentChats = pullAgentStatuses(from: try core.subscribeAgentChats())
 		} catch CoreError.StateInUse(let path, _) {
@@ -394,13 +396,15 @@ public final class Store {
 	public func setConfigSetting(profilePath: String?, key: String, value: String?) async -> Bool {
 		guard let core else { return false }
 		let stored = (try? await call("set_config_setting") { try core.setConfigSetting(profilePath: profilePath, key: key, value: value) }) != nil
-		if stored, key == "appearance" { readAppearance(core) }
+		if stored, key == "appearance" || key == "terminal.palette" { readLook(core) }
 		return stored
 	}
 
-	/// A config that can't be read keeps the appearance as it is, without a banner of its own: listing the profiles reports it.
-	private func readAppearance(_ core: DevoraCore) {
+	/// A config that can't be read keeps the appearance and the terminal palette as they are, without a banner of its own:
+	/// listing the profiles reports it.
+	private func readLook(_ core: DevoraCore) {
 		if let appearance = try? core.appearance() { self.appearance = appearance }
+		if let palette = try? core.terminalPalette() { terminalPalette = palette }
 	}
 
 	/// Reads Claude settings against this store's user config; errors follow the normal banner path.

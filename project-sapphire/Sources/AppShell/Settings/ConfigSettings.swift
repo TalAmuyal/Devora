@@ -59,6 +59,10 @@ struct ConfigCard {
 	static let terminal = ConfigCard(title: "Terminal & Session", fields: [
 		.text("terminal.default-app", "Default app", hint: "launched per session", placeholder: "e.g. nvim (blank = bare shell)"),
 		ConfigField(key: "terminal.git-shortcuts", label: "Git shortcuts", hint: "gst, gd, gri…", kind: .bool),
+		ConfigField(
+			key: "terminal.palette", label: "Terminal colors", hint: "light and dark follow Appearance",
+			kind: .choice([.init(label: "Selenized", value: nil), .init(label: "Catppuccin", value: "catppuccin"), .init(label: "Gruvbox", value: "gruvbox")]),
+			showsInherited: false, userDefaultsOnly: true),
 		.text("prepare-command", "Prepare command", hint: "runs after worktree add", placeholder: "e.g. mise install"),
 	])
 
