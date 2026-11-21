@@ -62,3 +62,18 @@ struct ModelSuggestionsTests {
 		#expect(ModelSuggestions.note(for: "sonnet", listedBy: nil) == "Any model name works.")
 	}
 }
+
+@MainActor
+struct ModelLookupInTestsTests {
+	/// A test that names no fake CLI mustn't launch the user's own `claude`: the lookup doesn't run at all. Had it run, it
+	/// would have answered a list or logged why it couldn't.
+	@Test func aTestRunNamingNoClaudeProgramLaunchesNothing() async throws {
+		let fixture = try Fixture()
+		let profile = try fixture.makeProfile("Work")
+		try fixture.registerProfiles([profile])
+		let store = Store(configPath: fixture.configPath, state: .inMemory, log: try fixture.log())
+		await store.load(selecting: profile)
+		#expect(await store.modelSuggestions(environment: ["DEVORA_TEST_MODE": "1"]) == nil)
+		#expect(try fixture.logLines().filter { $0.contains("model suggestions") }.isEmpty, "Nothing was tried")
+	}
+}

@@ -52,7 +52,8 @@ func launchWithANewAgent(_ test: XCTestCase, scratchName: String) throws -> (XCU
 extension XCUIApplication {
 	/// Runs the core's fake Claude CLI (`scripts/test-ui.sh` names it) wherever the app would run Claude: an agent's
 	/// session, and the probe that lists the models Claude Code offers, which the New Agent dialog and the Claude card start.
-	/// Without it, those would run the user's own `claude`. Its report goes to `fake-report.jsonl` in `scratch`.
+	/// Without it, an agent can't run, and the model list stays empty: a test run that names no fake CLI looks up no models,
+	/// so it never runs the user's own `claude`. Its report goes to `fake-report.jsonl` in `scratch`.
 	func useTheFakeClaude(reportingIn scratch: URL) throws {
 		launchEnvironment["DEVORA_TEST_MODE"] = "1"
 		for key in ["DEVORA_TEST_CLAUDE_PROGRAM", "DEVORA_FAKE_FIXTURES"] {

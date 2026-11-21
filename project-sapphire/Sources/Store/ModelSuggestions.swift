@@ -113,8 +113,13 @@ extension Store {
 	/// The models Claude Code offers an agent of `profilePath` (the selected profile's by default), or nil when it can't be
 	/// asked (no CLI, not logged in, a timeout): suggestions are optional, so that's a warning in the log, not a banner.
 	/// The core caches the list, so only a cold call waits for Claude Code.
-	public func modelSuggestions(profilePath: String? = nil) async -> ModelSuggestions? {
-		guard let core, let profile = profilePath ?? selectedProfilePath else { return nil }
+	///
+	/// A test run (`DEVORA_TEST_MODE`) that names no fake CLI (`DEVORA_TEST_CLAUDE_PROGRAM`) looks up nothing: the lookup
+	/// would otherwise launch the user's own `claude`, with their login.
+	public func modelSuggestions(
+		profilePath: String? = nil, environment: [String: String] = ProcessInfo.processInfo.environment
+	) async -> ModelSuggestions? {
+		guard Self.mayLookUpModels(environment), let core, let profile = profilePath ?? selectedProfilePath else { return nil }
 		do {
 			let launch = try await core.resolveAgentLaunch(resourcesDir: Bundle.main.resourcePath)
 			return ModelSuggestions(try await core.agentModelOptions(profilePath: profile, launch: launch))
@@ -122,5 +127,9 @@ extension Store {
 			logWarning("No model suggestions for \(profile): \(Self.describe(error))")
 			return nil
 		}
+	}
+
+	static func mayLookUpModels(_ environment: [String: String]) -> Bool {
+		environment["DEVORA_TEST_MODE"] != "1" || environment["DEVORA_TEST_CLAUDE_PROGRAM"] != nil
 	}
 }
