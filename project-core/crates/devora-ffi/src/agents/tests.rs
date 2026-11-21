@@ -1596,3 +1596,22 @@ fn the_agents_own_threshold_and_compact_now_reach_its_chat_and_a_paused_agent_re
     )
     .is_err());
 }
+
+#[test]
+fn the_models_a_profile_is_offered_come_from_its_cli_and_list_the_aliases_first() {
+    let f = Fixture::new(false);
+    let options = block_on(
+        f.core
+            .agent_model_options(f.profile.path_string(), f.launch()),
+    )
+    .unwrap();
+    let values: Vec<_> = options.iter().map(|o| o.value.as_str()).collect();
+    assert_eq!(
+        &values[..5],
+        ["default", "opus", "sonnet", "fable", "haiku"]
+    );
+    let opus = &options[1];
+    assert_eq!(opus.resolved_model.as_deref(), Some("claude-opus-5-5"));
+    assert_eq!(opus.display_name, "Opus 5.5");
+    assert!(!opus.effort_levels.is_empty());
+}

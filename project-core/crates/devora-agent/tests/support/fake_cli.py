@@ -15,7 +15,9 @@ args = sys.argv[1:]
 def argument(name):
     return args[args.index(name) + 1]
 
-session_id = argument("--resume" if "--resume" in args else "--session-id")
+# A probe (`devora_agent::models::discover`) runs no session, so it has neither.
+session_flag = next((flag for flag in ("--resume", "--session-id") if flag in args), None)
+session_id = argument(session_flag) if session_flag else None
 root = pathlib.Path(os.environ["DEVORA_FAKE_FIXTURES"])
 recording = [json.loads(line) for line in (root / "basic.jsonl").read_text().splitlines()]
 def recorded(kind):
