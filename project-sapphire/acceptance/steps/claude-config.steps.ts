@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { Given, When, Then } from '@cucumber/cucumber';
+import { DataTable, Given, When, Then } from '@cucumber/cucumber';
 import { SapphireWorld } from '../support/world';
 
 function setClaude(world: SapphireWorld, key: string, value: string | null): void {
@@ -111,8 +111,9 @@ Then('neither scope should store the fixture token on disk', function (this: Sap
   }
 });
 
-Then('Claude {string} should suggest the model ID {string} under {string}', async function (this: SapphireWorld, key: string, id: string, section: string) {
-  await this.bridge.waitFor(`Claude ${key} suggesting ${id} under ${section}`, () => this.bridge.state(), (s) =>
+Then('Claude {string} should suggest the model IDs, in order:', async function (this: SapphireWorld, key: string, table: DataTable) {
+  const expected = table.raw().map(([id]) => id);
+  await this.bridge.waitFor(`Claude ${key} suggesting ${JSON.stringify(expected)}`, () => this.bridge.state(), (s) =>
     s.settings?.scope?.claude?.fields.some((f) => f.key === key && f.segment === 'Custom' &&
-      f.modelSuggestions.some((m) => m.title === section && m.rows.some((row) => row.completion === id))) === true);
+      JSON.stringify(f.modelSuggestions.map((row) => row.completion)) === JSON.stringify(expected)) === true);
 });

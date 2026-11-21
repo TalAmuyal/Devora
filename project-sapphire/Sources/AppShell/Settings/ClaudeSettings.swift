@@ -59,10 +59,9 @@ final class ClaudeSettingsModel {
 		}
 	}
 
-	/// The suggestions for a model tier's Custom field (full IDs, the tier's own family first), narrowed to what's typed.
-	func suggestions(forTier key: String) -> [ModelSuggestions.Section] {
-		guard let family = key.split(separator: "-").first.map(String.init) else { return [] }
-		return modelSuggestions?.sections(for: .tier(family: family), typed: input(key)) ?? []
+	/// The suggestions for a model tier's Custom field (full IDs), narrowed to what's typed.
+	func suggestions(forTier key: String) -> [ModelSuggestions.Row] {
+		modelSuggestions?.rows(for: .tier, typed: input(key)) ?? []
 	}
 
 	func mode(_ key: String) -> ClaudeMode {

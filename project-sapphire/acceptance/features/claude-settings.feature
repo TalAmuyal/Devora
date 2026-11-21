@@ -26,8 +26,19 @@ Feature: Claude settings and the shared Asana token
     Then Claude "opus-model" should show "Default" with hint "→ Claude Code default"
     When the user switches Claude "opus-model" to "Custom"
     Then Claude "opus-model" should offer no suggestions
-    And Claude "opus-model" should suggest the model ID "claude-opus-4-8" under "Opus models"
-    And Claude "opus-model" should suggest the model ID "claude-sonnet-5-5" under "Other models"
+    And Claude "opus-model" should suggest the model IDs, in order:
+      | claude-opus-5-5           |
+      | claude-sonnet-5-5         |
+      | claude-haiku-5-5          |
+      | claude-fable-5-1          |
+      | claude-fable-5            |
+      | claude-opus-5             |
+      | claude-sonnet-5           |
+      | claude-opus-4-8           |
+      | claude-opus-4-7           |
+      | claude-opus-4-6           |
+      | claude-sonnet-4-6         |
+      | claude-haiku-4-5-20251001 |
 
   Scenario: A permission mode suggestion commits its value
     When the user opens the "User Defaults" settings detail

@@ -247,7 +247,7 @@ What it does:
 - **Default model**: Sets the default model to `opusplan` by default (Opus while planning, Sonnet during execution) -- toggle it off to let Claude Code pick its own model
 - **Model tiers**: Claude Code picks the model behind each tier (Opus, Sonnet, Haiku) unless you set one
 	- Set a tier's model in the Claude Launch Settings, globally or per profile, to pin it (for example, Fable as Opus, and Opus as Sonnet)
-	- In Devora Sapphire, a tier's Custom field suggests the model IDs Claude Code offers your login, the tier's own family first; any other model ID still works
+	- In Devora Sapphire, a tier's Custom field suggests the model IDs Claude Code offers your login, newest first; any other model ID still works
 	- To list them, Devora starts Claude Code briefly in the background (no session, none of your hooks or MCP servers) and keeps the list for a day
 	- A model you already set there stays as it is
 	- The default model, and the effort level and permission mode below, are configurable too (globally and per profile)

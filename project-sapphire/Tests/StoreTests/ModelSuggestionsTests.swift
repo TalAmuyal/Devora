@@ -17,46 +17,49 @@ private func option(_ value: String, _ resolved: String?, _ name: String) -> Age
 	AgentModelOption(value: value, resolvedModel: resolved, displayName: name, description: nil, effortLevels: [])
 }
 
-private func completions(_ sections: [ModelSuggestions.Section]) -> [String: [String]] {
-	Dictionary(uniqueKeysWithValues: sections.map { ($0.title, $0.rows.map(\.completion)) })
-}
-
 struct ModelSuggestionsTests {
-	@Test func anAgentsModelIsOfferedTheAliasesThenTheOtherModelsAndAPickStoresTheAlias() throws {
-		let sections = subscription.sections(for: .agentModel)
-		#expect(sections.map(\.title) == ["Claude Code’s models", "Other models"])
-		#expect(sections[0].rows.map(\.completion) == ["default", "opus", "sonnet", "haiku"])
-		#expect(sections[1].rows.map(\.completion) == ["claude-haiku-4-5-20251001", "claude-opus-4-8", "claude-sonnet-4-6"])
-		let opus = sections[0].rows[1]
+	@Test func anAgentsModelIsOfferedEveryModelButClaudeCodesDefaultAndAPickStoresTheAlias() {
+		let rows = subscription.rows(for: .agentModel)
+		#expect(rows.map(\.completion) == [
+			"opus", "sonnet", "haiku", "claude-opus-4-8", "claude-sonnet-4-6", "claude-haiku-4-5-20251001",
+		])
+		let opus = rows[0]
 		#expect((opus.name, opus.alias, opus.modelID) == ("Opus 5.5", "opus", "claude-opus-5-5"))
-		#expect(
-			sections[0].rows[0].name == "Claude Code’s recommended",
-			"Claude Code's default alias mustn't read as Devora's Default (follow the profile)")
+		#expect(rows[3].alias == nil, "A full ID is stored as itself")
 	}
 
-	@Test func aTierIsOfferedEachFullIDOnceItsOwnFamilyFirst() {
-		let sections = subscription.sections(for: .tier(family: "opus"))
-		#expect(completions(sections) == [
-			"Opus models": ["claude-opus-5-5", "claude-opus-4-8"],
-			"Other models": ["claude-sonnet-5-5", "claude-haiku-5-5", "claude-haiku-4-5-20251001", "claude-sonnet-4-6"],
+	@Test func aTierIsOfferedEachFullIDOnce() {
+		#expect(subscription.rows(for: .tier).map(\.completion) == [
+			"claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5", "claude-opus-4-8", "claude-sonnet-4-6",
+			"claude-haiku-4-5-20251001",
 		])
-		#expect(sections.map(\.title) == ["Opus models", "Other models"])
-		#expect(sections[0].rows[0].name == "Opus 5.5", "An alias's model is named by its alias, not by `default`")
+		#expect(subscription.rows(for: .tier)[0].name == "Opus 5.5", "An alias's model is named by its alias, not by `default`")
+	}
+
+	@Test func modelsReadNewestGenerationFirstThenByTierThenTheRestByID() {
+		let ids = [
+			"claude-haiku-4-5-20251001", "zeta-model", "claude-opus-5", "claude-sonnet-5-5", "claude-opus-5-2", "claude-fable-5-5",
+			"claude-mystery-6-0", "claude-opus-4-8", "claude-opus", "alpha-model", "claude-haiku-5-5", "claude-opus-5-5",
+		]
+		#expect(ids.sorted(by: ModelSuggestions.precedes) == [
+			"claude-fable-5-5", "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5", "claude-opus-5-2", "claude-opus-5",
+			"claude-opus-4-8", "claude-haiku-4-5-20251001",
+			// Outside the scheme, in plain order: an unknown family, no number at all, another naming.
+			"alpha-model", "claude-mystery-6-0", "claude-opus", "zeta-model",
+		])
 	}
 
 	@Test func aModelWithoutANameIsNamedByItsID() {
 		let unnamed = ModelSuggestions(AgentModelList(cliVersion: nil, models: [option("claude-next", "claude-next", "")]))
-		#expect(unnamed.sections(for: .agentModel).flatMap(\.rows).map(\.name) == ["claude-next"])
-		#expect(unnamed.sections(for: .tier(family: "opus")).flatMap(\.rows).map(\.name) == ["claude-next"])
+		#expect(unnamed.rows(for: .agentModel).map(\.name) == ["claude-next"])
+		#expect(unnamed.rows(for: .tier).map(\.name) == ["claude-next"])
 	}
 
 	@Test func theMenuNarrowsToWhatIsTypedUnlessItIsAlreadyAPick() {
-		#expect(completions(subscription.sections(for: .agentModel, typed: "son")) == [
-			"Claude Code’s models": ["sonnet"], "Other models": ["claude-sonnet-4-6"],
-		])
-		#expect(subscription.sections(for: .agentModel, typed: "4.8").flatMap(\.rows).map(\.completion) == ["claude-opus-4-8"], "By name too")
-		#expect(subscription.sections(for: .agentModel, typed: "nothing-like-it").isEmpty)
-		#expect(subscription.sections(for: .agentModel, typed: "opus").flatMap(\.rows).count == 7, "A picked value shows every alternative")
+		#expect(subscription.rows(for: .agentModel, typed: "son").map(\.completion) == ["sonnet", "claude-sonnet-4-6"])
+		#expect(subscription.rows(for: .agentModel, typed: "4.8").map(\.completion) == ["claude-opus-4-8"], "By name too")
+		#expect(subscription.rows(for: .agentModel, typed: "nothing-like-it").isEmpty)
+		#expect(subscription.rows(for: .agentModel, typed: "opus").count == 6, "A picked value shows every alternative")
 	}
 
 	@Test func theNoteNeverCallsAValueWrong() {
@@ -66,6 +69,7 @@ struct ModelSuggestionsTests {
 		#expect(subscription.note(for: "my-proxy-model") == "Any model name works.")
 		#expect(ModelSuggestions.note(for: "opusplan", listedBy: nil) == "Opus while planning, Sonnet for the rest.")
 		#expect(ModelSuggestions.note(for: "sonnet", listedBy: nil) == "Any model name works.")
+		#expect(subscription.note(for: " ") == "Required: pick a model or type its name.")
 	}
 }
 

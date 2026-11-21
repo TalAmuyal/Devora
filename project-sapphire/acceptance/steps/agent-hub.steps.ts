@@ -1,7 +1,7 @@
 import assert from 'node:assert';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { Given, When, Then } from '@cucumber/cucumber';
+import { DataTable, Given, When, Then } from '@cucumber/cucumber';
 import type { AgentHubState, AppState, NewAgentState } from '../support/bridge';
 import { SapphireWorld } from '../support/world';
 import { closeWindowSurfaces } from './workspace-hub.steps';
@@ -208,9 +208,14 @@ When('the user types {string} as the new agent\'s model', async function (this: 
   await this.bridge.newAgent({ action: 'setModel', value: model });
 });
 
-Then('the New Agent model field should suggest {string} as {string} under {string}', async function (this: SapphireWorld, completion: string, name: string, section: string) {
-  await waitForDialog(this, `${completion} suggested as ${name} under ${section}`, (dialog) =>
-    dialog.modelSuggestions.some((s) => s.title === section && s.rows.some((row) => row.completion === completion && row.name === name)));
+Then('the New Agent model field should suggest, in order:', async function (this: SapphireWorld, table: DataTable) {
+  const expected = table.hashes().map((row) => `${row.name} → ${row.stores}`);
+  await waitForDialog(this, `the suggestions ${JSON.stringify(expected)}`, (dialog) =>
+    JSON.stringify(dialog.modelSuggestions.map((row) => `${row.name} → ${row.completion}`)) === JSON.stringify(expected));
+});
+
+Then('the New Agent dialog should not allow Create', async function (this: SapphireWorld) {
+  await waitForDialog(this, 'Create disabled', (dialog) => !dialog.canCreate);
 });
 
 Then('the New Agent model note should read {string}', async function (this: SapphireWorld, note: string) {
