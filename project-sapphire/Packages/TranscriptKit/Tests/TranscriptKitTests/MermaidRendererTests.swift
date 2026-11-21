@@ -250,9 +250,10 @@ struct TranscriptDiagramTests {
 		let announced: Announced
 	}
 
-	private func shown(_ items: [TranscriptItem], drawer: FakeDrawer) -> Shown {
+	private func shown(_ items: [TranscriptItem], drawer: FakeDrawer, appearance: NSAppearance.Name? = nil) -> Shown {
 		let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 400), styleMask: [.titled], backing: .buffered, defer: false)
 		window.isReleasedWhenClosed = false
+		window.appearance = appearance.flatMap(NSAppearance.init(named:))
 		let (renderer, announced) = renderer(drawer)
 		let view = TranscriptScrollView(anchor: nil, renderer: renderer)
 		view.hasVerticalScroller = false
@@ -265,6 +266,31 @@ struct TranscriptDiagramTests {
 
 	private func diagrams(_ view: TranscriptScrollView) -> [String: Int] {
 		view.observation()["diagrams"] as? [String: Int] ?? [:]
+	}
+
+	/// A switch of appearance (the app's setting, or the system's on Automatic) redraws the diagrams in its colors.
+	@Test func aChangeOfAppearanceRedrawsTheDiagramsInItsColors() async throws {
+		let drawer = FakeDrawer()
+		let shown = shown([row(1, diagramReply)], drawer: drawer, appearance: .aqua)
+		defer { shown.window.close() }
+		await shown.announced.count(1)
+		try await eventually { diagrams(shown.view)["drawn"] == 1 }
+		#expect(drawer.drawn.count == 1, "Drawn once, light")
+
+		shown.window.appearance = NSAppearance(named: .darkAqua)
+		#expect(shown.view.diagramTheme == DiagramPalette.variables(for: NSAppearance(named: .darkAqua)!))
+		// The rows showing are rebuilt on the next layout pass, which an offscreen window only gets when asked.
+		shown.view.layoutSubtreeIfNeeded()
+		try await eventually { drawer.drawn.count == 2 && diagrams(shown.view)["drawn"] == 1 }
+	}
+
+	/// The accent color changes with no change of appearance, and the system says so.
+	@Test func aChangeOfSystemColorsDerivesTheDiagramsColorsAgain() {
+		let shown = shown([row(1, "Reply.")], drawer: FakeDrawer())
+		defer { shown.window.close() }
+		shown.view.diagramTheme = ["--color-accent": "#000000"]
+		NotificationCenter.default.post(name: NSColor.systemColorsDidChangeNotification, object: nil)
+		#expect(shown.view.diagramTheme == DiagramPalette.variables(for: shown.view.effectiveAppearance))
 	}
 
 	@Test func aDiagramShowsAPlaceholderThenItsImageAtTheBottom() async throws {

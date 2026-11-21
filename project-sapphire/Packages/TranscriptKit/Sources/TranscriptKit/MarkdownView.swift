@@ -102,6 +102,8 @@ private struct CodeBlockView: View {
 			Text(text).font(.system(.callout, design: .monospaced)).fixedSize(horizontal: true, vertical: false).padding(8)
 		}
 		.background(theme.codeBlock, in: RoundedRectangle(cornerRadius: 6))
+		// Its edge, which a system fill alone barely shows on a light page.
+		.overlay { RoundedRectangle(cornerRadius: 6).strokeBorder(theme.border) }
 	}
 }
 

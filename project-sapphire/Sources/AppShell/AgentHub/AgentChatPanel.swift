@@ -14,11 +14,9 @@ final class AgentPanelModel {
 	@ObservationIgnored weak var editor: NSTextView?
 	@ObservationIgnored weak var transcript: TranscriptScrollView?
 	@ObservationIgnored var onEditorReady: (() -> Void)?
-	@ObservationIgnored let theme: [String: String]
 
-	init(chat: AgentChat, store: Store) {
+	init(chat: AgentChat) {
 		self.chat = chat
-		theme = (try? store.userGuideContent(resourceDir: Bundle.main.resourcePath ?? "").1) ?? [:]
 	}
 
 	var pausePresentation: AgentPausePresentation {
@@ -75,7 +73,7 @@ struct AgentChatPanel: View {
 				TranscriptView(
 					items: model.chat.items.map(TranscriptKit.TranscriptItem.init),
 					questions: (model.chat.chat?.questions ?? []).map(TranscriptKit.PermissionQuestion.init),
-					generation: model.chat.chat?.generation ?? 0, theme: model.theme, hasOlder: model.chat.hasOlder,
+					generation: model.chat.chat?.generation ?? 0, hasOlder: model.chat.hasOlder,
 					anchor: model.chat.anchor.map(TranscriptKit.ChatScrollAnchor.init),
 					onScroll: { model.chat.saveScroll($0.map(CoreBindings.ChatScrollAnchor.init)) },
 					onNeedsOlder: { Task { await model.chat.older() } },

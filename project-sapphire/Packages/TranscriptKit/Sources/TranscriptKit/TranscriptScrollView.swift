@@ -51,19 +51,14 @@ public final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NS
 	private var lastTop: CGFloat = 0
 	private var wheelRouting = WheelRouting()
 	private var wheelMonitor: Any?
-	/// Draws the rows' Mermaid diagrams, in the web renderer's colors for the theme, as the previews draw them.
+	/// Draws the rows' Mermaid diagrams, in the web renderer, as the previews draw them.
 	private let renderer: MermaidRenderer
-	/// The Devora theme's CSS variables: the rows' colors and the page's (`colors`), and the diagrams' theme.
+	/// The diagrams' colors, the web renderer's CSS variables for the view's appearance (`DiagramPalette`); the rows' own
+	/// colors are the system's, which follow the appearance by themselves.
 	var diagramTheme: [String: String] = [:] {
 		didSet {
-			guard diagramTheme != oldValue else { return }
-			colors = TranscriptTheme(diagramTheme)
-			backgroundColor = colors.background ?? .clear
-			drawsBackground = colors.background != nil
-			// What the theme doesn't color (buttons, scrollers, the system's quieter colors) follows a dark or light page.
-			appearance = colors.background.map { NSAppearance(named: $0.isDark ? .darkAqua : .aqua) } ?? nil
-			guard !entries.isEmpty else { return }
-			// The rows showing take the new colors at once; the others as they come into view.
+			guard diagramTheme != oldValue, !entries.isEmpty else { return }
+			// The rows showing take the new drawings' keys at once; the others as they come into view.
 			table.reloadData(forRowIndexes: IndexSet(integersIn: Range(table.rows(in: table.visibleRect)) ?? 0..<0), columnIndexes: [0])
 			// Every diagram is drawn again in the new colors: their rows' heights are estimates until then.
 			findPending()
@@ -71,7 +66,7 @@ public final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NS
 			scheduleIdle()
 		}
 	}
-	private(set) var colors = TranscriptTheme()
+	let colors = TranscriptTheme()
 	private var diagramToken: UUID?
 	private(set) var measurements = 0
 
@@ -106,6 +101,21 @@ public final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NS
 			self, selector: #selector(boundsChanged), name: NSView.boundsDidChangeNotification, object: contentView)
 		NotificationCenter.default.addObserver(
 			self, selector: #selector(frameChanged), name: NSView.frameDidChangeNotification, object: contentView)
+		// The accent color can change with no change of appearance.
+		NotificationCenter.default.addObserver(
+			self, selector: #selector(systemColorsChanged), name: NSColor.systemColorsDidChangeNotification, object: nil)
+		paletteChanged()
+	}
+
+	public override func viewDidChangeEffectiveAppearance() {
+		super.viewDidChangeEffectiveAppearance()
+		paletteChanged()
+	}
+
+	@objc private func systemColorsChanged() { paletteChanged() }
+
+	private func paletteChanged() {
+		diagramTheme = DiagramPalette.variables(for: effectiveAppearance)
 	}
 
 	required init?(coder: NSCoder) { fatalError("not used") }
@@ -496,6 +506,7 @@ public final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NS
 		super.viewDidMoveToWindow()
 		if window == nil { stopIdle() } else { scheduleIdle() }
 		watchWheel()
+		paletteChanged()
 	}
 
 	// MARK: Wheel
@@ -746,7 +757,6 @@ public struct TranscriptView: NSViewRepresentable {
 	let items: [TranscriptItem]
 	var questions: [PermissionQuestion] = []
 	var generation: UInt64 = 0
-	var theme: [String: String] = [:]
 	let hasOlder: Bool
 	let anchor: ChatScrollAnchor?
 	var onScroll: (ChatScrollAnchor?) -> Void
@@ -755,14 +765,13 @@ public struct TranscriptView: NSViewRepresentable {
 	var onView: (TranscriptScrollView) -> Void
 
 	public init(
-		items: [TranscriptItem], questions: [PermissionQuestion] = [], generation: UInt64 = 0, theme: [String: String] = [:],
+		items: [TranscriptItem], questions: [PermissionQuestion] = [], generation: UInt64 = 0,
 		hasOlder: Bool, anchor: ChatScrollAnchor?, onScroll: @escaping (ChatScrollAnchor?) -> Void, onNeedsOlder: @escaping () -> Void,
 		onAnswer: @escaping (String, String, UInt64) -> Void = { _, _, _ in }, onView: @escaping (TranscriptScrollView) -> Void
 	) {
 		self.items = items
 		self.questions = questions
 		self.generation = generation
-		self.theme = theme
 		self.hasOlder = hasOlder
 		self.anchor = anchor
 		self.onScroll = onScroll
@@ -779,7 +788,6 @@ public struct TranscriptView: NSViewRepresentable {
 		view.onScroll = onScroll
 		view.onNeedsOlder = onNeedsOlder
 		view.onAnswer = onAnswer
-		view.diagramTheme = theme
 		view.hasOlder = hasOlder
 		view.apply(items, questions: questions, generation: generation)
 		onView(view)
