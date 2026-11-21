@@ -44,7 +44,7 @@ final class NativeTranscriptUITests: XCTestCase {
 		centre.scrollWithPointer(byDeltaX: 0, deltaY: 150)
 		let scrolledTop = settledTop(of: code, movedFrom: codeTop)
 		if scrolledTop <= codeTop + 30 { attachWheelEvidence(app, transcript, "the wheel scroll over the code block", overBlock) }
-		XCTAssertGreaterThan(scrolledTop, codeTop + 30, "A vertical scroll over a code block must scroll the transcript (\(overBlock))")
+		XCTAssertGreaterThan(scrolledTop, codeTop + 30, wheelFailure("A vertical scroll over a code block must scroll the transcript (\(overBlock))"))
 
 		// The row's label is part of the transcript too. The row is one accessibility element, so the label has none of its
 		// own to aim at: scrolling the element scrolls at XCUITest's own point for it, which is the label (the case that
@@ -53,7 +53,7 @@ final class NativeTranscriptUITests: XCTestCase {
 		code.scrollWithPointer(byDeltaX: 0, deltaY: -150)
 		let backTop = settledTop(of: code, movedFrom: scrolledTop)
 		if backTop >= scrolledTop - 30 { attachWheelEvidence(app, transcript, "the wheel scroll over the row's label", overLabel) }
-		XCTAssertLessThan(backTop, scrolledTop - 30, "A vertical scroll over a row's label must scroll the transcript (\(overLabel))")
+		XCTAssertLessThan(backTop, scrolledTop - 30, wheelFailure("A vertical scroll over a row's label must scroll the transcript (\(overLabel))"))
 
 		code.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).scrollWithPointer(byDeltaX: -300, deltaY: 0)
 		XCTAssertEqual(settledTop(of: code), backTop, accuracy: 1, "A sideways scroll over a code block must not scroll the transcript")
@@ -64,7 +64,7 @@ final class NativeTranscriptUITests: XCTestCase {
 		for _ in 0..<5 { transcript.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).scrollWithPointer(byDeltaX: 0, deltaY: 600) }
 		view = try settledSnapshot(of: transcript, after: bottom)
 		capture(app, "Native transcript scrolled up")
-		XCTAssertLessThan(view.distanceFromTop, bottom.distanceFromTop - 2_000, "The wheel must scroll the transcript up (from \(Int(bottom.distanceFromTop)) to \(Int(view.distanceFromTop)) below its top)")
+		XCTAssertLessThan(view.distanceFromTop, bottom.distanceFromTop - 2_000, wheelFailure("The wheel must scroll the transcript up (from \(Int(bottom.distanceFromTop)) to \(Int(view.distanceFromTop)) below its top)"))
 		// `NSTableView` exposes every row, in view or not, so that VoiceOver can reach it; what a reused cell must not leave
 		// behind is a row's text twice, or at another row's place.
 		XCTAssertEqual(Set(view.turns.map(\.text)).count, view.turns.count, "No row text twice: \(view.turns.map(\.number).sorted())")
@@ -205,6 +205,24 @@ final class NativeTranscriptUITests: XCTestCase {
 		attachment.name = name
 		attachment.lifetime = .keepAlways
 		add(attachment)
+	}
+
+	/// A failed wheel assertion's message, with the display frames the app's window got after the last wheel (its trace's
+	/// `frames after the wheel` line). The scroll is animated over those frames, so with none, or the window off screen, the
+	/// runner drew nothing, and the message names that runner problem (an infrastructure failure, which the PR's owner may
+	/// re-run) rather than the transcript.
+	private func wheelFailure(_ failure: String) -> String {
+		let trace = wheelTrace.flatMap { try? String(contentsOf: $0, encoding: .utf8) } ?? ""
+		guard let line = trace.split(separator: "\n").last(where: { $0.contains("frames after the wheel: ") }) else {
+			return "\(failure); the trace has no frames line after the wheel"
+		}
+		let evidence = line.split(separator: " ", maxSplits: 1).last.map(String.init) ?? String(line)
+		let frames = evidence.firstMatch(of: /frames after the wheel: (\d+)/).flatMap { Int($0.1) } ?? -1
+		// By the frames, not the occlusion state alone, which can lag behind the window coming on screen.
+		let starved = frames == 0 || evidence.hasSuffix("on screen false")
+		return starved
+			? "Runner problem, not the transcript: the window got no display frames to animate the scroll over (\(evidence)). \(failure)"
+			: "\(failure); \(evidence)"
 	}
 
 	/// What a failed wheel assertion needs: where the scroll was aimed, the app's own wheel and scrolling decisions
