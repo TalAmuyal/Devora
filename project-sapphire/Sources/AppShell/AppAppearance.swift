@@ -1,6 +1,7 @@
 import AppKit
 import CoreBindings
 import Observation
+import TerminalKit
 
 /// The app's appearance (ADR-010): it applies the User Defaults' Appearance to the app, so that every native view follows it, and publishes the effective one, light or dark, which the panes Sapphire draws itself read.
 /// On Automatic the effective appearance is the system's, and follows it as it changes.
@@ -43,5 +44,16 @@ public final class AppAppearance {
 	/// The system's appearance, whatever the app's is, for the acceptance tests to compare Automatic with.
 	static var system: Effective {
 		UserDefaults.standard.string(forKey: "AppleInterfaceStyle") == "Dark" ? .dark : .light
+	}
+}
+
+extension TerminalPalette.Family {
+	/// The family for the User Defaults' choice (`terminal.palette`).
+	init(_ name: TerminalPaletteName) {
+		switch name {
+		case .selenized: self = .selenized
+		case .catppuccin: self = .catppuccin
+		case .gruvbox: self = .gruvbox
+		}
 	}
 }

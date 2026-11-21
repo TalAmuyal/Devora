@@ -6,6 +6,7 @@
 pub use devora_app::{bundle, log};
 pub use devora_config::{
     agent as agent_config, appearance, config, profile, repo_update as repo_update_config,
+    terminal_palette,
 };
 pub use devora_health as health;
 pub use devora_ipc as ipc;

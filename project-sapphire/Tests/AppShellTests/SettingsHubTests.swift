@@ -189,18 +189,21 @@ struct ConfigDisplayTests {
 		#expect(!model.isVisible(projectID))
 	}
 
-	/// The app's settings (Appearance, Repository Updates) are the User Defaults'; Automatic removes the key and says nothing inherited.
+	/// The app's settings (Appearance, Terminal colors, Repository Updates) are the User Defaults'; Automatic removes the key and says nothing inherited.
 	@Test func appearanceIsChosenInTheUserDefaultsOnly() async {
 		let field = ConfigCard.appearance.fields[0]
 		guard case .choice(let options) = field.kind else { Issue.record("Appearance is a choice"); return }
 		let interval = ConfigCard.repoUpdates.fields[1]
+		let palette = ConfigCard.terminal.fields.first { $0.key == "terminal.palette" }!
 		#expect(!scope.model().isVisible(field))
 		#expect(!scope.model().isVisible(interval))
+		#expect(!scope.model().isVisible(palette))
 
 		let model = scope.model(profilePath: nil)
 		await model.reload()
 		#expect(model.isVisible(field))
 		#expect(model.isVisible(interval))
+		#expect(model.isVisible(palette))
 		#expect(model.chosenOption(options, for: field.key)?.label == "Automatic")
 		#expect(model.inheritedHint(field) == nil)
 

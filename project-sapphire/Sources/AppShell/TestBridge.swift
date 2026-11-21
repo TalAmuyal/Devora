@@ -1066,6 +1066,7 @@ final class TestBridge {
 			"profileForm": profileFormState(),
 			"settings": settingsState(),
 			"fontSize": TerminalRuntime.shared.fontSize,
+			"terminalBackground": TerminalRuntime.shared.dark ? TerminalRuntime.shared.palettes.dark.background : TerminalRuntime.shared.palettes.light.background,
 			"appearance": [
 				"setting": "\(store.appearance)",
 				"effective": appearance.effective.rawValue,
