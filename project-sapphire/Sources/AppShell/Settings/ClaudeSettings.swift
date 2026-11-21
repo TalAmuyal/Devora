@@ -26,6 +26,7 @@ final class ClaudeSettingsModel {
 	@ObservationIgnored private let readChoices: () async -> ClaudeSettingChoices?
 	@ObservationIgnored private let write: (String, ClaudeValue?) async -> Bool
 	@ObservationIgnored private let suggest: () async -> ModelSuggestions?
+	@ObservationIgnored private var suggestionsTask: Task<Void, Never>?
 	@ObservationIgnored private let writes: SettingsWriteQueue
 
 	init(
@@ -43,8 +44,19 @@ final class ClaudeSettingsModel {
 	func reload() async {
 		if choices == nil { choices = await readChoices() }
 		if let settings = await read() { self.settings = settings }
-		// Asked again after every write: a changed tier changes what the aliases resolve to (the core keys its cache by it).
-		modelSuggestions = await suggest()
+		refreshSuggestions()
+	}
+
+	/// Asks for the suggestions again, after every write since a changed tier changes what the aliases resolve to (the core
+	/// keys its cache by it). Off the shared write queue: a cold lookup waits for Claude Code, and the scope's other writes
+	/// mustn't wait for it.
+	private func refreshSuggestions() {
+		suggestionsTask?.cancel()
+		suggestionsTask = Task { [weak self, suggest] in
+			let suggestions = await suggest()
+			guard !Task.isCancelled else { return }
+			self?.modelSuggestions = suggestions
+		}
 	}
 
 	/// The suggestions for a model tier's Custom field (full IDs, the tier's own family first), narrowed to what's typed.
