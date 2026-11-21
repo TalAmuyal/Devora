@@ -26,6 +26,8 @@ public final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NS
 	/// Answers a card's question: its request id, the action ("allow", "deny", "always") and the card's generation.
 	var onAnswer: (String, String, UInt64) -> Void = { _, _, _ in }
 
+	/// Stops the wheel trace's drawing heartbeat (`WheelTrace.noteDrawing`).
+	private var stopNotingDrawing: (() -> Void)?
 	private var heights = RowHeights()
 	/// The height the table was last given for each row, which is what it lays the row out at: an estimate can change
 	/// after the table took it (the calibration learns from every measurement), so a measurement is compared with this.
@@ -506,6 +508,8 @@ public final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NS
 		super.viewDidMoveToWindow()
 		if window == nil { stopIdle() } else { scheduleIdle() }
 		watchWheel()
+		stopNotingDrawing?()
+		stopNotingDrawing = window == nil ? nil : WheelTrace.noteDrawing(in: self)
 		paletteChanged()
 	}
 

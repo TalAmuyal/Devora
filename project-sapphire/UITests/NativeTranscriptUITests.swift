@@ -41,30 +41,37 @@ final class NativeTranscriptUITests: XCTestCase {
 		// XCUITest's delta isn't points (150 moves the view about 85), so the check is that it moved, not how far.
 		let centre = code.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
 		let overBlock = "at \(centre.screenPoint), code frame \(code.frame), visible area \(transcript.frame)"
-		centre.scrollWithPointer(byDeltaX: 0, deltaY: 150)
-		let scrolledTop = settledTop(of: code, movedFrom: codeTop)
-		if scrolledTop <= codeTop + 30 { attachWheelEvidence(app, transcript, "the wheel scroll over the code block", overBlock) }
-		XCTAssertGreaterThan(scrolledTop, codeTop + 30, wheelFailure("A vertical scroll over a code block must scroll the transcript (\(overBlock))"))
+		let (scrolledTop, overBlockFrames) = try wheelScroll(
+			"the wheel scroll over the code block", aimed: overBlock, in: app, transcript,
+			send: { centre.scrollWithPointer(byDeltaX: 0, deltaY: 150) },
+			landing: { settledTop(of: code, movedFrom: codeTop) }, landed: { $0 > codeTop + 30 })
+		XCTAssertGreaterThan(scrolledTop, codeTop + 30, "A vertical scroll over a code block must scroll the transcript (\(overBlock))\(overBlockFrames)")
 
 		// The row's label is part of the transcript too. The row is one accessibility element, so the label has none of its
 		// own to aim at: scrolling the element scrolls at XCUITest's own point for it, which is the label (the case that
 		// failed in CI). The app's trace records the point and the view it hit.
 		let overLabel = "XCUITest's own point for the row, code frame \(code.frame), visible area \(transcript.frame)"
-		code.scrollWithPointer(byDeltaX: 0, deltaY: -150)
-		let backTop = settledTop(of: code, movedFrom: scrolledTop)
-		if backTop >= scrolledTop - 30 { attachWheelEvidence(app, transcript, "the wheel scroll over the row's label", overLabel) }
-		XCTAssertLessThan(backTop, scrolledTop - 30, wheelFailure("A vertical scroll over a row's label must scroll the transcript (\(overLabel))"))
+		let (backTop, overLabelFrames) = try wheelScroll(
+			"the wheel scroll over the row's label", aimed: overLabel, in: app, transcript,
+			send: { code.scrollWithPointer(byDeltaX: 0, deltaY: -150) },
+			landing: { settledTop(of: code, movedFrom: scrolledTop) }, landed: { $0 < scrolledTop - 30 })
+		XCTAssertLessThan(backTop, scrolledTop - 30, "A vertical scroll over a row's label must scroll the transcript (\(overLabel))\(overLabelFrames)")
 
+		try awaitDrawing(before: "the sideways scroll over the code block")
 		code.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).scrollWithPointer(byDeltaX: -300, deltaY: 0)
 		XCTAssertEqual(settledTop(of: code), backTop, accuracy: 1, "A sideways scroll over a code block must not scroll the transcript")
 
 		// Up through about half the 200-row tail (3,000 pt of its 5,000), so that the table reuses its cells for the rows coming
 		// into view, and short of the top, where an older page would load.
 		let bottom = try TranscriptSnapshot(transcript)
-		for _ in 0..<5 { transcript.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).scrollWithPointer(byDeltaX: 0, deltaY: 600) }
-		view = try settledSnapshot(of: transcript, after: bottom)
+		let (scrolledUp, upFrames) = try wheelScroll(
+			"the wheel scrolls up the tail", aimed: "the transcript's centre, 5 × 600", in: app, transcript,
+			send: { for _ in 0..<5 { transcript.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).scrollWithPointer(byDeltaX: 0, deltaY: 600) } },
+			landing: { try settledSnapshot(of: transcript, after: bottom) },
+			landed: { $0.distanceFromTop < bottom.distanceFromTop - 2_000 })
+		view = scrolledUp
 		capture(app, "Native transcript scrolled up")
-		XCTAssertLessThan(view.distanceFromTop, bottom.distanceFromTop - 2_000, wheelFailure("The wheel must scroll the transcript up (from \(Int(bottom.distanceFromTop)) to \(Int(view.distanceFromTop)) below its top)"))
+		XCTAssertLessThan(view.distanceFromTop, bottom.distanceFromTop - 2_000, "The wheel must scroll the transcript up (from \(Int(bottom.distanceFromTop)) to \(Int(view.distanceFromTop)) below its top)\(upFrames)")
 		// `NSTableView` exposes every row, in view or not, so that VoiceOver can reach it; what a reused cell must not leave
 		// behind is a row's text twice, or at another row's place.
 		XCTAssertEqual(Set(view.turns.map(\.text)).count, view.turns.count, "No row text twice: \(view.turns.map(\.number).sorted())")
@@ -203,22 +210,79 @@ final class NativeTranscriptUITests: XCTestCase {
 		add(attachment)
 	}
 
-	/// A failed wheel assertion's message, with the display frames the app's window got after the last wheel (its trace's
-	/// `frames after the wheel` line). The scroll is animated over those frames, so with none, or the window off screen, the
-	/// runner drew nothing, and the message names that runner problem (an infrastructure failure, which the PR's owner may
-	/// re-run) rather than the transcript.
-	private func wheelFailure(_ failure: String) -> String {
-		let trace = wheelTrace.flatMap { try? String(contentsOf: $0, encoding: .utf8) } ?? ""
-		guard let line = trace.split(separator: "\n").last(where: { $0.contains("frames after the wheel: ") }) else {
-			return "\(failure); the trace has no frames line after the wheel"
+	/// The runner, not the transcript, failed the test: the app's window got no display frames, which a wheel's scroll is
+	/// animated over (`Packages/TranscriptKit/CLAUDE.md`). An infrastructure failure, which the PR's owner may re-run.
+	struct RunnerProblem: Error, CustomStringConvertible {
+		let description: String
+	}
+
+	/// Sends a wheel scroll once the window draws (`awaitDrawing`), and reads where it landed. A scroll that didn't land
+	/// while one of its wheel events got 0 frames (the trace's `frames after the wheel`) was the runner's: it's sent once
+	/// more, recorded as a retry, after the window draws again. Returns the landing and, for a scroll that didn't land, what
+	/// the assertion's message adds: every wheel event's frame count, per attempt, and whether that was the runner.
+	@MainActor
+	private func wheelScroll<Landing>(
+		_ what: String, aimed aim: String, in app: XCUIApplication, _ transcript: XCUIElement,
+		send: () -> Void, landing: () throws -> Landing, landed: (Landing) -> Bool
+	) throws -> (Landing, String) {
+		var attempts: [[String]] = []
+		while true {
+			try awaitDrawing(before: what)
+			let start = ProcessInfo.processInfo.systemUptime
+			send()
+			let result = try landing()
+			if landed(result) { return (result, "") }
+			let counts = wheelFrames(since: start)
+			attempts.append(counts)
+			let starved = counts.contains { $0.hasPrefix("0 in ") }
+			if starved && attempts.count == 1 {
+				// The one retry, and only for this measured case: a scroll that failed with frames arriving is the transcript's.
+				let note = "Retried \(what): a wheel event of it got no display frames (\(counts.joined(separator: "; ")))"
+				print(note)
+				let attachment = XCTAttachment(string: note)
+				attachment.name = "Wheel retry: \(what)"
+				attachment.lifetime = .keepAlways
+				add(attachment)
+				continue
+			}
+			attachWheelEvidence(app, transcript, what, aim)
+			let perAttempt = attempts.enumerated().map { "attempt \($0 + 1): \($1.joined(separator: "; "))" }.joined(separator: " / ")
+			return (result, starved
+				? ". Runner problem, not the transcript: a wheel event got no display frames to animate the scroll over (\(perAttempt))"
+				: "; frames after each wheel event: \(perAttempt)")
 		}
-		let evidence = line.split(separator: " ", maxSplits: 1).last.map(String.init) ?? String(line)
-		let frames = evidence.firstMatch(of: /frames after the wheel: (\d+)/).flatMap { Int($0.1) } ?? -1
-		// By the frames, not the occlusion state alone, which can lag behind the window coming on screen.
-		let starved = frames == 0 || evidence.hasSuffix("on screen false")
-		return starved
-			? "Runner problem, not the transcript: the window got no display frames to animate the scroll over (\(evidence)). \(failure)"
-			: "\(failure); \(evidence)"
+	}
+
+	/// Waits, up to 10 s, until the app's window has drawn a frame since the wait began (the trace's `drawing:` heartbeat),
+	/// so that a wheel goes to a window that can animate its scroll; a window that stays frozen is the runner problem, and
+	/// no wheel is sent.
+	@MainActor
+	private func awaitDrawing(before what: String) throws {
+		let start = ProcessInfo.processInfo.systemUptime
+		let drew = poll(timeout: 10) {
+			traceLines(since: start).contains { $0.hasPrefix("drawing: ") && !$0.hasPrefix("drawing: 0 ") }
+		}
+		guard drew else {
+			throw RunnerProblem(description: "Runner problem, not the transcript: the window drew no frame for 10 s before \(what), so no wheel was sent (\(traceLines(since: start).filter { $0.hasPrefix("drawing: ") }.suffix(8).joined(separator: "; ")))")
+		}
+	}
+
+	/// The frame counts the trace noted for each wheel event since `start` ("4 in 0.5 s, window visible true …").
+	private func wheelFrames(since start: TimeInterval) -> [String] {
+		traceLines(since: start).compactMap { line in
+			line.hasPrefix("frames after the wheel: ") ? String(line.dropFirst("frames after the wheel: ".count)) : nil
+		}
+	}
+
+	/// The app's wheel trace from `start` on, each line without its time stamp. The app stamps lines with the system's
+	/// uptime, the clock this process reads too.
+	private func traceLines(since start: TimeInterval) -> [String] {
+		let trace = wheelTrace.flatMap { try? String(contentsOf: $0, encoding: .utf8) } ?? ""
+		return trace.split(separator: "\n").compactMap { line in
+			let parts = line.split(separator: " ", maxSplits: 1)
+			guard parts.count == 2, let stamp = TimeInterval(parts[0]), stamp >= start else { return nil }
+			return String(parts[1])
+		}
 	}
 
 	/// What a failed wheel assertion needs: where the scroll was aimed, the app's own wheel and scrolling decisions
