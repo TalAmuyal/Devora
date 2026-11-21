@@ -799,19 +799,17 @@ public final class Store {
 	}
 
 	/// A preview read reports its error in the pane, rather than as a global banner.
-	public func previewContent(path: String, resourceDir: String) throws -> (String, [String: String]) {
+	public func previewContent(path: String) throws -> String {
 		guard let core else { throw CoreError.Failed(message: "the core isn't running") }
-		let themePath = try core.bundledThemePath(resourceDir: resourceDir)
-		return (try core.readPreview(path: path), try core.loadTheme(path: themePath))
+		return try core.readPreview(path: path)
 	}
 
-	/// Resolve the guide and theme through the shared core.
-	public func userGuideContent(resourceDir: String) throws -> (String, [String: String]) {
+	/// Resolve the guide through the shared core.
+	public func userGuideContent(resourceDir: String) throws -> String {
 		guard let core else { throw CoreError.Failed(message: "the core isn't running") }
 		// The core prefers bundled USER_GUIDE.md; plain dev builds retain its checkout fallback.
 		let guide = try core.userGuidePath(resourceDir: resourceDir)
-		let themePath = try core.bundledThemePath(resourceDir: resourceDir)
-		return (try String(contentsOfFile: guide, encoding: .utf8), try core.loadTheme(path: themePath))
+		return try String(contentsOfFile: guide, encoding: .utf8)
 	}
 
 	/// Creates a cancellable health run; its blocking work belongs on a detached task.

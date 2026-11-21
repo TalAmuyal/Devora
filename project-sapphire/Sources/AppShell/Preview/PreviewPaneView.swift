@@ -35,10 +35,7 @@ struct PreviewPaneView: View {
 					onError: { model.error = Store.describe($0) }, onView: { model.webView = $0 },
 					revision: "\(preview.id):\(preview.revision)")
 			} else {
-				WebContentView(content: {
-					guard let resources = Bundle.main.resourcePath else { throw CocoaError(.fileNoSuchFile) }
-					return try store.previewContent(path: preview.path, resourceDir: resources)
-				}, onError: { model.error = Store.describe($0) }, onView: { model.webView = $0 }, revision: "\(preview.id):\(preview.revision)")
+				WebContentView(content: { try store.previewContent(path: preview.path) }, onError: { model.error = Store.describe($0) }, onView: { model.webView = $0 }, revision: "\(preview.id):\(preview.revision)")
 			}
 		}
 		.background(.windowBackground)

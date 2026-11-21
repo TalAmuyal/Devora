@@ -167,3 +167,16 @@ Then('the terminals should be drawn on {string} in light and {string} in dark', 
   await this.bridge.waitFor(`the terminals on ${light} (light) or ${dark} (dark)`, () => this.bridge.state(), (s) =>
     s.terminalBackground.toLowerCase() === (s.appearance.effective === 'dark' ? dark : light).toLowerCase());
 });
+
+// The guide's page is a document's background in the app's appearance: light or dark by its luminance.
+Then("the User Guide's page should follow the app's appearance", async function (this: SapphireWorld) {
+  const dark = (background: string) => {
+    const [r, g, b] = (background.match(/\d+/g) ?? []).map(Number);
+    return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 < 0.5;
+  };
+  await this.bridge.waitFor(
+    "the guide's page to follow the appearance",
+    async () => ({ state: await this.bridge.state(), guide: await this.bridge.guide() }),
+    ({ state, guide }) => guide.background !== '' && dark(guide.background) === (state.appearance.effective === 'dark'),
+  );
+});
