@@ -4,13 +4,16 @@ import GhosttyKit
 
 /// Colors for every terminal: one variant of a palette family, light or dark, after the app's effective appearance.
 public struct TerminalPalette: Sendable, Equatable {
+	/// Its family and variant (`selenized-light`), which names its theme file.
+	public var name: String
 	public var background: String
 	public var foreground: String
 	public var cursor: String
 	/// The 16 ANSI colors, as `#rrggbb`.
 	public var ansi: [String]
 
-	public init(background: String, foreground: String, cursor: String, ansi: [String]) {
+	public init(name: String, background: String, foreground: String, cursor: String, ansi: [String]) {
+		self.name = name
 		self.background = background
 		self.foreground = foreground
 		self.cursor = cursor
@@ -44,22 +47,22 @@ public struct TerminalPalette: Sendable, Equatable {
 	}
 
 	static let selenizedLight = TerminalPalette(
-		background: "#fbf3db", foreground: "#53676d", cursor: "#3a4d53",
+		name: "selenized-light", background: "#fbf3db", foreground: "#53676d", cursor: "#3a4d53",
 		ansi: ["#ece3cc", "#d2212d", "#3f7e00", "#886c00", "#006fcf", "#c0388b", "#007d73", "#909995", "#7c6e47", "#cc1729", "#3c7e00", "#886b00", "#006dce", "#be3b8b", "#007d73", "#3a4d53"])
 	static let selenizedDark = TerminalPalette(
-		background: "#103c48", foreground: "#adbcbc", cursor: "#cad8d9",
+		name: "selenized-dark", background: "#103c48", foreground: "#adbcbc", cursor: "#cad8d9",
 		ansi: ["#184956", "#fb7771", "#75b938", "#dbb32d", "#5ca2f8", "#f275be", "#41c7b9", "#88a4ab", "#65a9bd", "#ff746b", "#84c747", "#ebc13d", "#58a3ff", "#ff84cd", "#53d6c7", "#cad8d9"])
 	static let catppuccinLatte = TerminalPalette(
-		background: "#eff1f5", foreground: "#4c4f69", cursor: "#dc8a78",
+		name: "catppuccin-light", background: "#eff1f5", foreground: "#4c4f69", cursor: "#dc8a78",
 		ansi: ["#5c5f77", "#d20f39", "#327d22", "#996114", "#1862f5", "#8839ef", "#137a80", "#acb0be", "#6a6d82", "#b50d31", "#29681c", "#7f5111", "#0a4ed6", "#7418ec", "#106569", "#bcc0cc"])
 	static let catppuccinMacchiato = TerminalPalette(
-		background: "#24273a", foreground: "#cad3f5", cursor: "#f4dbd6",
+		name: "catppuccin-dark", background: "#24273a", foreground: "#cad3f5", cursor: "#f4dbd6",
 		ansi: ["#494d64", "#ed8796", "#a6da95", "#eed49f", "#8aadf4", "#c6a0f6", "#8bd5ca", "#b8c0e0", "#898ea3", "#ee99a0", "#b7e3a7", "#f5e0b3", "#9dbaf7", "#d2b4f8", "#91d7e3", "#cad3f5"])
 	static let gruvboxLight = TerminalPalette(
-		background: "#fbf1c7", foreground: "#3c3836", cursor: "#3c3836",
+		name: "gruvbox-light", background: "#fbf1c7", foreground: "#3c3836", cursor: "#3c3836",
 		ansi: ["#ebdbb2", "#cc241d", "#727113", "#8f6616", "#3d7679", "#a65278", "#4d774f", "#7c6f64", "#786b5e", "#9d0006", "#74700d", "#976311", "#076678", "#8f3f71", "#417957", "#3c3836"])
 	static let gruvboxDark = TerminalPalette(
-		background: "#282828", foreground: "#ebdbb2", cursor: "#ebdbb2",
+		name: "gruvbox-dark", background: "#282828", foreground: "#ebdbb2", cursor: "#ebdbb2",
 		ansi: ["#3c3836", "#e8655f", "#98971a", "#d79921", "#509a9d", "#bd7b99", "#689d6a", "#a89984", "#9a8c7e", "#fb533f", "#b8bb26", "#fabd2f", "#83a598", "#d3869b", "#8ec07c", "#fbf1c7"])
 }
 
@@ -137,12 +140,12 @@ public final class TerminalRuntime {
 
 	/// Applies new colors to every terminal at once, through a regenerated config, then tells each terminal's program the
 	/// scheme (mode 2031's report, for the programs that asked for it), so one that re-reads the colors (OSC 10/11) gets the new ones.
-	public func apply(light: TerminalPalette, dark darkPalette: TerminalPalette, dark: Bool) {
-		if light != palettes.light || darkPalette != palettes.dark {
-			palettes = (light, darkPalette)
+	public func apply(light: TerminalPalette, dark: TerminalPalette, isDark: Bool) {
+		if light != palettes.light || dark != palettes.dark {
+			palettes = (light, dark)
 			reconfigure()
 		}
-		self.dark = dark
+		self.dark = isDark
 		ghostty_app_set_color_scheme(app, colorScheme)
 		// Each surface reports its own scheme, after the colors changed, so a program that asks again reads the new ones.
 		for surface in surfaces { ghostty_surface_set_color_scheme(surface, colorScheme) }
@@ -183,14 +186,17 @@ public final class TerminalRuntime {
 		ghostty_app_set_focus(app, focused)
 	}
 
-	/// Where the palettes' theme files live while the app runs: libghostty reads them again whenever it applies a scheme.
+	/// Where the palettes' theme files live: libghostty reads them again whenever it applies a scheme, so they stay
+	/// while the app runs, in one home that every run shares (the app's caches directory).
 	private static let themeDirectory: URL = {
-		let url = FileManager.default.temporaryDirectory.appending(path: "sapphire-themes-\(ProcessInfo.processInfo.processIdentifier)")
+		let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+		let url = caches.appending(path: Bundle.main.bundleIdentifier ?? "dev.devora.sapphire").appending(path: "terminal-themes")
 		try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
 		return url
 	}()
 
-	/// A palette as a Ghostty theme file, named by its colors, so that a changed palette is a new file.
+	/// A palette as a Ghostty theme file, named for its family and variant and rewritten only when its colors changed,
+	/// so that every run uses the same six files.
 	private static func themeFile(_ palette: TerminalPalette) -> URL {
 		let lines = [
 			"background = \(palette.background)",
@@ -198,10 +204,8 @@ public final class TerminalRuntime {
 			"cursor-color = \(palette.cursor)",
 		] + palette.ansi.enumerated().map { "palette = \($0.offset)=\($0.element)" }
 		let text = lines.joined(separator: "\n")
-		var hasher = Hasher()
-		hasher.combine(text)
-		let url = themeDirectory.appending(path: "theme-\(UInt(bitPattern: hasher.finalize())).conf")
-		if !FileManager.default.fileExists(atPath: url.path) { try? text.write(to: url, atomically: true, encoding: .utf8) }
+		let url = themeDirectory.appending(path: "\(palette.name).conf")
+		if (try? String(contentsOf: url, encoding: .utf8)) != text { try? text.write(to: url, atomically: true, encoding: .utf8) }
 		return url
 	}
 

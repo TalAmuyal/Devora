@@ -135,7 +135,7 @@ public struct RootView: View {
 
 	private func applyTerminalPalette() {
 		let family = TerminalPalette.Family(store.terminalPalette)
-		TerminalRuntime.shared.apply(light: family.light, dark: family.dark, dark: appearance.effective == .dark)
+		TerminalRuntime.shared.apply(light: family.light, dark: family.dark, isDark: appearance.effective == .dark)
 	}
 
 	/// Runs once the app state is open: the restored tabs are already in the core, and the Workspace Hub opens when there are none, as Ember's launch always opens it.
