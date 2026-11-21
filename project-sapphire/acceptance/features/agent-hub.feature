@@ -79,8 +79,8 @@ Feature: Agent Hub
     Given the Agent Hub is open
     When the user opens the New Agent dialog
     And the user names the new agent "Echo"
-    Then the New Agent model field should suggest "opus" as "Opus 5.5 · opus claude-opus-5-5" under "Claude Code’s models"
-    And the New Agent model field should suggest "claude-opus-4-8" as "Opus 4.8 claude-opus-4-8" under "Other models"
+    Then the New Agent model field should suggest "opus" as "Opus 5.5" under "Claude Code’s models"
+    And the New Agent model field should suggest "claude-opus-4-8" as "Opus 4.8" under "Other models"
     And the New Agent model note should read "Suggestions from Claude Code 2.1.312. Any model name works."
     When the user types "opusplan" as the new agent's model
     Then the New Agent model note should read "Opus while planning, Sonnet for the rest."

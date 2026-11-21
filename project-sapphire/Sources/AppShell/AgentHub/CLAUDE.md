@@ -23,7 +23,7 @@ The Agent Spaces of the selected profile (ADR-012, `Sources/AppShell/AgentHub/`)
 
 `Store.modelSuggestions` asks the core for the models Claude Code offers a profile (`agent_model_options`, cached by the core, so only a cold call waits for the CLI) and wraps them in `ModelSuggestions`, the one object every model field takes (the New Agent dialog, the Claude card's tiers, later an agent's model widget): it groups, labels and narrows them, and the views only draw it (`modelSuggestions(_:)`, SwiftUI's native `textInputSuggestions` menu).
 An agent's model is offered Claude Code's aliases (each with its name, the alias it stores, and the full ID it resolves to today; `default` reads "Claude Code's recommended", so it isn't taken for Devora's Default), then other models' full IDs; a tier, which is what an alias resolves to, only full IDs, its own family first.
-Each row has its name on the left and its full ID on the right, in a monospaced column as wide as the longest ID.
+The menu is as wide as its field: in the New Agent dialog's narrow column a row shows only its name (its ID when it has none); a tier's row has its name, with the stored alias beside it, on the left and its full ID on the right, in a monospaced column as wide as the longest ID (`showsModelIDs`).
 The field works at once and takes any name: no suggestions (none yet, or Claude Code couldn't be asked, a warning in the log, never a banner; a test run that names no fake CLI, `DEVORA_TEST_CLAUDE_PROGRAM`, doesn't ask at all, so a test never runs the user's own `claude`) leave it a plain text field, and the note under the New Agent field never calls a value wrong (`opusplan`, the profile's default, which the list doesn't name, says what it does).
 
 ## Agent chat

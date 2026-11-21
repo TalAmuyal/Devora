@@ -288,13 +288,11 @@ struct NewAgentDialogView: View {
 						}
 						.frame(maxHeight: formHeight)
 						.scrollBounceBehavior(.basedOnSize)
+						buttons
 					}
 					.frame(minWidth: 260, maxWidth: 330)
 					.padding(.trailing, 500)
 					.overlay(alignment: .trailing) { preview.frame(width: 480) }
-					// Across the dialog: the model field's suggestions menu is as wide as the field, and its rows need the room.
-					launchSettings
-					buttons
 				}
 			}
 			.padding(20)
@@ -351,30 +349,20 @@ struct NewAgentDialogView: View {
 				isSelected: { model.selected.contains($0.path) }, click: model.click, activate: model.activate,
 				identifierPrefix: "new-agent-repo-", height: 140)
 		}
+		label("Model")
+		TextField("e.g. opus, sonnet or a full model name", text: $model.model)
+			.textFieldStyle(.roundedBorder)
+			.focused($field, equals: .model)
+			// Names only: the menu is as wide as the field, and the form's column is narrow.
+			.modelSuggestions(model.modelSuggestions?.sections(for: .agentModel, typed: model.model) ?? [], showsModelIDs: false)
+			.accessibilityIdentifier("new-agent-model")
+		Text(ModelSuggestions.note(for: model.model, listedBy: model.modelSuggestions))
+			.font(.caption).foregroundStyle(.secondary)
+			.accessibilityIdentifier("new-agent-model-note")
+		effortSlider
 		Toggle("Include coding instructions", isOn: $model.keepCodingInstructions)
 			.help("On: the instructions are appended to Claude Code's own system prompt, with its coding instructions. Off: they replace it.")
 			.accessibilityIdentifier("new-agent-keep-coding-instructions")
-	}
-
-	/// What every launch of the agent runs: its model and effort.
-	private var launchSettings: some View {
-		HStack(alignment: .top, spacing: 20) {
-			VStack(alignment: .leading, spacing: 10) {
-				label("Model")
-				TextField("e.g. opus, sonnet or a full model name", text: $model.model)
-					.textFieldStyle(.roundedBorder)
-					.focused($field, equals: .model)
-					.modelSuggestions(model.modelSuggestions?.sections(for: .agentModel, typed: model.model) ?? [])
-					.accessibilityIdentifier("new-agent-model")
-				Text(ModelSuggestions.note(for: model.model, listedBy: model.modelSuggestions))
-					.font(.caption).foregroundStyle(.secondary)
-					.accessibilityIdentifier("new-agent-model-note")
-			}
-			.frame(width: 480)
-			VStack(alignment: .leading, spacing: 10) { effortSlider }
-				.frame(minWidth: 260, maxWidth: 330)
-		}
-		.padding(.horizontal, 6)
 	}
 
 	private var buttons: some View {

@@ -44,6 +44,12 @@ struct ModelSuggestionsTests {
 		#expect(sections[0].rows[0].name == "Opus 5.5", "An alias's model is named by its alias, not by `default`")
 	}
 
+	@Test func aModelWithoutANameIsNamedByItsID() {
+		let unnamed = ModelSuggestions(AgentModelList(cliVersion: nil, models: [option("claude-next", "claude-next", "")]))
+		#expect(unnamed.sections(for: .agentModel).flatMap(\.rows).map(\.name) == ["claude-next"])
+		#expect(unnamed.sections(for: .tier(family: "opus")).flatMap(\.rows).map(\.name) == ["claude-next"])
+	}
+
 	@Test func theMenuNarrowsToWhatIsTypedUnlessItIsAlreadyAPick() {
 		#expect(completions(subscription.sections(for: .agentModel, typed: "son")) == [
 			"Claude Code’s models": ["sonnet"], "Other models": ["claude-sonnet-4-6"],

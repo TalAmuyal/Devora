@@ -44,9 +44,9 @@ public struct ModelSuggestions: Equatable, Sendable {
 		case .agentModel:
 			sections = [
 				Section(title: "Claude Code’s models", rows: aliases.map { alias in
-					Row(completion: alias.value, name: Self.name(of: alias), alias: alias.value, modelID: alias.resolvedModel ?? alias.value)
+					Row(completion: alias.value, name: Self.aliasName(alias), alias: alias.value, modelID: alias.resolvedModel ?? alias.value)
 				}),
-				Section(title: "Other models", rows: others.map { Row(completion: $0.value, name: $0.displayName, alias: nil, modelID: $0.value) }),
+				Section(title: "Other models", rows: others.map { Row(completion: $0.value, name: Self.name(of: $0), alias: nil, modelID: $0.value) }),
 			]
 		case .tier(let family):
 			let ids = fullIDs
@@ -99,13 +99,18 @@ public struct ModelSuggestions: Equatable, Sendable {
 			guard model.value != "default" else { return nil }
 			let id = model.resolvedModel ?? model.value
 			guard seen.insert(id).inserted else { return nil }
-			return Row(completion: id, name: model.displayName, alias: nil, modelID: id)
+			return Row(completion: id, name: Self.name(of: model), alias: nil, modelID: id)
 		}
 	}
 
 	/// Claude Code's `default` alias is its recommendation; "Default" alone would read as Devora's "follow the profile".
-	private static func name(of alias: AgentModelOption) -> String {
-		alias.value == "default" ? "Claude Code’s recommended" : alias.displayName
+	private static func aliasName(_ alias: AgentModelOption) -> String {
+		alias.value == "default" ? "Claude Code’s recommended" : name(of: alias)
+	}
+
+	/// A model's name, or its ID when the list gives it none.
+	private static func name(of model: AgentModelOption) -> String {
+		model.displayName.isEmpty ? model.value : model.displayName
 	}
 }
 

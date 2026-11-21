@@ -52,7 +52,7 @@ struct ClaudeSettingsCard: View {
 						.textFieldStyle(.roundedBorder)
 						.frame(maxWidth: 340)
 						.focused($focus, equals: key)
-						.modelSuggestions(key == "permission-mode" ? [] : model.suggestions(forTier: key))
+						.modelSuggestions(key == "permission-mode" ? [] : model.suggestions(forTier: key), showsModelIDs: true)
 						.onSubmit { model.commit(key) }
 						.accessibilityIdentifier("claude-input-\(key)")
 					if model.showsSave(key) {

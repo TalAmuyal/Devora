@@ -208,10 +208,9 @@ When('the user types {string} as the new agent\'s model', async function (this: 
   await this.bridge.newAgent({ action: 'setModel', value: model });
 });
 
-Then('the New Agent model field should suggest {string} as {string} under {string}', async function (this: SapphireWorld, completion: string, label: string, section: string) {
-  await waitForDialog(this, `${completion} suggested as ${label} under ${section}`, (dialog) =>
-    dialog.modelSuggestions.some((s) => s.title === section && s.rows.some((row) =>
-      row.completion === completion && [row.name, row.alias].filter(Boolean).join(' · ') + ' ' + row.modelID === label)));
+Then('the New Agent model field should suggest {string} as {string} under {string}', async function (this: SapphireWorld, completion: string, name: string, section: string) {
+  await waitForDialog(this, `${completion} suggested as ${name} under ${section}`, (dialog) =>
+    dialog.modelSuggestions.some((s) => s.title === section && s.rows.some((row) => row.completion === completion && row.name === name)));
 });
 
 Then('the New Agent model note should read {string}', async function (this: SapphireWorld, note: string) {
