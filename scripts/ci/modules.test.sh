@@ -58,6 +58,7 @@ project-sapphire/Sources/AppShell/TaskCreation/CLAUDE.md
 project-sapphire/Sources/AppShell/WorkspaceHub/CLAUDE.md
 project-sapphire/Sources/Layers/CLAUDE.md
 project-sapphire/Sources/Store/CLAUDE.md
+project-sapphire/Sources/TerminalKit/CLAUDE.md
 project-sapphire/Tests/CLAUDE.md
 project-sapphire/UITests/CLAUDE.md
 project-sapphire/acceptance/CLAUDE.md

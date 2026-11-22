@@ -68,7 +68,7 @@ Types of changes:
 
 ### Changed
 
-- Devora Sapphire's terminals follow the Appearance setting, light or dark, live, and their default look changes from Catppuccin Macchiato to Selenized; User Defaults' Terminal colors (in Terminal & Session) switches between Selenized, Catppuccin and Gruvbox, each tuned to read in both. A program in the terminal that asks for color-scheme reports is now told when the appearance switches
+- Devora Sapphire's terminals follow the Appearance setting, light or dark, live, and their default look changes from Catppuccin Macchiato to Selenized; User Defaults' Terminal colors (in Terminal & Session) switches between Selenized, Catppuccin and Gruvbox, each tuned to read in both.
 - Devora Sapphire's agent transcript and its Mermaid diagrams are drawn in the system's colors and follow the Appearance setting, light or dark, and the accent color, instead of the dark Catppuccin theme; code blocks have a visible edge in both
 - Devora no longer pins the Opus, Sonnet and Haiku tier models when you haven't set them, so Claude Code picks them: with the default `opusplan`, planning runs on Claude Code's current Opus, and execution moves from Opus 4.8 to Claude Code's current Sonnet, which may differ in cost and behavior. Models you set yourself stay as they are, and the outdated model suggestions are gone from the Claude Launch Settings
 - Pausing a Devora Sapphire agent that has background work (a background shell or subagent) now stops that work cleanly through Claude Code first, so the agent exits by itself instead of being killed after the grace period; when it resumes, it's told exactly what was stopped, to re-establish what it still needs
@@ -110,6 +110,7 @@ Types of changes:
 ### Fixed
 
 - A Devora Sapphire agent's Context widget and its compaction threshold count only the agent's own context: while a subagent ran, they showed the subagent's, which could drop the widget to a few percent and keep a compaction that was due from starting
+- On a Mac in Dark, a new Devora Sapphire terminal lost Devora's environment, so `debi preview` failed in it ("only available inside a Devora terminal"), and a configured Default app wasn't started
 - Quitting Devora Sapphire right after a Global Pause has stopped an agent no longer reports a bogus "session has stopped" problem or shows the agent as Stopped
 - A Devora Sapphire agent's Claude Code left running by a Devora that crashed is stopped before the agent resumes, instead of both writing its session and forking the conversation; and stopping an agent by force now ends its background shells too, which used to keep running unheard from, and tells the agent at its next launch to re-establish its waits
 - A Devora Sapphire agent's turn now ends only with its own result: a result Claude Code produces by itself (when background work finishes, or on resuming) no longer marks a running turn finished, starts compaction early or lets a pause stop the agent mid-turn
