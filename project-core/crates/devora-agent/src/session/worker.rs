@@ -743,13 +743,16 @@ impl Worker {
                 }
                 self.mcp.remove(request_id);
             }
-            Message::Known(KnownMessage::Assistant { message, .. }) => {
-                self.usage(UsageSource::Assistant, message.extra.get("usage"))
+            // Usage is the agent's own context: a subagent's messages report the subagent's.
+            Message::Known(KnownMessage::Assistant { message: turn, .. })
+                if message.is_main_thread() =>
+            {
+                self.usage(UsageSource::Assistant, turn.extra.get("usage"))
             }
             Message::Known(KnownMessage::StreamEvent {
                 event: Extensible::Known(event),
                 ..
-            }) => match event {
+            }) if message.is_main_thread() => match event {
                 StreamEvent::MessageStart { message, .. } => {
                     self.usage(UsageSource::MessageStart, message.extra.get("usage"))
                 }

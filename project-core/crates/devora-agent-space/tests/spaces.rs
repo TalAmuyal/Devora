@@ -1062,6 +1062,79 @@ async fn over_the_threshold_the_agent_saves_its_memory_then_devora_compacts() {
     );
 }
 
+/// Sends `prompt` to a new agent with the profile's `threshold`, and returns the contexts the space published and
+/// the prompts the CLI received by the time `results` turns have ended.
+async fn contexts_and_prompts(
+    threshold: u8,
+    prompt: &str,
+    results: usize,
+) -> (Vec<devora_agent_space::Context>, Vec<String>) {
+    let fixture = Fixture::new();
+    std::fs::write(
+        fixture.profile.join("config.json"),
+        json!({"prepare-command":"true","agent":{"compact-threshold":threshold}}).to_string(),
+    )
+    .unwrap();
+    let context = fixture.context();
+    let space = fixture.create(fixture.form("Delta")).unwrap();
+    let log = Arc::new(Log::open(&fixture.root.path().join("log")).unwrap());
+    let mut running = space.start(&context, log, &fixture.run).await.unwrap();
+    running.handle().send_turn(prompt.into()).await.unwrap();
+    let mut contexts = vec![];
+    let mut ended = 0;
+    tokio::time::timeout(Duration::from_secs(10), async {
+        while let Some(update) = running.next_update().await {
+            match update {
+                SpaceEvent::Context(context) => contexts.push(context),
+                SpaceEvent::Session(SessionEvent::Message(Message::Known(
+                    KnownMessage::Result(_),
+                ))) => {
+                    ended += 1;
+                    if ended == results {
+                        break;
+                    }
+                }
+                SpaceEvent::Session(SessionEvent::Failed(error)) => panic!("{error}"),
+                _ => {}
+            }
+        }
+    })
+    .await
+    .unwrap_or_else(|_| panic!("{ended} of {results} turns ended; contexts: {contexts:?}"));
+    running.pause().await.unwrap();
+    let report = std::fs::read_to_string(fixture.root.path().join("report.jsonl")).unwrap();
+    let prompts = report
+        .lines()
+        .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
+        .filter(|entry| entry["kind"] == "user")
+        .map(|entry| entry["message"]["content"].as_str().unwrap().to_owned())
+        .collect();
+    (contexts, prompts)
+}
+
+// The fake's subagent message reports a context of 4 tokens; the agent's own is the recorded turn's, over 10,000.
+#[tokio::test]
+async fn a_subagents_message_mid_turn_leaves_the_agents_context_alone() {
+    let (contexts, _) = contexts_and_prompts(80, "subagent:mid", 1).await;
+    let used: Vec<u64> = contexts.iter().map(|c| c.used_tokens).collect();
+    assert!(used.iter().any(|&tokens| tokens > 10_000), "{used:?}");
+    assert!(
+        used.iter().all(|&tokens| tokens == 0 || tokens > 10_000),
+        "the subagent's context never shows as the agent's: {used:?}"
+    );
+}
+
+#[tokio::test]
+async fn the_threshold_decides_on_the_agents_context_when_a_subagents_message_comes_last() {
+    // The recorded turn fills about 2% of its model's window: over 1%, while the subagent's 4 tokens are not.
+    let (_, prompts) = contexts_and_prompts(1, "subagent:last", 2).await;
+    assert_eq!(prompts[0], "subagent:last");
+    assert!(
+        prompts[1].contains("save to memory/"),
+        "the compaction starts: {prompts:?}"
+    );
+}
+
 #[tokio::test]
 async fn pause_after_turn_waits_for_the_turn_and_wins_over_compaction() {
     let fixture = Fixture::new();

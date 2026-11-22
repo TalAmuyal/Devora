@@ -15,7 +15,7 @@ let holdStream = false;
 let sequence = 0;
 let requests: unknown[] = [];
 
-function interaction() {
+function interaction(tokens = inputTokens) {
   const dropped = new Set<number>();
   const events: string[] = [];
   const id = ++sequence;
@@ -30,8 +30,8 @@ function interaction() {
     if (holdStream && message.index !== undefined) message.index = 0;
     if (message.type === 'message_start') {
       message.message.id += '_' + id;
-      if (inputTokens !== undefined) {
-        message.message.usage.input_tokens = inputTokens;
+      if (tokens !== undefined) {
+        message.message.usage.input_tokens = tokens;
         message.message.usage.cache_read_input_tokens = 0;
         message.message.usage.cache_creation_input_tokens = 0;
         message.message.usage.cache_creation = { ephemeral_1h_input_tokens: 0, ephemeral_5m_input_tokens: 0 };
@@ -39,8 +39,8 @@ function interaction() {
     }
     if (message.type === 'message_delta') {
       message.delta.stop_reason = 'end_turn';
-      if (inputTokens !== undefined) {
-        message.usage.input_tokens = inputTokens;
+      if (tokens !== undefined) {
+        message.usage.input_tokens = tokens;
         message.usage.cache_read_input_tokens = 0;
         message.usage.cache_creation_input_tokens = 0;
         message.usage.cache_creation = { ephemeral_1h_input_tokens: 0, ephemeral_5m_input_tokens: 0 };
@@ -55,8 +55,8 @@ function interaction() {
   };
 }
 
-function toolUse(name: string, input: object) {
-  const response = interaction();
+function toolUse(name: string, input: object, tokens = inputTokens) {
+  const response = interaction(tokens);
   const startWire = response.response.sse_events.find((wire: string) => wire.startsWith('event: message_start\n'))!;
   const event = (type: string, fields: object) => 'event: ' + type + '\ndata: ' + JSON.stringify({ type, ...fields }) + '\n\n';
   const tool = { type: 'tool_use', id: 'toolu_devora_' + sequence, name, input: {} };
@@ -83,6 +83,10 @@ function toolInteraction(command: string) {
 // their content, outside the main sequence.
 let agentPrompt: string | undefined;
 let subagentCommand: string | undefined;
+// The subagent's own context, reported on its replies; and whether it runs in the background (the default) or
+// within the turn that starts it.
+let subagentInputTokens: number | undefined;
+let agentBackground = true;
 let notificationTool: { command: string; delayMs: number } | undefined;
 
 function userText(message: any): string {
@@ -95,7 +99,7 @@ function reset() {
   const interactions = [
     ...(toolCommand === undefined ? [] : [toolInteraction(toolCommand)]),
     ...(agentPrompt === undefined ? [] : [interaction(), toolUse('Agent', {
-      description: 'a CI wait', prompt: agentPrompt, subagent_type: 'general-purpose', run_in_background: true,
+      description: 'a CI wait', prompt: agentPrompt, subagent_type: 'general-purpose', run_in_background: agentBackground,
     })]),
     ...Array.from({ length: 50 }, interaction),
   ];
@@ -130,8 +134,8 @@ const route = (request: any, response: any) => {
     const last = userText(users[users.length - 1]);
     if (agentPrompt !== undefined && subagentCommand !== undefined && first.includes(agentPrompt)) {
       send(response, last.includes('tool_result')
-        ? interaction().response.sse_events
-        : toolUse('Bash', { command: subagentCommand, description: 'the CI wait' }).response.sse_events);
+        ? interaction(subagentInputTokens ?? inputTokens).response.sse_events
+        : toolUse('Bash', { command: subagentCommand, description: 'the CI wait' }, subagentInputTokens ?? inputTokens).response.sse_events);
       return;
     }
     if (notificationTool !== undefined && last.includes('<task-notification>')) {
@@ -192,6 +196,8 @@ for await (const line of lines) {
     holdStream = command.holdStream ?? false;
     agentPrompt = command.agentPrompt;
     subagentCommand = command.subagentCommand;
+    subagentInputTokens = command.subagentInputTokens;
+    agentBackground = command.agentBackground ?? true;
     notificationTool = command.notificationTool;
     reset();
     process.stdout.write(JSON.stringify({ type: 'configured' }) + '\n');

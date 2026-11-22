@@ -252,6 +252,17 @@ for line in sys.stdin:
             emit({"type":"assistant","message":8})
             emit({"type":"future_message","data":9})
             result()
+        elif text in ("subagent:mid", "subagent:last"):
+            # A subagent's whole message within the turn (the CLI streams none for it): it names the tool call
+            # that started the subagent, and reports the subagent's own, small context.
+            subagent = recorded("assistant")
+            subagent["parent_tool_use_id"] = "toolu_fake_subagent"
+            subagent["message"]["usage"] = {"input_tokens": 3, "output_tokens": 1}
+            emit(recorded("assistant"))
+            emit(subagent)
+            if text == "subagent:mid":
+                emit(recorded("assistant"))
+            result()
         elif text == "malformed":
             print("{not JSON}",flush=True)
         elif text in ("compact", "/compact"):

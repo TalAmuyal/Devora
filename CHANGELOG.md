@@ -109,6 +109,7 @@ Types of changes:
 
 ### Fixed
 
+- A Devora Sapphire agent's Context widget and its compaction threshold count only the agent's own context: while a subagent ran, they showed the subagent's, which could drop the widget to a few percent and keep a compaction that was due from starting
 - Quitting Devora Sapphire right after a Global Pause has stopped an agent no longer reports a bogus "session has stopped" problem or shows the agent as Stopped
 - A Devora Sapphire agent's Claude Code left running by a Devora that crashed is stopped before the agent resumes, instead of both writing its session and forking the conversation; and stopping an agent by force now ends its background shells too, which used to keep running unheard from, and tells the agent at its next launch to re-establish its waits
 - A Devora Sapphire agent's turn now ends only with its own result: a result Claude Code produces by itself (when background work finishes, or on resuming) no longer marks a running turn finished, starts compaction early or lets a pause stop the agent mid-turn
