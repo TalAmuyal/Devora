@@ -40,6 +40,34 @@ enum WheelTrace {
 	}
 }
 
+extension WheelTrace {
+	/// Notes, every quarter second while `view` is in a window, how many display frames the window got in it ("drawing:"),
+	/// so that a UI test can wait until the window draws before it sends a wheel, rather than send it to a window that can't
+	/// animate it. Off unless the trace is on.
+	@MainActor
+	static func noteDrawing(in view: NSView) -> (() -> Void)? {
+		guard isOn else { return nil }
+		let heartbeat = DrawingHeartbeat()
+		let link = view.displayLink(target: heartbeat, selector: #selector(DrawingHeartbeat.frame))
+		link.add(to: .main, forMode: .common)
+		let timer = Timer(timeInterval: 0.25, target: heartbeat, selector: #selector(DrawingHeartbeat.report), userInfo: nil, repeats: true)
+		RunLoop.main.add(timer, forMode: .common)
+		return {
+			timer.invalidate()
+			link.invalidate()
+		}
+	}
+}
+
+private final class DrawingHeartbeat: NSObject {
+	private var frames = 0
+	@objc func frame() { frames += 1 }
+	@objc func report() {
+		WheelTrace.note("drawing: \(frames) frames in 0.25 s")
+		frames = 0
+	}
+}
+
 private final class FrameCounter: NSObject {
 	private(set) var count = 0
 	@objc func tick() { count += 1 }
