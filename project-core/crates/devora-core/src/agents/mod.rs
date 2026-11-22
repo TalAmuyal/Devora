@@ -8,6 +8,7 @@ mod models;
 mod operations;
 mod running;
 
+pub use devora_agent::models::same_model;
 use devora_agent::session::SessionEvent;
 pub use devora_agent::session::{PermissionAnswer, Plugin};
 use devora_agent_space::{ActiveModel, RunningSpace, SpaceEvent, SpaceHandle};
@@ -18,7 +19,6 @@ pub use devora_agent_space::{
 use devora_app::log::Log;
 pub use devora_config::agent::Scope;
 use devora_state::{ChatCommand, ChatPhase, ChatUpdate, Command, Event, SessionKind, Store};
-pub use devora_agent::models::same_model;
 pub use models::ModelOptions;
 pub use operations::{Creation, CreationEvent};
 use std::collections::BTreeMap;
