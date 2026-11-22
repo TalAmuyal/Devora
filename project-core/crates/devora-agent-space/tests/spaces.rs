@@ -1831,6 +1831,33 @@ async fn stop_mid_turn(fixture: &Fixture, context: &LaunchContext, log: &Arc<Log
     running.pause().await.unwrap();
 }
 
+// The host pausing mid-turn (the tab closing, a quit, a hold) interrupts the turn, which the CLI ends with an error
+// result; the space asked for that stop, so the transcript keeps it as one: "Turn stopped", not a failure.
+#[tokio::test]
+async fn a_turn_the_host_paused_mid_way_ends_stopped_not_failed() {
+    let fixture = Fixture::new();
+    let context = fixture.context();
+    let log = Arc::new(Log::open(&fixture.root.path().join("log")).unwrap());
+    fixture.create(fixture.form("Delta")).unwrap();
+    stop_mid_turn(&fixture, &context, &log, "stream").await;
+    let results: Vec<(String, serde_json::Value)> =
+        Space::read_history(&fixture.profile, "Delta", 0, 500)
+            .unwrap()
+            .into_iter()
+            .filter_map(|item| match item.content {
+                devora_agent::transcript::TranscriptContent::System {
+                    kind: devora_agent::transcript::SystemKind::Result,
+                    text,
+                    detail_json,
+                } => Some((text, serde_json::from_str(&detail_json).unwrap())),
+                _ => None,
+            })
+            .collect();
+    assert_eq!(results.len(), 1, "{results:?}");
+    assert_eq!(results[0].0, "Turn stopped");
+    assert_eq!(results[0].1["stopped"], true);
+}
+
 // In one run: a clean idle stop owes nothing, while a stop that interrupted a
 // turn, or had to be forced, ended the agent's background work and owes it the
 // notice at its next launch.

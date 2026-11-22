@@ -170,6 +170,7 @@ impl Transcript {
         self.session = session;
         self.streams.clear();
         self.fallback = None;
+        self.stop_requested = false;
     }
 
     fn insert(
@@ -271,6 +272,7 @@ impl Transcript {
     /// gets an explicit marker identifying the prompt absent from the new CLI.
     pub fn interrupt(&mut self, fresh_first: bool) -> Vec<TranscriptChange> {
         self.fallback = None;
+        self.stop_requested = false;
         let mut changes = vec![];
         for item in &mut self.items {
             if item.cli_session == self.session
@@ -289,12 +291,13 @@ impl Transcript {
     }
 
     pub fn event(&mut self, event: &SessionEvent) -> Vec<TranscriptChange> {
-        // A waiting fallback belongs to the turn that announced it; a session ending ends that turn.
+        // A waiting fallback, or a stop asked for, belongs to the turn it was for; a session ending ends that turn.
         if matches!(
             event,
             SessionEvent::Exited { .. } | SessionEvent::Failed(_) | SessionEvent::Stopped(_)
         ) {
             self.fallback = None;
+            self.stop_requested = false;
         }
         match event {
             SessionEvent::Message(message) => self.message(message),

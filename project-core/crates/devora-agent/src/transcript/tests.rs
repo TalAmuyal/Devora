@@ -590,3 +590,19 @@ fn a_stop_asked_for_is_spent_by_the_next_result_even_one_that_completed() {
         "a turn that ended before the interrupt took is completed, and the stop isn't left over for a later error"
     );
 }
+
+#[test]
+fn a_stop_asked_for_ends_with_its_session_when_no_result_came() {
+    let mut t = Transcript::new(vec![], "s".into());
+    t.expect_stop();
+    t.event(&SessionEvent::Exited {
+        code: Some(1),
+        restarting: true,
+    });
+    replay_interrupt(&mut t, false);
+    assert_eq!(
+        result_rows(&t)[0],
+        ("Turn ended with an error".into(), false),
+        "the next session's error is its own, not the stop asked of the last"
+    );
+}

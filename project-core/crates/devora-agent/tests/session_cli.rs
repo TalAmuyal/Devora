@@ -901,6 +901,61 @@ async fn pinned_cli_hook_ask_forces_a_question_in_auto_mode() {
     backend.stop().await;
 }
 
+// A pause during a turn (the path a closed tab, a quit or a hold takes) interrupts it, and Claude Code answers with
+// the turn's error result before it exits: the result the transcript words "Turn stopped", since Devora asked for it.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires CI-pinned Claude CLI, Node and Sapphire npm dependencies"]
+async fn pinned_cli_answers_a_pause_mid_turn_with_the_turns_error_result_before_it_exits() {
+    check_pin().await;
+    let fixture = Fixture::new();
+    let mut backend = Backend::start(fixture.root.path()).await;
+    backend
+        .command(json!({"action":"configure", "holdStream":true}))
+        .await;
+    let options = fixture.options(backend.port, Instructions::Append("Pause probe".into()));
+    let mut session = Session::start(options, fixture.log()).await.unwrap();
+    session
+        .handle()
+        .send_turn(turn_id(), "Say something long.".into())
+        .await
+        .unwrap();
+    tokio::time::timeout(Duration::from_secs(20), async {
+        loop {
+            match session.next_event().await.unwrap() {
+                SessionEvent::Message(Message::Known(KnownMessage::StreamEvent { .. })) => break,
+                SessionEvent::Message(Message::Known(KnownMessage::Result(_))) => {
+                    panic!("the turn ended before the pause")
+                }
+                SessionEvent::Failed(error) => panic!("{error}"),
+                _ => {}
+            }
+        }
+    })
+    .await
+    .expect("the turn streaming");
+    let handle = session.handle();
+    let pausing = tokio::spawn(async move { handle.pause().await });
+    let mut result = None;
+    tokio::time::timeout(Duration::from_secs(30), async {
+        while let Some(event) = session.next_event().await {
+            match event {
+                SessionEvent::Message(Message::Known(KnownMessage::Result(turn))) => {
+                    result = Some(turn)
+                }
+                SessionEvent::Stopped(_) => break,
+                _ => {}
+            }
+        }
+    })
+    .await
+    .expect("the session stopping");
+    let stopped = pausing.await.unwrap().unwrap();
+    assert!(stopped.interrupted_turn);
+    let result = result.expect("a result before the session stopped");
+    assert!(result.is_error, "{result:?}");
+    backend.stop().await;
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[ignore = "requires CI-pinned Claude CLI, Node and Sapphire npm dependencies"]
 async fn pinned_cli_reopens_after_a_forced_stop_in_the_first_turn() {
