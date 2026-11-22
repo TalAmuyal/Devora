@@ -51,12 +51,15 @@ Then('no error banners should be visible', async function (this: SapphireWorld) 
 });
 
 Then('the recorded errors should include {string}', async function (this: SapphireWorld, text: string) {
-  // Scraping drains the list, which also keeps the After hook's no-unexpected-errors check green for intentional-error scenarios.
-  const errors = await this.bridge.scrapeErrors();
-  assert.ok(
-    errors.some((e) => e.includes(text)),
-    `Expected a recorded error containing "${text}", got: ${JSON.stringify(errors)}`,
-  );
+  // The error may come after the step starts (an action that doesn't wait for its write), so it waits for one. Scraping
+  // drains the app's list: what a look drains and doesn't match stays with the scenario (`unclaimedErrors`), for a later
+  // step to claim and for the After hook to fail on if none does.
+  const matches = (error: string) => error.includes(text);
+  await this.bridge.waitFor(`a recorded error containing "${text}"`, async () => {
+    this.unclaimedErrors.push(...(await this.bridge.scrapeErrors()));
+    return this.unclaimedErrors;
+  }, errors => errors.some(matches));
+  this.unclaimedErrors = this.unclaimedErrors.filter(error => !matches(error));
 });
 
 Then('the log file should contain {string}', async function (this: SapphireWorld, text: string) {

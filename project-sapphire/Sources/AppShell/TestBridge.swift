@@ -232,7 +232,13 @@ final class TestBridge {
 				try profileFormAction(request.json())
 				return .init(status: 200, body: [:])
 			case ("POST", "/test/settings"):
-				try settingsAction(request.json())
+				let body = try request.json()
+				try settingsAction(body)
+				// A write the action queued has landed, and its scope has read its settings again, before the step goes on: a
+				// check that follows could otherwise pass before the write had even run.
+				if !["selectRow", "type"].contains(body["action"] as? String ?? ""), let scope = surfaces.settings?.scope {
+					await scope.settled()
+				}
 				return .init(status: 200, body: [:])
 			case ("POST", "/test/layers/clear"):
 				// Teardown, as Ember's `__test.layers.clear()`: it closes even the first-run welcome, which refuses `q` and Escape.

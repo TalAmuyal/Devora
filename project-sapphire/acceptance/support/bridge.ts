@@ -1,3 +1,7 @@
+/** How long a settings action may take to land its write: inside the step's own timeout (30 s), so that a write that
+ * never settles fails saying so, rather than as a bare step timeout. */
+const SETTINGS_SETTLE_MS = 20_000;
+
 /** A client for the app's test bridge (`Sources/AppShell/TestBridge.swift`). */
 
 export interface AgentChatState {
@@ -507,9 +511,15 @@ export class Bridge {
     await this.request('POST', '/test/profile-form', action);
   }
 
-  /** Clicks what the open Settings Hub draws, or types into a revealed input of its cards. */
+  /** Clicks what the open Settings Hub draws, or types into a revealed input of its cards; an action that writes returns
+   * once its write has landed and its scope has read its settings again, so a check that follows means something. */
   async settings(action: SettingsAction): Promise<void> {
-    await this.request('POST', '/test/settings', action);
+    try {
+      await this.request('POST', '/test/settings', action, AbortSignal.timeout(SETTINGS_SETTLE_MS));
+    } catch (error) {
+      if ((error as Error).name !== 'TimeoutError') throw error;
+      throw new Error(`the settings write didn't settle within ${SETTINGS_SETTLE_MS} ms: ${JSON.stringify(action)}`);
+    }
   }
 
   /** Teardown: removes every window surface, the first-run welcome included, as Ember's `__test.layers.clear()`. */
@@ -577,10 +587,11 @@ export class Bridge {
     }
   }
 
-  private async request(method: string, path: string, body?: unknown): Promise<any> {
+  private async request(method: string, path: string, body?: unknown, signal?: AbortSignal): Promise<any> {
     const response = await fetch(`http://127.0.0.1:${this.port}${path}`, {
       method,
       body: body === undefined ? undefined : JSON.stringify(body),
+      signal,
     });
     const json = await response.json();
     if (!response.ok) throw new BridgeError(response.status, `${method} ${path}: ${json.error}`);
