@@ -16,6 +16,13 @@ struct TranscriptTheme: Equatable {
 	var error: Color = .red
 }
 
+extension TranscriptTheme {
+	/// On the user's blue bubble: white text, with its code and quotes in translucent white and black.
+	static let onBubble = TranscriptTheme(
+		text: .white, secondary: .white.opacity(0.8), heading: .white, link: .white, inlineCode: .white.opacity(0.2),
+		codeBlock: .black.opacity(0.18), quoteEdge: .white, border: .white.opacity(0.35), error: .white)
+}
+
 extension EnvironmentValues {
 	@Entry var transcriptTheme = TranscriptTheme()
 }

@@ -137,6 +137,8 @@ final class TestBridge {
 				guard let transcript = panel.transcript else { throw BridgeError(status: 409, "agent chat is not ready") }
 				// `dom` keeps the name the scenarios read from the web transcript's page.
 				var observation: [String: Any] = ["dom": transcript.observation(), "draft": panel.chat.draft, "canSend": panel.chat.canSend]
+				// The items the chat holds, shown or not ("Turn completed" isn't a row).
+				observation["items"] = panel.chat.items.count
 				observation["phase"] = panel.chat.chat.map { String(describing: $0.phase) } ?? "opening"
 				observation["context"] = panel.chat.chat?.context.map {
 					[
@@ -154,6 +156,10 @@ final class TestBridge {
 				observation["globallyPaused"] = panel.chat.globallyPaused
 				observation["globallyHeld"] = panel.chat.chat?.globallyHeld ?? false
 				observation["running"] = panel.chat.chat?.turnRunning ?? false
+				// The spinner's line under the transcript: the step's name and its start, or none without a turn.
+				observation["turnStatus"] = panel.chat.chat?.step.map {
+					["step": AgentTurnStatus.label($0.activity), "sinceMs": String($0.sinceMs)] as [String: Any]
+				} ?? NSNull()
 				let model = panel.modelPresentation
 				observation["modelWidget"] = [
 					"label": model.label, "grayed": model.grayed, "mismatch": model.mismatch, "tooltip": model.tooltip,

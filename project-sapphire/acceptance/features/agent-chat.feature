@@ -30,10 +30,13 @@ Feature: Agent chat panel
   Scenario: Permission cards can be answered from the tab and disappear
     When the user sends the agent prompt "permission"
     Then the agent chat shows a permission card
+    And the agent chat's turn status is "Waiting for your answer: Bash"
     And the agent transcript contains "localSettings"
     When the user allows the agent permission with Command+Y
     Then the agent chat has no permission card
     And the agent "Echo" should be idle
+    And the agent chat shows no turn status
+    And the agent transcript has no "Turn completed" row
 
   Scenario: A withdrawn question disappears
     When the user sends the agent prompt "cancel-permission"
@@ -106,6 +109,8 @@ Feature: Agent chat panel
     Then the agent turn is still running
     When the user stops the agent turn
     Then the agent "Echo" should be idle
+    And the agent transcript contains "Turn stopped"
+    And the agent transcript has no "Turn ended with an error" row
 
   Scenario: The context bar uses the actor's usage and profile threshold
     When the user sends the agent prompt "Context metrics"

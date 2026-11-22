@@ -191,6 +191,53 @@ struct TranscriptScrollViewTests {
 		#expect(stepsMeasuring >= 15, "The steps must bring estimated rows into view")
 	}
 
+	/// Something under the transcript coming and going (the chat's spinner, once a turn) resizes it, and AppKit moves its
+	/// top to stay inside the rows: the view's own move, which never asks for older history nor saves a position.
+	/// Resizes `view` as a layout pass does: its clip view takes the new size, and AppKit keeps its top inside the rows.
+	private func resize(_ view: TranscriptScrollView, to height: CGFloat) {
+		view.frame.size.height = height
+		view.tile()
+		view.reflectScrolledClipView(view.contentView)
+	}
+
+	@Test func aResizeIsNeverTheReadersScroll() {
+		// A little shorter than the view, so that the turn's reply makes it outgrow the view with its top near the top,
+		// where a reader's scroll would ask for older rows.
+		func rows(_ count: Int) -> [TranscriptItem] { (1...UInt64(count)).map { reply($0, "Short \($0).") } }
+		var count = 1
+		var (window, view) = shown(rows(count))
+		// The rows' own height: the table is never shorter than the view.
+		func content(_ view: TranscriptScrollView) -> CGFloat { view.table.rect(ofRow: view.table.numberOfRows - 1).maxY }
+		while content(view) <= view.contentView.bounds.height - 30 {
+			window.close()
+			count += 1
+			(window, view) = shown(rows(count))
+		}
+		defer { window.close() }
+		view.hasOlder = true
+		var asked = false
+		var saved: [ChatScrollAnchor?] = []
+		view.onNeedsOlder = { asked = true }
+		view.onScroll = { saved.append($0) }
+		// A turn: the spinner shows (the transcript is 28 points shorter), a reply arrives, the spinner goes.
+		resize(view, to: 372)
+		#expect(view.distanceFromBottom == 0, "a shorter view keeps the bottom it follows in view")
+		view.apply(rows(count + 1))
+		#expect(view.contentView.bounds.minY < TranscriptScrollView.olderSlack)
+		resize(view, to: 400)
+		#expect(view.distanceFromBottom == 0)
+		#expect(!asked, "the view's own move asks for no older rows")
+		#expect(saved.allSatisfy { $0 == nil }, "nor saves a position")
+	}
+
+	@Test func aTopPulledBackToTheEndIsTheViewsOwnWithinHalfAPoint() {
+		#expect(TranscriptScrollView.isPulledBack(top: 8, from: 36, end: 8))
+		#expect(TranscriptScrollView.isPulledBack(top: 8, from: 36, end: 8.33), "a fractional end")
+		#expect(TranscriptScrollView.isPulledBack(top: 7.75, from: 36, end: 8))
+		#expect(!TranscriptScrollView.isPulledBack(top: 20, from: 36, end: 8), "the reader scrolling up, short of the end")
+		#expect(!TranscriptScrollView.isPulledBack(top: 8, from: 0, end: 8), "the reader scrolling down onto the end")
+	}
+
 	@Test func olderHistoryGoesInAboveWithoutMovingTheVisibleRow() {
 		let rows = transcript(200, from: 201)
 		let (window, view) = shown(rows)

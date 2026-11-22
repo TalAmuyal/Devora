@@ -33,6 +33,10 @@ export interface AgentChatState {
     topSequence: string | null;
   };
   running: boolean;
+  /** The items the chat holds, shown or not: a turn's plain end isn't a row. */
+  items: number;
+  /** The spinner's line under the transcript while a turn runs: the step's name and its start (ms since the epoch). */
+  turnStatus: { step: string; sinceMs: string } | null;
   enterSends: boolean;
   anchor: string | null;
   draft: string;

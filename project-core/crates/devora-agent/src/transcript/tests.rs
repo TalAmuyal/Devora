@@ -507,3 +507,102 @@ fn a_first_reply_from_a_fallback_adds_no_row_but_keeps_its_sentence() {
     assert_eq!(t.latest_model(), Some("claude-sonnet-5-5"));
     assert_eq!(t.fallback_note(), Some(FALLBACK_SENTENCE));
 }
+
+/// The result row's text and whether it says the turn was stopped.
+fn result_rows(t: &Transcript) -> Vec<(String, bool)> {
+    t.items()
+        .iter()
+        .filter_map(|item| match &item.content {
+            TranscriptContent::System {
+                kind: SystemKind::Result,
+                text,
+                detail_json,
+            } => {
+                let detail: Value = serde_json::from_str(detail_json).unwrap();
+                Some((text.clone(), detail["stopped"] == json!(true)))
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+/// Replays the recorded session of an interrupted turn (the pinned CLI's `interrupt.jsonl`): every message the CLI sent,
+/// and, where Devora sent its interrupt, the intention Devora records for it when `devora_asked`.
+fn replay_interrupt(t: &mut Transcript, devora_asked: bool) {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/claude-2.1.312/interrupt.jsonl");
+    for line in std::fs::read_to_string(path).unwrap().lines() {
+        let recording: Value = serde_json::from_str(line).unwrap();
+        let message = recording["msg"].clone();
+        if recording["dir"] == "in" {
+            if message["type"] != "control_response" {
+                self::message(t, message);
+            }
+        } else if devora_asked && message["request"]["subtype"] == "interrupt" {
+            t.intention(
+                SystemKind::Interruption,
+                "Interrupt requested".into(),
+                json!({}),
+            );
+        }
+    }
+}
+
+#[test]
+fn the_recorded_turn_devora_interrupted_ends_stopped_and_the_next_completes() {
+    let mut t = Transcript::new(vec![], "s".into());
+    replay_interrupt(&mut t, true);
+    assert_eq!(
+        result_rows(&t),
+        [
+            ("Turn stopped".into(), true),
+            ("Turn completed".into(), false)
+        ]
+    );
+}
+
+#[test]
+fn the_same_error_result_without_devoras_interrupt_stays_an_error() {
+    let mut t = Transcript::new(vec![], "s".into());
+    replay_interrupt(&mut t, false);
+    assert_eq!(
+        result_rows(&t),
+        [
+            ("Turn ended with an error".into(), false),
+            ("Turn completed".into(), false)
+        ]
+    );
+}
+
+#[test]
+fn a_stop_asked_for_is_spent_by_the_next_result_even_one_that_completed() {
+    let mut t = Transcript::new(vec![], "s".into());
+    t.expect_stop();
+    turn_end(&mut t);
+    replay_interrupt(&mut t, false);
+    assert_eq!(
+        result_rows(&t),
+        [
+            ("Turn completed".into(), false),
+            ("Turn ended with an error".into(), false),
+            ("Turn completed".into(), false),
+        ],
+        "a turn that ended before the interrupt took is completed, and the stop isn't left over for a later error"
+    );
+}
+
+#[test]
+fn a_stop_asked_for_ends_with_its_session_when_no_result_came() {
+    let mut t = Transcript::new(vec![], "s".into());
+    t.expect_stop();
+    t.event(&SessionEvent::Exited {
+        code: Some(1),
+        restarting: true,
+    });
+    replay_interrupt(&mut t, false);
+    assert_eq!(
+        result_rows(&t)[0],
+        ("Turn ended with an error".into(), false),
+        "the next session's error is its own, not the stop asked of the last"
+    );
+}

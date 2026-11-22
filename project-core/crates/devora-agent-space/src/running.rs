@@ -72,6 +72,8 @@ enum Action {
     Permission(String, PermissionAnswer),
     PauseAfterTurn,
     GlobalPauseChanged,
+    /// The host is pausing the session, which interrupts a running turn: its result is a stop, not a failure.
+    ExpectStop,
     /// The agent's own threshold, or none to follow the profile's.
     SetCompactThreshold(Option<u8>),
     CompactNow,
@@ -140,7 +142,10 @@ impl SpaceHandle {
     pub async fn answer_mcp(&self, request_id: String, response: Value) -> Result<(), String> {
         self.runtime.answer_mcp(request_id, response).await
     }
+    /// Pauses the session, interrupting a running turn, whose result the transcript then shows as stopped. An actor
+    /// that has already stopped can't be told, and has no turn running.
     pub async fn pause(&self) -> Result<StopInfo, String> {
+        let _ = self.call(Action::ExpectStop).await;
         self.runtime.pause().await
     }
     /// Sets this agent's compaction threshold, or clears it to follow the
@@ -348,6 +353,7 @@ pub(crate) async fn start(
         .await;
         if let Err(error) = &result {
             log.report_error(error);
+            transcript.expect_stop();
             if let Ok(info) = session.pause().await {
                 let _ = persist(
                     &mut space,
@@ -466,6 +472,7 @@ fn begin(
         ),
         Action::PauseAfterTurn
         | Action::GlobalPauseChanged
+        | Action::ExpectStop
         | Action::SetCompactThreshold(_)
         | Action::CompactNow => return Err("the pump handles this action itself".into()),
         Action::Permission(id, answer) => {
@@ -524,6 +531,7 @@ fn begin(
                 .map(|_| Value::Null),
             Action::PauseAfterTurn
             | Action::GlobalPauseChanged
+            | Action::ExpectStop
             | Action::SetCompactThreshold(_)
             | Action::CompactNow => unreachable!("handled by the pump"),
         };
@@ -641,6 +649,7 @@ async fn pump(
         tokio::select! {
             biased;
             _ = events.closed() => {
+                transcript.expect_stop();
                 let pause = session.pause().await;
                 let mut stopped = None;
                 while let Some(event) = session.next_event().await {
@@ -687,6 +696,7 @@ async fn pump(
                     match &event {
                         // A stopped subagent's notification turn starting: the agent mustn't act on it.
                         SessionEvent::Message(Message::Known(KnownMessage::System(System::Init { .. }))) => {
+                            transcript.expect_stop();
                             let runtime = session.handle();
                             tokio::spawn(async move { let _ = runtime.interrupt().await; });
                         }
@@ -748,6 +758,10 @@ async fn pump(
                     }
                     Some(Command { action: Action::GlobalPauseChanged, reply }) => {
                         let _ = reply.send(Ok(Value::Bool(stopping)));
+                    }
+                    Some(Command { action: Action::ExpectStop, reply }) => {
+                        transcript.expect_stop();
+                        let _ = reply.send(Ok(Value::Null));
                     }
                     Some(Command { action: Action::SetCompactThreshold(percent), reply }) => {
                         let outcome = space.db.set_compact_threshold(percent).map(|()| {

@@ -54,6 +54,16 @@ Then('the agent chat shows a permission card', async function (this: SapphireWor
 Then('the agent chat has no permission card', async function (this: SapphireWorld) {
   await this.bridge.waitFor('permission card removed', () => this.bridge.agentChat(), s => s.questions === 0 && s.dom.cards === 0);
 });
+Then("the agent chat's turn status is {string}", async function (this: SapphireWorld, step: string) {
+  await this.bridge.waitFor(`the turn status "${step}"`, () => this.bridge.agentChat(), s => s.turnStatus?.step === step);
+});
+Then('the agent chat shows no turn status', async function (this: SapphireWorld) {
+  await this.bridge.waitFor('no turn status', () => this.bridge.agentChat(), s => s.turnStatus === null);
+});
+Then('the agent transcript has no {string} row', async function (this: SapphireWorld, text: string) {
+  const chat = await this.bridge.agentChat();
+  assert.ok(!chat.dom.rows.some(row => row.text === text), `a "${text}" row is shown: ${JSON.stringify(chat.dom.rows.map(row => row.text))}`);
+});
 When('the user allows the agent permission with Command+Y', async function (this: SapphireWorld) {
   await this.bridge.press('y', ['command']);
 });
@@ -76,8 +86,9 @@ Given('the agent chat has {int} completed test turns', async function (this: Sap
     await this.bridge.chatAction('send');
     await this.bridge.waitFor('history turn complete', () => this.bridge.agentChat(), s => !s.running && s.draft === '');
   }
+  // The chat keeps its 200-item tail; the rows are fewer, since a turn's "Turn completed" isn't shown.
   const chat = await this.bridge.agentChat();
-  assert.equal(chat.dom.rows.length, 200);
+  assert.equal(chat.items, 200);
   assert.notEqual(chat.dom.rows[0].sequence, '1');
 });
 When('the user scrolls up for older agent history', async function (this: SapphireWorld) {

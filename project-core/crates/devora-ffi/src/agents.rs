@@ -5,9 +5,10 @@ use devora_core::agents::{
     self, CreationForm, Field, LaunchContext, ModelChoice, PermissionAnswer, Scope, Source,
 };
 use devora_core::state::{
-    AgentActivity, Chat, ChatContext, ChatEvent, ChatModel, ChatPhase, ChatUpdate,
-    CompactionProgress, ItemState, PermissionQuestion, RunningAgent, RunningAgents, Subscription,
-    SystemKind, ToolResult, ToolVerdict, TranscriptChange, TranscriptContent, TranscriptItem,
+    AgentActivity, Chat, ChatContext, ChatEvent, ChatModel, ChatPhase, ChatStep, ChatUpdate,
+    CompactionProgress, ItemState, PermissionQuestion, RunningAgent, RunningAgents, StepActivity,
+    Subscription, SystemKind, ToolResult, ToolVerdict, TranscriptChange, TranscriptContent,
+    TranscriptItem,
 };
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -313,6 +314,31 @@ pub struct Chat {
     pub usage_json: Option<String>,
     pub context: Option<ChatContext>,
     pub model: Option<ChatModel>,
+    pub step: Option<ChatStep>,
+}
+#[uniffi::remote(Record)]
+pub struct ChatStep {
+    pub activity: StepActivity,
+    pub since_ms: u64,
+}
+#[uniffi::remote(Enum)]
+pub enum StepActivity {
+    Waiting {
+        tool: String,
+        request_id: String,
+    },
+    Running {
+        tool: String,
+        tool_use_id: String,
+        subagent: bool,
+    },
+    Thinking {
+        subagent: bool,
+    },
+    Writing {
+        subagent: bool,
+    },
+    Working,
 }
 #[uniffi::remote(Record)]
 pub struct ChatContext {
@@ -355,6 +381,7 @@ pub enum ChatUpdate {
     Usage { payload_json: String },
     Context { context: ChatContext },
     Model { model: ChatModel },
+    Step { step: Option<ChatStep> },
 }
 #[uniffi::remote(Enum)]
 pub enum AgentActivity {

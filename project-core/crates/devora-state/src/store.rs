@@ -78,10 +78,12 @@ impl Store {
     /// The live projection is held in memory. Token patches never rewrite app-state SQLite.
     pub fn dispatch_chat(&self, command: ChatCommand) -> Result<(), StateError> {
         let inner = &mut *lock(&self.inner);
-        let event = crate::chat::apply(&mut inner.chats, &mut inner.running_agents, command)?;
-        inner
-            .chat_subscribers
-            .retain(|feed| feed.push(std::slice::from_ref(&event)));
+        let now_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |since| since.as_millis() as u64);
+        let events =
+            crate::chat::apply(&mut inner.chats, &mut inner.running_agents, command, now_ms)?;
+        inner.chat_subscribers.retain(|feed| feed.push(&events));
         Ok(())
     }
 

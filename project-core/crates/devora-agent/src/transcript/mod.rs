@@ -90,6 +90,14 @@ pub struct TranscriptItem {
     pub content: TranscriptContent,
 }
 
+impl TranscriptItem {
+    /// Whether the item is the agent's own, not a subagent's: the message it came from named no parent tool call, by
+    /// the same rule as `Message::is_main_thread`, whose `parent_tool_use_id` the item keeps.
+    pub fn is_main_thread(&self) -> bool {
+        self.parent_tool_use_id.is_none()
+    }
+}
+
 /// Whole items commit before publication. Append changes are transient, bounded
 /// by the text arriving in this frame, and fold into the same stable sequence.
 #[derive(Clone, Debug, PartialEq, Eq)]

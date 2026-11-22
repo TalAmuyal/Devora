@@ -15,6 +15,7 @@ mod app_state;
 mod asana_credentials;
 mod claude_settings;
 mod creation;
+mod format;
 mod health;
 mod log;
 mod profiles;

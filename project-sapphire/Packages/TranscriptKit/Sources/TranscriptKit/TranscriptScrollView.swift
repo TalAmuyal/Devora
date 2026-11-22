@@ -158,8 +158,10 @@ public final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NS
 
 	// MARK: Updates
 
-	/// Shows `items`, with a card for each of `questions`, whose answers carry `generation`.
+	/// Shows `items` (those the chat ever shows: `TranscriptVisibility`), with a card for each of `questions`, whose
+	/// answers carry `generation`. A row never shown isn't laid out, so it is never measured.
 	func apply(_ items: [TranscriptItem], questions: [PermissionQuestion] = [], generation: UInt64 = 0) {
+		let items = items.filter { $0.visibility != .never }
 		let new = TranscriptEntry.layout(items, questions: questions, generation: generation)
 		let change = TranscriptChange(from: entries, to: new)
 		guard change != .none else { return }
@@ -282,8 +284,8 @@ public final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NS
 
 	// MARK: Diagrams
 
-	/// The width a diagram is drawn at: the row's, inside its margins and kind marker (`TranscriptRow`, `KindMarker`).
-	private var diagramWidth: Int { Int(width - 54) }
+	/// The width a diagram is drawn at: a reply's, inside the row's margins (`TranscriptRow.replyInset`).
+	private var diagramWidth: Int { Int(width - TranscriptRow.replyInset) }
 
 	func diagramKey(_ source: String) -> DiagramKey {
 		DiagramKey(source: source, width: diagramWidth, scale: window?.backingScaleFactor ?? 2, theme: diagramTheme)
@@ -563,6 +565,9 @@ public final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NS
 	// MARK: Width
 
 	@objc private func frameChanged() {
+		// Something under the transcript coming or going (the chat's spinner, every turn) changes its height: a view
+		// following the bottom keeps it in view.
+		if following { scrollToBottom() }
 		guard width != laidOutWidth else { return }
 		laidOutWidth = width
 		guard !entries.isEmpty else { return }
@@ -597,7 +602,9 @@ public final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NS
 			// Away from the top again: a request that brought nothing (an error) may go again on the way back.
 			olderRequested = false
 		}
-		// Only the reader's own scrolls count: not the view's adjustments, nor a resize or layout of the clip view.
+		// Only the reader's own scrolls count: not the view's adjustments, nor a resize or layout of the clip view. A view
+		// that grew pulls its top back to the last one it can show, which the reader can't scroll past.
+		if Self.isPulledBack(top: top, from: lastTop, end: max(0, table.bounds.height - contentView.bounds.height)) { lastTop = top }
 		let byReader = !adjusting && top != lastTop
 		if byReader {
 			lastTop = top
@@ -616,6 +623,12 @@ public final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NS
 			onScroll(visibleAnchor)
 			onNeedsOlder()
 		}
+	}
+
+	/// Whether a top that moved from `from` to `top` was pulled back to `end`, the last top the view can show: up, and onto
+	/// it, within half a point, since AppKit's top and a computed end can differ by a fraction (a fractional row height).
+	static func isPulledBack(top: CGFloat, from: CGFloat, end: CGFloat) -> Bool {
+		top < from && abs(top - end) < 0.5
 	}
 
 	private func reportScrollLater() {
