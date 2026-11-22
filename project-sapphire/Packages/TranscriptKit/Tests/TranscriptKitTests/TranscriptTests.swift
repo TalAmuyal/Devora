@@ -230,6 +230,14 @@ struct TranscriptScrollViewTests {
 		#expect(saved.allSatisfy { $0 == nil }, "nor saves a position")
 	}
 
+	@Test func aTopPulledBackToTheEndIsTheViewsOwnWithinHalfAPoint() {
+		#expect(TranscriptScrollView.isPulledBack(top: 8, from: 36, end: 8))
+		#expect(TranscriptScrollView.isPulledBack(top: 8, from: 36, end: 8.33), "a fractional end")
+		#expect(TranscriptScrollView.isPulledBack(top: 7.75, from: 36, end: 8))
+		#expect(!TranscriptScrollView.isPulledBack(top: 20, from: 36, end: 8), "the reader scrolling up, short of the end")
+		#expect(!TranscriptScrollView.isPulledBack(top: 8, from: 0, end: 8), "the reader scrolling down onto the end")
+	}
+
 	@Test func olderHistoryGoesInAboveWithoutMovingTheVisibleRow() {
 		let rows = transcript(200, from: 201)
 		let (window, view) = shown(rows)

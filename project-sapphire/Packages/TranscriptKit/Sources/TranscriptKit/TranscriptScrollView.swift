@@ -604,8 +604,7 @@ public final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NS
 		}
 		// Only the reader's own scrolls count: not the view's adjustments, nor a resize or layout of the clip view. A view
 		// that grew pulls its top back to the last one it can show, which the reader can't scroll past.
-		let pulledBack = top < lastTop && top == max(0, table.bounds.height - contentView.bounds.height)
-		if pulledBack { lastTop = top }
+		if Self.isPulledBack(top: top, from: lastTop, end: max(0, table.bounds.height - contentView.bounds.height)) { lastTop = top }
 		let byReader = !adjusting && top != lastTop
 		if byReader {
 			lastTop = top
@@ -624,6 +623,12 @@ public final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NS
 			onScroll(visibleAnchor)
 			onNeedsOlder()
 		}
+	}
+
+	/// Whether a top that moved from `from` to `top` was pulled back to `end`, the last top the view can show: up, and onto
+	/// it, within half a point, since AppKit's top and a computed end can differ by a fraction (a fractional row height).
+	static func isPulledBack(top: CGFloat, from: CGFloat, end: CGFloat) -> Bool {
+		top < from && abs(top - end) < 0.5
 	}
 
 	private func reportScrollLater() {
