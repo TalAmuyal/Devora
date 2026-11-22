@@ -19,7 +19,7 @@ final class UserGuideModel {
 
 	func showError(_ error: any Error) { self.error = Store.describe(error) }
 
-	func content() throws -> (String, [String: String]) {
+	func content() throws -> String {
 		guard let resourceDir = Bundle.main.resourcePath else {
 			throw CocoaError(.fileNoSuchFile)
 		}

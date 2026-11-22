@@ -1,4 +1,5 @@
 import AppKit
+import WebRendering
 import SwiftUI
 
 /// The native agent transcript (ADR-014): an `NSTableView` of hosted SwiftUI rows, fed `AgentChat`'s items.
@@ -55,7 +56,7 @@ public final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NS
 	private var wheelMonitor: Any?
 	/// Draws the rows' Mermaid diagrams, in the web renderer, as the previews draw them.
 	private let renderer: MermaidRenderer
-	/// The diagrams' colors, the web renderer's CSS variables for the view's appearance (`DiagramPalette`); the rows' own
+	/// The diagrams' colors, the web renderer's CSS variables for the view's appearance (`WebPalette`, followed by `PaletteFollower`); the rows' own
 	/// colors are the system's, which follow the appearance by themselves.
 	var diagramTheme: [String: String] = [:] {
 		didSet {
@@ -103,21 +104,14 @@ public final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NS
 			self, selector: #selector(boundsChanged), name: NSView.boundsDidChangeNotification, object: contentView)
 		NotificationCenter.default.addObserver(
 			self, selector: #selector(frameChanged), name: NSView.frameDidChangeNotification, object: contentView)
-		// The accent color can change with no change of appearance.
-		NotificationCenter.default.addObserver(
-			self, selector: #selector(systemColorsChanged), name: NSColor.systemColorsDidChangeNotification, object: nil)
 		paletteChanged()
+		follower = PaletteFollower(self) { [weak self] in self?.paletteChanged() }
 	}
 
-	public override func viewDidChangeEffectiveAppearance() {
-		super.viewDidChangeEffectiveAppearance()
-		paletteChanged()
-	}
-
-	@objc private func systemColorsChanged() { paletteChanged() }
+	private var follower: PaletteFollower?
 
 	private func paletteChanged() {
-		diagramTheme = DiagramPalette.variables(for: effectiveAppearance)
+		diagramTheme = WebPalette.variables(for: effectiveAppearance, page: .windowBackgroundColor)
 	}
 
 	required init?(coder: NSCoder) { fatalError("not used") }

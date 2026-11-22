@@ -400,7 +400,7 @@ export class Bridge {
     await this.request('POST', '/test/agent-chat', { action: 'keepPaused', value });
   }
 
-  guide(): Promise<{ text: string; error: string | null }> {
+  guide(): Promise<{ text: string; background: string; error: string | null }> {
     return this.request('GET', '/test/guide');
   }
 

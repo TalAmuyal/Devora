@@ -68,6 +68,7 @@ Types of changes:
 
 ### Changed
 
+- Devora Sapphire's Markdown previews and User Guide are drawn in the system's colors and follow the Appearance setting, light or dark, and the accent color, live, keeping the reader's place; they no longer use the dark Catppuccin theme
 - Devora Sapphire's terminals follow the Appearance setting, light or dark, live, and their default look changes from Catppuccin Macchiato to Selenized; User Defaults' Terminal colors (in Terminal & Session) switches between Selenized, Catppuccin and Gruvbox, each tuned to read in both.
 - Devora Sapphire's agent transcript and its Mermaid diagrams are drawn in the system's colors and follow the Appearance setting, light or dark, and the accent color, instead of the dark Catppuccin theme; code blocks have a visible edge in both
 - Devora no longer pins the Opus, Sonnet and Haiku tier models when you haven't set them, so Claude Code picks them: with the default `opusplan`, planning runs on Claude Code's current Opus, and execution moves from Opus 4.8 to Claude Code's current Sonnet, which may differ in cost and behavior. Models you set yourself stay as they are, and the outdated model suggestions are gone from the Claude Launch Settings

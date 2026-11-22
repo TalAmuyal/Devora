@@ -3,12 +3,11 @@
 //! Every export returns `Result`, since a panic in an infallible export is an uncatchable crash on the Swift side.
 //! The records here are the FFI shapes of the core's data; the crates behind `devora-core` stay UniFFI-free.
 
-use std::collections::HashMap;
 use std::fmt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use devora_core::{config, state, theme, workspace};
+use devora_core::{config, state, workspace};
 
 mod agent_settings;
 mod agents;
@@ -346,18 +345,6 @@ impl DevoraCore {
                 .into_owned(),
         )
     }
-
-    /// Resolve the theme bundled by both apps from their resource directory.
-    pub fn bundled_theme_path(&self, resource_dir: String) -> Result<String, CoreError> {
-        Ok(theme::bundled_theme_path(Path::new(&resource_dir))
-            .to_string_lossy()
-            .into_owned())
-    }
-
-    /// The theme file's colors, keyed by the CSS custom property names the UIs share.
-    pub fn load_theme(&self, path: String) -> Result<HashMap<String, String>, CoreError> {
-        Ok(theme::load_theme(Path::new(&path))?)
-    }
 }
 
 #[cfg(test)]
@@ -627,28 +614,5 @@ mod tests {
                 .unwrap(),
             guide.to_string_lossy()
         );
-    }
-
-    #[test]
-    fn loads_a_theme_and_reports_a_missing_one() {
-        let tmp = tempfile::tempdir().unwrap();
-        let core = core_with_config(tmp.path(), "{}");
-        let theme_path = PathBuf::from(
-            core.bundled_theme_path(tmp.path().to_string_lossy().into_owned())
-                .unwrap(),
-        );
-        fs::create_dir_all(theme_path.parent().unwrap()).unwrap();
-        fs::write(&theme_path, "background #24273A\n").unwrap();
-
-        let tokens = core
-            .load_theme(theme_path.to_string_lossy().into_owned())
-            .unwrap();
-        let missing = core.load_theme(tmp.path().join("nope.conf").to_string_lossy().into_owned());
-
-        assert_eq!(
-            tokens.get("--color-terminal-bg").map(String::as_str),
-            Some("#24273A")
-        );
-        assert!(missing.is_err());
     }
 }

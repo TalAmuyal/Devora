@@ -8,3 +8,4 @@ The renderer signals readiness to the host before receiving its content and them
 
 Sapphire's agent transcript is native; its Mermaid diagrams are drawn by this renderer in a hidden web view (`devoraRender`), as the previews draw them.
 Mermaid's colors come from the page's CSS variables (`mermaidConfig`); `--color-scheme: light` draws for a light page, and without it (Ember's themes) diagrams are drawn for a dark one; a page that names its scheme also gets edge labels on its own color (`--color-bg`) rather than Mermaid's boxes.
+Sapphire sets every color variable the renderer reads from the system's colors (`WebPalette` in `project-sapphire/Packages/TranscriptKit`, whose `WebPaletteTests` fail when a stylesheet or `cssVar` reads a color it doesn't set), so a new color variable here needs a value there.

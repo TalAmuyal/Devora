@@ -24,5 +24,6 @@ let package = Package(
 			dependencies: ["WebRendering", .product(name: "Markdown", package: "swift-markdown")]
 		),
 		.testTarget(name: "TranscriptKitTests", dependencies: ["TranscriptKit", "TestSupport"]),
+		.testTarget(name: "WebRenderingTests", dependencies: ["WebRendering"]),
 	]
 )

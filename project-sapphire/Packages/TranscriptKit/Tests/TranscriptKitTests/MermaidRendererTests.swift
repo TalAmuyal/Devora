@@ -4,6 +4,7 @@ import Testing
 import TestSupport
 
 @testable import TranscriptKit
+import WebRendering
 
 /// A drawer that answers on the main actor's next turn, or once its `gate` opens; fails the sources it is told to,
 /// never answers for the `hanging` ones, and records how many draws ran at once. Nothing in it takes time.
@@ -278,7 +279,7 @@ struct TranscriptDiagramTests {
 		#expect(drawer.drawn.count == 1, "Drawn once, light")
 
 		shown.window.appearance = NSAppearance(named: .darkAqua)
-		#expect(shown.view.diagramTheme == DiagramPalette.variables(for: NSAppearance(named: .darkAqua)!))
+		#expect(shown.view.diagramTheme == WebPalette.variables(for: NSAppearance(named: .darkAqua)!, page: .windowBackgroundColor))
 		// The rows showing are rebuilt on the next layout pass, which an offscreen window only gets when asked.
 		shown.view.layoutSubtreeIfNeeded()
 		try await eventually { drawer.drawn.count == 2 && diagrams(shown.view)["drawn"] == 1 }
@@ -290,7 +291,7 @@ struct TranscriptDiagramTests {
 		defer { shown.window.close() }
 		shown.view.diagramTheme = ["--color-accent": "#000000"]
 		NotificationCenter.default.post(name: NSColor.systemColorsDidChangeNotification, object: nil)
-		#expect(shown.view.diagramTheme == DiagramPalette.variables(for: shown.view.effectiveAppearance))
+		#expect(shown.view.diagramTheme == WebPalette.variables(for: shown.view.effectiveAppearance, page: .windowBackgroundColor))
 	}
 
 	@Test func aDiagramShowsAPlaceholderThenItsImageAtTheBottom() async throws {
