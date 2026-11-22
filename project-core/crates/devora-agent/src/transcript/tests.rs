@@ -496,3 +496,14 @@ fn a_reply_claude_code_made_up_itself_changes_no_model() {
     assert!(model_rows(&t).is_empty());
     assert_eq!(t.latest_model(), Some("claude-opus-5-5"));
 }
+
+#[test]
+fn a_first_reply_from_a_fallback_adds_no_row_but_keeps_its_sentence() {
+    let mut t = Transcript::new(vec![], "cli".into());
+    for sent in overloaded_turns().into_iter().take(5) {
+        message(&mut t, sent);
+    }
+    assert!(model_rows(&t).is_empty());
+    assert_eq!(t.latest_model(), Some("claude-sonnet-5-5"));
+    assert_eq!(t.fallback_note(), Some(FALLBACK_SENTENCE));
+}

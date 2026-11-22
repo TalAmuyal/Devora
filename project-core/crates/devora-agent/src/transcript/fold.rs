@@ -434,12 +434,14 @@ impl Transcript {
     /// this model; a repeated fallback to the model already replying adds nothing.
     fn reply_model(&mut self, model: Option<&str>) -> Option<TranscriptChange> {
         let model = model.filter(|model| crate::protocol::is_model(model))?;
-        let previous = self.latest_model.replace(model.to_owned())?;
-        if previous == model {
+        let previous = self.latest_model.replace(model.to_owned());
+        if previous.as_deref() == Some(model) {
             return None;
         }
+        // The first reply has no row, but a fallback it came from is still what the widget explains.
         let fallback = self.fallback.take().filter(|(to, _)| to == model);
         self.fallback_note = fallback.as_ref().map(|(_, content)| content.clone());
+        let previous = previous?;
         let text = match &fallback {
             Some((_, content)) => content.clone(),
             None => format!("Model changed: {previous} → {model}"),

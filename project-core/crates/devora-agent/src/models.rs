@@ -108,7 +108,7 @@ impl ModelList {
         self.models
             .iter()
             .filter(|model| model.value != "default")
-            .find(|model| model.resolved_model.as_deref().unwrap_or(&model.value) == id)
+            .find(|model| same_model(model.resolved_model.as_deref().unwrap_or(&model.value), id))
             .map(|model| model.display_name.as_str())
     }
 
@@ -124,16 +124,17 @@ impl ModelList {
     /// Whether a reply from `model` is what an agent set to `setting` runs: what the setting resolves to, or for
     /// `opusplan` its Opus or its Sonnet. A setting this list can't resolve expects anything, rather than a guess.
     pub fn expects(&self, setting: &str, model: &str) -> bool {
-        if setting == model {
+        if same_model(setting, model) {
             return true;
         }
         if setting == "opusplan" {
-            return ["opus", "sonnet"]
-                .iter()
-                .any(|alias| self.resolve(alias) == Some(model));
+            return ["opus", "sonnet"].iter().any(|alias| {
+                self.resolve(alias)
+                    .is_some_and(|resolved| same_model(resolved, model))
+            });
         }
         self.resolve(setting)
-            .is_none_or(|resolved| resolved == model)
+            .is_none_or(|resolved| same_model(resolved, model))
     }
 
     /// What an agent's model can be: every entry but Claude Code's `default`, which is a choice rather than a model, in
@@ -336,6 +337,20 @@ pub fn short_id(id: &str) -> String {
     }
 }
 
+/// Whether two model IDs name the same model: equal, or equal but for a snapshot date at the end. The API answers a
+/// request for an undated ID with its dated snapshot (`claude-sonnet-4-5` with `claude-sonnet-4-5-20250929`).
+pub fn same_model(a: &str, b: &str) -> bool {
+    a == b || undated(a) == undated(b)
+}
+
+/// `id` without a snapshot date at its end (`-20250929`).
+fn undated(id: &str) -> &str {
+    match id.rsplit_once('-') {
+        Some((base, date)) if date.len() == 8 && date.bytes().all(|b| b.is_ascii_digit()) => base,
+        _ => id,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -422,6 +437,7 @@ mod tests {
                 option("opus", opus, "Opus 5.5"),
                 option("sonnet", "claude-sonnet-5-5", "Sonnet 5.5"),
                 option("claude-opus-4-8", "claude-opus-4-8", "Opus 4.8"),
+                option("claude-sonnet-4-5", "claude-sonnet-4-5", "Sonnet 4.5"),
             ],
         }
     }
@@ -433,6 +449,9 @@ mod tests {
         assert!(!list.expects("opus", "claude-sonnet-5-5"), "a fallback");
         assert!(list.expects("claude-opus-4-8", "claude-opus-4-8"));
         assert!(!list.expects("claude-opus-4-8", "claude-opus-5-5"));
+        // Asked for an undated ID, the API answers with its dated snapshot.
+        assert!(list.expects("claude-sonnet-4-5", "claude-sonnet-4-5-20250929"));
+        assert!(!list.expects("claude-sonnet-4-5", "claude-sonnet-5-5"));
         // The profile pins the Opus tier to an older model: a reply from it is what the agent runs.
         let pinned = tiers("claude-opus-4-8");
         assert!(pinned.expects("opus", "claude-opus-4-8"));
@@ -460,7 +479,17 @@ mod tests {
             "not Claude Code's default"
         );
         assert_eq!(list.name_of("claude-opus-4-8"), Some("Opus 4.8"));
-        assert_eq!(list.name_of("claude-sonnet-4-5-20250929"), None);
+        assert_eq!(
+            list.name_of("claude-sonnet-4-5-20250929"),
+            Some("Sonnet 4.5"),
+            "a dated snapshot is its undated model"
+        );
+        assert_eq!(list.name_of("claude-haiku-4-5-20251001"), None);
+        assert!(same_model(
+            "claude-sonnet-4-5",
+            "claude-sonnet-4-5-20250929"
+        ));
+        assert!(!same_model("claude-opus-4-8", "claude-opus-4-7"));
         assert_eq!(short_id("claude-sonnet-4-5-20250929"), "sonnet-4-5");
         assert_eq!(short_id("claude-opus-5"), "opus-5");
         assert_eq!(
