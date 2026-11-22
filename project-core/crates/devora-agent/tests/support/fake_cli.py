@@ -7,10 +7,6 @@ import pathlib
 import sys
 import time
 
-if "--version" in sys.argv:
-    print(os.environ.get("DEVORA_FAKE_VERSION", "2.1.316 (Claude Code)"))
-    sys.exit(0)
-
 args = sys.argv[1:]
 def argument(name):
     return args[args.index(name) + 1]
@@ -23,6 +19,13 @@ recording = [json.loads(line) for line in (root / "basic.jsonl").read_text().spl
 def recorded(kind):
     return copy.deepcopy(next(row["msg"] for row in recording
         if isinstance(row.get("msg"), dict) and row["msg"].get("type") == kind))
+
+# The version of the recording it answers with, as a real CLI's `--version` agrees with its own initialize reply: the core
+# caches the model list per CLI version, and a fake that disagreed would never be served from that cache.
+if "--version" in sys.argv:
+    recorded_version = recorded("control_response")["response"]["response"]["claude_code_version"]
+    print(os.environ.get("DEVORA_FAKE_VERSION", f"{recorded_version} (Claude Code)"))
+    sys.exit(0)
 
 def report(value):
     with open(os.environ["DEVORA_FAKE_REPORT"], "a") as stream:
@@ -123,6 +126,10 @@ for line in sys.stdin:
             emit({"type":"fake_control_waiting"})
             continue
         if subtype == "initialize":
+            if session_id is None and os.environ.get("DEVORA_FAKE_PROBE_STALL"):
+                # A model lookup that never gets its answer, for ending it from outside.
+                report({"kind":"probe-stalled","pid":os.getpid()})
+                continue
             if os.environ.get("DEVORA_FAKE_INIT_ERROR"):
                 emit({"type":"control_response","response":{"subtype":"error","request_id":message["request_id"],"error":"initialize refused"}})
                 continue

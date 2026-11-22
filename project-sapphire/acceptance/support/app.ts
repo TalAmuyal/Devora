@@ -1,6 +1,7 @@
 /** Launching, quitting and killing the app under test. */
 
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
+import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { hangWatchdog } from '../../../acceptance/hang-watchdog';
 import { Bridge, type AppState } from './bridge';
@@ -170,5 +171,39 @@ export async function shutdown(app: LaunchedApp): Promise<void> {
       catch { await stop(app.app, 'SIGKILL', 3000); }
     }
     await waitForAgentChildren(children);
+  }
+}
+
+/** The processes whose command or environment names `dir` (`ps -E` shows the environment), as `pid command` lines. */
+function processesIn(dir: string): string[] {
+  const rows = execFileSync('ps', ['-wwEaxo', 'pid=,command='], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+  return rows.split('\n').filter(line => line.includes(dir)).map(line => line.trim().slice(0, 300));
+}
+
+/** What's left under `dir`: each file's path, size and last change. */
+function contents(dir: string): string[] {
+  if (!fs.existsSync(dir)) return [];
+  return fs.readdirSync(dir, { recursive: true, encoding: 'utf8' }).map(entry => {
+    const stat = fs.lstatSync(path.join(dir, entry));
+    return `${entry} (${stat.size} bytes, changed ${stat.mtime.toISOString()})`;
+  });
+}
+
+/** Removes a scenario's directory once no fake CLI working in it is left: a model lookup the app started can outlive its
+ * quit, no longer the app's child, and its report would land in the directory as it's deleted. If the delete still
+ * fails, the error says what was left and what was still running there. */
+export async function removeScenarioDir(dir: string): Promise<void> {
+  const deadline = Date.now() + 3000;
+  while (processesIn(dir).some(line => line.includes(FAKE_CLAUDE)) && Date.now() < deadline) {
+    await new Promise(resolve => setTimeout(resolve, 50));
+  }
+  try {
+    fs.rmSync(dir, { recursive: true, force: true });
+  } catch (error) {
+    throw new Error([
+      (error as Error).message,
+      'Left in it:', ...contents(dir).map(line => `  ${line}`),
+      'Still running there:', ...processesIn(dir).map(line => `  ${line}`),
+    ].join('\n'));
   }
 }

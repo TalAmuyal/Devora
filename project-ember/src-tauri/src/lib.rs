@@ -152,10 +152,18 @@ pub fn run() {
                     api.prevent_exit();
                     if !shutting_down.swap(true, Ordering::AcqRel) {
                         let background = app.state::<Arc<background::Background>>().inner().clone();
+                        let models = app
+                            .state::<Arc<devora_core::agents::ModelOptions>>()
+                            .inner()
+                            .clone();
                         let done = shutdown_done.clone();
                         let app = app.clone();
                         std::thread::spawn(move || {
                             background.shutdown();
+                            // A model lookup still asking the CLI would otherwise outlive the app.
+                            tauri::async_runtime::block_on(
+                                models.shutdown(devora_core::agents::MODEL_LOOKUP_GRACE),
+                            );
                             done.store(true, Ordering::Release);
                             app.exit(code.unwrap_or(0));
                         });
