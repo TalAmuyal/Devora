@@ -26,6 +26,10 @@ final class AgentPanelModel {
 			keepPausedSelected: chat.chat?.keepPaused == true)
 	}
 
+	var modelPresentation: AgentModelPresentation {
+		AgentModelPresentation(model: chat.chat?.model, paused: chat.chat?.phase == .paused)
+	}
+
 	var contextPresentation: AgentContextPresentation {
 		AgentContextPresentation(
 			context: chat.chat?.context, phase: chat.chat?.phase, pauseRequested: chat.chat?.pauseRequested == true,
@@ -71,7 +75,7 @@ struct AgentChatPanel: View {
 			}
 			if model.prepared {
 				TranscriptView(
-					items: model.chat.items.map(TranscriptKit.TranscriptItem.init),
+					items: model.chat.items.map { TranscriptKit.TranscriptItem($0, names: model.chat.modelNames) },
 					questions: (model.chat.chat?.questions ?? []).map(TranscriptKit.PermissionQuestion.init),
 					generation: model.chat.chat?.generation ?? 0, hasOlder: model.chat.hasOlder,
 					anchor: model.chat.anchor.map(TranscriptKit.ChatScrollAnchor.init),
@@ -93,7 +97,9 @@ struct AgentChatPanel: View {
 			)
 			.frame(minHeight: 85, idealHeight: 110, maxHeight: 180).padding(8)
 			AgentWidgetBar(
-				context: model.chat.chat?.context, enterSends: model.chat.enterSends,
+				context: model.chat.chat?.context,
+				model: model.modelPresentation,
+				modelNames: Array(Set(model.chat.modelNames.values)).sorted(), enterSends: model.chat.enterSends,
 				pause: model.pausePresentation,
 				compaction: model.contextPresentation,
 				turnRunning: model.chat.chat?.turnRunning == true,
@@ -105,6 +111,7 @@ struct AgentChatPanel: View {
 				onCompactNow: { Task { await model.chat.compactNow() } }
 			)
 			.padding(.horizontal, 12).padding(.bottom, 10)
+			.task { await model.chat.loadModelNames() }
 		}
 		.background(.windowBackground)
 		.accessibilityElement(children: .contain)
@@ -184,6 +191,8 @@ final class PromptTextView: NSTextView {
 /// The row below the prompt, with content-sized widgets and the current turn action on the right.
 struct AgentWidgetBar: View {
 	let context: ChatContext?
+	let model: AgentModelPresentation
+	let modelNames: [String]
 	let enterSends: Bool
 	let pause: AgentPausePresentation
 	let compaction: AgentContextPresentation
@@ -205,6 +214,7 @@ struct AgentWidgetBar: View {
 		HStack(spacing: 12) {
 			AgentContextWidget(context: context)
 				.popover(compaction, onThreshold: onThreshold, onCompactNow: onCompactNow)
+			AgentModelWidget(presentation: model, names: modelNames)
 			AgentPauseWidget(presentation: pause, onPause: onPause, onResume: onResume, onKeepPaused: onKeepPaused)
 			Spacer(minLength: 12)
 			if turnRunning {

@@ -4,6 +4,7 @@ export interface AgentChatState {
   globallyPaused: boolean;
   globallyHeld: boolean;
   pauseWidget: { label: string; tooltip: string; enabled: boolean; keepPaused: boolean; keptPaused: boolean };
+  modelWidget: { label: string; grayed: boolean; mismatch: boolean; tooltip: string; glyphTooltip: string | null };
   context: {
     used: string;
     window: string;

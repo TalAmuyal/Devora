@@ -29,7 +29,8 @@ public enum ItemState: Equatable, Hashable, Sendable {
 
 public enum TranscriptContent: Equatable, Hashable, Sendable {
 	case user(text: String, error: String?)
-	case assistant(text: String)
+	/// `model` is the model that wrote it, as the API names it; none for a reply stored before it was kept.
+	case assistant(text: String, model: String?)
 	case thinking(text: String, signature: String)
 	case tool(toolUseId: String, name: String, inputJson: String, verdict: ToolVerdict?, result: ToolResult?)
 	case system(kind: SystemKind, text: String, detailJson: String)

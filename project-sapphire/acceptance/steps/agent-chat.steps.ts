@@ -166,3 +166,17 @@ Then('the agent transcript draws its Mermaid diagram', async function (this: Sap
 Then('the agent transcript shows the Mermaid source {string} with a warning', async function (this: SapphireWorld, source: string) {
   await this.bridge.waitFor('Mermaid diagram failed', () => this.bridge.agentChat(), s => s.dom.diagrams.failed === 1 && s.dom.text.includes(source));
 });
+Then('the agent model widget shows {string}, as the model it is set to', async function (this: SapphireWorld, label: string) {
+  await this.bridge.waitFor(`the model widget showing ${label}`, () => this.bridge.agentChat(),
+    s => s.modelWidget.label === label && !s.modelWidget.mismatch && !s.modelWidget.grayed);
+});
+Then('the agent model widget shows {string}, not the model it is set to', async function (this: SapphireWorld, label: string) {
+  const chat = await this.bridge.waitFor(`the model widget showing ${label} as a mismatch`, () => this.bridge.agentChat(),
+    s => s.modelWidget.label === label && s.modelWidget.mismatch);
+  assert.match(chat.modelWidget.glyphTooltip ?? '', /set to opus/);
+});
+Then('the agent transcript says once {string}', async function (this: SapphireWorld, text: string) {
+  const chat = await this.bridge.waitFor(`transcript containing ${text}`, () => this.bridge.agentChat(),
+    s => s.dom.text.includes(text) && !s.running);
+  assert.equal(chat.dom.text.split(text).length - 1, 1, `exactly one "${text}"`);
+});

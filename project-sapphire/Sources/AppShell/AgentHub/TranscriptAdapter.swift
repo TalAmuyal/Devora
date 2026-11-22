@@ -1,3 +1,4 @@
+import Foundation
 import CoreBindings
 import TranscriptKit
 
@@ -5,10 +6,31 @@ import TranscriptKit
 /// core. They mirror the core's one to one, and a change to the core's makes this file stop compiling.
 
 extension TranscriptKit.TranscriptItem {
-	init(_ item: CoreBindings.TranscriptItem) {
+	/// `names` are the models' names by full ID, which a model-change row shows instead of the IDs the core gives it.
+	init(_ item: CoreBindings.TranscriptItem, names: [String: String]) {
 		self.init(
 			sequence: item.sequence, cliSession: item.cliSession, parentToolUseId: item.parentToolUseId,
-			state: TranscriptKit.ItemState(item.state), content: TranscriptKit.TranscriptContent(item.content))
+			state: TranscriptKit.ItemState(item.state),
+			content: Self.namingModels(TranscriptKit.TranscriptContent(item.content), names: names))
+	}
+
+	/// A model-change row in the models' names, with its spoken form ("from … to …") in its detail as `spoken`. One the CLI
+	/// worded (a fallback) keeps its sentence; a model with no name keeps its ID.
+	private static func namingModels(
+		_ content: TranscriptKit.TranscriptContent, names: [String: String]
+	) -> TranscriptKit.TranscriptContent {
+		guard case .system(.modelChanged, let text, let detailJson) = content,
+			let detail = try? JSONSerialization.jsonObject(with: Data(detailJson.utf8)) as? [String: Any],
+			let from = detail["from"] as? String, let to = detail["to"] as? String
+		else { return content }
+		let (fromName, toName) = (names[from] ?? from, names[to] ?? to)
+		let fallback = detail["fallback"] as? Bool == true
+		var named = detail
+		named["spoken"] = fallback ? text : "Model changed from \(fromName) to \(toName)"
+		let namedJson = (try? JSONSerialization.data(withJSONObject: named)).flatMap { String(data: $0, encoding: .utf8) }
+		return .system(
+			kind: .modelChanged, text: fallback ? text : "Model changed: \(fromName) → \(toName)",
+			detailJson: namedJson ?? detailJson)
 	}
 }
 
@@ -28,7 +50,7 @@ extension TranscriptKit.TranscriptContent {
 	init(_ content: CoreBindings.TranscriptContent) {
 		switch content {
 		case .user(let text, let error): self = .user(text: text, error: error)
-		case .assistant(let text, _): self = .assistant(text: text)
+		case .assistant(let text, let model): self = .assistant(text: text, model: model)
 		case .thinking(let text, let signature): self = .thinking(text: text, signature: signature)
 		case .tool(let toolUseId, let name, let inputJson, let verdict, let result):
 			self = .tool(

@@ -154,6 +154,11 @@ final class TestBridge {
 				observation["globallyPaused"] = panel.chat.globallyPaused
 				observation["globallyHeld"] = panel.chat.chat?.globallyHeld ?? false
 				observation["running"] = panel.chat.chat?.turnRunning ?? false
+				let model = panel.modelPresentation
+				observation["modelWidget"] = [
+					"label": model.label, "grayed": model.grayed, "mismatch": model.mismatch, "tooltip": model.tooltip,
+					"glyphTooltip": model.glyphTooltip ?? NSNull(),
+				] as [String: Any]
 				let pause = panel.pausePresentation
 				observation["pauseWidget"] = [
 					"label": pause.label, "tooltip": pause.tooltip,

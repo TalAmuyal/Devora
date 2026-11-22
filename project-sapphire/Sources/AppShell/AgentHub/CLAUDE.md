@@ -46,7 +46,8 @@ Drafts and sequence/offset anchors use the canonical profile and space name, so 
 Stop interrupts with no keyboard binding.
 Pause reserves a stop after the running turn, rejects new sends while pending, and leaves permission answers available.
 The facade queues `SpaceHandle::pause_after_turn` before returning, and the space actor makes the pause-versus-compaction decision.
-`AgentWidgetBar`, below the editor, holds the content-sized Context and Pause widgets on the left and Send on the right, whose tooltip and accessibility hint carry the Enter hint.
+`AgentWidgetBar`, below the editor, holds the Context, Model and Pause widgets on the left and Send on the right, whose tooltip and accessibility hint carry the Enter hint.
+`AgentModelWidget` shows the model the agent's replies come from (the core's `ChatModel`, through `AgentModelPresentation`): its name, else its ID as it is, cut at the tail; "Pending", grayed, until a reply is known (a stored conversation continues from its latest reply); grayed while paused. Its width is fixed, measured from the names of the models Claude Code offers the profile (`AgentChat.modelNames`, by model ID, which also names the transcript's model-change rows) and "Pending", so the widgets beside it never move. A reply from a model the agent isn't set to shows only in its glyph, orange, whose own tooltip explains it (what answered, what it's set to, and Claude Code's sentence for a fallback); VoiceOver reads it in words. The tooltip has the full ID and the setting.
 A running turn replaces Send with Stop in that position.
 `AgentPauseWidget` maps the typed phase and pause flags through `AgentPausePresentation` into Pause, disabled Pausing…, Resume, or a system-colored Paused capsule, with the global resume hint in its tooltip and accessibility description.
 Keep paused is a native reversible switch that selects whether this globally held agent remains paused when Devora resumes.

@@ -19,7 +19,7 @@ private func entry(_ sequence: UInt64, _ content: TranscriptContent) -> Transcri
 	TranscriptItem(sequence: sequence, cliSession: "s", parentToolUseId: nil, state: .complete, content: content)
 }
 
-private func reply(_ sequence: UInt64) -> TranscriptItem { entry(sequence, .assistant(text: "Reply \(sequence).")) }
+private func reply(_ sequence: UInt64) -> TranscriptItem { entry(sequence, .assistant(text: "Reply \(sequence).", model: nil)) }
 
 private func toolRow(_ sequence: UInt64) -> TranscriptItem {
 	entry(sequence, .tool(toolUseId: "t\(sequence)", name: "Bash", inputJson: "{}", verdict: nil, result: nil))

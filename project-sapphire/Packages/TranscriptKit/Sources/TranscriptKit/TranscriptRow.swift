@@ -36,7 +36,7 @@ public struct TranscriptRowModel: Equatable {
 	/// The Markdown a row renders: a user's prompt, a reply or a thought. None for the rest.
 	static func markdown(of content: TranscriptContent) -> String? {
 		switch content {
-		case .user(let text, _), .assistant(let text), .thinking(let text, _): text
+		case .user(let text, _), .assistant(let text, _), .thinking(let text, _): text
 		case .tool, .system, .unknown: nil
 		}
 	}
@@ -45,7 +45,7 @@ public struct TranscriptRowModel: Equatable {
 	var plainText: String {
 		switch item.content {
 		case .user(let text, let error): text + (error.map { "\n\n\($0)" } ?? "")
-		case .assistant(let text): text
+		case .assistant(let text, _): text
 		case .thinking(let text, _): "Thinking\n\(text)"
 		case .tool(_, let name, let input, let verdict, let result):
 			[name, verdict.map { "Judgess \($0.kind)" }, prettyJSON(input), result?.text ?? "Awaiting result…"]
@@ -58,7 +58,7 @@ public struct TranscriptRowModel: Equatable {
 	/// What Copy puts on the pasteboard: the item as written, its Markdown included, rather than as drawn.
 	var source: String {
 		switch item.content {
-		case .user(let text, _), .assistant(let text), .thinking(let text, _): text
+		case .user(let text, _), .assistant(let text, _), .thinking(let text, _): text
 		case .tool(_, let name, let input, _, let result): [name, prettyJSON(input), result?.text].compactMap { $0 }.joined(separator: "\n\n")
 		case .system, .unknown: plainText
 		}
@@ -80,9 +80,19 @@ public struct TranscriptRowModel: Equatable {
 		return parts.joined(separator: ", ")
 	}
 
+	/// The row's hover title: its sequence, and for a reply the model that wrote it.
+	var helpTitle: String {
+		guard case .assistant(_, let model?) = item.content else { return "#\(item.sequence)" }
+		return "#\(item.sequence) · \(model)"
+	}
+
 	/// What VoiceOver reads after the kind: the text, without what a collapsed row hides.
 	var accessibilityValue: String {
 		switch item.content {
+		case .system(.modelChanged, _, let detailJson):
+			// The host words the change for speech ("from … to …"), since an arrow reads poorly.
+			(try? JSONSerialization.jsonObject(with: Data(detailJson.utf8)) as? [String: Any])?["spoken"] as? String
+				?? plainText
 		case .thinking(let text, _): expanded ? text : ""
 		case .tool(_, _, let input, _, let result): expanded ? [prettyJSON(input), result?.text ?? "Awaiting result…"].joined(separator: "\n") : ""
 		default: plainText
@@ -103,7 +113,7 @@ struct TranscriptRow: View {
 			.kindMarker(model.kind, unfinished: model.item.state == .interrupted || model.item.state == .failed)
 			.padding(.horizontal, 16).padding(.vertical, 6)
 			.textSelection(.enabled)
-			.help("#\(model.item.sequence)")
+			.help(model.helpTitle)
 			.environment(\.openURL, OpenURLAction { Self.opensLink($0) ? .systemAction : .discarded })
 			.environment(\.diagrams, model.diagrams)
 			.contextMenu {
@@ -133,7 +143,7 @@ struct TranscriptRow: View {
 				markdown(text)
 				if let error { Text(error).foregroundStyle(theme.error) }
 			}
-		case .assistant(let text):
+		case .assistant(let text, _):
 			markdown(text)
 		case .thinking(let text, _):
 			VStack(alignment: .leading, spacing: 4) {
