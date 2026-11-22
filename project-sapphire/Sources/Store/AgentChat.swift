@@ -120,6 +120,7 @@ public final class AgentChat {
 			case .usage(let json): value.usageJson = json
 			case .context(let context): value.context = context
 			case .model(let model): value.model = model
+			case .step(let step): value.step = step
 			}
 			chat = value
 		default: return false

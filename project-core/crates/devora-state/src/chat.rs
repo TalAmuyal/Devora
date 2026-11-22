@@ -1,6 +1,6 @@
 //! The Store's typed live chat projection. Token patches update existing items
 //! in memory. The space actor owns durable whole items in its own database.
-use crate::{StateError, TranscriptChange, TranscriptItem};
+use crate::{ItemState, StateError, TranscriptChange, TranscriptContent, TranscriptItem};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ChatPhase {
@@ -55,6 +55,66 @@ pub struct ChatModel {
     pub fallback: Option<String>,
 }
 
+/// What a running turn is doing now, for the line beside the chat's spinner, and since when: the step's start, in
+/// milliseconds since the Unix epoch on the core's clock, kept while the step stays the same and taken again when it
+/// changes. It lives only in memory: a turn doesn't survive a relaunch.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ChatStep {
+    pub activity: StepActivity,
+    pub since_ms: u64,
+}
+
+/// A turn's current step, from its questions and its latest item; two steps are the same step only for the same tool
+/// call or question, so the next Bash starts its own.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum StepActivity {
+    /// A tool waits for the user's answer to its permission question.
+    Waiting { tool: String, request_id: String },
+    /// A tool call has no result yet.
+    Running { tool: String, tool_use_id: String },
+    /// A thought is streaming.
+    Thinking,
+    /// A reply is streaming.
+    Writing,
+    /// Anything else while the turn runs: the model is on its way to the next step.
+    Working,
+}
+
+impl StepActivity {
+    /// The step a chat is on, or none when no turn runs and no question waits.
+    fn of(chat: &Chat) -> Option<Self> {
+        if let Some(question) = chat.questions.last() {
+            return Some(Self::Waiting {
+                tool: question.tool_name.clone(),
+                request_id: question.request_id.clone(),
+            });
+        }
+        if !chat.turn_running {
+            return None;
+        }
+        let Some(item) = chat.items.last() else {
+            return Some(Self::Working);
+        };
+        let unfinished = matches!(item.state, ItemState::Pending | ItemState::Streaming);
+        Some(match &item.content {
+            TranscriptContent::Tool {
+                name,
+                tool_use_id,
+                result: None,
+                ..
+            } if !matches!(item.state, ItemState::Interrupted | ItemState::Failed) => {
+                Self::Running {
+                    tool: name.clone(),
+                    tool_use_id: tool_use_id.clone(),
+                }
+            }
+            TranscriptContent::Thinking { .. } if unfinished => Self::Thinking,
+            TranscriptContent::Assistant { .. } if unfinished => Self::Writing,
+            _ => Self::Working,
+        })
+    }
+}
+
 /// Where an agent's compaction is, as far as the user can act on it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CompactionProgress {
@@ -81,6 +141,7 @@ pub struct Chat {
     pub usage_json: Option<String>,
     pub context: Option<ChatContext>,
     pub model: Option<ChatModel>,
+    pub step: Option<ChatStep>,
 }
 
 /// What an agent with a live runtime is doing, for knowing when everyone has stopped.
@@ -115,21 +176,55 @@ pub struct RunningAgents {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ChatUpdate {
-    GlobalHold { held: bool },
-    KeepPaused { keep_paused: bool },
-    PauseRequested { requested: bool },
-    Turn { running: bool },
-    Generation { generation: u64 },
-    Phase { phase: ChatPhase },
-    Ready { session_id: String },
-    Restore { items: Vec<TranscriptItem> },
-    Transcript { change: TranscriptChange },
-    Failure { message: String },
-    PermissionRequested { question: PermissionQuestion },
-    PermissionRemoved { request_id: String },
-    Usage { payload_json: String },
-    Context { context: ChatContext },
-    Model { model: ChatModel },
+    GlobalHold {
+        held: bool,
+    },
+    KeepPaused {
+        keep_paused: bool,
+    },
+    PauseRequested {
+        requested: bool,
+    },
+    Turn {
+        running: bool,
+    },
+    Generation {
+        generation: u64,
+    },
+    Phase {
+        phase: ChatPhase,
+    },
+    Ready {
+        session_id: String,
+    },
+    Restore {
+        items: Vec<TranscriptItem>,
+    },
+    Transcript {
+        change: TranscriptChange,
+    },
+    Failure {
+        message: String,
+    },
+    PermissionRequested {
+        question: PermissionQuestion,
+    },
+    PermissionRemoved {
+        request_id: String,
+    },
+    Usage {
+        payload_json: String,
+    },
+    Context {
+        context: ChatContext,
+    },
+    Model {
+        model: ChatModel,
+    },
+    /// The chat's step changed; the reducer publishes it after the update that changed it.
+    Step {
+        step: Option<ChatStep>,
+    },
 }
 
 /// Named mutations of the transient projection, serialized by Store.
@@ -175,15 +270,18 @@ pub enum ChatEvent {
     },
 }
 
+/// Applies `command` at `now_ms` (the core's clock, for a step's start), returning the events it publishes: an update
+/// that changes the chat's step is followed by that step.
 pub(crate) fn apply(
     chats: &mut Vec<Chat>,
     running: &mut RunningAgents,
     command: ChatCommand,
-) -> Result<ChatEvent, StateError> {
+    now_ms: u64,
+) -> Result<Vec<ChatEvent>, StateError> {
     match command {
         ChatCommand::Running { running: next } => {
             *running = next.clone();
-            Ok(ChatEvent::Running { running: next })
+            Ok(vec![ChatEvent::Running { running: next }])
         }
         ChatCommand::Start { tab, generation } => {
             let chat = Chat {
@@ -201,14 +299,15 @@ pub(crate) fn apply(
                 usage_json: None,
                 context: None,
                 model: None,
+                step: None,
             };
             chats.retain(|c| c.tab != tab);
             chats.push(chat.clone());
-            Ok(ChatEvent::Started { chat })
+            Ok(vec![ChatEvent::Started { chat }])
         }
         ChatCommand::Close { tab } => {
             chats.retain(|c| c.tab != tab);
-            Ok(ChatEvent::Closed { tab })
+            Ok(vec![ChatEvent::Closed { tab }])
         }
         ChatCommand::Update {
             tab,
@@ -294,12 +393,242 @@ pub(crate) fn apply(
                 ChatUpdate::Usage { payload_json } => chat.usage_json = Some(payload_json.clone()),
                 ChatUpdate::Context { context } => chat.context = Some(*context),
                 ChatUpdate::Model { model } => chat.model = Some(model.clone()),
+                ChatUpdate::Step { step } => chat.step = step.clone(),
             }
-            Ok(ChatEvent::Updated {
+            let mut events = vec![ChatEvent::Updated {
                 tab,
                 generation,
                 update,
-            })
+            }];
+            let step = StepActivity::of(chat).map(|activity| match &chat.step {
+                Some(step) if step.activity == activity => step.clone(),
+                _ => ChatStep {
+                    activity,
+                    since_ms: now_ms,
+                },
+            });
+            if step != chat.step {
+                chat.step = step.clone();
+                events.push(ChatEvent::Updated {
+                    tab,
+                    generation: chat.generation,
+                    update: ChatUpdate::Step { step },
+                });
+            }
+            Ok(events)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{SystemKind, ToolResult};
+
+    struct Fixture {
+        chats: Vec<Chat>,
+        running: RunningAgents,
+    }
+
+    impl Fixture {
+        fn new() -> Self {
+            let mut fixture = Self {
+                chats: vec![],
+                running: RunningAgents::default(),
+            };
+            fixture.send(
+                ChatCommand::Start {
+                    tab: 1,
+                    generation: 1,
+                },
+                0,
+            );
+            fixture
+        }
+
+        fn send(&mut self, command: ChatCommand, now_ms: u64) -> Vec<ChatEvent> {
+            apply(&mut self.chats, &mut self.running, command, now_ms).unwrap()
+        }
+
+        /// Applies `update` at `now_ms`, returning the step it published, if it changed it.
+        fn update(&mut self, update: ChatUpdate, now_ms: u64) -> Option<Option<ChatStep>> {
+            let events = self.send(
+                ChatCommand::Update {
+                    tab: 1,
+                    generation: 1,
+                    update,
+                },
+                now_ms,
+            );
+            match events.as_slice() {
+                [_] => None,
+                [_, ChatEvent::Updated {
+                    update: ChatUpdate::Step { step },
+                    ..
+                }] => Some(step.clone()),
+                other => panic!("unexpected events {other:?}"),
+            }
+        }
+
+        fn item(
+            &mut self,
+            sequence: u64,
+            state: ItemState,
+            content: TranscriptContent,
+            now_ms: u64,
+        ) -> Option<Option<ChatStep>> {
+            let item = TranscriptItem {
+                sequence,
+                cli_session: "session".into(),
+                parent_tool_use_id: None,
+                state,
+                content,
+            };
+            self.update(
+                ChatUpdate::Transcript {
+                    change: TranscriptChange::upsert(item),
+                },
+                now_ms,
+            )
+        }
+
+        fn step(&self) -> Option<ChatStep> {
+            self.chats[0].step.clone()
+        }
+    }
+
+    fn bash(id: &str, result: Option<&str>) -> TranscriptContent {
+        TranscriptContent::Tool {
+            tool_use_id: id.into(),
+            name: "Bash".into(),
+            input_json: "{}".into(),
+            verdict: None,
+            result: result.map(|text| ToolResult {
+                text: text.into(),
+                content_json: "[]".into(),
+                is_error: false,
+            }),
+        }
+    }
+
+    fn step(activity: StepActivity, since_ms: u64) -> Option<ChatStep> {
+        Some(ChatStep { activity, since_ms })
+    }
+
+    fn running(id: &str) -> StepActivity {
+        StepActivity::Running {
+            tool: "Bash".into(),
+            tool_use_id: id.into(),
+        }
+    }
+
+    #[test]
+    fn a_turns_step_follows_its_latest_item_and_keeps_its_start_while_it_stays_the_same() {
+        let mut chat = Fixture::new();
+        assert_eq!(
+            chat.update(ChatUpdate::Turn { running: true }, 100),
+            Some(step(StepActivity::Working, 100))
+        );
+        let thought = TranscriptContent::Thinking {
+            text: "Hm".into(),
+            signature: String::new(),
+        };
+        assert_eq!(
+            chat.item(1, ItemState::Streaming, thought, 200),
+            Some(step(StepActivity::Thinking, 200))
+        );
+        let more = ChatUpdate::Transcript {
+            change: TranscriptChange::AppendThinking {
+                sequence: 1,
+                text: "m".into(),
+            },
+        };
+        assert_eq!(
+            chat.update(more, 300),
+            None,
+            "the same step publishes nothing"
+        );
+        assert_eq!(chat.step(), step(StepActivity::Thinking, 200));
+        assert_eq!(
+            chat.item(2, ItemState::Complete, bash("t1", None), 400),
+            Some(step(running("t1"), 400))
+        );
+        assert_eq!(
+            chat.item(2, ItemState::Complete, bash("t1", Some("ok")), 500),
+            Some(step(StepActivity::Working, 500))
+        );
+        assert_eq!(
+            chat.item(3, ItemState::Complete, bash("t2", None), 600),
+            Some(step(running("t2"), 600)),
+            "the next Bash is a step of its own"
+        );
+        let reply = TranscriptContent::Assistant {
+            text: "Done".into(),
+            model: None,
+        };
+        assert_eq!(
+            chat.item(4, ItemState::Streaming, reply, 700),
+            Some(step(StepActivity::Writing, 700))
+        );
+        let result = TranscriptContent::System {
+            kind: SystemKind::Result,
+            text: "Turn completed".into(),
+            detail_json: "{}".into(),
+        };
+        assert_eq!(
+            chat.item(5, ItemState::Complete, result, 800),
+            Some(None),
+            "the turn's end ends its step"
+        );
+    }
+
+    #[test]
+    fn a_permission_question_is_the_step_until_it_is_answered() {
+        let mut chat = Fixture::new();
+        chat.update(ChatUpdate::Turn { running: true }, 100);
+        chat.item(1, ItemState::Complete, bash("t1", None), 200);
+        let question = PermissionQuestion {
+            request_id: "q1".into(),
+            tool_name: "Bash".into(),
+            tool_use_id: "t1".into(),
+            input_json: "{}".into(),
+            decision_reason: None,
+            can_always_allow: true,
+            suggested_rules_json: None,
+        };
+        let waiting = StepActivity::Waiting {
+            tool: "Bash".into(),
+            request_id: "q1".into(),
+        };
+        assert_eq!(
+            chat.update(ChatUpdate::PermissionRequested { question }, 300),
+            Some(step(waiting, 300))
+        );
+        assert_eq!(
+            chat.update(
+                ChatUpdate::PermissionRemoved {
+                    request_id: "q1".into()
+                },
+                900
+            ),
+            Some(step(running("t1"), 900)),
+            "once answered, the tool's run is timed from the answer"
+        );
+    }
+
+    #[test]
+    fn a_chat_that_stops_has_no_step() {
+        let mut chat = Fixture::new();
+        chat.update(ChatUpdate::Turn { running: true }, 100);
+        assert_eq!(
+            chat.update(
+                ChatUpdate::Phase {
+                    phase: ChatPhase::Paused
+                },
+                200
+            ),
+            Some(None)
+        );
+        assert_eq!(chat.step(), None);
     }
 }

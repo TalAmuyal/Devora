@@ -34,7 +34,7 @@ struct AgentChatTests {
 		let model = try AgentChat(store: store, core: core, tab: tab, name: "Delta")
 		let chat = Chat(
 			tab: tab.id, generation: 7, phase: .running, turnRunning: false, pauseRequested: false, globallyHeld: false, keepPaused: false,
-			sessionId: "cli", items: [], error: nil, questions: [], usageJson: nil, context: nil, model: nil)
+			sessionId: "cli", items: [], error: nil, questions: [], usageJson: nil, context: nil, model: nil, step: nil)
 		model.apply(.started(chat: chat))
 		let item = TranscriptItem(
 			sequence: 1, cliSession: "cli", parentToolUseId: nil, state: .streaming,

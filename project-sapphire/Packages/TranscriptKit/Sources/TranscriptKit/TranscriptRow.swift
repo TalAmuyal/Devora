@@ -106,12 +106,17 @@ struct TranscriptRow: View {
 	/// Expands or collapses a thinking or tool row.
 	var toggle: () -> Void = {}
 	@Environment(\.transcriptTheme) private var theme
+	@Environment(\.colorScheme) private var scheme
+
+	static let margin: CGFloat = 16
+	/// The room a reply leaves on its right, so that the user's bubbles stand out from it.
+	static let replyTrailing: CGFloat = 48
+	/// How much narrower than its row a reply is, which is the width its diagrams are drawn at.
+	static let replyInset = 2 * margin + replyTrailing
 
 	var body: some View {
-		content
-			.frame(maxWidth: .infinity, alignment: .leading)
-			.kindMarker(model.kind, unfinished: model.item.state == .interrupted || model.item.state == .failed)
-			.padding(.horizontal, 16).padding(.vertical, 6)
+		placed
+			.padding(.horizontal, Self.margin).padding(.vertical, 4)
 			.textSelection(.enabled)
 			.help(model.helpTitle)
 			.environment(\.openURL, OpenURLAction { Self.opensLink($0) ? .systemAction : .discarded })
@@ -136,15 +141,60 @@ struct TranscriptRow: View {
 			}
 	}
 
-	@ViewBuilder private var content: some View {
+	/// The row in the conversation: the user's message in a bubble on the right, the agent's reply as text on the page,
+	/// and the rest (the agent's working, the session's notes, errors) in a grey bubble on the left.
+	@ViewBuilder private var placed: some View {
 		switch model.item.content {
 		case .user(let text, let error):
+			VStack(alignment: .trailing, spacing: 4) {
+				UserBubbleLayout {
+					markdown(text)
+						.foregroundStyle(.white)
+						.environment(\.transcriptTheme, .onBubble)
+						.padding(.horizontal, 12).padding(.vertical, 8)
+						.background(Color(nsColor: .systemBlue), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+				}
+				if let error { Text(error).font(.callout).foregroundStyle(theme.error) }
+			}
+			.frame(maxWidth: .infinity, alignment: .trailing)
+		case .assistant(let text, _):
 			VStack(alignment: .leading, spacing: 4) {
 				markdown(text)
-				if let error { Text(error).foregroundStyle(theme.error) }
+				stateNote
 			}
-		case .assistant(let text, _):
-			markdown(text)
+			.frame(maxWidth: .infinity, alignment: .leading)
+			.padding(.trailing, Self.replyTrailing)
+		default:
+			VStack(alignment: .leading, spacing: 4) {
+				content
+				stateNote
+			}
+			.padding(.horizontal, 10).padding(.vertical, 5)
+			.background(bubbleFill, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+			.frame(maxWidth: .infinity, alignment: .leading)
+			.padding(.trailing, Self.replyTrailing)
+		}
+	}
+
+	/// A grey bubble's fill: tinted red for an error, which shows whatever the system messages' toggle says.
+	private var bubbleFill: Color {
+		model.item.isError ? Color(nsColor: .systemRed).opacity(scheme == .dark ? 0.22 : 0.12) : Color(nsColor: .quaternarySystemFill)
+	}
+
+	/// What became of an item that didn't finish, under it.
+	@ViewBuilder private var stateNote: some View {
+		switch model.item.state {
+		case .interrupted: Label("Interrupted", systemImage: "stop.circle").font(.caption).foregroundStyle(theme.secondary)
+		case .failed: Label("Failed", systemImage: "exclamationmark.triangle").font(.caption).foregroundStyle(theme.error)
+		default: EmptyView()
+		}
+	}
+
+	/// A grey bubble's content.
+	@ViewBuilder private var content: some View {
+		switch model.item.content {
+		case .user, .assistant:
+			EmptyView()
 		case .thinking(let text, _):
 			VStack(alignment: .leading, spacing: 4) {
 				summary { Text("Thinking") }
@@ -167,7 +217,7 @@ struct TranscriptRow: View {
 				}
 			}
 		case .system, .unknown:
-			Text(model.plainText).font(.callout).foregroundStyle(theme.secondary)
+			Text(model.plainText).font(.callout).foregroundStyle(model.item.isError ? theme.text : theme.secondary)
 		}
 	}
 
@@ -222,6 +272,28 @@ private struct VerdictBadge: View {
 		case "defer": Color(red: 0.98, green: 0.75, blue: 0.14)
 		default: .secondary
 		}
+	}
+}
+
+/// The user's bubble: as wide as its text, up to 70% of the row, at the row's trailing edge. A layout rather than a
+/// frame, so that the row's measured height is the bubble's at that width.
+private struct UserBubbleLayout: Layout {
+	static let widthFraction: CGFloat = 0.7
+
+	func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+		guard let bubble = subviews.first else { return .zero }
+		let size = bubble.sizeThatFits(bubbleProposal(proposal.width))
+		return CGSize(width: proposal.width ?? size.width, height: size.height)
+	}
+
+	func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+		guard let bubble = subviews.first else { return }
+		let size = bubble.sizeThatFits(bubbleProposal(bounds.width))
+		bubble.place(at: CGPoint(x: bounds.maxX, y: bounds.minY), anchor: .topTrailing, proposal: ProposedViewSize(size))
+	}
+
+	private func bubbleProposal(_ width: CGFloat?) -> ProposedViewSize {
+		ProposedViewSize(width: width.map { $0 * Self.widthFraction }, height: nil)
 	}
 }
 

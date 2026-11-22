@@ -83,6 +83,7 @@ struct AgentChatPanel: View {
 					onNeedsOlder: { Task { await model.chat.older() } },
 					onAnswer: { id, action, generation in Task { await model.chat.answer(id, action: action, generation: generation) } },
 					onView: { model.transcript = $0 })
+				if let step = model.chat.chat?.step { AgentTurnStatus(step: step) }
 			} else {
 				ProgressView("Opening agent…").frame(maxWidth: .infinity, maxHeight: .infinity)
 			}

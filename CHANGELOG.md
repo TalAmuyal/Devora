@@ -69,6 +69,7 @@ Types of changes:
 
 ### Changed
 
+- Devora Sapphire's agent chat reads as a conversation: your messages are blue bubbles on the right, the agent's replies are text on the page, and tool calls, thinking and the session's notes are grey one-line bubbles that open on a click, errors tinted red; an interrupted reply says so under it. While a turn runs, a spinner under the transcript names what the agent is doing ("Running Bash", "Waiting for your answer: Bash", "Thinking") and for how long ("1m 12s"), which replaces the "Turn completed" row
 - Devora Sapphire's Markdown previews and User Guide are drawn in the system's colors and follow the Appearance setting, light or dark, and the accent color, live, keeping the reader's place; they no longer use the dark Catppuccin theme
 - Devora Sapphire's terminals follow the Appearance setting, light or dark, live, and their default look changes from Catppuccin Macchiato to Selenized; User Defaults' Terminal colors (in Terminal & Session) switches between Selenized, Catppuccin and Gruvbox, each tuned to read in both.
 - Devora Sapphire's agent transcript and its Mermaid diagrams are drawn in the system's colors and follow the Appearance setting, light or dark, and the accent color, instead of the dark Catppuccin theme; code blocks have a visible edge in both
