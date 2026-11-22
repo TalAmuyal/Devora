@@ -76,6 +76,8 @@ public enum SystemKind: Equatable, Hashable, Sendable {
 	case unfinishedFirstPrompt
 	/// Devora restarted the agent's session and asked it to re-check its waits.
 	case restartNotice
+	/// The agent's replies now come from another model.
+	case modelChanged
 }
 
 /// A tool call waiting for the user's answer, shown as a card.

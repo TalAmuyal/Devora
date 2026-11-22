@@ -30,7 +30,7 @@ use crate::protocol::{
 };
 use devora_app::log::Log;
 pub use launch::{Instructions, Plugin, Resume, SessionOptions};
-pub use saved::saved_turn;
+pub use saved::{saved_model, saved_turn};
 use serde_json::{Map, Value};
 use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot, watch};

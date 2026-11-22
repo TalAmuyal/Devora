@@ -1,6 +1,7 @@
 use super::*;
 use crate::protocol::{
-    Content, ContentBlock, ContentDelta, Extensible, KnownMessage, Message, StreamEvent, Turn,
+    Content, ContentBlock, ContentDelta, Extensible, KnownMessage, Message, StreamEvent, System,
+    Turn,
 };
 use crate::session::SessionEvent;
 use serde_json::{json, Value};
@@ -9,6 +10,8 @@ use std::collections::{BTreeMap, BTreeSet};
 #[derive(Default)]
 struct StreamingMessage {
     id: String,
+    /// The model writing it, from its `message_start`.
+    model: Option<String>,
     active: bool,
     blocks: BTreeMap<u64, u64>,
 }
@@ -23,6 +26,12 @@ pub struct Transcript {
     pending_commands: BTreeSet<u64>,
     has_prompt: bool,
     marked_first_prompt: bool,
+    /// The model of the latest reply in the agent's own conversation (not a subagent's).
+    latest_model: Option<String>,
+    /// A fallback the CLI announced this turn, waiting for the reply it names: `(fallback_model, content)`.
+    fallback: Option<(String, String)>,
+    /// The CLI's sentence for the fallback the latest model came from, while replies still come from it.
+    fallback_note: Option<String>,
 }
 
 impl Transcript {
@@ -41,12 +50,14 @@ impl Transcript {
                     }
                 )
         });
+        let latest_model = latest_model(&items);
         Self::restore(
             items,
             session,
             next_sequence,
             has_prompt,
             marked_first_prompt,
+            latest_model,
         )
     }
 
@@ -56,6 +67,7 @@ impl Transcript {
         next_sequence: u64,
         has_prompt: bool,
         marked_first_prompt: bool,
+        latest_model: Option<String>,
     ) -> Self {
         Self {
             items,
@@ -65,6 +77,9 @@ impl Transcript {
             pending_commands: BTreeSet::new(),
             has_prompt,
             marked_first_prompt,
+            latest_model,
+            fallback: None,
+            fallback_note: None,
         }
     }
 
@@ -95,6 +110,22 @@ impl Transcript {
 
     pub fn items(&self) -> &[TranscriptItem] {
         &self.items
+    }
+
+    /// The model of the latest reply in the agent's own conversation, if one is known.
+    pub fn latest_model(&self) -> Option<&str> {
+        self.latest_model.as_deref()
+    }
+
+    /// Continues a conversation whose stored replies name no model (they predate keeping it) from `model`, the latest
+    /// reply's as Claude's saved session has it.
+    pub fn continue_from(&mut self, model: String) {
+        self.latest_model.get_or_insert(model);
+    }
+
+    /// The CLI's sentence for the fallback the latest model came from, while replies still come from it.
+    pub fn fallback_note(&self) -> Option<&str> {
+        self.fallback_note.as_deref()
     }
     fn item_mut(&mut self, sequence: u64) -> Option<&mut TranscriptItem> {
         let index = self
@@ -134,6 +165,7 @@ impl Transcript {
         }
         self.session = session;
         self.streams.clear();
+        self.fallback = None;
     }
 
     fn insert(
@@ -225,6 +257,7 @@ impl Transcript {
     /// Seal unfinished UI items on pause/crash. A fresh first conversation also
     /// gets an explicit marker identifying the prompt absent from the new CLI.
     pub fn interrupt(&mut self, fresh_first: bool) -> Vec<TranscriptChange> {
+        self.fallback = None;
         let mut changes = vec![];
         for item in &mut self.items {
             if item.cli_session == self.session
@@ -243,6 +276,13 @@ impl Transcript {
     }
 
     pub fn event(&mut self, event: &SessionEvent) -> Vec<TranscriptChange> {
+        // A waiting fallback belongs to the turn that announced it; a session ending ends that turn.
+        if matches!(
+            event,
+            SessionEvent::Exited { .. } | SessionEvent::Failed(_) | SessionEvent::Stopped(_)
+        ) {
+            self.fallback = None;
+        }
         match event {
             SessionEvent::Message(message) => self.message(message),
             SessionEvent::Ready {
@@ -361,15 +401,26 @@ impl Transcript {
                     .map(str::to_owned);
                 self.stream(event, parent)
             }
-            Message::Known(KnownMessage::Result(result)) => vec![self.system(
-                SystemKind::Result,
-                if result.is_error {
-                    "Turn ended with an error"
-                } else {
-                    "Turn completed"
-                },
-                json!(result),
-            )],
+            Message::Known(KnownMessage::System(System::ModelFallback {
+                fallback_model,
+                content,
+                ..
+            })) => {
+                self.fallback = Some((fallback_model.clone(), content.clone()));
+                vec![]
+            }
+            Message::Known(KnownMessage::Result(result)) => {
+                self.fallback = None;
+                vec![self.system(
+                    SystemKind::Result,
+                    if result.is_error {
+                        "Turn ended with an error"
+                    } else {
+                        "Turn completed"
+                    },
+                    json!(result),
+                )]
+            }
             Message::Known(KnownMessage::System(_))
             | Message::Known(KnownMessage::ControlRequest { .. })
             | Message::Known(KnownMessage::ControlResponse { .. })
@@ -378,7 +429,34 @@ impl Transcript {
         }
     }
 
+    /// Notes the model of a reply in the agent's own conversation, and returns the row saying it changed when
+    /// it differs from the previous reply's. A fallback the CLI announced this turn words the row when it names
+    /// this model; a repeated fallback to the model already replying adds nothing.
+    fn reply_model(&mut self, model: Option<&str>) -> Option<TranscriptChange> {
+        let model = model.filter(|model| crate::protocol::is_model(model))?;
+        let previous = self.latest_model.replace(model.to_owned())?;
+        if previous == model {
+            return None;
+        }
+        let fallback = self.fallback.take().filter(|(to, _)| to == model);
+        self.fallback_note = fallback.as_ref().map(|(_, content)| content.clone());
+        let text = match &fallback {
+            Some((_, content)) => content.clone(),
+            None => format!("Model changed: {previous} → {model}"),
+        };
+        Some(self.system(
+            SystemKind::ModelChanged,
+            text,
+            json!({"from": previous, "to": model, "fallback": fallback.is_some()}),
+        ))
+    }
+
     fn whole(&mut self, turn: &Turn, parent: Option<String>, user: bool) -> Vec<TranscriptChange> {
+        let model = (!user)
+            .then(|| turn.extra.get("model").and_then(Value::as_str))
+            .flatten()
+            .map(str::to_owned);
+        let mut changed = None;
         if !user {
             let id = turn.extra.get("id").and_then(Value::as_str);
             let matches_stream = self.streams.get(&parent).is_some_and(|stream| match id {
@@ -389,17 +467,21 @@ impl Transcript {
                 }),
             });
             if !matches_stream {
+                if parent.is_none() {
+                    changed = self.reply_model(model.as_deref());
+                }
                 self.streams.insert(
                     parent.clone(),
                     StreamingMessage {
                         id: id.unwrap_or("").into(),
+                        model: model.clone(),
                         active: false,
                         blocks: BTreeMap::new(),
                     },
                 );
             }
         }
-        match &turn.content {
+        let made = match &turn.content {
             Content::Text(text) if user => vec![self.insert(
                 TranscriptContent::User {
                     text: text.clone(),
@@ -410,7 +492,10 @@ impl Transcript {
             )],
             Content::Text(text) => vec![self.complete_block(
                 0,
-                TranscriptContent::Assistant { text: text.clone() },
+                TranscriptContent::Assistant {
+                    text: text.clone(),
+                    model: model.clone(),
+                },
                 parent,
                 true,
             )],
@@ -454,7 +539,7 @@ impl Transcript {
                             ))
                         }
                         _ => {
-                            let content = block_content(block);
+                            let content = block_content(block, model.clone());
                             changes.push(self.complete_block(
                                 index as u64,
                                 content,
@@ -467,7 +552,8 @@ impl Transcript {
                 changes
             }
             Content::Raw(value) => vec![self.unknown(value.clone(), parent)],
-        }
+        };
+        changed.into_iter().chain(made).collect()
     }
 
     fn complete_block(
@@ -550,6 +636,12 @@ impl Transcript {
     fn stream(&mut self, event: &StreamEvent, parent: Option<String>) -> Vec<TranscriptChange> {
         match event {
             StreamEvent::MessageStart { message, .. } => {
+                let model = message.extra.get("model").and_then(Value::as_str);
+                let changed = if parent.is_none() {
+                    self.reply_model(model)
+                } else {
+                    None
+                };
                 self.streams.insert(
                     parent,
                     StreamingMessage {
@@ -559,11 +651,12 @@ impl Transcript {
                             .and_then(Value::as_str)
                             .unwrap_or("")
                             .into(),
+                        model: model.map(str::to_owned),
                         active: true,
                         blocks: BTreeMap::new(),
                     },
                 );
-                vec![]
+                changed.into_iter().collect()
             }
             StreamEvent::ContentBlockStart {
                 index,
@@ -571,7 +664,10 @@ impl Transcript {
                 ..
             } => vec![self.block(
                 *index,
-                block_content(content_block),
+                block_content(
+                    content_block,
+                    self.streams.get(&parent).and_then(|s| s.model.clone()),
+                ),
                 parent,
                 ItemState::Streaming,
             )],
@@ -637,11 +733,23 @@ impl Transcript {
     }
 }
 
-fn block_content(block: &Extensible<ContentBlock>) -> TranscriptContent {
-    match block {
-        Extensible::Known(ContentBlock::Text { text, .. }) => {
-            TranscriptContent::Assistant { text: text.clone() }
+/// The model of the latest reply in the agent's own conversation among `items`.
+fn latest_model(items: &[TranscriptItem]) -> Option<String> {
+    items.iter().rev().find_map(|item| match &item.content {
+        TranscriptContent::Assistant { model, .. } if item.parent_tool_use_id.is_none() => {
+            model.clone()
         }
+        _ => None,
+    })
+}
+
+/// A block's item; `model` is the model writing the message it belongs to.
+fn block_content(block: &Extensible<ContentBlock>, model: Option<String>) -> TranscriptContent {
+    match block {
+        Extensible::Known(ContentBlock::Text { text, .. }) => TranscriptContent::Assistant {
+            text: text.clone(),
+            model,
+        },
         Extensible::Known(ContentBlock::Thinking { thinking, extra }) => {
             TranscriptContent::Thinking {
                 text: thinking.clone(),

@@ -109,6 +109,7 @@ Types of changes:
 
 ### Fixed
 
+- Devora Sapphire's agent transcript no longer shows Claude Code's retries after an overloaded model as rows of raw JSON, nor logs them as protocol drift; a reply Claude Code makes up after failing a turn changes no model
 - A Devora Sapphire agent's Context widget and its compaction threshold count only the agent's own context: while a subagent ran, they showed the subagent's, which could drop the widget to a few percent and keep a compaction that was due from starting
 - On a Mac in Dark, a new Devora Sapphire terminal lost Devora's environment, so `debi preview` failed in it ("only available inside a Devora terminal"), and a configured Default app wasn't started
 - Quitting Devora Sapphire right after a Global Pause has stopped an agent no longer reports a bogus "session has stopped" problem or shows the agent as Stopped

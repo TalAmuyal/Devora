@@ -95,6 +95,21 @@ pub enum System {
         #[serde(flatten)]
         extra: Map<String, Value>,
     },
+    /// The model the agent is set to was unavailable (overloaded), so this turn's request went to the fallback
+    /// model instead. Sent again on every turn that falls back; `content` is the CLI's own sentence for it.
+    ModelFallback {
+        trigger: String,
+        original_model: String,
+        fallback_model: String,
+        content: String,
+        #[serde(flatten)]
+        extra: Map<String, Value>,
+    },
+    /// The CLI is retrying a failed request; it reports the outcome through the turn itself.
+    ApiRetry {
+        #[serde(flatten)]
+        extra: Map<String, Value>,
+    },
 }
 
 /// One piece of background work the CLI tracks: a background shell

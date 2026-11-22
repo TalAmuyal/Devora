@@ -4,8 +4,8 @@ use crate::Space;
 use devora_agent::protocol::{BackgroundTask, KnownMessage, Message, System};
 use devora_agent::session::stop_tree;
 use devora_agent::session::{
-    saved_turn, PermissionAnswer, Resume, Session, SessionEvent, SessionHandle, SessionOptions,
-    StopInfo, UsageSource,
+    saved_model, saved_turn, PermissionAnswer, Resume, Session, SessionEvent, SessionHandle,
+    SessionOptions, StopInfo, UsageSource,
 };
 use devora_agent::transcript::{SystemKind, Transcript, TranscriptChange, TranscriptItem};
 use devora_app::log::{Level, Log};
@@ -22,11 +22,30 @@ pub enum SpaceEvent {
     Session(SessionEvent),
     /// How full the context is, whenever that changes.
     Context(Context),
+    /// The model the agent's replies come from, at the start and whenever that changes.
+    Model(ActiveModel),
     /// A turn the space sent itself: compaction's, or the restart notice.
     TurnStarted,
     /// The CLI answered the running turn, or exited during it. Results the CLI
     /// produces by itself (background work finishing, a resume) end nothing.
     TurnEnded,
+}
+
+/// The model of the latest reply in the agent's own conversation (a full ID; none before one is known), and Claude
+/// Code's sentence for the fallback it came from, while replies still come from that fallback.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ActiveModel {
+    pub latest: Option<String>,
+    pub fallback: Option<String>,
+}
+
+impl ActiveModel {
+    fn of(transcript: &Transcript) -> Self {
+        Self {
+            latest: transcript.latest_model().map(str::to_owned),
+            fallback: transcript.fallback_note().map(str::to_owned),
+        }
+    }
 }
 
 /// How long a pause waits for the agent's background tasks to stop, and a
@@ -172,6 +191,7 @@ pub struct RunningSpace {
     /// Ends with the stop the actor persisted, when it stopped the session itself.
     worker: Option<JoinHandle<Result<Option<StopInfo>, String>>>,
     settings: Value,
+    model: String,
 }
 impl RunningSpace {
     pub fn handle(&self) -> SpaceHandle {
@@ -180,6 +200,10 @@ impl RunningSpace {
     /// The settings the CLI was launched with (`SessionOptions::settings`): the host's, with the profile's model tiers.
     pub fn launch_settings(&self) -> &Value {
         &self.settings
+    }
+    /// The model the CLI was launched with (`SessionOptions::model`): what the agent is set to, an alias or a full ID.
+    pub fn launch_model(&self) -> &str {
+        &self.model
     }
     pub async fn next_update(&mut self) -> Option<SpaceEvent> {
         self.events.recv().await
@@ -218,10 +242,23 @@ pub(crate) async fn start(
 ) -> Result<RunningSpace, String> {
     let run = run.clone();
     let settings = options.settings.clone();
+    let model = options.model.clone();
     let launch = options.clone();
     let launch_log = log.clone();
     let (mut space, mut transcript, history, notice) = tokio::task::spawn_blocking(move || {
         let mut transcript = space.db.fold(&space.resume.session_id)?;
+        // A conversation stored before replies kept their model: Claude's saved session says which one answered last.
+        // Failing to read it only leaves the model unknown until the next reply.
+        if transcript.latest_model().is_none() && space.resume.has_conversation {
+            match saved_model(&launch, &space.resume.session_id) {
+                Ok(Some(model)) => transcript.continue_from(model),
+                Ok(None) => {}
+                Err(error) => launch_log.write(
+                    Level::Warn,
+                    &format!("could not read the model of the agent's latest reply: {error}"),
+                ),
+            }
+        }
         let interrupted = transcript.interrupt(!space.resume.has_conversation);
         space.db.save_changes(None, &interrupted)?;
         transcript.release_completed();
@@ -336,6 +373,7 @@ pub(crate) async fn start(
         events: received,
         worker: Some(worker),
         settings,
+        model,
     })
 }
 
@@ -390,6 +428,7 @@ fn persist(
     } else {
         vec![]
     };
+    let model_before = ActiveModel::of(transcript);
     changes.extend(transcript.event(event));
     space.db.save_changes(resume.as_ref(), &changes)?;
     transcript.release_completed();
@@ -398,6 +437,9 @@ fn persist(
     }
     for change in changes {
         let _ = events.send(SpaceEvent::Transcript(change));
+    }
+    if ActiveModel::of(transcript) != model_before {
+        let _ = events.send(SpaceEvent::Model(ActiveModel::of(transcript)));
     }
     Ok(())
 }
@@ -537,6 +579,8 @@ async fn pump(
     let mut pause_after_turn: Option<oneshot::Sender<Result<Value, String>>> = None;
     // The threshold, before any usage arrives.
     let _ = events.send(SpaceEvent::Context(compaction.context()));
+    // The model, before any reply: the one the stored conversation continues on, if known.
+    let _ = events.send(SpaceEvent::Model(ActiveModel::of(transcript)));
     // The restart notice's turn, until its result delivers it.
     let mut notice_turn: Option<String> = None;
     // The agent's background work, as the CLI last listed it.

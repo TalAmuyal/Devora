@@ -76,6 +76,13 @@ pub enum KnownMessage {
     },
 }
 
+/// Whether a reply's `model` names the model that wrote it. Claude Code also reports some things as replies it makes up
+/// itself, named `<synthetic>`: a turn it ends after failing (the model overloaded, with no fallback), an interruption.
+/// Those name no model, so they change none: not the model widget's, not the transcript's, not the saved session's.
+pub fn is_model(model: &str) -> bool {
+    model != "<synthetic>"
+}
+
 impl Message {
     /// Decode one complete JSONL line. Unknown valid JSON passes through as `Raw`.
     pub fn parse(line: &str) -> serde_json::Result<Self> {

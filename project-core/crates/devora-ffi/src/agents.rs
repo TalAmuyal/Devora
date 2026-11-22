@@ -5,9 +5,9 @@ use devora_core::agents::{
     self, CreationForm, Field, LaunchContext, ModelChoice, PermissionAnswer, Scope, Source,
 };
 use devora_core::state::{
-    AgentActivity, Chat, ChatContext, ChatEvent, ChatPhase, ChatUpdate, CompactionProgress,
-    ItemState, PermissionQuestion, RunningAgent, RunningAgents, Subscription, SystemKind,
-    ToolResult, ToolVerdict, TranscriptChange, TranscriptContent, TranscriptItem,
+    AgentActivity, Chat, ChatContext, ChatEvent, ChatModel, ChatPhase, ChatUpdate,
+    CompactionProgress, ItemState, PermissionQuestion, RunningAgent, RunningAgents, Subscription,
+    SystemKind, ToolResult, ToolVerdict, TranscriptChange, TranscriptContent, TranscriptItem,
 };
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -217,6 +217,7 @@ pub enum SystemKind {
     Result,
     UnfinishedFirstPrompt,
     RestartNotice,
+    ModelChanged,
 }
 #[uniffi::remote(Record)]
 pub struct ToolVerdict {
@@ -238,6 +239,7 @@ pub enum TranscriptContent {
     },
     Assistant {
         text: String,
+        model: Option<String>,
     },
     Thinking {
         text: String,
@@ -300,6 +302,7 @@ pub struct Chat {
     pub questions: Vec<PermissionQuestion>,
     pub usage_json: Option<String>,
     pub context: Option<ChatContext>,
+    pub model: Option<ChatModel>,
 }
 #[uniffi::remote(Record)]
 pub struct ChatContext {
@@ -309,6 +312,15 @@ pub struct ChatContext {
     pub default_threshold_percent: u8,
     pub own_threshold_percent: Option<u8>,
     pub compaction: CompactionProgress,
+}
+#[uniffi::remote(Record)]
+pub struct ChatModel {
+    pub latest: Option<String>,
+    pub label: Option<String>,
+    pub set_to: String,
+    pub set_to_resolved: Option<String>,
+    pub differs: bool,
+    pub fallback: Option<String>,
 }
 #[uniffi::remote(Enum)]
 pub enum CompactionProgress {
@@ -332,6 +344,7 @@ pub enum ChatUpdate {
     PermissionRemoved { request_id: String },
     Usage { payload_json: String },
     Context { context: ChatContext },
+    Model { model: ChatModel },
 }
 #[uniffi::remote(Enum)]
 pub enum AgentActivity {

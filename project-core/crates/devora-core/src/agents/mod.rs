@@ -10,11 +10,11 @@ mod running;
 
 use devora_agent::session::SessionEvent;
 pub use devora_agent::session::{PermissionAnswer, Plugin};
+use devora_agent_space::{ActiveModel, RunningSpace, SpaceEvent, SpaceHandle};
 use devora_agent_space::{AppRun, Space};
 pub use devora_agent_space::{
     CreationForm, Entry as SpaceEntry, Field, LaunchContext, ModelChoice, Source,
 };
-use devora_agent_space::{SpaceEvent, SpaceHandle};
 use devora_app::log::Log;
 pub use devora_config::agent::Scope;
 use devora_state::{ChatCommand, ChatPhase, ChatUpdate, Command, Event, SessionKind, Store};
@@ -1037,6 +1037,11 @@ async fn run_session(
         let owner = inner.owners.get_mut(key).ok_or("agent owner disappeared")?;
         owner.handle = Some(running.handle());
     }
+    // The model the agent's replies come from, as the space last said.
+    let mut active = ActiveModel {
+        latest: None,
+        fallback: None,
+    };
     loop {
         if *pause.borrow() {
             let result = running.pause().await;
@@ -1059,11 +1064,43 @@ async fn run_session(
                     let _ = running.pause().await;
                     return Err(error);
                 }
+                let ready = matches!(&event, SpaceEvent::Session(SessionEvent::Ready { .. }));
                 if let SpaceEvent::Session(SessionEvent::Ready { capabilities, .. }) = &event {
                     lock(inner).models.clone().learned(&key.profile, running.launch_settings(), devora_agent::models::decode(capabilities));
                 }
-                publish(inner, state, key, generation, event);
+                match event {
+                    SpaceEvent::Model(model) => {
+                        active = model;
+                        present_model(inner, state, key, generation, &running, &active);
+                    }
+                    event => publish(inner, state, key, generation, event),
+                }
+                // The list this launch was just offered names the model, and says whether it's the one set.
+                if ready {
+                    present_model(inner, state, key, generation, &running, &active);
+                }
             }
+        }
+    }
+}
+
+/// Shows `active` on the agent's tab, named and checked against the models its launch was offered.
+fn present_model(
+    inner: &Mutex<Inner>,
+    state: &Store,
+    key: &Key,
+    run_id: u64,
+    running: &RunningSpace,
+    active: &ActiveModel,
+) {
+    let list = lock(inner)
+        .models
+        .cached(&key.profile, running.launch_settings());
+    let model = events::model(active, running.launch_model(), list.as_ref());
+    let inner = lock(inner);
+    if let Some(owner) = inner.owners.get(key).filter(|o| o.run_id == run_id) {
+        if let Some(tab) = owner.tab {
+            events::update(state, tab, owner.generation, ChatUpdate::Model { model });
         }
     }
 }

@@ -103,6 +103,39 @@ impl ModelOption {
 }
 
 impl ModelList {
+    /// The name the CLI gives the model `id` (a full ID), if it lists that model.
+    pub fn name_of(&self, id: &str) -> Option<&str> {
+        self.models
+            .iter()
+            .filter(|model| model.value != "default")
+            .find(|model| model.resolved_model.as_deref().unwrap_or(&model.value) == id)
+            .map(|model| model.display_name.as_str())
+    }
+
+    /// The full ID an agent set to `setting` runs: an alias through the entry the CLI lists for it (which follows the
+    /// profile's model tiers), a full ID as itself; none for an alias it doesn't list.
+    pub fn resolve<'a>(&'a self, setting: &'a str) -> Option<&'a str> {
+        match self.models.iter().find(|model| model.value == setting) {
+            Some(model) => Some(model.resolved_model.as_deref().unwrap_or(&model.value)),
+            None => setting.starts_with("claude-").then_some(setting),
+        }
+    }
+
+    /// Whether a reply from `model` is what an agent set to `setting` runs: what the setting resolves to, or for
+    /// `opusplan` its Opus or its Sonnet. A setting this list can't resolve expects anything, rather than a guess.
+    pub fn expects(&self, setting: &str, model: &str) -> bool {
+        if setting == model {
+            return true;
+        }
+        if setting == "opusplan" {
+            return ["opus", "sonnet"]
+                .iter()
+                .any(|alias| self.resolve(alias) == Some(model));
+        }
+        self.resolve(setting)
+            .is_none_or(|resolved| resolved == model)
+    }
+
     /// What an agent's model can be: every entry but Claude Code's `default`, which is a choice rather than a model, in
     /// [`precedes`]'s order. Picking an alias stores the alias, which follows Claude Code to newer models.
     pub fn agent_choices(&self) -> Vec<ModelOption> {
@@ -285,6 +318,24 @@ pub async fn cli_version(options: &SessionOptions) -> Result<String, String> {
         .ok_or_else(|| format!("Claude's --version exited with {}", output.status))
 }
 
+/// How to show a model the CLI gives no name: its tier and version, without the `claude-` prefix and a date
+/// (`claude-sonnet-4-5-20250929` is `sonnet-4-5`); an ID that doesn't read that way, without the prefix only.
+pub fn short_id(id: &str) -> String {
+    match Generation::of(id) {
+        Some(Generation {
+            version: (major, 0),
+            tier,
+        }) => format!("{}-{major}", Generation::TIERS[tier]),
+        Some(Generation {
+            version: (major, minor),
+            tier,
+        }) => {
+            format!("{}-{major}-{minor}", Generation::TIERS[tier])
+        }
+        None => id.strip_prefix("claude-").unwrap_or(id).to_owned(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -361,6 +412,62 @@ mod tests {
             description: None,
             effort_levels: vec![],
         }
+    }
+
+    fn tiers(opus: &str) -> ModelList {
+        ModelList {
+            cli_version: Some("2.1.326".into()),
+            models: vec![
+                option("default", opus, "Default (recommended)"),
+                option("opus", opus, "Opus 5.5"),
+                option("sonnet", "claude-sonnet-5-5", "Sonnet 5.5"),
+                option("claude-opus-4-8", "claude-opus-4-8", "Opus 4.8"),
+            ],
+        }
+    }
+
+    #[test]
+    fn a_reply_is_expected_from_what_the_setting_resolves_to_under_the_profiles_tiers() {
+        let list = tiers("claude-opus-5-5");
+        assert!(list.expects("opus", "claude-opus-5-5"));
+        assert!(!list.expects("opus", "claude-sonnet-5-5"), "a fallback");
+        assert!(list.expects("claude-opus-4-8", "claude-opus-4-8"));
+        assert!(!list.expects("claude-opus-4-8", "claude-opus-5-5"));
+        // The profile pins the Opus tier to an older model: a reply from it is what the agent runs.
+        let pinned = tiers("claude-opus-4-8");
+        assert!(pinned.expects("opus", "claude-opus-4-8"));
+        assert!(!pinned.expects("opus", "claude-opus-5-5"));
+    }
+
+    #[test]
+    fn opusplan_expects_its_opus_and_its_sonnet_and_an_unknown_alias_expects_anything() {
+        let list = tiers("claude-opus-5-5");
+        assert!(list.expects("opusplan", "claude-opus-5-5"));
+        assert!(list.expects("opusplan", "claude-sonnet-5-5"));
+        assert!(!list.expects("opusplan", "claude-haiku-5-5"));
+        assert!(
+            list.expects("some-future-alias", "claude-haiku-5-5"),
+            "no guess"
+        );
+    }
+
+    #[test]
+    fn a_model_is_named_as_the_cli_names_it_or_shown_by_its_tier_and_version() {
+        let list = tiers("claude-opus-5-5");
+        assert_eq!(
+            list.name_of("claude-opus-5-5"),
+            Some("Opus 5.5"),
+            "not Claude Code's default"
+        );
+        assert_eq!(list.name_of("claude-opus-4-8"), Some("Opus 4.8"));
+        assert_eq!(list.name_of("claude-sonnet-4-5-20250929"), None);
+        assert_eq!(short_id("claude-sonnet-4-5-20250929"), "sonnet-4-5");
+        assert_eq!(short_id("claude-opus-5"), "opus-5");
+        assert_eq!(
+            short_id("claude-3-5-sonnet-20241022"),
+            "3-5-sonnet-20241022"
+        );
+        assert_eq!(short_id("custom-model"), "custom-model");
     }
 
     /// A subscription's list, as Claude Code 2.1.312 gave it: its aliases, then other models' full IDs.

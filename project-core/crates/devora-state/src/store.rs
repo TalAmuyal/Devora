@@ -408,6 +408,7 @@ mod chat_tests {
             state: crate::ItemState::Complete,
             content: crate::TranscriptContent::Assistant {
                 text: sequence.to_string(),
+                model: None,
             },
         };
         store
@@ -467,6 +468,7 @@ mod chat_tests {
             state: crate::ItemState::Streaming,
             content: crate::TranscriptContent::Assistant {
                 text: String::new(),
+                model: None,
             },
         };
         store
@@ -499,7 +501,7 @@ mod chat_tests {
         assert_eq!(batch.len(), 102);
         assert_eq!(store.chat_snapshot()[0].items.len(), 1);
         assert!(
-            matches!(&store.chat_snapshot()[0].items[0].content, crate::TranscriptContent::Assistant { text } if text.len() == 100)
+            matches!(&store.chat_snapshot()[0].items[0].content, crate::TranscriptContent::Assistant { text, .. } if text.len() == 100)
         );
         assert_eq!(std::fs::read(&path).unwrap(), database);
         assert_eq!(std::fs::read(&wal_path).unwrap_or_default(), wal);
@@ -524,7 +526,7 @@ mod chat_tests {
             .is_err());
         assert_eq!(store.chat_snapshot()[0].items.len(), 1);
         assert!(
-            matches!(&store.chat_snapshot()[0].items[0].content, crate::TranscriptContent::Assistant { text } if text.len() == 100)
+            matches!(&store.chat_snapshot()[0].items[0].content, crate::TranscriptContent::Assistant { text, .. } if text.len() == 100)
         );
         events.close();
         store.dispatch_chat(ChatCommand::Close { tab: 1 }).unwrap();

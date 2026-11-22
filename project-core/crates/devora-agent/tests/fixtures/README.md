@@ -14,6 +14,9 @@ Each envelope has `t` (elapsed milliseconds), `dir` and `msg`. `out` means host 
 | ask-auto | Hook-forced permission questions and their reason |
 | runtime, runtime-resume | Mode changes, compact_boundary and resumed session identity |
 | interrupt | Interrupted streaming and error result |
+| claude-2.1.326/model-fallback | Two turns of an overloaded model falling back: `api_retry`, `model_fallback`, the fallback's reply and the result (see below) |
+
+`claude-2.1.326/model-fallback.jsonl` holds only the CLI's output messages, as envelopes, from Claude Code 2.1.326 (CI's pin) launched with `--model opus --fallback-model sonnet` and two user turns against an offline fake Messages API that answered every Opus request "overloaded" (529) and replied as Sonnet otherwise. No Anthropic API was called. Devora passes no `--fallback-model`, so no pinned-CLI test produces these messages; the transcript's fallback tests replay them.
 
 The recordings do not contain `set_model`, `mcp_message` or error control responses. Supplemental constructed contracts in `protocol_contract.rs` cover those shapes separately. MCP and control-response spelling follows the official Python Agent SDK control types. New envelope kinds such as the recordings' `rate_limit_event` deliberately remain Raw.
 

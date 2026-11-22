@@ -2,7 +2,7 @@ use crate::restart_notice::RestartNotice;
 use crate::{CreationForm, Identity};
 use devora_agent::session::{CliProcess, Resume};
 use devora_agent::transcript::{TranscriptChange, TranscriptContent, TranscriptItem};
-use rusqlite::{params, Connection, OpenFlags};
+use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
 use std::path::Path;
 use std::time::Duration;
 
@@ -489,12 +489,26 @@ impl Db {
                 Ok(item)
             })
             .collect::<Result<Vec<_>, String>>()?;
+        // The latest reply in the agent's own conversation, from any of its CLI sessions: the model it continues on.
+        let latest_model: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT json_extract(payload,'$.content.Assistant.model') FROM events
+             WHERE kind='assistant' AND json_extract(payload,'$.parent_tool_use_id') IS NULL
+               AND json_extract(payload,'$.content.Assistant.model') IS NOT NULL
+             ORDER BY sequence DESC LIMIT 1",
+                [],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(storage)?;
         Ok(devora_agent::transcript::Transcript::restore(
             items,
             session.into(),
             next,
             has_prompt,
             marked,
+            latest_model,
         ))
     }
 }
@@ -608,6 +622,7 @@ mod tests {
                     state: ItemState::Complete,
                     content: TranscriptContent::Assistant {
                         text: sequence.to_string(),
+                        model: None,
                     },
                 })],
             )
@@ -628,6 +643,7 @@ mod tests {
             state: ItemState::Complete,
             content: TranscriptContent::Assistant {
                 text: "wrong session".into(),
+                model: None,
             },
         };
         assert!(db
