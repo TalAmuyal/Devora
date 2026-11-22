@@ -109,6 +109,8 @@ Feature: Agent chat panel
     Then the agent turn is still running
     When the user stops the agent turn
     Then the agent "Echo" should be idle
+    And the agent transcript contains "Turn stopped"
+    And the agent transcript has no "Turn ended with an error" row
 
   Scenario: The context bar uses the actor's usage and profile threshold
     When the user sends the agent prompt "Context metrics"

@@ -32,6 +32,9 @@ pub struct Transcript {
     fallback: Option<(String, String)>,
     /// The CLI's sentence for the fallback the latest model came from, while replies still come from it.
     fallback_note: Option<String>,
+    /// Devora asked the CLI to interrupt the running turn (the user's Stop, a pause), so the result ending it is a stop,
+    /// which Claude Code reports as an error (`error_during_execution`), not a failure. The next result consumes it.
+    stop_requested: bool,
 }
 
 impl Transcript {
@@ -79,6 +82,7 @@ impl Transcript {
             marked_first_prompt,
             latest_model,
             fallback: None,
+            stop_requested: false,
             fallback_note: None,
         }
     }
@@ -221,6 +225,9 @@ impl Transcript {
     }
 
     pub fn intention(&mut self, kind: SystemKind, text: String, detail: Value) -> TranscriptChange {
+        if kind == SystemKind::Interruption {
+            self.expect_stop();
+        }
         self.pending_commands.insert(self.next_sequence);
         self.insert(
             TranscriptContent::System {
@@ -231,6 +238,12 @@ impl Transcript {
             ItemState::Pending,
             None,
         )
+    }
+
+    /// Devora is interrupting the running turn itself: the error result that ends it is a stop ("Turn stopped", with
+    /// `stopped` in its detail), not a failure. Recording an interruption's intention does this too.
+    pub fn expect_stop(&mut self) {
+        self.stop_requested = true;
     }
 
     pub fn settle(&mut self, sequence: u64, error: Option<String>) -> Option<TranscriptChange> {
@@ -411,15 +424,17 @@ impl Transcript {
             }
             Message::Known(KnownMessage::Result(result)) => {
                 self.fallback = None;
-                vec![self.system(
-                    SystemKind::Result,
-                    if result.is_error {
-                        "Turn ended with an error"
-                    } else {
-                        "Turn completed"
-                    },
-                    json!(result),
-                )]
+                let stopped = std::mem::take(&mut self.stop_requested) && result.is_error;
+                let mut detail = json!(result);
+                if stopped {
+                    detail["stopped"] = json!(true);
+                }
+                let text = match (stopped, result.is_error) {
+                    (true, _) => "Turn stopped",
+                    (false, true) => "Turn ended with an error",
+                    (false, false) => "Turn completed",
+                };
+                vec![self.system(SystemKind::Result, text, detail)]
             }
             Message::Known(KnownMessage::System(_))
             | Message::Known(KnownMessage::ControlRequest { .. })

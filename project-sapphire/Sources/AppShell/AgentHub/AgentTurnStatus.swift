@@ -26,9 +26,9 @@ struct AgentTurnStatus: View {
 	static func label(_ activity: StepActivity) -> String {
 		switch activity {
 		case .waiting(let tool, _): "Waiting for your answer: \(tool)"
-		case .running(let tool, _): "Running \(tool)"
-		case .thinking: "Thinking"
-		case .writing: "Writing"
+		case .running(let tool, _, let subagent): subagent ? "Sub-agent is running \(tool)" : "Running \(tool)"
+		case .thinking(let subagent): subagent ? "Sub-agent is thinking" : "Thinking"
+		case .writing(let subagent): subagent ? "Sub-agent is writing" : "Writing"
 		case .working: "Working"
 		}
 	}

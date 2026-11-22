@@ -7,9 +7,12 @@ import Testing
 struct AgentTurnStatusTests {
 	@Test func theLineNamesTheStep() {
 		#expect(AgentTurnStatus.label(.waiting(tool: "Bash", requestId: "q1")) == "Waiting for your answer: Bash")
-		#expect(AgentTurnStatus.label(.running(tool: "Read", toolUseId: "t1")) == "Running Read")
-		#expect(AgentTurnStatus.label(.thinking) == "Thinking")
-		#expect(AgentTurnStatus.label(.writing) == "Writing")
+		#expect(AgentTurnStatus.label(.running(tool: "Read", toolUseId: "t1", subagent: false)) == "Running Read")
+		#expect(AgentTurnStatus.label(.thinking(subagent: false)) == "Thinking")
+		#expect(AgentTurnStatus.label(.writing(subagent: false)) == "Writing")
+		#expect(AgentTurnStatus.label(.running(tool: "Read", toolUseId: "t2", subagent: true)) == "Sub-agent is running Read")
+		#expect(AgentTurnStatus.label(.thinking(subagent: true)) == "Sub-agent is thinking")
+		#expect(AgentTurnStatus.label(.writing(subagent: true)) == "Sub-agent is writing")
 		#expect(AgentTurnStatus.label(.working) == "Working")
 	}
 

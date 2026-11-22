@@ -687,6 +687,7 @@ async fn pump(
                     match &event {
                         // A stopped subagent's notification turn starting: the agent mustn't act on it.
                         SessionEvent::Message(Message::Known(KnownMessage::System(System::Init { .. }))) => {
+                            transcript.expect_stop();
                             let runtime = session.handle();
                             tokio::spawn(async move { let _ = runtime.interrupt().await; });
                         }

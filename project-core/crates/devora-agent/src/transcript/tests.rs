@@ -507,3 +507,53 @@ fn a_first_reply_from_a_fallback_adds_no_row_but_keeps_its_sentence() {
     assert_eq!(t.latest_model(), Some("claude-sonnet-5-5"));
     assert_eq!(t.fallback_note(), Some(FALLBACK_SENTENCE));
 }
+
+/// The result row's text and whether it says the turn was stopped.
+fn result_rows(t: &Transcript) -> Vec<(String, bool)> {
+    t.items()
+        .iter()
+        .filter_map(|item| match &item.content {
+            TranscriptContent::System {
+                kind: SystemKind::Result,
+                text,
+                detail_json,
+            } => {
+                let detail: Value = serde_json::from_str(detail_json).unwrap();
+                Some((text.clone(), detail["stopped"] == json!(true)))
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+fn aborted(t: &mut Transcript) {
+    message(
+        t,
+        json!({"type":"result","subtype":"error_during_execution","session_id":"s","is_error":true,"terminal_reason":"aborted_streaming","num_turns":1,"usage":{"input_tokens":1,"output_tokens":1}}),
+    );
+}
+
+#[test]
+fn a_turn_devora_interrupted_ends_stopped_and_any_other_error_stays_an_error() {
+    let mut t = Transcript::new(vec![], "s".into());
+    t.intention(
+        SystemKind::Interruption,
+        "Interrupt requested".into(),
+        json!({}),
+    );
+    aborted(&mut t);
+    aborted(&mut t);
+    t.expect_stop();
+    turn_end(&mut t);
+    turn_end(&mut t);
+    assert_eq!(
+        result_rows(&t),
+        [
+            ("Turn stopped".into(), true),
+            ("Turn ended with an error".into(), false),
+            ("Turn completed".into(), false),
+            ("Turn completed".into(), false),
+        ],
+        "a stop asked for marks only the result that follows it, and a turn that ended anyway is still completed"
+    );
+}

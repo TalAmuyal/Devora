@@ -13,6 +13,7 @@ private func system(_ kind: SystemKind, detail: String = "{}") -> TranscriptCont
 
 private let turnCompleted = system(.result, detail: #"{"is_error":false}"#)
 private let turnFailed = system(.result, detail: #"{"is_error":true}"#)
+private let turnStopped = system(.result, detail: #"{"is_error":true,"stopped":true}"#)
 
 @MainActor
 struct TranscriptVisibilityTests {
@@ -36,6 +37,7 @@ struct TranscriptVisibilityTests {
 			(item(15, system(.restartNotice)), .system),
 			(item(16, system(.interruption)), .system),
 			(item(17, turnCompleted), .never),
+			(item(18, turnStopped), .system),
 		]
 		for (item, visibility) in cases {
 			#expect(item.visibility == visibility, "#\(item.sequence) \(item.content)")

@@ -70,12 +70,16 @@ pub struct ChatStep {
 pub enum StepActivity {
     /// A tool waits for the user's answer to its permission question.
     Waiting { tool: String, request_id: String },
-    /// A tool call has no result yet.
-    Running { tool: String, tool_use_id: String },
+    /// A tool call has no result yet. `subagent` when it's a subagent's, as for the other steps that follow an item.
+    Running {
+        tool: String,
+        tool_use_id: String,
+        subagent: bool,
+    },
     /// A thought is streaming.
-    Thinking,
+    Thinking { subagent: bool },
     /// A reply is streaming.
-    Writing,
+    Writing { subagent: bool },
     /// Anything else while the turn runs: the model is on its way to the next step.
     Working,
 }
@@ -96,6 +100,7 @@ impl StepActivity {
             return Some(Self::Working);
         };
         let unfinished = matches!(item.state, ItemState::Pending | ItemState::Streaming);
+        let subagent = item.parent_tool_use_id.is_some();
         Some(match &item.content {
             TranscriptContent::Tool {
                 name,
@@ -106,10 +111,11 @@ impl StepActivity {
                 Self::Running {
                     tool: name.clone(),
                     tool_use_id: tool_use_id.clone(),
+                    subagent,
                 }
             }
-            TranscriptContent::Thinking { .. } if unfinished => Self::Thinking,
-            TranscriptContent::Assistant { .. } if unfinished => Self::Writing,
+            TranscriptContent::Thinking { .. } if unfinished => Self::Thinking { subagent },
+            TranscriptContent::Assistant { .. } if unfinished => Self::Writing { subagent },
             _ => Self::Working,
         })
     }
@@ -477,10 +483,22 @@ mod tests {
             content: TranscriptContent,
             now_ms: u64,
         ) -> Option<Option<ChatStep>> {
+            self.item_of(None, sequence, state, content, now_ms)
+        }
+
+        /// An item of the subagent that tool call `parent` started, or of the agent itself with none.
+        fn item_of(
+            &mut self,
+            parent: Option<&str>,
+            sequence: u64,
+            state: ItemState,
+            content: TranscriptContent,
+            now_ms: u64,
+        ) -> Option<Option<ChatStep>> {
             let item = TranscriptItem {
                 sequence,
                 cli_session: "session".into(),
-                parent_tool_use_id: None,
+                parent_tool_use_id: parent.map(Into::into),
                 state,
                 content,
             };
@@ -519,6 +537,7 @@ mod tests {
         StepActivity::Running {
             tool: "Bash".into(),
             tool_use_id: id.into(),
+            subagent: false,
         }
     }
 
@@ -535,7 +554,7 @@ mod tests {
         };
         assert_eq!(
             chat.item(1, ItemState::Streaming, thought, 200),
-            Some(step(StepActivity::Thinking, 200))
+            Some(step(StepActivity::Thinking { subagent: false }, 200))
         );
         let more = ChatUpdate::Transcript {
             change: TranscriptChange::AppendThinking {
@@ -548,7 +567,10 @@ mod tests {
             None,
             "the same step publishes nothing"
         );
-        assert_eq!(chat.step(), step(StepActivity::Thinking, 200));
+        assert_eq!(
+            chat.step(),
+            step(StepActivity::Thinking { subagent: false }, 200)
+        );
         assert_eq!(
             chat.item(2, ItemState::Complete, bash("t1", None), 400),
             Some(step(running("t1"), 400))
@@ -568,7 +590,7 @@ mod tests {
         };
         assert_eq!(
             chat.item(4, ItemState::Streaming, reply, 700),
-            Some(step(StepActivity::Writing, 700))
+            Some(step(StepActivity::Writing { subagent: false }, 700))
         );
         let result = TranscriptContent::System {
             kind: SystemKind::Result,
@@ -579,6 +601,45 @@ mod tests {
             chat.item(5, ItemState::Complete, result, 800),
             Some(None),
             "the turn's end ends its step"
+        );
+    }
+
+    #[test]
+    fn a_subagents_latest_item_is_the_step_and_says_whose_it_is() {
+        let mut chat = Fixture::new();
+        chat.update(ChatUpdate::Turn { running: true }, 100);
+        chat.item(1, ItemState::Complete, bash("task", None), 200);
+        let thought = TranscriptContent::Thinking {
+            text: "Hm".into(),
+            signature: String::new(),
+        };
+        assert_eq!(
+            chat.item_of(Some("task"), 2, ItemState::Streaming, thought, 300),
+            Some(step(StepActivity::Thinking { subagent: true }, 300))
+        );
+        let read = StepActivity::Running {
+            tool: "Bash".into(),
+            tool_use_id: "read".into(),
+            subagent: true,
+        };
+        assert_eq!(
+            chat.item_of(
+                Some("task"),
+                3,
+                ItemState::Complete,
+                bash("read", None),
+                400
+            ),
+            Some(step(read, 400))
+        );
+        let reply = TranscriptContent::Assistant {
+            text: "Done".into(),
+            model: None,
+        };
+        assert_eq!(
+            chat.item(4, ItemState::Streaming, reply, 500),
+            Some(step(StepActivity::Writing { subagent: false }, 500)),
+            "back to the agent's own step"
         );
     }
 

@@ -323,10 +323,21 @@ pub struct ChatStep {
 }
 #[uniffi::remote(Enum)]
 pub enum StepActivity {
-    Waiting { tool: String, request_id: String },
-    Running { tool: String, tool_use_id: String },
-    Thinking,
-    Writing,
+    Waiting {
+        tool: String,
+        request_id: String,
+    },
+    Running {
+        tool: String,
+        tool_use_id: String,
+        subagent: bool,
+    },
+    Thinking {
+        subagent: bool,
+    },
+    Writing {
+        subagent: bool,
+    },
     Working,
 }
 #[uniffi::remote(Record)]
