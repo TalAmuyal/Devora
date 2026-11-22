@@ -2,23 +2,29 @@ import CoreBindings
 import Store
 import Testing
 
-/// A subscription's list, as Claude Code 2.1.312 gave it: its aliases, then other models' full IDs, older ones included.
-private let subscription = ModelSuggestions(AgentModelList(cliVersion: "2.1.312", models: [
-	option("default", "claude-opus-5-5", "Default (recommended)"),
-	option("opus", "claude-opus-5-5", "Opus 5.5"),
-	option("sonnet", "claude-sonnet-5-5", "Sonnet 5.5"),
-	option("haiku", "claude-haiku-5-5", "Haiku 5.5"),
-	option("claude-haiku-4-5-20251001", "claude-haiku-4-5-20251001", "Haiku 4.5"),
-	option("claude-opus-4-8", "claude-opus-4-8", "Opus 4.8"),
-	option("claude-sonnet-4-6", "claude-sonnet-4-6", "Sonnet 4.6"),
-]))
+/// A subscription's list as the core hands it over (Claude Code 2.1.312's): an agent's choices and a tier's, each in the
+/// core's order, which the core's own tests cover (`devora_agent::models`).
+private let subscription = ModelSuggestions(AgentModelList(
+	cliVersion: "2.1.312",
+	models: [
+		option("opus", "claude-opus-5-5", "Opus 5.5"),
+		option("sonnet", "claude-sonnet-5-5", "Sonnet 5.5"),
+		option("haiku", "claude-haiku-5-5", "Haiku 5.5"),
+		option("claude-opus-4-8", "claude-opus-4-8", "Opus 4.8"),
+		option("claude-sonnet-4-6", "claude-sonnet-4-6", "Sonnet 4.6"),
+		option("claude-haiku-4-5-20251001", "claude-haiku-4-5-20251001", "Haiku 4.5"),
+	],
+	tierModels: [
+		TierModel(id: "claude-opus-5-5", name: "Opus 5.5"), TierModel(id: "claude-sonnet-5-5", name: "Sonnet 5.5"),
+		TierModel(id: "claude-opus-4-8", name: "Opus 4.8"),
+	]))
 
 private func option(_ value: String, _ resolved: String?, _ name: String) -> AgentModelOption {
 	AgentModelOption(value: value, resolvedModel: resolved, displayName: name, description: nil, effortLevels: [])
 }
 
 struct ModelSuggestionsTests {
-	@Test func anAgentsModelIsOfferedEveryModelButClaudeCodesDefaultAndAPickStoresTheAlias() {
+	@Test func anAgentsRowsKeepTheCoresOrderAndAPickStoresTheAlias() {
 		let rows = subscription.rows(for: .agentModel)
 		#expect(rows.map(\.completion) == [
 			"opus", "sonnet", "haiku", "claude-opus-4-8", "claude-sonnet-4-6", "claude-haiku-4-5-20251001",
@@ -28,31 +34,10 @@ struct ModelSuggestionsTests {
 		#expect(rows[3].alias == nil, "A full ID is stored as itself")
 	}
 
-	@Test func aTierIsOfferedEachFullIDOnce() {
-		#expect(subscription.rows(for: .tier).map(\.completion) == [
-			"claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5", "claude-opus-4-8", "claude-sonnet-4-6",
-			"claude-haiku-4-5-20251001",
-		])
-		#expect(subscription.rows(for: .tier)[0].name == "Opus 5.5", "An alias's model is named by its alias, not by `default`")
-	}
-
-	@Test func modelsReadNewestGenerationFirstThenByTierThenTheRestByID() {
-		let ids = [
-			"claude-haiku-4-5-20251001", "zeta-model", "claude-opus-5", "claude-sonnet-5-5", "claude-opus-5-2", "claude-fable-5-5",
-			"claude-mystery-6-0", "claude-opus-4-8", "claude-opus", "alpha-model", "claude-haiku-5-5", "claude-opus-5-5",
-		]
-		#expect(ids.sorted(by: ModelSuggestions.precedes) == [
-			"claude-fable-5-5", "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5", "claude-opus-5-2", "claude-opus-5",
-			"claude-opus-4-8", "claude-haiku-4-5-20251001",
-			// Outside the scheme, in plain order: an unknown family, no number at all, another naming.
-			"alpha-model", "claude-mystery-6-0", "claude-opus", "zeta-model",
-		])
-	}
-
-	@Test func aModelWithoutANameIsNamedByItsID() {
-		let unnamed = ModelSuggestions(AgentModelList(cliVersion: nil, models: [option("claude-next", "claude-next", "")]))
-		#expect(unnamed.rows(for: .agentModel).map(\.name) == ["claude-next"])
-		#expect(unnamed.rows(for: .tier).map(\.name) == ["claude-next"])
+	@Test func aTiersRowsAreTheCoresFullIDs() {
+		let rows = subscription.rows(for: .tier)
+		#expect(rows.map(\.completion) == ["claude-opus-5-5", "claude-sonnet-5-5", "claude-opus-4-8"])
+		#expect((rows[0].name, rows[0].alias) == ("Opus 5.5", nil))
 	}
 
 	@Test func theMenuNarrowsToWhatIsTypedUnlessItIsAlreadyAPick() {

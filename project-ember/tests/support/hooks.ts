@@ -19,6 +19,10 @@ import { hangWatchdog } from '../../../acceptance/hang-watchdog';
 import { cleanupFixtures, writeTestConfig } from './fixture-helper';
 import { EmberWorld } from './world';
 
+const CORE_AGENT = path.resolve(import.meta.dirname, '../../../project-core/crates/devora-agent/tests');
+const FAKE_CLAUDE_CLI = path.join(CORE_AGENT, 'support/fake_cli.py');
+const FAKE_CLAUDE_CLI_FIXTURES = path.join(CORE_AGENT, 'fixtures/claude-2.1.312');
+
 /** How long one launch may take in all, from spawning the app to its test namespace; a normal launch takes 1 to 10 s. */
 const LAUNCH_BUDGET_MS = 60_000;
 /** The Cucumber timeout of a hook or step that launches the app: above the launch's budget, so a slow launch fails with the launch's own error. */
@@ -180,6 +184,11 @@ async function launchApp(): Promise<AppDriver> {
     env: {
       ...baseEnv,
       DEVORA_TEST_MODE: '1',
+      // The core's fake Claude CLI, for what the app runs Claude for itself (the models a tier field suggests), never the
+      // user's own; the terminals' `ccc` still runs the recorded CLI against the fake server.
+      DEVORA_TEST_CLAUDE_PROGRAM: FAKE_CLAUDE_CLI,
+      DEVORA_FAKE_FIXTURES: FAKE_CLAUDE_CLI_FIXTURES,
+      DEVORA_FAKE_REPORT: path.join(testConfigDir!, 'fake-claude.jsonl'),
       DEVORA_TEST_HEALTH_FIXTURE: path.join(testConfigDir!, 'health-report.json'),
       ANTHROPIC_BASE_URL: `http://127.0.0.1:${fakeClaudeServer!.getPort()}`,
       ANTHROPIC_API_KEY: 'sk-ant-fake-key-for-bdd-tests',

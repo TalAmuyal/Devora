@@ -14,6 +14,7 @@ fn main() {
             "get_all_workspace_statuses",
             "get_registered_repos",
             "get_claude_settings",
+            "get_claude_model_options",
             "set_claude_setting",
             "get_config_settings",
             "get_global_paused",

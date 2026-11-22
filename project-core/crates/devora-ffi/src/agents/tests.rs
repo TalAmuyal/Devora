@@ -1598,7 +1598,7 @@ fn the_agents_own_threshold_and_compact_now_reach_its_chat_and_a_paused_agent_re
 }
 
 #[test]
-fn the_models_a_profile_is_offered_come_from_its_cli_and_list_the_aliases_first() {
+fn the_models_a_profile_is_offered_come_from_its_cli_in_the_cores_order() {
     let f = Fixture::new(false);
     let list = block_on(
         f.core
@@ -1612,10 +1612,13 @@ fn the_models_a_profile_is_offered_come_from_its_cli_and_list_the_aliases_first(
     let options = &list.models;
     let values: Vec<_> = options.iter().map(|o| o.value.as_str()).collect();
     assert_eq!(
-        &values[..5],
-        ["default", "opus", "sonnet", "fable", "haiku"]
+        &values[..3],
+        ["opus", "sonnet", "haiku"],
+        "the core's order, without Claude Code's default"
     );
-    let opus = &options[1];
+    assert!(!values.contains(&"default"));
+    assert_eq!(list.tier_models[0].id, "claude-opus-5-5");
+    let opus = &options[0];
     assert_eq!(opus.resolved_model.as_deref(), Some("claude-opus-5-5"));
     assert_eq!(opus.display_name, "Opus 5.5");
     assert!(!opus.effort_levels.is_empty());

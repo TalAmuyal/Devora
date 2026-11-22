@@ -1,6 +1,6 @@
 import assert from 'node:assert';
 import * as fs from 'node:fs';
-import { Given, When, Then } from '@cucumber/cucumber';
+import { DataTable, Given, When, Then } from '@cucumber/cucumber';
 import { EmberWorld } from '../support/world';
 
 // Merges a single `claude.<key>` override into the global test config.
@@ -159,3 +159,45 @@ Then(
     );
   },
 );
+
+/** The card's row for a Claude setting key, by the label it shows. */
+const ROW_LABELS: Record<string, string> = {
+  'opus-model': 'Opus tier',
+  'sonnet-model': 'Sonnet tier',
+  'haiku-model': 'Haiku tier',
+  'permission-mode': 'Permission mode',
+};
+
+function rowLookup(key: string): string {
+  const label = ROW_LABELS[key];
+  if (!label) throw new Error(`no Claude row for ${key}`);
+  return `Array.from(document.querySelectorAll('.settings-card .config-row'))
+    .find((r) => r.querySelector('.config-row-name')?.textContent === ${JSON.stringify(label)})`;
+}
+
+When('the user switches Claude {string} to {string}', async function (this: EmberWorld, key: string, segment: string) {
+  await this.driver.eval(`
+    const row = need(${rowLookup(key)}, 'the ${key} row');
+    const button = Array.from(row.querySelectorAll('.segmented-control-btn')).find((b) => b.textContent === ${JSON.stringify(segment)});
+    need(button, '${key} segment ${segment}').click();
+  `);
+  await this.driver.pollFor(
+    `return ${rowLookup(key)}?.querySelector('.segmented-control-btn.segmented-control-active')?.textContent ?? null`,
+    segment,
+    5_000,
+  );
+});
+
+Then('Claude {string} should suggest the model IDs, in order:', async function (this: EmberWorld, key: string, table: DataTable) {
+  const expected = table.raw().map(([id]) => id);
+  // The input's own list fills when the core answers, after the row renders.
+  await this.driver.pollFor(
+    `
+    const input = ${rowLookup(key)}?.querySelector('input.config-input');
+    const list = input && document.getElementById(input.getAttribute('list') ?? '');
+    return JSON.stringify(list ? Array.from(list.options).map((o) => o.value) : null);
+    `,
+    JSON.stringify(expected),
+    30_000,
+  );
+});

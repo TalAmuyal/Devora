@@ -29,6 +29,9 @@ pub fn run() {
         .manage(Mutex::new(
             workspace_creation::WorkspaceCreationManager::new(),
         ))
+        .manage(Arc::new(devora_core::agents::ModelOptions::new(
+            log.clone(),
+        )))
         .manage(log)
         .setup(|app| {
             let handle = app.handle().clone();
@@ -115,6 +118,7 @@ pub fn run() {
             commands::get_all_workspace_statuses,
             commands::get_registered_repos,
             commands::get_claude_settings,
+            commands::get_claude_model_options,
             commands::set_claude_setting,
             commands::get_config_settings,
             commands::get_global_paused,

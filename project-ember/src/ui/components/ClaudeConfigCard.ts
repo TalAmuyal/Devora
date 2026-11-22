@@ -1,7 +1,7 @@
 /**
  * Claude launch settings card: edits the default model, the Opus/Sonnet/Haiku model tiers, the effort level, and the permission mode for one scope (a profile, or `null` for user-level/global defaults).
  *
- * Most rows are a tri-state "combo" control (`Custom | Default | None`): a concrete value, "Default" (unset here → falls through profile → user → Devora default), or "None" (impose nothing, so Claude Code uses its own default). Custom values are free text (decoupled from Devora releases), and the permission mode's Custom has suggestion chips; the model tiers have no Devora default, so their Default leaves the model to Claude Code.
+ * Most rows are a tri-state "combo" control (`Custom | Default | None`): a concrete value, "Default" (unset here → falls through profile → user → Devora default), or "None" (impose nothing, so Claude Code uses its own default). Custom values are free text (decoupled from Devora releases): the permission mode's Custom has suggestion chips, and a model tier's Custom suggests the full model IDs Claude Code offers (`get_claude_model_options`, in the core's order) as its input's own list; the model tiers have no Devora default, so their Default leaves the model to Claude Code.
  * The Effort row is a single segmented control listing every choice at once — "Default", the supported levels (highest → lowest), and "None" — since effort is a closed set rather than free text.
  * The Default model row is a 2-state On/Off toggle: On imposes `opusplan` (via ANTHROPIC_MODEL); Off omits the var so Claude Code picks its own model.
  *
@@ -13,6 +13,7 @@ import { createSettingsEditor } from '../settingsEditor';
 import { createSettingsCard } from './SettingsCard';
 import { createSegmentedControl } from './SegmentedControl';
 import { createCommitInput } from './CommitInput';
+import { invokeLogOnly } from '../../invoke';
 
 /** The model alias imposed while the Default model toggle is On. Mirrors the `default-model` default in workspace.rs. */
 const DEFAULT_MODEL_ALIAS = 'opusplan';
@@ -35,9 +36,9 @@ interface RowSpec {
 }
 
 const ROWS: RowSpec[] = [
-  { key: 'opus-model', label: 'Opus tier', hint: 'ANTHROPIC_DEFAULT_OPUS_MODEL', kind: 'combo', placeholder: 'model id, then Enter' },
-  { key: 'sonnet-model', label: 'Sonnet tier', hint: 'ANTHROPIC_DEFAULT_SONNET_MODEL', kind: 'combo', placeholder: 'model id, then Enter' },
-  { key: 'haiku-model', label: 'Haiku tier', hint: 'ANTHROPIC_DEFAULT_HAIKU_MODEL', kind: 'combo', placeholder: 'model id, then Enter' },
+  { key: 'opus-model', label: 'Opus tier', hint: 'ANTHROPIC_DEFAULT_OPUS_MODEL', kind: 'combo', placeholder: 'model ID, then Enter' },
+  { key: 'sonnet-model', label: 'Sonnet tier', hint: 'ANTHROPIC_DEFAULT_SONNET_MODEL', kind: 'combo', placeholder: 'model ID, then Enter' },
+  { key: 'haiku-model', label: 'Haiku tier', hint: 'ANTHROPIC_DEFAULT_HAIKU_MODEL', kind: 'combo', placeholder: 'model ID, then Enter' },
   { key: 'effort', label: 'Effort', hint: '--effort', kind: 'effort' },
   { key: 'default-model', label: 'Default model', hint: 'ANTHROPIC_MODEL', kind: 'toggle' },
   { key: 'permission-mode', label: 'Permission mode', hint: '--permission-mode', kind: 'combo', placeholder: 'permission mode, then Enter' },
@@ -54,10 +55,40 @@ interface ClaudeSettings {
 export interface ClaudeConfigCardOptions {
   /** `null` = user-level/global scope; a path = that profile's scope. */
   profilePath: string | null;
+  /** The profile whose agents' models the tier fields suggest: this scope's, or the active one for the global scope; `null` suggests none. */
+  modelProfilePath: string | null;
 }
+
+/** A full model ID Claude Code offers, with its model's name (`get_claude_model_options`). */
+interface TierModel {
+  id: string;
+  name: string;
+}
+
+let modelListCount = 0;
 
 export function createClaudeConfigCard(options: ClaudeConfigCardOptions): HTMLElement {
   const card = createSettingsCard('Claude Launch Settings');
+
+  // One list for the three tier inputs, filled when the core answers: they work at once, and a failed lookup (no CLI,
+  // not logged in) leaves it empty, with a log line and no banner.
+  const modelList = document.createElement('datalist');
+  modelList.id = `claude-model-ids-${++modelListCount}`;
+  const suggestModels = (models: TierModel[]): void => {
+    modelList.replaceChildren(...models.map((model) => {
+      const option = document.createElement('option');
+      option.value = model.id;
+      option.label = model.name;
+      return option;
+    }));
+  };
+  // Asked again after every load: a changed tier changes what Claude Code's aliases resolve to.
+  const refreshModels = (): void => {
+    if (options.modelProfilePath === null) return;
+    invokeLogOnly<TierModel[]>('get_claude_model_options', { profilePath: options.modelProfilePath })
+      .then(suggestModels)
+      .catch(() => {});
+  };
 
   const editor = createSettingsEditor<ClaudeSettings>({
     getCommand: 'get_claude_settings',
@@ -66,6 +97,7 @@ export function createClaudeConfigCard(options: ClaudeConfigCardOptions): HTMLEl
     initial: { stored: {}, resolved: {} as Record<SettingKey, string | null>, choices: { effort_levels: [], permission_mode_suggestions: [] } },
     render: () => render(),
     afterLoad: (settings, ed) => {
+      refreshModels();
       for (const row of ROWS) {
         const stored = settings.stored[row.key];
         if (typeof stored === 'string') ed.setDraft(row.key, stored);
@@ -89,6 +121,7 @@ export function createClaudeConfigCard(options: ClaudeConfigCardOptions): HTMLEl
     for (const row of ROWS) {
       card.appendChild(renderRow(row));
     }
+    card.appendChild(modelList);
   };
 
   const renderRow = (row: RowSpec): HTMLElement => {
@@ -212,12 +245,13 @@ export function createClaudeConfigCard(options: ClaudeConfigCardOptions): HTMLEl
       whitespace: 'trim',
       onCommit: (value) => editor.commit(row.key, value),
     });
+    if (row.key !== 'permission-mode') commitInput.input.setAttribute('list', modelList.id);
     wrap.appendChild(commitInput.root);
 
     const chips = document.createElement('div');
     chips.className = 'config-chips';
     const choices = editor.settings.choices;
-    // Only the permission mode has suggestions: a model tier's Custom takes any model ID.
+    // The permission mode's suggestions are chips; a model tier's are its input's list (`modelList`), since a subscription offers too many models for chips.
     const suggestions = row.key === 'permission-mode' ? choices?.permission_mode_suggestions : [];
     for (const suggestion of suggestions ?? []) {
       const chip = document.createElement('button');

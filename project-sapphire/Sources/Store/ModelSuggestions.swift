@@ -23,63 +23,35 @@ public struct ModelSuggestions: Equatable, Sendable {
 
 	public let cliVersion: String?
 	let models: [AgentModelOption]
+	let tierModels: [TierModel]
 
 	public init(_ list: AgentModelList) {
 		cliVersion = list.cliVersion
 		models = list.models
+		tierModels = list.tierModels
 	}
 
-	/// The rows for `use`, newest generation first, then by tier (Fable, Opus, Sonnet, Haiku), then any other model by ID,
+	/// The rows for `use`, in the core's order (newest generation first, then by tier, then any other model by ID),
 	/// narrowed to the rows whose ID, alias or name contain `typed` (unless it's a row's own value).
 	public func rows(for use: Use, typed: String = "") -> [Row] {
 		var typed = typed.trimmingCharacters(in: .whitespaces)
 		let rows: [Row]
 		switch use {
 		case .agentModel:
-			// Claude Code's `default` is a choice, not a model: an agent is created with a model chosen.
-			rows = models.filter { $0.value != "default" }.map { model in
-				Row(
-					completion: model.value, name: Self.name(of: model), alias: isAlias(model) ? model.value : nil,
+			// The core leaves out Claude Code's `default`, a choice rather than a model: an agent is created with a model chosen.
+			rows = models.map { model in
+				let isAlias = model.resolvedModel.map { $0 != model.value } ?? false
+				return Row(
+					completion: model.value, name: model.displayName, alias: isAlias ? model.value : nil,
 					modelID: model.resolvedModel ?? model.value)
 			}
 		case .tier:
-			rows = fullIDs
+			rows = tierModels.map { Row(completion: $0.id, name: $0.name, alias: nil, modelID: $0.id) }
 		}
 		// A value already picked shows every alternative, not only itself.
 		if rows.contains(where: { $0.completion == typed }) { typed = "" }
-		return rows
-			.filter { row in typed.isEmpty || [row.modelID, row.name, row.alias ?? ""].contains { $0.localizedCaseInsensitiveContains(typed) } }
-			.sorted { Self.precedes($0.modelID, $1.modelID) }
-	}
-
-	/// The order Claude's models read in: `claude-<tier>-<major>[-<minor>][-<date>]` by generation, newest first, then by
-	/// tier; every other ID after them, by ID.
-	public static func precedes(_ first: String, _ second: String) -> Bool {
-		switch (Generation(first), Generation(second)) {
-		case (let a?, let b?): a.sortsBefore(b) || (!b.sortsBefore(a) && first < second)
-		case (.some, nil): true
-		case (nil, .some): false
-		case (nil, nil): first < second
-		}
-	}
-
-	struct Generation {
-		static let tiers = ["fable", "opus", "sonnet", "haiku"]
-		let major: Int
-		let minor: Int
-		let tier: Int
-
-		init?(_ id: String) {
-			let parts = id.split(separator: "-").map(String.init)
-			guard parts.count >= 3, parts[0] == "claude", let tier = Self.tiers.firstIndex(of: parts[1]), let major = Int(parts[2])
-			else { return nil }
-			// A date suffix (`-20251001`) isn't a minor version.
-			let minor = parts.count > 3 ? Int(parts[3]).flatMap { $0 < 1000 ? $0 : nil } ?? 0 : 0
-			(self.major, self.minor, self.tier) = (major, minor, tier)
-		}
-
-		func sortsBefore(_ other: Generation) -> Bool {
-			(other.major, other.minor, tier) < (major, minor, other.tier)
+		return rows.filter { row in
+			typed.isEmpty || [row.modelID, row.name, row.alias ?? ""].contains { $0.localizedCaseInsensitiveContains(typed) }
 		}
 	}
 
@@ -99,29 +71,7 @@ public struct ModelSuggestions: Equatable, Sendable {
 	}
 
 	func lists(_ value: String) -> Bool {
-		models.contains { $0.value == value || $0.resolvedModel == value }
-	}
-
-	/// An alias names a model it resolves to (`opus` → `claude-opus-5-5`); every other entry is a full ID.
-	private func isAlias(_ model: AgentModelOption) -> Bool {
-		model.resolvedModel.map { $0 != model.value } ?? false
-	}
-
-	/// Every full ID once, an alias's resolution included, named by its model: `default` names a choice, not a model, so
-	/// the model's own alias names it.
-	private var fullIDs: [Row] {
-		var seen = Set<String>()
-		return models.compactMap { model in
-			guard model.value != "default" else { return nil }
-			let id = model.resolvedModel ?? model.value
-			guard seen.insert(id).inserted else { return nil }
-			return Row(completion: id, name: Self.name(of: model), alias: nil, modelID: id)
-		}
-	}
-
-	/// A model's name, or its ID when the list gives it none.
-	private static func name(of model: AgentModelOption) -> String {
-		model.displayName.isEmpty ? model.value : model.displayName
+		models.contains { $0.value == value || $0.resolvedModel == value } || tierModels.contains { $0.id == value }
 	}
 }
 
