@@ -236,24 +236,33 @@ struct AgentWidgetBar: View {
 	}
 }
 
-/// Shows or hides the chat's system messages (tool calls, thinking, the session's notes): a native button that stays
-/// pressed while they show. What needs the user (errors, permission requests) shows either way.
+/// Shows or hides the chat's system messages (tool calls, thinking, the session's notes): their glyph and a native
+/// switch, held together in a capsule, with what it does in the tooltip. What needs the user (errors, permission
+/// requests) shows either way.
 struct AgentSystemMessagesToggle: View {
 	let shows: Bool
 	let onChange: (Bool) -> Void
 
 	static func help(_ shows: Bool) -> String {
 		shows
-			? "Hide tool calls, thinking and the session's notes"
-			: "Show tool calls, thinking and the session's notes"
+			? "System messages: shown. Hide tool calls, thinking and the session's notes"
+			: "System messages: hidden. Show tool calls, thinking and the session's notes"
 	}
 
 	var body: some View {
-		Toggle(isOn: Binding(get: { shows }, set: onChange)) {
-			Label("System messages", systemImage: "text.bubble")
+		HStack(spacing: 6) {
+			Image(systemName: "text.bubble").foregroundStyle(.secondary).accessibilityHidden(true)
+			Toggle("System messages", isOn: Binding(get: { shows }, set: onChange))
+				.toggleStyle(.switch)
+				.controlSize(.mini)
+				.labelsHidden()
 		}
-		.toggleStyle(.button)
+		.padding(.horizontal, 8).padding(.vertical, 3)
+		.background(.quaternary, in: Capsule())
+		.overlay(Capsule().strokeBorder(Color(nsColor: .separatorColor), lineWidth: 1))
 		.help(Self.help(shows))
+		.accessibilityElement(children: .combine)
+		.accessibilityLabel("System messages")
 		.accessibilityValue(shows ? "shown" : "hidden")
 		.accessibilityIdentifier("agent-system-messages")
 	}

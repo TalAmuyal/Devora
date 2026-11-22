@@ -31,6 +31,10 @@ public final class AgentChat {
 	@ObservationIgnored private var draftSave: Task<Void, Never>?
 	@ObservationIgnored private var initializing = true
 	@ObservationIgnored private var acceptingDraft = false
+	/// How many items the chat keeps while the reader follows the bottom: its 200-item tail, grown by the older pages the
+	/// transcript asked for there to fill its view (with system messages hidden a page can show little), so that trimming
+	/// doesn't take them back. The history bounds it.
+	@ObservationIgnored private var tail = 200
 
 	init(store: Store, core: DevoraCore, tab: AppTab, name: String) throws {
 		self.store = store
@@ -51,8 +55,8 @@ public final class AgentChat {
 					var changed = false
 					for event in batch { if self.apply(event) { changed = true } }
 					guard changed else { continue }
-					if self.anchor == nil && self.items.count > 200 {
-						self.items.removeFirst(self.items.count - 200)
+					if self.anchor == nil && self.items.count > self.tail {
+						self.items.removeFirst(self.items.count - self.tail)
 						self.hasOlder = true
 					}
 				}
@@ -197,6 +201,7 @@ public final class AgentChat {
 			let existing = Set(items.map(\.sequence))
 			items.insert(contentsOf: page.filter { !existing.contains($0.sequence) }, at: 0)
 			hasOlder = page.count == 200
+			if anchor == nil { tail = max(tail, items.count) }
 		} catch { fail(error) }
 	}
 

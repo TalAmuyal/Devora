@@ -155,3 +155,16 @@ Feature: Agent chat panel
     Then the agent transcript does not contain "Bash"
     And the agent transcript contains "A visible answer"
 
+  Scenario: Older history behind hidden system messages loads by itself, and stays as the chat goes on
+    When the user sends the agent prompt "Before the tools"
+    Then the agent "Echo" should be idle
+    When the user sends the agent prompt "tools:450"
+    Then the agent transcript contains "Done with the tools"
+    And the agent "Echo" should be idle
+    When Sapphire is quit and relaunched
+    Then the agent transcript contains "Done with the tools"
+    And the agent transcript contains "Before the tools"
+    When the user sends the agent prompt "After the tools"
+    Then the agent "Echo" should be idle
+    And the agent transcript contains "Before the tools"
+

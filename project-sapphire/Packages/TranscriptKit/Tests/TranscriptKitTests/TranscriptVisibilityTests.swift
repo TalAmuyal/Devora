@@ -153,3 +153,76 @@ struct SystemMessagesToggleTests {
 		#expect(offset(of: 31, in: view) == 0)
 	}
 }
+
+@MainActor
+struct OlderHistoryBehindHiddenRowsTests {
+	/// `count` tool calls from `first`, system messages that a chat hiding them shows nothing of.
+	private func tools(_ count: Int, from first: UInt64) -> [TranscriptItem] {
+		(0..<UInt64(count)).map { item(first + $0, .tool(toolUseId: "t\(first + $0)", name: "Bash", inputJson: "{}", verdict: nil, result: nil)) }
+	}
+
+	private func replies(_ count: Int, from first: UInt64) -> [TranscriptItem] {
+		(0..<UInt64(count)).map { item(first + $0, .assistant(text: String(repeating: "A reply that wraps. ", count: 20), model: nil)) }
+	}
+
+	private func shown(_ items: [TranscriptItem], hasOlder: Bool, asked: @escaping () -> Void) -> (NSWindow, TranscriptScrollView) {
+		let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 400), styleMask: [.titled], backing: .buffered, defer: false)
+		window.isReleasedWhenClosed = false
+		let view = TranscriptScrollView(anchor: nil)
+		view.hasVerticalScroller = false
+		view.frame = window.contentView!.bounds
+		window.contentView!.addSubview(view)
+		window.layoutIfNeeded()
+		view.hasOlder = hasOlder
+		view.onNeedsOlder = asked
+		view.apply(items)
+		return (window, view)
+	}
+
+	@Test func aTailThatShowsTooLittleToScrollAsksForOlderPagesUntilTheViewFillsOrTheHistoryEnds() {
+		var asked = 0
+		// A tail of 200 items, one reply among hidden tool calls: nothing to scroll, so no reader's scroll would ask.
+		var held = tools(199, from: 1001) + replies(1, from: 1200)
+		let (window, view) = shown(held, hasOlder: true) { asked += 1 }
+		defer { window.close() }
+		#expect(asked == 1, "it asks by itself")
+		view.apply(held)
+		#expect(asked == 1, "once, until the page arrives")
+		// A page with nothing shown: it asks again.
+		held = tools(200, from: 801) + held
+		view.apply(held)
+		#expect(asked == 2)
+		// A page whose replies fill the view: enough.
+		held = replies(20, from: 781) + tools(180, from: 801) + held.dropFirst(180)
+		view.apply(held)
+		#expect(asked == 2, "a filled view asks for no more")
+		#expect(view.distanceFromBottom == 0, "the reader stays at the bottom while the pages come in")
+	}
+
+	@Test func theHistorysEndStopsIt() {
+		var asked = 0
+		let (window, _) = shown(tools(10, from: 1) + replies(1, from: 11), hasOlder: false) { asked += 1 }
+		defer { window.close() }
+		#expect(asked == 0)
+	}
+
+	@Test func anOlderPageThatShowsNothingAtTheTopAsksForTheNext() {
+		var asked = 0
+		var held = replies(40, from: 1001)
+		let (window, view) = shown(held, hasOlder: true) { asked += 1 }
+		defer { window.close() }
+		#expect(asked == 0, "a filled view at the bottom asks for nothing")
+		// The reader scrolls to the top, which asks for a page.
+		view.contentView.scroll(to: NSPoint(x: 0, y: 0))
+		view.reflectScrolledClipView(view.contentView)
+		#expect(asked == 1)
+		// It brings only hidden rows: the view, unchanged, asks for the next by itself.
+		held = tools(200, from: 801) + held
+		view.apply(held)
+		#expect(asked == 2)
+		view.hasOlder = false
+		held = tools(100, from: 701) + held
+		view.apply(held)
+		#expect(asked == 2, "until the history ends")
+	}
+}
