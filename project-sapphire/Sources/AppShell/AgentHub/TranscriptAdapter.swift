@@ -6,24 +6,25 @@ import TranscriptKit
 /// core. They mirror the core's one to one, and a change to the core's makes this file stop compiling.
 
 extension TranscriptKit.TranscriptItem {
-	/// `names` are the models' names by full ID, which a model-change row shows instead of the IDs the core gives it.
-	init(_ item: CoreBindings.TranscriptItem, names: [String: String]) {
+	/// `name` names a model by its full ID (the core's rule, `ModelSuggestions.name(of:)`), which a model-change row shows
+	/// instead of the IDs the core gives it.
+	init(_ item: CoreBindings.TranscriptItem, name: (String) -> String?) {
 		self.init(
 			sequence: item.sequence, cliSession: item.cliSession, parentToolUseId: item.parentToolUseId,
 			state: TranscriptKit.ItemState(item.state),
-			content: Self.namingModels(TranscriptKit.TranscriptContent(item.content), names: names))
+			content: Self.namingModels(TranscriptKit.TranscriptContent(item.content), name: name))
 	}
 
 	/// A model-change row in the models' names, with its spoken form ("from … to …") in its detail as `spoken`. One the CLI
 	/// worded (a fallback) keeps its sentence; a model with no name keeps its ID.
 	private static func namingModels(
-		_ content: TranscriptKit.TranscriptContent, names: [String: String]
+		_ content: TranscriptKit.TranscriptContent, name: (String) -> String?
 	) -> TranscriptKit.TranscriptContent {
 		guard case .system(.modelChanged, let text, let detailJson) = content,
 			let detail = try? JSONSerialization.jsonObject(with: Data(detailJson.utf8)) as? [String: Any],
 			let from = detail["from"] as? String, let to = detail["to"] as? String
 		else { return content }
-		let (fromName, toName) = (names[from] ?? from, names[to] ?? to)
+		let (fromName, toName) = (name(from) ?? from, name(to) ?? to)
 		let fallback = detail["fallback"] as? Bool == true
 		var named = detail
 		named["spoken"] = fallback ? text : "Model changed from \(fromName) to \(toName)"

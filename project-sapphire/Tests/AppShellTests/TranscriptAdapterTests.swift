@@ -32,7 +32,7 @@ struct TranscriptAdapterTests {
 		]
 		for (core, expected) in cases {
 			#expect(
-				TranscriptKit.TranscriptItem(item(core, state: .streaming), names: [:])
+				TranscriptKit.TranscriptItem(item(core, state: .streaming), name: { _ in nil })
 					== TranscriptKit.TranscriptItem(sequence: 7, cliSession: "cli", parentToolUseId: "parent", state: .streaming, content: expected))
 		}
 	}

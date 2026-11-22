@@ -18,6 +18,7 @@ pub use devora_agent_space::{
 use devora_app::log::Log;
 pub use devora_config::agent::Scope;
 use devora_state::{ChatCommand, ChatPhase, ChatUpdate, Command, Event, SessionKind, Store};
+pub use devora_agent::models::same_model;
 pub use models::ModelOptions;
 pub use operations::{Creation, CreationEvent};
 use std::collections::BTreeMap;

@@ -9,9 +9,9 @@ import Observation
 public final class AgentChat {
 	public let tab: UInt64
 	public let profile: String
-	/// The names of the models Claude Code offers this agent's profile, by full model ID: the model widget's width fits
-	/// them, and the transcript's model-change rows use them. Empty until they arrive, or when Claude Code can't be asked.
-	public private(set) var modelNames: [String: String] = [:]
+	/// The models Claude Code offers this agent's profile: the model widget's width fits their names, and the transcript's
+	/// model-change rows are named by them. Nil until they arrive, or when Claude Code can't be asked.
+	public private(set) var modelSuggestions: ModelSuggestions?
 	public let name: String
 	public private(set) var chat: Chat?
 	public private(set) var items: [TranscriptItem] = []
@@ -251,11 +251,10 @@ public final class AgentChat {
 		do { try core.pauseAgentAfterTurn(tab: tab, generation: generation) } catch { fail(error) }
 	}
 
-	/// Asks once for the names of the models the profile is offered (`modelNames`); the core caches the list.
-	public func loadModelNames() async {
-		guard modelNames.isEmpty, let suggestions = await store?.modelSuggestions(profilePath: profile) else { return }
-		modelNames = Dictionary(
-			suggestions.rows(for: .agentModel).map { ($0.modelID, $0.name) }, uniquingKeysWith: { first, _ in first })
+	/// Asks once for the models the profile is offered (`modelSuggestions`); the core caches the list.
+	public func loadModelSuggestions() async {
+		guard modelSuggestions == nil else { return }
+		modelSuggestions = await store?.modelSuggestions(profilePath: profile)
 	}
 
 	/// This agent's own compaction threshold, or nil to follow its profile's.

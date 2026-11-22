@@ -1,5 +1,6 @@
 import CoreBindings
 import Foundation
+import Store
 import Testing
 import TranscriptKit
 
@@ -61,7 +62,11 @@ struct AgentModelTests {
 
 	/// The adapted row's text, and its spoken form from its detail.
 	func adapted(_ item: CoreBindings.TranscriptItem, names: [String: String]) -> (String, String?) {
-		guard case .system(.modelChanged, let text, let detailJson) = TranscriptKit.TranscriptItem(item, names: names).content
+		adapted(item, name: { names[$0] })
+	}
+
+	func adapted(_ item: CoreBindings.TranscriptItem, name: (String) -> String?) -> (String, String?) {
+		guard case .system(.modelChanged, let text, let detailJson) = TranscriptKit.TranscriptItem(item, name: name).content
 		else { return ("", nil) }
 		let detail = try? JSONSerialization.jsonObject(with: Data(detailJson.utf8)) as? [String: Any]
 		return (text, detail?["spoken"] as? String)
@@ -83,5 +88,24 @@ struct AgentModelTests {
 		let core = changeRow(#"{"from":"claude-opus-5-5","to":"claude-sonnet-5-5","fallback":true}"#, text: sentence)
 		let (text, spoken) = adapted(core, names: ["claude-opus-5-5": "Opus 5.5"])
 		#expect(text == sentence && spoken == sentence)
+	}
+
+	@Test func aChangeRowNamesADatedSnapshotByItsUndatedModelAsTheWidgetDoes() {
+		let list = AgentModelList(
+			cliVersion: "2.1.326", models: [],
+			tierModels: [TierModel(id: "claude-sonnet-4-5", name: "Sonnet 4.5"), TierModel(id: "claude-opus-5-5", name: "Opus 5.5")])
+		let suggestions = ModelSuggestions(list)
+		let core = changeRow(
+			#"{"from":"claude-opus-5-5","to":"claude-sonnet-4-5-20250929","fallback":false}"#,
+			text: "Model changed: claude-opus-5-5 → claude-sonnet-4-5-20250929")
+		#expect(adapted(core, name: { suggestions.name(of: $0) }).0 == "Model changed: Opus 5.5 → Sonnet 4.5")
+	}
+
+	@Test func theWidgetFitsANamedModelBeforeTheProfilesNamesArrive() {
+		let named = AgentModelPresentation(model: model("claude-sonnet-5-5", label: "Sonnet 5.5"), paused: false)
+		#expect(AgentModelWidget.reserved(names: [], presentation: named) == ["Pending", "Sonnet 5.5"])
+		let unnamed = AgentModelPresentation(
+			model: model("claude-sonnet-4-5-20250929", label: "claude-sonnet-4-5-20250929"), paused: false)
+		#expect(AgentModelWidget.reserved(names: ["Opus 5.5"], presentation: unnamed) == ["Opus 5.5", "Pending"], "an ID may be cut")
 	}
 }

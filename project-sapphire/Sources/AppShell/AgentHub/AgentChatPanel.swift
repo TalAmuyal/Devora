@@ -75,7 +75,7 @@ struct AgentChatPanel: View {
 			}
 			if model.prepared {
 				TranscriptView(
-					items: model.chat.items.map { TranscriptKit.TranscriptItem($0, names: model.chat.modelNames) },
+					items: model.chat.items.map { TranscriptKit.TranscriptItem($0, name: { model.chat.modelSuggestions?.name(of: $0) }) },
 					questions: (model.chat.chat?.questions ?? []).map(TranscriptKit.PermissionQuestion.init),
 					generation: model.chat.chat?.generation ?? 0, hasOlder: model.chat.hasOlder,
 					anchor: model.chat.anchor.map(TranscriptKit.ChatScrollAnchor.init),
@@ -99,7 +99,7 @@ struct AgentChatPanel: View {
 			AgentWidgetBar(
 				context: model.chat.chat?.context,
 				model: model.modelPresentation,
-				modelNames: Array(Set(model.chat.modelNames.values)).sorted(), enterSends: model.chat.enterSends,
+				modelNames: model.chat.modelSuggestions?.rows(for: .agentModel).map(\.name) ?? [], enterSends: model.chat.enterSends,
 				pause: model.pausePresentation,
 				compaction: model.contextPresentation,
 				turnRunning: model.chat.chat?.turnRunning == true,
@@ -111,7 +111,7 @@ struct AgentChatPanel: View {
 				onCompactNow: { Task { await model.chat.compactNow() } }
 			)
 			.padding(.horizontal, 12).padding(.bottom, 10)
-			.task { await model.chat.loadModelNames() }
+			.task { await model.chat.loadModelSuggestions() }
 		}
 		.background(.windowBackground)
 		.accessibilityElement(children: .contain)

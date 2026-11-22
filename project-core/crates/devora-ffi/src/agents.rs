@@ -99,6 +99,16 @@ pub struct AgentModelList {
     pub tier_models: Vec<TierModel>,
 }
 
+/// The name of the model `id` among `models` (a list's `tier_models`, each full ID once), by the core's rule for model IDs:
+/// a dated snapshot is its undated model (`claude-sonnet-4-5-20250929` is `claude-sonnet-4-5`). None when it isn't listed.
+#[uniffi::export]
+pub fn model_name(models: Vec<TierModel>, id: String) -> Result<Option<String>, CoreError> {
+    Ok(models
+        .into_iter()
+        .find(|model| devora_core::agents::same_model(&model.id, &id))
+        .map(|model| model.name))
+}
+
 impl AgentLaunch {
     fn context(self, global_config: PathBuf) -> Result<LaunchContext, CoreError> {
         let settings = serde_json::from_str(&self.settings_json)
