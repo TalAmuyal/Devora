@@ -319,24 +319,6 @@ pub async fn cli_version(options: &SessionOptions) -> Result<String, String> {
         .ok_or_else(|| format!("Claude's --version exited with {}", output.status))
 }
 
-/// How to show a model the CLI gives no name: its tier and version, without the `claude-` prefix and a date
-/// (`claude-sonnet-4-5-20250929` is `sonnet-4-5`); an ID that doesn't read that way, without the prefix only.
-pub fn short_id(id: &str) -> String {
-    match Generation::of(id) {
-        Some(Generation {
-            version: (major, 0),
-            tier,
-        }) => format!("{}-{major}", Generation::TIERS[tier]),
-        Some(Generation {
-            version: (major, minor),
-            tier,
-        }) => {
-            format!("{}-{major}-{minor}", Generation::TIERS[tier])
-        }
-        None => id.strip_prefix("claude-").unwrap_or(id).to_owned(),
-    }
-}
-
 /// Whether two model IDs name the same model: equal, or equal but for a snapshot date at the end. The API answers a
 /// request for an undated ID with its dated snapshot (`claude-sonnet-4-5` with `claude-sonnet-4-5-20250929`).
 pub fn same_model(a: &str, b: &str) -> bool {
@@ -471,7 +453,7 @@ mod tests {
     }
 
     #[test]
-    fn a_model_is_named_as_the_cli_names_it_or_shown_by_its_tier_and_version() {
+    fn a_model_is_named_as_the_cli_names_it_a_dated_snapshot_included() {
         let list = tiers("claude-opus-5-5");
         assert_eq!(
             list.name_of("claude-opus-5-5"),
@@ -490,13 +472,6 @@ mod tests {
             "claude-sonnet-4-5-20250929"
         ));
         assert!(!same_model("claude-opus-4-8", "claude-opus-4-7"));
-        assert_eq!(short_id("claude-sonnet-4-5-20250929"), "sonnet-4-5");
-        assert_eq!(short_id("claude-opus-5"), "opus-5");
-        assert_eq!(
-            short_id("claude-3-5-sonnet-20241022"),
-            "3-5-sonnet-20241022"
-        );
-        assert_eq!(short_id("custom-model"), "custom-model");
     }
 
     /// A subscription's list, as Claude Code 2.1.312 gave it: its aliases, then other models' full IDs.

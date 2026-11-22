@@ -43,7 +43,7 @@ pub struct ChatContext {
 pub struct ChatModel {
     /// The latest reply's model in the agent's own conversation, a full ID; none until one is known.
     pub latest: Option<String>,
-    /// How to show it: its name as Claude Code lists it, else its tier and version (`sonnet-4-5`).
+    /// How to show it: its name as Claude Code lists it, else its ID as it is.
     pub label: Option<String>,
     /// What the agent is set to: an alias or a full ID.
     pub set_to: String,

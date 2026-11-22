@@ -1,4 +1,4 @@
-use devora_agent::models::{short_id, ModelList};
+use devora_agent::models::ModelList;
 use devora_agent::session::SessionEvent;
 use devora_agent_space::{ActiveModel, CompactionProgress, SpaceEvent};
 use devora_state::{ChatCommand, ChatModel, ChatUpdate, PermissionQuestion, Store};
@@ -54,14 +54,15 @@ pub(super) fn publish(state: &Store, tab: u64, generation: u64, event: SpaceEven
 }
 
 /// The model widget's view of `active` for an agent set to `set_to`, named and checked against `list`, the models its
-/// launch was offered; without a list it shows the ID by its tier and version, and claims no mismatch.
+/// launch was offered; a model with no name (or no list) shows its ID as it is, and claims no mismatch.
 pub(super) fn model(active: &ActiveModel, set_to: &str, list: Option<&ModelList>) -> ChatModel {
     let latest = active.latest.as_deref();
     ChatModel {
         latest: active.latest.clone(),
         label: latest.map(|id| {
             list.and_then(|list| list.name_of(id))
-                .map_or_else(|| short_id(id), str::to_owned)
+                .unwrap_or(id)
+                .to_owned()
         }),
         set_to: set_to.to_owned(),
         set_to_resolved: list
@@ -197,7 +198,11 @@ mod tests {
             "opus",
             None,
         );
-        assert_eq!(unlisted.label.as_deref(), Some("sonnet-4-5"));
+        assert_eq!(
+            unlisted.label.as_deref(),
+            Some("claude-sonnet-4-5-20250929"),
+            "the ID as it is"
+        );
         assert!(!unlisted.differs, "no list, no guess");
         assert_eq!(unlisted.set_to_resolved, None);
     }
