@@ -15,7 +15,7 @@ struct TranscriptAdapterTests {
 		let result = CoreBindings.ToolResult(text: "out", contentJson: "{}", isError: true)
 		let cases: [(CoreBindings.TranscriptContent, TranscriptKit.TranscriptContent)] = [
 			(.user(text: "hi", error: "oops"), .user(text: "hi", error: "oops")),
-			(.assistant(text: "hello", model: nil), .assistant(text: "hello")),
+			(.assistant(text: "hello", model: "claude-opus-5-5"), .assistant(text: "hello", model: "claude-opus-5-5")),
 			(.thinking(text: "hmm", signature: "sig"), .thinking(text: "hmm", signature: "sig")),
 			(
 				.tool(toolUseId: "t1", name: "Bash", inputJson: "{\"command\":\"ls\"}", verdict: verdict, result: result),
@@ -32,7 +32,7 @@ struct TranscriptAdapterTests {
 		]
 		for (core, expected) in cases {
 			#expect(
-				TranscriptKit.TranscriptItem(item(core, state: .streaming))
+				TranscriptKit.TranscriptItem(item(core, state: .streaming), name: { _ in nil })
 					== TranscriptKit.TranscriptItem(sequence: 7, cliSession: "cli", parentToolUseId: "parent", state: .streaming, content: expected))
 		}
 	}

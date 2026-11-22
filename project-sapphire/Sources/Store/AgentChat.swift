@@ -9,6 +9,9 @@ import Observation
 public final class AgentChat {
 	public let tab: UInt64
 	public let profile: String
+	/// The models Claude Code offers this agent's profile: the model widget's width fits their names, and the transcript's
+	/// model-change rows are named by them. Nil until they arrive, or when Claude Code can't be asked.
+	public private(set) var modelSuggestions: ModelSuggestions?
 	public let name: String
 	public private(set) var chat: Chat?
 	public private(set) var items: [TranscriptItem] = []
@@ -246,6 +249,12 @@ public final class AgentChat {
 	public func pause() {
 		guard let generation = chat?.generation else { return }
 		do { try core.pauseAgentAfterTurn(tab: tab, generation: generation) } catch { fail(error) }
+	}
+
+	/// Asks once for the models the profile is offered (`modelSuggestions`); the core caches the list.
+	public func loadModelSuggestions() async {
+		guard modelSuggestions == nil else { return }
+		modelSuggestions = await store?.modelSuggestions(profilePath: profile)
 	}
 
 	/// This agent's own compaction threshold, or nil to follow its profile's.

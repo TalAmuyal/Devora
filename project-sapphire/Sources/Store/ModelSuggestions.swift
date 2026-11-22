@@ -31,6 +31,11 @@ public struct ModelSuggestions: Equatable, Sendable {
 		tierModels = list.tierModels
 	}
 
+	/// The name Claude Code gives the model `id` (a full ID), by the core's rule: a dated snapshot is its undated model.
+	public func name(of id: String) -> String? {
+		(try? modelName(models: tierModels, id: id)) ?? nil
+	}
+
 	/// The rows for `use`, in the core's order (newest generation first, then by tier, then any other model by ID),
 	/// narrowed to the rows whose ID, alias or name contain `typed` (unless it's a row's own value).
 	public func rows(for use: Use, typed: String = "") -> [Row] {

@@ -20,6 +20,7 @@ Types of changes:
 
 ### Added
 
+- Devora Sapphire shows which model an agent is actually using: a Model widget beside Context names the model its latest reply came from ("Pending" until one is known), marks a reply from a model the agent isn't set to with an orange glyph that explains it on hover, and the transcript adds one row where the replying model changes, with each reply's model in its hover title
 - Devora Ember's Claude Launch Settings suggest the model IDs Claude Code offers on the Opus, Sonnet and Haiku tiers' Custom fields, newest first, each with its model's name; any other model ID still works
 - Devora Sapphire suggests the models Claude Code offers: the New Agent dialog's model field (which starts at the latest Opus and requires a model) and a model tier's Custom field list them newest first, by name in the dialog and by name and ID for a tier; any other model name still works
 - Devora Sapphire has an Appearance setting in User Defaults: Automatic (the system's, the default), Light or Dark, applied at once and from the first frame at launch. Native views (dialogs, hubs, settings, the toolbar and agent chats' controls) follow it today; the terminals stay dark, and the transcript and web panes don't follow it yet

@@ -10,7 +10,7 @@ private func item(_ sequence: UInt64, _ content: TranscriptContent, state: ItemS
 }
 
 private func reply(_ sequence: UInt64, _ text: String = "A reply.") -> TranscriptItem {
-	item(sequence, .assistant(text: text))
+	item(sequence, .assistant(text: text, model: nil))
 }
 
 /// A transcript of `count` rows from `first`, mixing short and long replies so that rows differ in height.
@@ -542,7 +542,7 @@ struct TranscriptWheelTargetTests {
 	@Test func aCodeBlocksOwnScrollViewIsPartOfTheTranscript() async throws {
 		let views = Views()
 		let lines = (0..<30).map { "line \($0): " + String(repeating: "wide ", count: 80) }.joined(separator: "\n")
-		let code = TranscriptItem(sequence: 1, cliSession: "s", parentToolUseId: nil, state: .complete, content: .assistant(text: "```\n\(lines)\n```"))
+		let code = TranscriptItem(sequence: 1, cliSession: "s", parentToolUseId: nil, state: .complete, content: .assistant(text: "```\n\(lines)\n```", model: nil))
 		let window = await shown(TranscriptView(items: [code], hasOlder: false, anchor: nil, onScroll: { _ in }, onNeedsOlder: {}, onView: { views.byName["code"] = $0 }))
 		defer { window.close() }
 		let view = try #require(views.byName["code"])
@@ -577,7 +577,7 @@ private func tool(_ sequence: UInt64, verdict: String? = "approve", result: Stri
 
 struct TranscriptRowModelTests {
 	@Test func copyTakesTheSourceAndTheBridgeTheWebTranscriptsText() {
-		let reply = TranscriptRowModel(item(1, .assistant(text: "A **bold** [link](https://example.com)")), document: nil)
+		let reply = TranscriptRowModel(item(1, .assistant(text: "A **bold** [link](https://example.com)", model: nil)), document: nil)
 		#expect(reply.source == "A **bold** [link](https://example.com)")
 		let call = TranscriptRowModel(tool(2), document: nil)
 		#expect(call.source == "Bash\n\n{\n  \"command\" : \"pwd\",\n  \"description\" : \"cwd\"\n}\n\n/tmp")
@@ -592,7 +592,7 @@ struct TranscriptRowModelTests {
 		let open = TranscriptRowModel(thought(2), document: nil, expanded: true)
 		#expect(open.accessibilityLabel == "Thinking, expanded")
 		#expect(open.accessibilityValue == "Consider **this**.")
-		let stopped = TranscriptRowModel(item(3, .assistant(text: "Half"), state: .interrupted), document: nil)
+		let stopped = TranscriptRowModel(item(3, .assistant(text: "Half", model: nil), state: .interrupted), document: nil)
 		#expect(stopped.accessibilityLabel == "Agent, interrupted")
 	}
 
@@ -703,5 +703,24 @@ struct TranscriptToggleAtTheBottomTests {
 		view.toggle(1000)
 		#expect(view.table.rect(ofRow: row).minY - view.contentView.bounds.minY == offset)
 		#expect(view.distanceFromBottom > 0, "The opened body pushes the bottom out of view, and the view stays")
+	}
+}
+
+@MainActor
+struct ModelRowTests {
+	@Test func aRepliesHoverTitleNamesTheModelThatWroteIt() {
+		let reply = item(42, .assistant(text: "Done.", model: "claude-sonnet-5-5"))
+		#expect(TranscriptRowModel(reply, document: nil).helpTitle == "#42 · claude-sonnet-5-5")
+		#expect(TranscriptRowModel(item(7, .assistant(text: "Done.", model: nil)), document: nil).helpTitle == "#7")
+	}
+
+	@Test func aModelChangeRowIsSpokenInTheWordsItsDetailGives() {
+		let detail = #"{"from":"a","to":"b","fallback":false,"spoken":"Model changed from A to B"}"#
+		let row = TranscriptRowModel(
+			item(3, .system(kind: .modelChanged, text: "Model changed: A → B", detailJson: detail)), document: nil)
+		#expect(row.accessibilityValue == "Model changed from A to B")
+		let unspoken = TranscriptRowModel(
+			item(4, .system(kind: .modelChanged, text: "Model changed: A → B", detailJson: "{}")), document: nil)
+		#expect(unspoken.accessibilityValue == "Model changed: A → B")
 	}
 }

@@ -123,3 +123,11 @@ Feature: Agent chat panel
     When the user requests Pause in the agent chat
     Then the agent chat is paused
     And the context popover refuses Compact Now with "This agent is paused"
+
+  Scenario: The model widget shows the model the replies come from, and the transcript says once where it changed
+    When the user sends the agent prompt "model:claude-opus-5-5"
+    Then the agent model widget shows "Opus 5.5", as the model it is set to
+    When the user sends the agent prompt "model:claude-sonnet-5-5"
+    Then the agent model widget shows "Sonnet 5.5", not the model it is set to
+    When the user sends the agent prompt "model:claude-sonnet-5-5"
+    Then the agent transcript says once "Model changed: Opus 5.5 → Sonnet 5.5"

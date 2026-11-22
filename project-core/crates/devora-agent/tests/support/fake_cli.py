@@ -252,6 +252,12 @@ for line in sys.stdin:
             emit({"type":"assistant","message":8})
             emit({"type":"future_message","data":9})
             result()
+        elif text.startswith("model:"):
+            # A whole reply (no stream) from the model named after the colon, as the API names the model that answered.
+            reply = recorded("assistant")
+            reply["message"]["model"] = text[len("model:"):]
+            emit(reply)
+            result()
         elif text in ("subagent:mid", "subagent:last"):
             # A subagent's whole message within the turn (the CLI streams none for it): it names the tool call
             # that started the subagent, and reports the subagent's own, small context.

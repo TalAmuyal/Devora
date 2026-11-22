@@ -70,7 +70,7 @@ struct RowHeights {
 		case .item(let item):
 			switch item.content {
 			case .user(let body, let error): text = body + (error ?? "")
-			case .assistant(let body): text = body
+			case .assistant(let body, _): text = body
 			case .thinking(let body, _):
 				guard expanded else { return 32 }
 				text = body
