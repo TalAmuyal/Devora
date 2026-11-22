@@ -153,19 +153,36 @@ public final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NS
 
 	private var visiblePin: Pin? { visibleRow.map(pin) }
 
+	/// The row to keep in place across an update to `new`: the top visible one, or, when the update drops it (a system
+	/// message the reader hid), the nearest one above it that stays, else below it.
+	private func keptPin(in new: [TranscriptEntry]) -> Pin? {
+		guard let top = visibleRow else { return nil }
+		let keys = Set(new.map(\.key))
+		let rows = Array((0...top).reversed()) + Array((top + 1)..<entries.count)
+		return rows.first { keys.contains(entries[$0].key) }.map(pin)
+	}
+
+	/// Whether the transcript shows its system messages (`TranscriptVisibility.system`); the chat's own setting.
+	var showsSystem = false
+	/// The setting the rows were last laid out with: a change is the reader's toggle, after which the position is saved.
+	private var laidOutShowsSystem = false
+
 	/// Whether every row has its measured height (the idle measurement has nothing left to do).
 	var isSettled: Bool { pending.isEmpty && idle == nil }
 
 	// MARK: Updates
 
-	/// Shows `items` (those the chat ever shows: `TranscriptVisibility`), with a card for each of `questions`, whose
-	/// answers carry `generation`. A row never shown isn't laid out, so it is never measured.
+	/// Shows `items` (those the chat shows: `TranscriptVisibility`, system messages only with `showsSystem`), with a
+	/// card for each of `questions`, whose answers carry `generation`. A row not shown isn't laid out, so it is never
+	/// measured.
 	func apply(_ items: [TranscriptItem], questions: [PermissionQuestion] = [], generation: UInt64 = 0) {
-		let items = items.filter { $0.visibility != .never }
+		let items = items.filter { $0.visibility == .always || ($0.visibility == .system && showsSystem) }
 		let new = TranscriptEntry.layout(items, questions: questions, generation: generation)
+		let toggled = showsSystem != laidOutShowsSystem
+		laidOutShowsSystem = showsSystem
 		let change = TranscriptChange(from: entries, to: new)
 		guard change != .none else { return }
-		let anchor = following ? nil : visiblePin
+		let anchor = following ? nil : keptPin(in: new)
 		let firstLoad = entries.isEmpty
 		entries = new
 		let sequences = Set(items.map(\.sequence))
@@ -207,14 +224,18 @@ public final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NS
 		if firstLoad, let saved = restoring {
 			// The saved position, once: at its row if the transcript has it, otherwise at the bottom, as the web one does.
 			// Its row stays put while the rows around it are measured.
+			// A position on a row now hidden is the nearest shown row's above it.
 			restoring = nil
-			following = !sequences.contains(saved.sequence)
-			kept = following ? nil : Pin(key: .item(saved.sequence), offset: CGFloat(saved.offset))
+			let row = items.last { $0.sequence <= saved.sequence }
+			following = row == nil
+			kept = row.map { Pin(key: .item($0.sequence), offset: CGFloat(saved.offset)) }
 			settle(kept)
 		}
 		measureVisible(keeping: kept)
 		settle(anchor)
 		scheduleIdle()
+		// The reader's position is now on a row that stays shown; saved, so that it never names a hidden one.
+		if toggled && !following { onScroll(visibleAnchor) }
 	}
 
 	// MARK: Heights
@@ -771,6 +792,8 @@ public struct TranscriptView: NSViewRepresentable {
 	var generation: UInt64 = 0
 	let hasOlder: Bool
 	let anchor: ChatScrollAnchor?
+	/// Whether the chat shows its system messages.
+	var showsSystem = false
 	var onScroll: (ChatScrollAnchor?) -> Void
 	var onNeedsOlder: () -> Void
 	var onAnswer: (String, String, UInt64) -> Void = { _, _, _ in }
@@ -778,7 +801,8 @@ public struct TranscriptView: NSViewRepresentable {
 
 	public init(
 		items: [TranscriptItem], questions: [PermissionQuestion] = [], generation: UInt64 = 0,
-		hasOlder: Bool, anchor: ChatScrollAnchor?, onScroll: @escaping (ChatScrollAnchor?) -> Void, onNeedsOlder: @escaping () -> Void,
+		hasOlder: Bool, anchor: ChatScrollAnchor?, showsSystem: Bool, onScroll: @escaping (ChatScrollAnchor?) -> Void,
+		onNeedsOlder: @escaping () -> Void,
 		onAnswer: @escaping (String, String, UInt64) -> Void = { _, _, _ in }, onView: @escaping (TranscriptScrollView) -> Void
 	) {
 		self.items = items
@@ -786,6 +810,7 @@ public struct TranscriptView: NSViewRepresentable {
 		self.generation = generation
 		self.hasOlder = hasOlder
 		self.anchor = anchor
+		self.showsSystem = showsSystem
 		self.onScroll = onScroll
 		self.onNeedsOlder = onNeedsOlder
 		self.onAnswer = onAnswer
@@ -801,6 +826,7 @@ public struct TranscriptView: NSViewRepresentable {
 		view.onNeedsOlder = onNeedsOlder
 		view.onAnswer = onAnswer
 		view.hasOlder = hasOlder
+		view.showsSystem = showsSystem
 		view.apply(items, questions: questions, generation: generation)
 		onView(view)
 	}

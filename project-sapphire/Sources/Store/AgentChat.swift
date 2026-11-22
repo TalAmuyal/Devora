@@ -17,6 +17,9 @@ public final class AgentChat {
 	public private(set) var items: [TranscriptItem] = []
 	public var draft: String { didSet { if !acceptingDraft { saveDraftLater() } } }
 	public private(set) var anchor: ChatScrollAnchor?
+	/// Whether the chat shows its system messages (tool calls, thinking, the session's notes), which it hides by default;
+	/// kept with the agent's draft and position, so it holds across a relaunch and for a paused agent.
+	public private(set) var showsSystem = false
 	public private(set) var hasOlder = true
 	public private(set) var loadingOlder = false
 	public private(set) var sending = false
@@ -39,6 +42,7 @@ public final class AgentChat {
 		let saved = try core.snapshot().agentViews.first { $0.profilePath == profile && $0.name == name }
 		draft = saved?.draft ?? ""
 		anchor = saved?.anchor
+		showsSystem = saved?.showSystem ?? false
 		let subscription = try core.subscribeAgentChats()
 		events = Task { [weak self] in
 			do {
@@ -193,6 +197,13 @@ public final class AgentChat {
 			let existing = Set(items.map(\.sequence))
 			items.insert(contentsOf: page.filter { !existing.contains($0.sequence) }, at: 0)
 			hasOlder = page.count == 200
+		} catch { fail(error) }
+	}
+
+	public func setShowsSystem(_ show: Bool) {
+		do {
+			_ = try core.dispatch(command: .setAgentShowSystem(profilePath: profile, name: name, show: show))
+			showsSystem = show
 		} catch { fail(error) }
 	}
 

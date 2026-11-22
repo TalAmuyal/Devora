@@ -54,7 +54,8 @@ Feature: Agent chat panel
     Then the agent "Echo" should be idle
 
   Scenario: Pausing stops the agent's background work, and resuming tells it what was stopped
-    When the user sends the agent prompt "background-work"
+    When the user shows the agent's system messages
+    And the user sends the agent prompt "background-work"
     Then the agent "Echo" should be idle
     When the user requests Pause in the agent chat
     Then the agent chat is paused
@@ -71,7 +72,8 @@ Feature: Agent chat panel
     Then the first agent history item is restored at the top
 
   Scenario: Thinking and tool details start collapsed and the Judgess badge is shown
-    When the user sends the agent prompt "chat-fixture"
+    When the user shows the agent's system messages
+    And the user sends the agent prompt "chat-fixture"
     Then the agent transcript has a "chat-thinking" item
     And the agent transcript has a "chat-tool" item
     And the agent tool has a Judgess badge
@@ -104,7 +106,8 @@ Feature: Agent chat panel
       | Command+Shift+Y  |
 
   Scenario: Stop interrupts while Escape and Control+C keep the turn running
-    When the user sends the agent prompt "stream"
+    When the user shows the agent's system messages
+    And the user sends the agent prompt "stream"
     And the user presses Escape and Control+C in the agent prompt
     Then the agent turn is still running
     When the user stops the agent turn
@@ -117,7 +120,8 @@ Feature: Agent chat panel
     Then the agent context bar has a known window and threshold 80
 
   Scenario: The context popover sets this agent's threshold and compacts on demand
-    When the user sends the agent prompt "Context metrics"
+    When the user shows the agent's system messages
+    And the user sends the agent prompt "Context metrics"
     And the user sets the agent compaction threshold to 50
     Then the agent compacts at 50 for this agent, over the profile threshold 80
     When the user compacts the agent now
@@ -136,3 +140,18 @@ Feature: Agent chat panel
     Then the agent model widget shows "Sonnet 5.5", not the model it is set to
     When the user sends the agent prompt "model:claude-sonnet-5-5"
     Then the agent transcript says once "Model changed: Opus 5.5 → Sonnet 5.5"
+
+  Scenario: System messages are hidden until the user shows them, and the choice is the agent's, across a relaunch
+    When the user sends the agent prompt "chat-fixture"
+    Then the agent "Echo" should be idle
+    And the agent transcript contains "A visible answer"
+    And the agent transcript does not contain "Bash"
+    When the user shows the agent's system messages
+    Then the agent transcript has a "chat-tool" item
+    And the agent transcript has a "chat-thinking" item
+    When Sapphire is quit and relaunched
+    Then the agent transcript has a "chat-tool" item
+    When the user hides the agent's system messages
+    Then the agent transcript does not contain "Bash"
+    And the agent transcript contains "A visible answer"
+

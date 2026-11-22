@@ -18,6 +18,13 @@ pub enum Command {
         name: String,
         paused: bool,
     },
+    /// Whether the agent's chat shows its system messages; kept with the chat's draft and position, so a paused agent's
+    /// chat can be toggled too.
+    SetAgentShowSystem {
+        profile_path: String,
+        name: String,
+        show: bool,
+    },
     ClearAgentDraft {
         profile_path: String,
         name: String,
@@ -269,6 +276,30 @@ pub(crate) fn apply(
                 return Ok(vec![]);
             }
             view.paused = paused;
+            vec![Event::AgentViewChanged {
+                profile_path,
+                name,
+                view: Some(view.clone()),
+            }]
+        }
+        Command::SetAgentShowSystem {
+            profile_path,
+            name,
+            show,
+        } => {
+            // The default needs no view of its own.
+            if !show
+                && !app.agent_views.iter().any(|view| {
+                    view.profile_path == profile_path && view.name == name && view.show_system
+                })
+            {
+                return Ok(vec![]);
+            }
+            let view = agent_view(app, &profile_path, &name);
+            if view.show_system == show {
+                return Ok(vec![]);
+            }
+            view.show_system = show;
             vec![Event::AgentViewChanged {
                 profile_path,
                 name,

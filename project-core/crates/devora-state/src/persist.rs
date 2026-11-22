@@ -52,6 +52,7 @@ const MIGRATIONS: &[&str] = &[
     "ALTER TABLE agent_views ADD COLUMN paused INTEGER NOT NULL DEFAULT 0;
      UPDATE agent_views SET paused = keep_paused;
      ALTER TABLE agent_views DROP COLUMN keep_paused;",
+    "ALTER TABLE agent_views ADD COLUMN show_system INTEGER NOT NULL DEFAULT 0;",
 ];
 
 pub(crate) struct Db {
@@ -347,7 +348,7 @@ fn load(conn: &Connection) -> Result<State, Error> {
     }
 
     let mut query = conn.prepare(
-        "SELECT profile_path, name, draft, anchor_sequence, anchor_offset, paused
+        "SELECT profile_path, name, draft, anchor_sequence, anchor_offset, paused, show_system
          FROM agent_views ORDER BY profile_path, name",
     )?;
     let agent_views = query
@@ -363,6 +364,7 @@ fn load(conn: &Connection) -> Result<State, Error> {
                     offset: offset.unwrap_or(0),
                 }),
                 paused: row.get(5)?,
+                show_system: row.get(6)?,
             })
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -383,14 +385,16 @@ fn write(conn: &mut Connection, state: &State) -> rusqlite::Result<()> {
     tx.execute("DELETE FROM agent_views", [])?;
     for view in &state.app.agent_views {
         tx.execute(
-            "INSERT INTO agent_views VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            "INSERT INTO agent_views (profile_path, name, draft, anchor_sequence, anchor_offset, paused, show_system)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             params![
                 view.profile_path,
                 view.name,
                 view.draft,
                 view.anchor.as_ref().map(|a| a.sequence),
                 view.anchor.as_ref().map(|a| a.offset),
-                view.paused
+                view.paused,
+                view.show_system
             ],
         )?;
     }
@@ -1212,6 +1216,66 @@ mod agent_view_tests {
                 .collect::<Vec<_>>(),
             [("Kept", true), ("Plain", false)],
             "Keep paused carries over, and no other agent comes back paused"
+        );
+    }
+
+    #[test]
+    fn an_upgrade_hides_every_chats_system_messages_and_keeps_its_view_and_a_shown_chat_stays_shown(
+    ) {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("state.db");
+        let conn = Connection::open(&path).unwrap();
+        let before = MIGRATIONS
+            .iter()
+            .position(|migration| migration.contains("ADD COLUMN show_system"))
+            .unwrap();
+        for migration in &MIGRATIONS[..before] {
+            conn.execute_batch(migration).unwrap();
+        }
+        conn.pragma_update(None, "user_version", before).unwrap();
+        conn.execute_batch(
+            "INSERT INTO agent_views VALUES ('/p', 'Paused', 'draft', NULL, NULL, 1);
+             INSERT INTO agent_views VALUES ('/p', 'Reading', '', 4, 2, 0);",
+        )
+        .unwrap();
+        drop(conn);
+
+        let store = Store::open(&path).unwrap();
+        let views = store.snapshot().agent_views;
+        assert_eq!(
+            views
+                .iter()
+                .map(|view| (view.name.as_str(), view.draft.as_str(), view.anchor.clone(), view.paused, view.show_system))
+                .collect::<Vec<_>>(),
+            [
+                ("Paused", "draft", None, true, false),
+                ("Reading", "", Some(crate::ChatScrollAnchor { sequence: 4, offset: 2 }), false, false),
+            ],
+            "every chat starts with its system messages hidden, and keeps its draft, position and pause"
+        );
+        let show = |name: &str, show| Command::SetAgentShowSystem {
+            profile_path: "/p".into(),
+            name: name.into(),
+            show,
+        };
+        assert_eq!(store.dispatch(show("Reading", true)).unwrap().len(), 1);
+        assert!(
+            store.dispatch(show("Reading", true)).unwrap().is_empty(),
+            "no change, no event"
+        );
+        assert!(
+            store.dispatch(show("Unseen", false)).unwrap().is_empty(),
+            "hiding needs no view of its own"
+        );
+        drop(store);
+        let views = Store::open(&path).unwrap().snapshot().agent_views;
+        assert_eq!(
+            views
+                .iter()
+                .map(|view| (view.name.as_str(), view.show_system))
+                .collect::<Vec<_>>(),
+            [("Paused", false), ("Reading", true)],
+            "a shown chat is still shown after a relaunch"
         );
     }
 

@@ -27,7 +27,8 @@ Feature: Global Pause
     And the agent prompt draft is "Keep my draft"
 
   Scenario: Relaunch preserves the global hold and restores history without a CLI launch
-    When the user sends the agent prompt "History before the hold"
+    When the user shows the agent's system messages
+    And the user sends the agent prompt "History before the hold"
     Then the agent "Echo" should be idle
     When the user drafts the agent prompt "After relaunch"
     And the user globally pauses Devora
@@ -47,7 +48,8 @@ Feature: Global Pause
     And the agent prompt draft is "After relaunch"
 
   Scenario: Keep paused survives relaunch and can be reversed before Devora resumes
-    When the user sends the agent prompt "Before the hold"
+    When the user shows the agent's system messages
+    And the user sends the agent prompt "Before the hold"
     Then the agent "Echo" should be idle
     When the user globally pauses Devora
     Then the agent chat is paused

@@ -15,6 +15,15 @@ When('the user sends the agent prompt {string}', async function (this: SapphireW
   await this.bridge.waitFor('the agent ready to send', () => this.bridge.agentChat(), s => s.canSend);
   await this.bridge.chatAction('send');
 });
+When("the user {word} the agent's system messages", async function (this: SapphireWorld, action: string) {
+  assert.ok(action === 'shows' || action === 'hides', `"shows" or "hides", not "${action}"`);
+  await this.bridge.showSystemMessages(action === 'shows');
+  await this.bridge.waitFor(`system messages ${action === 'shows' ? 'shown' : 'hidden'}`, () => this.bridge.agentChat(), s => s.showsSystem === (action === 'shows'));
+});
+Then('the agent transcript does not contain {string}', async function (this: SapphireWorld, text: string) {
+  const chat = await this.bridge.agentChat();
+  assert.ok(!chat.dom.text.includes(text), `the transcript shows "${text}"`);
+});
 Then('the agent transcript contains {string}', async function (this: SapphireWorld, text: string) {
   await this.bridge.waitFor(`transcript containing ${text}`, () => this.bridge.agentChat(), s => s.dom.text.includes(text));
 });
@@ -79,7 +88,9 @@ Then('the agent {string} should be pausing', async function (this: SapphireWorld
 
 const topRows = new WeakMap<SapphireWorld, {sequence: string; offset: number}>();
 
-Given('the agent chat has {int} completed test turns', async function (this: SapphireWorld, turns: number) {
+// Ninety turns, one after another, take about 23 s under the stress runs' load: past the default 30 s budget now and
+// then, which is a hang guard, not a measure of this step. Its own budget is the harness's longest.
+Given('the agent chat has {int} completed test turns', { timeout: 120_000 }, async function (this: SapphireWorld, turns: number) {
   for (let index = 0; index < turns; index++) {
     await this.bridge.chatAction('draft', `History turn ${index}`);
     await this.bridge.waitFor('ready for history turn', () => this.bridge.agentChat(), s => s.canSend);
@@ -96,18 +107,24 @@ When('the user scrolls up for older agent history', async function (this: Sapphi
   const chat = await this.bridge.agentChat();
   topRows.set(this, chat.dom.rows.find(row => row.sequence === chat.dom.topSequence)!);
 });
+// The history's first shown row: its first prompt, since the session's notes before it are system messages, hidden.
+const firstPrompt = 'History turn 0';
 Then('earlier agent history loads without moving the visible row', async function (this: SapphireWorld) {
-  const chat = await this.bridge.waitFor('first history page loaded', () => this.bridge.agentChat(), s => s.dom.rows[0]?.sequence === '1');
+  const chat = await this.bridge.waitFor('first history page loaded', () => this.bridge.agentChat(), s => s.dom.rows[0]?.text === firstPrompt);
   const saved = topRows.get(this)!;
   const row = chat.dom.rows.find(row => row.sequence === saved.sequence)!;
   assert.ok(Math.abs(row.offset - saved.offset) <= 1, `anchor moved from ${saved.offset} to ${row.offset}`);
 });
+const firstRows = new WeakMap<SapphireWorld, string>();
 When('the user scrolls to the first agent history item', async function (this: SapphireWorld) {
   await this.bridge.chatAction('scrollTop');
-  await this.bridge.waitFor('first row anchor persisted', () => this.bridge.agentChat(), s => s.anchor === '1');
+  const first = (await this.bridge.agentChat()).dom.rows.find(row => row.text === firstPrompt)!.sequence;
+  firstRows.set(this, first);
+  await this.bridge.waitFor('first row anchor persisted', () => this.bridge.agentChat(), s => s.anchor === first);
 });
 Then('the first agent history item is restored at the top', async function (this: SapphireWorld) {
-  await this.bridge.waitFor('restored transcript scroll anchor', () => this.bridge.agentChat(), s => s.dom.topSequence === '1' && s.dom.rows[0]?.sequence === '1');
+  const first = firstRows.get(this)!;
+  await this.bridge.waitFor('restored transcript scroll anchor', () => this.bridge.agentChat(), s => s.dom.topSequence === first && s.dom.rows[0]?.sequence === first);
 });
 
 Then('the agent tool has a Judgess badge', async function (this: SapphireWorld) {
