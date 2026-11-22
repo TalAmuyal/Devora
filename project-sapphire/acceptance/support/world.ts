@@ -19,6 +19,8 @@ export class SapphireWorld extends World {
   bundledTools = false;
   home?: string;
   bridge!: Bridge;
+  /** Errors the app recorded that a step drained while waiting for another one: the After hook fails on any left. */
+  unclaimedErrors: string[] = [];
   /** The scenario's own directory, holding its config and its app state. */
   scenarioDir!: string;
   /** The scenario's global config (`DEVORA_CONFIG_PATH`). */

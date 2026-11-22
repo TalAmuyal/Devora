@@ -49,7 +49,7 @@ AfterStep(async function (this: SapphireWorld, { result, pickle, pickleStep }) {
 /** As Ember's: an error no step expected fails the scenario; steps that expect one scrape it ("the recorded errors should include"). */
 After(async function (this: SapphireWorld) {
   try {
-    const errors = this.app && !hasExited(this.app) ? await this.bridge.scrapeErrors() : [];
+    const errors = [...this.unclaimedErrors, ...(this.app && !hasExited(this.app) ? await this.bridge.scrapeErrors() : [])];
     if (errors.length > 0) {
       throw new Error(`Errors shown during the scenario:\n${errors.map((e) => `  - ${e}`).join('\n')}`);
     }
