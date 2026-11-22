@@ -81,6 +81,19 @@ impl Message {
     pub fn parse(line: &str) -> serde_json::Result<Self> {
         serde_json::from_str(line)
     }
+
+    /// Whether this belongs to the agent's own conversation rather than a subagent's: a subagent's messages (and
+    /// stream events, should the CLI ever stream them) name the tool call that started it, `parent_tool_use_id`.
+    pub fn is_main_thread(&self) -> bool {
+        match self {
+            Self::Known(
+                KnownMessage::User { extra, .. }
+                | KnownMessage::Assistant { extra, .. }
+                | KnownMessage::StreamEvent { extra, .. },
+            ) => extra.get("parent_tool_use_id").is_none_or(Value::is_null),
+            _ => true,
+        }
+    }
 }
 
 impl Message {

@@ -1447,3 +1447,87 @@ async fn listing_the_models_starts_none_of_the_users_hooks_mcp_servers_or_plugin
     assert!(left.is_empty(), "the probe left session files: {left:?}");
     backend.stop().await;
 }
+
+// The context Devora tracks is the agent's own: a subagent's messages report the subagent's context, so the
+// usage the session passes on comes from the main thread alone. The CLI streams no events for a subagent, only its
+// whole messages, which name it (`parent_tool_use_id`).
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires CI-pinned Claude CLI, Node and Sapphire npm dependencies"]
+async fn pinned_cli_usage_is_the_main_threads_while_a_subagent_runs() {
+    check_pin().await;
+    let fixture = Fixture::new();
+    let mut backend = Backend::start(fixture.root.path()).await;
+    let (main, subagent) = (100_000_u64, 3_000_u64);
+    backend
+        .command(json!({"action":"configure", "inputTokens": main,
+            "agentPrompt": "SUBAGENT_CONTEXT", "subagentCommand": "true",
+            "subagentInputTokens": subagent, "agentBackground": false}))
+        .await;
+    let mut options = fixture.options(
+        backend.port,
+        Instructions::Append("Subagent usage probe".into()),
+    );
+    // Auto mode's safety check can't run offline, and refuses the Agent tool without it.
+    options.permission_mode = "default".into();
+    options.settings["permissions"] = json!({"allow":["Bash","Agent"]});
+    let mut session = Session::start(options, fixture.log()).await.unwrap();
+    let handle = session.handle();
+    let input_tokens = |usage: &Value| usage["input_tokens"].as_u64().unwrap_or(0);
+    let mut passed_on = vec![];
+    let mut subagent_messages = vec![];
+    for prompt in ["Hello.", "Start the subagent."] {
+        handle.send_turn(turn_id(), prompt.into()).await.unwrap();
+        tokio::time::timeout(Duration::from_secs(45), async {
+            while let Some(event) = session.next_event().await {
+                match &event {
+                    SessionEvent::Usage { source, usage } => {
+                        passed_on.push((format!("{source:?}"), input_tokens(usage)))
+                    }
+                    SessionEvent::Message(Message::Known(KnownMessage::Assistant {
+                        message,
+                        extra,
+                    })) if extra
+                        .get("parent_tool_use_id")
+                        .is_some_and(|p| !p.is_null()) =>
+                    {
+                        subagent_messages
+                            .push(("assistant", input_tokens(&message.extra["usage"])));
+                    }
+                    SessionEvent::Message(Message::Known(KnownMessage::StreamEvent {
+                        extra,
+                        ..
+                    })) if extra
+                        .get("parent_tool_use_id")
+                        .is_some_and(|p| !p.is_null()) =>
+                    {
+                        subagent_messages.push(("stream_event", 0));
+                    }
+                    SessionEvent::Message(Message::Known(KnownMessage::Result(result))) => {
+                        assert!(!result.is_error, "{result:?}");
+                        return;
+                    }
+                    SessionEvent::Failed(error) => panic!("{error}"),
+                    _ => {}
+                }
+            }
+            panic!("CLI ended");
+        })
+        .await
+        .expect("offline CLI deadline");
+    }
+    assert!(
+        subagent_messages
+            .iter()
+            .any(|(kind, _)| *kind == "assistant")
+            && subagent_messages
+                .iter()
+                .all(|(kind, _)| *kind == "assistant"),
+        "the subagent ran, and only its whole messages came, naming it: {subagent_messages:?}"
+    );
+    assert!(
+        passed_on.iter().all(|(_, tokens)| *tokens != subagent),
+        "no usage passed on is the subagent's ({subagent}); passed on: {passed_on:?}; the subagent's messages: {subagent_messages:?}"
+    );
+    session.pause().await.unwrap();
+    backend.stop().await;
+}
