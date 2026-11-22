@@ -100,7 +100,7 @@ impl StepActivity {
             return Some(Self::Working);
         };
         let unfinished = matches!(item.state, ItemState::Pending | ItemState::Streaming);
-        let subagent = item.parent_tool_use_id.is_some();
+        let subagent = !item.is_main_thread();
         Some(match &item.content {
             TranscriptContent::Tool {
                 name,

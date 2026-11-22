@@ -753,9 +753,7 @@ impl Transcript {
 /// The model of the latest reply in the agent's own conversation among `items`.
 fn latest_model(items: &[TranscriptItem]) -> Option<String> {
     items.iter().rev().find_map(|item| match &item.content {
-        TranscriptContent::Assistant { model, .. } if item.parent_tool_use_id.is_none() => {
-            model.clone()
-        }
+        TranscriptContent::Assistant { model, .. } if item.is_main_thread() => model.clone(),
         _ => None,
     })
 }
