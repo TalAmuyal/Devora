@@ -1,0 +1,9 @@
+# TerminalKit
+
+The only module that imports `GhosttyKit` (libghostty's embedding API): `TerminalRuntime`, the process-wide libghostty app and its config; `TerminalView`, one surface; `TerminalSession`, its model; `TerminalLaunch`, what it runs.
+
+## The config and the colors
+
+libghostty has no setter API, so `TerminalRuntime` writes its config as a file and loads it. The colors are the active variant of the chosen palette (`TerminalRuntime.apply`: light or dark after the app's appearance), set directly (`background`, `foreground`, `cursor-color`, `palette`); a switch of appearance or palette regenerates the config, and every terminal repaints. A program already running isn't told of a switch (mode 2031): it keeps what it drew until it redraws.
+
+**Never a conditional theme (`theme = light:…,dark:…`), nor a scheme on the app or a surface (`ghostty_app_set_color_scheme`, `ghostty_surface_set_color_scheme`).** A surface made while the app's scheme differs from the config's default (light) gets a config replayed from its file lines (`Surface.init`, `vendor/ghostty/src/Surface.zig`, through `Config.changeConditionalState`, `src/config/Config.zig`), and the replay drops what the embedding API set on the config directly (`src/apprt/embedded.zig`, `opts.env_vars` and `opts.command`); only `working-directory` is put back. The shell's process gets its environment and command when the surface is made (`termio.Exec.init` in `Surface.init`), so it would start without `DEVORA_PTY_ID` and `DEVORA_IPC_PORT` (`debi preview` then fails) and without its Default app. Setting the scheme per surface instead avoids the replay but draws a new terminal's first frame in the light colors, and with a theme whose two halves are the same palette the scheme still doesn't reach the mode 2031 report. `terminal-appearance.feature` checks a new terminal's environment, Default app and directory at launch in Dark and after a switch either way.

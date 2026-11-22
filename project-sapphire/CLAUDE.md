@@ -17,6 +17,7 @@ Each subsystem's current behavior is in a `CLAUDE.md` at its own root, which loa
 - `Sources/AppShell/`: the terminals, the surfaces and Global Pause.
 - `Sources/AppShell/WorkspaceHub/`, `AgentHub/` (with the agent chat), `Profiles/`, `Settings/` (with Repository Updates), `TaskCreation/`, `Repos/` and `Preview/`: each surface.
 - `Sources/Layers/`: the layer system.
+- `Sources/TerminalKit/`: libghostty's app, its config and the terminals' colors.
 - `Packages/TranscriptKit/`: the native agent transcript.
 - `acceptance/`: the acceptance harness and the test bridge's routes.
 - `UITests/`: the XCUITests and their input rules.
