@@ -19,7 +19,7 @@ pub use devora_agent_space::{
 use devora_app::log::Log;
 pub use devora_config::agent::Scope;
 use devora_state::{ChatCommand, ChatPhase, ChatUpdate, Command, Event, SessionKind, Store};
-pub use models::ModelOptions;
+pub use models::{ModelOptions, MODEL_LOOKUP_GRACE};
 pub use operations::{Creation, CreationEvent};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -540,8 +540,14 @@ impl Agents {
         Ok(())
     }
 
-    /// Stops every agent, interrupting live turns; returns what went wrong, if anything did.
+    /// Stops every agent, interrupting live turns, and every model lookup; returns what went wrong, if anything did.
     pub async fn shutdown(&self) -> Vec<String> {
+        // On the registry's runtime, where the lookups run (a UI calls this from its own executor).
+        let models = lock(&self.inner).models.clone();
+        let _ = self
+            .runtime
+            .spawn(async move { models.shutdown(MODEL_LOOKUP_GRACE).await })
+            .await;
         shutdown(&self.inner, &self.state).await
     }
 

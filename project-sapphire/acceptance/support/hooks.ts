@@ -4,7 +4,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { cleanupFixtures } from '../../../project-ember/tests/support/fixture-helper';
-import { APP_BINARY, BUNDLED_APP_BINARY, hasExited, shutdown, waitUntilReady } from './app';
+import { APP_BINARY, BUNDLED_APP_BINARY, hasExited, removeScenarioDir, shutdown, waitUntilReady } from './app';
 import { SapphireWorld } from './world';
 import { stopTestClaude } from './claude';
 import { captureFailure, FAILURE_CAPTURE_DIR } from './failure-capture';
@@ -59,7 +59,7 @@ After(async function (this: SapphireWorld) {
       const stopped = await Promise.allSettled(apps.map(app => shutdown(app!)));
       const failure = stopped.find(result => result.status === 'rejected');
       if (failure?.status === 'rejected') throw failure.reason;
-      fs.rmSync(this.scenarioDir, { recursive: true, force: true });
+      await removeScenarioDir(this.scenarioDir);
       if (this.fixtureRoot) cleanupFixtures(this.fixtureRoot);
     }
   }

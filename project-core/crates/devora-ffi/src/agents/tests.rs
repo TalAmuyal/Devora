@@ -1623,3 +1623,24 @@ fn the_models_a_profile_is_offered_come_from_its_cli_in_the_cores_order() {
     assert_eq!(opus.display_name, "Opus 5.5");
     assert!(!opus.effort_levels.is_empty());
 }
+
+// The fake CLI answers `--version` with the version of the recording it replies with, as a real CLI agrees with its own
+// initialize reply; otherwise the model cache would never serve it, and every lookup would launch the CLI again.
+#[test]
+fn lookups_after_the_first_are_served_from_the_cache() {
+    let f = Fixture::new(false);
+    for _ in 0..3 {
+        block_on(
+            f.core
+                .agent_model_options(f.profile.path_string(), f.launch()),
+        )
+        .unwrap();
+    }
+    let report = fs::read_to_string(f.profile.root.path().join("report.jsonl")).unwrap();
+    let lookups = report
+        .lines()
+        .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
+        .filter(|entry| entry["kind"] == "start")
+        .count();
+    assert_eq!(lookups, 1, "one CLI launch for three lookups");
+}

@@ -12,6 +12,8 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
+use tokio::sync::watch;
+use tokio::task::JoinHandle;
 
 /// How long a list serves before the CLI is asked again, even at the same version.
 const FRESH: Duration = Duration::from_secs(24 * 60 * 60);
@@ -24,10 +26,33 @@ struct Cached {
     at: Instant,
 }
 
+/// A lookup's outcome, once it has one.
+type Outcome = Option<Result<ModelList, String>>;
+
+/// A lookup under way: the profile and launch settings it asks for, its outcome as it arrives, and its task.
+struct Probe {
+    id: u64,
+    profile: PathBuf,
+    settings: Value,
+    outcome: watch::Receiver<Outcome>,
+    task: JoinHandle<()>,
+}
+
+#[derive(Default)]
+struct Probes {
+    running: Vec<Probe>,
+    next_id: u64,
+    /// Set by `shutdown`: no lookup starts after it.
+    closed: bool,
+}
+
 /// The models each profile is offered, cached per profile. The agent registry keeps one, which every agent start fills;
-/// a host without agents (Ember's settings) keeps its own.
+/// a host without agents (Ember's settings) keeps its own. It runs one lookup at a time per profile and launch settings
+/// (callers asking meanwhile share it), each as a task of its own that `shutdown` ends, so that a quitting app leaves no
+/// CLI behind.
 pub struct ModelOptions {
     cache: Mutex<BTreeMap<PathBuf, Cached>>,
+    probes: Mutex<Probes>,
     log: Arc<Log>,
 }
 
@@ -35,6 +60,7 @@ impl ModelOptions {
     pub fn new(log: Arc<Log>) -> Self {
         Self {
             cache: Mutex::new(BTreeMap::new()),
+            probes: Mutex::new(Probes::default()),
             log,
         }
     }
@@ -85,7 +111,14 @@ impl ModelOptions {
     /// The models an agent of `profile` is offered, launched with `context`: the cached list while it's under a day old
     /// and from the CLI version and launch settings an agent would get now, else a fresh one from an initialize-only
     /// launch.
-    pub async fn get(&self, profile: &Path, context: &LaunchContext) -> Result<ModelList, String> {
+    pub async fn get(
+        self: &Arc<Self>,
+        profile: &Path,
+        context: &LaunchContext,
+    ) -> Result<ModelList, String> {
+        if self.lock_probes().closed {
+            return Err(QUITTING.into());
+        }
         let options = Space::probe_options(context, profile)?;
         let cached = self
             .cache
@@ -99,11 +132,96 @@ impl ModelOptions {
                 return Ok(cached.list);
             }
         }
-        let list = models::discover(&options).await?;
-        self.learned(profile, &options.settings, list.clone());
-        Ok(list)
+        let mut outcome = self.probe(profile, options)?;
+        let result = outcome
+            .wait_for(Option::is_some)
+            .await
+            .map_err(|_| "the model lookup was stopped".to_owned())?
+            .clone();
+        result.expect("waited for an outcome")
+    }
+
+    /// The lookup for `profile` under `options`' launch settings: the one under way, or a new one, started as a task of its
+    /// own, which caches the list and then leaves the running lookups, failed or not, so that the next call asks again.
+    fn probe(
+        self: &Arc<Self>,
+        profile: &Path,
+        options: devora_agent::session::SessionOptions,
+    ) -> Result<watch::Receiver<Outcome>, String> {
+        let mut probes = self.lock_probes();
+        if probes.closed {
+            return Err(QUITTING.into());
+        }
+        if let Some(probe) = probes
+            .running
+            .iter()
+            .find(|probe| probe.profile == profile && probe.settings == options.settings)
+        {
+            return Ok(probe.outcome.clone());
+        }
+        let (sender, outcome) = watch::channel(None);
+        let id = probes.next_id;
+        probes.next_id += 1;
+        let this = self.clone();
+        let key = profile.to_path_buf();
+        let settings = options.settings.clone();
+        let task = tokio::spawn(async move {
+            let result = models::discover(&options).await;
+            if let Ok(list) = &result {
+                this.learned(&key, &options.settings, list.clone());
+            }
+            this.lock_probes().running.retain(|probe| probe.id != id);
+            let _ = sender.send(Some(result));
+        });
+        probes.running.push(Probe {
+            id,
+            profile: profile.to_path_buf(),
+            settings,
+            outcome: outcome.clone(),
+            task,
+        });
+        Ok(outcome)
+    }
+
+    /// Ends every lookup under way, which kills its CLI, and refuses new ones: a quitting app leaves no CLI behind. Waits at
+    /// most `grace` for them to end; one that hasn't by then is logged, and the quit goes on.
+    pub async fn shutdown(&self, grace: Duration) {
+        let running = {
+            let mut probes = self.lock_probes();
+            probes.closed = true;
+            std::mem::take(&mut probes.running)
+        };
+        let tasks: Vec<JoinHandle<()>> = running
+            .into_iter()
+            .map(|probe| {
+                probe.task.abort();
+                probe.task
+            })
+            .collect();
+        let count = tasks.len();
+        let ended = tokio::time::timeout(grace, async {
+            for task in tasks {
+                let _ = task.await;
+            }
+        });
+        if ended.await.is_err() {
+            self.log.write(
+                Level::Warn,
+                &format!("{count} model lookup(s) still ending after {grace:?}; quitting anyway"),
+            );
+        }
+    }
+
+    fn lock_probes(&self) -> std::sync::MutexGuard<'_, Probes> {
+        self.probes.lock().unwrap_or_else(|e| e.into_inner())
     }
 }
+
+/// How long a quit waits for the model lookups it ends.
+pub const MODEL_LOOKUP_GRACE: Duration = Duration::from_secs(2);
+
+/// Why a lookup is refused once `shutdown` has run.
+const QUITTING: &str = "Devora is quitting, so it doesn't ask Claude Code for its models";
 
 /// Whether a cached list still answers for the CLI version installed now and the launch settings an agent would get now.
 fn serves(cached: &Cached, age: Duration, installed: &str, settings: &Value) -> bool {
@@ -132,6 +250,58 @@ impl Agents {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    /// An initialize-only lookup by the fake CLI that never gets its answer (`DEVORA_FAKE_PROBE_STALL`).
+    fn stalled_lookup(dir: &Path) -> devora_agent::session::SessionOptions {
+        let agent = Path::new(env!("CARGO_MANIFEST_DIR")).join("../devora-agent/tests");
+        devora_agent::session::SessionOptions {
+            program: agent.join("support/fake_cli.py"),
+            working_directory: dir.to_path_buf(),
+            instructions: devora_agent::session::Instructions::Append(String::new()),
+            model: String::new(),
+            effort: None,
+            permission_mode: "default".into(),
+            plugins: vec![],
+            settings: json!({}),
+            environment: BTreeMap::from([
+                ("PATH".into(), std::env::var("PATH").unwrap()),
+                (
+                    "DEVORA_FAKE_FIXTURES".into(),
+                    agent.join("fixtures/claude-2.1.312").display().to_string(),
+                ),
+                (
+                    "DEVORA_FAKE_REPORT".into(),
+                    dir.join("report.jsonl").display().to_string(),
+                ),
+                ("DEVORA_FAKE_PROBE_STALL".into(), "1".into()),
+            ]),
+            resume: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn lookups_asked_while_one_runs_share_it_and_quitting_ends_it_and_refuses_more() {
+        let dir = std::env::temp_dir().join(format!("devora-core-lookups-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let models = Arc::new(ModelOptions::new(Arc::new(
+            Log::open(&dir.join("log")).unwrap(),
+        )));
+        let profile = dir.join("profile");
+        let mut first = models.probe(&profile, stalled_lookup(&dir)).unwrap();
+        let second = models.probe(&profile, stalled_lookup(&dir)).unwrap();
+        assert!(first.same_channel(&second), "one lookup for both");
+
+        models.shutdown(MODEL_LOOKUP_GRACE).await;
+        assert!(
+            first.wait_for(Option::is_some).await.is_err(),
+            "the lookup was ended, so its waiters get no list"
+        );
+        assert!(
+            models.probe(&profile, stalled_lookup(&dir)).is_err(),
+            "no lookup starts after the shutdown"
+        );
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 
     fn tiers(opus: &str) -> Value {
         json!({"env": {"ANTHROPIC_DEFAULT_OPUS_MODEL": opus}})

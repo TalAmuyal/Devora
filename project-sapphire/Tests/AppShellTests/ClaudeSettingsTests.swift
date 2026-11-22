@@ -1,5 +1,7 @@
 @testable import AppShell
 import CoreBindings
+import Store
+import TestSupport
 import Testing
 
 @MainActor
@@ -9,7 +11,9 @@ private final class ClaudeScope {
 	var writes: [(String, ClaudeValue?)] = []
 	var fail = false
 
-	func model(queue: SettingsWriteQueue = SettingsWriteQueue()) -> ClaudeSettingsModel {
+	func model(
+		queue: SettingsWriteQueue = SettingsWriteQueue(), suggest: @escaping () async -> ModelSuggestions? = { nil }
+	) -> ClaudeSettingsModel {
 		ClaudeSettingsModel(
 			read: { [self] in ClaudeSettings(stored: stored, resolved: inherited.merging(stored) { _, value in value }) },
 			choices: { ClaudeSettingChoices(effortLevels: ["low", "max"], permissionModeSuggestions: ["plan"]) },
@@ -18,7 +22,7 @@ private final class ClaudeScope {
 				writes.append((key, value))
 				stored[key] = value
 				return true
-			}, writes: queue, suggest: { nil })
+			}, writes: queue, suggest: suggest)
 	}
 }
 
@@ -135,5 +139,28 @@ struct ClaudeSettingsTests {
 		token.clearToken()
 		await queue.settled()
 		#expect(token.isSet == false)
+	}
+}
+
+@MainActor
+struct ClaudeSettingsLookupTests {
+	// The card reports loaded, with its fields usable, while Claude Code is still being asked for its models: a lookup can
+	// take seconds (it launches the CLI), and nothing on the card waits for it.
+	@Test func theCardIsLoadedAndUsableWhileTheModelListIsStillBeingAskedFor() async throws {
+		let scope = ClaudeScope()
+		let (gate, open) = AsyncStream<Void>.makeStream()
+		let list = AgentModelList(cliVersion: "2.1.312", models: [], tierModels: [TierModel(id: "claude-opus-5-5", name: "Opus 5.5")])
+		let model = scope.model(suggest: {
+			for await _ in gate { break }
+			return ModelSuggestions(list)
+		})
+		await model.reload()
+		#expect(model.settings != nil && model.choices != nil, "loaded")
+		#expect(model.modelSuggestions == nil, "the lookup is still held open")
+		model.select(.custom, key: "opus-model")
+		#expect(model.input("opus-model") == "")
+		open.yield()
+		try await eventually { model.modelSuggestions != nil }
+		#expect(model.suggestions(forTier: "opus-model").map(\.modelID) == ["claude-opus-5-5"])
 	}
 }
