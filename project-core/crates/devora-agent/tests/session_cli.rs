@@ -1531,3 +1531,153 @@ async fn pinned_cli_usage_is_the_main_threads_while_a_subagent_runs() {
     session.pause().await.unwrap();
     backend.stop().await;
 }
+
+/// Runs one turn, returning the CLI's announced fallbacks and the models its replies name, in order.
+async fn turn_models(session: &mut Session, prompt: &str) -> (Vec<String>, Vec<String>, bool) {
+    use devora_agent::protocol::System;
+    session
+        .handle()
+        .send_turn(turn_id(), prompt.into())
+        .await
+        .unwrap();
+    let (mut fallbacks, mut replies) = (vec![], vec![]);
+    let failed = tokio::time::timeout(Duration::from_secs(60), async {
+        while let Some(event) = session.next_event().await {
+            match event {
+                SessionEvent::Message(Message::Known(KnownMessage::System(
+                    System::ModelFallback { fallback_model, .. },
+                ))) => fallbacks.push(fallback_model),
+                SessionEvent::Message(Message::Known(KnownMessage::Assistant {
+                    message, ..
+                })) => replies.push(
+                    message.extra["model"]
+                        .as_str()
+                        .unwrap_or_default()
+                        .to_owned(),
+                ),
+                SessionEvent::Message(Message::Known(KnownMessage::Result(result))) => {
+                    return result.is_error
+                }
+                SessionEvent::Failed(error) => panic!("{error}"),
+                _ => {}
+            }
+        }
+        panic!("CLI ended");
+    })
+    .await
+    .expect("offline CLI deadline");
+    (fallbacks, replies, failed)
+}
+
+// What the model widget and the transcript's change rows read is the model named on each reply. Devora sets no
+// fallback model (`--fallback-model`; the CLI ignores `fallbackModel` in the launch's or the user's settings), so an
+// overloaded model doesn't change the model replying: the CLI retries, then ends the turn with a reply it made up
+// itself, named `<synthetic>`, which the transcript and the saved-session reader don't count as a model.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires CI-pinned Claude CLI, Node and Sapphire npm dependencies"]
+async fn pinned_cli_ends_an_overloaded_turn_with_a_reply_that_names_no_model() {
+    check_pin().await;
+    let fixture = Fixture::new();
+    let mut backend = Backend::start(fixture.root.path()).await;
+    backend
+        .command(json!({"action":"configure", "replyModel": "claude-opus-5-5"}))
+        .await;
+    let mut options = fixture.options(backend.port, Instructions::Append("Overload probe".into()));
+    options.model = "opus".into();
+    let user_settings = fixture.home.join(".claude/settings.json");
+    let mut settings: Value =
+        serde_json::from_str(&std::fs::read_to_string(&user_settings).unwrap()).unwrap();
+    settings["fallbackModel"] = json!("sonnet");
+    std::fs::write(&user_settings, settings.to_string()).unwrap();
+    options.settings["fallbackModel"] = json!("sonnet");
+    let mut session = Session::start(options, fixture.log()).await.unwrap();
+    let (fallbacks, replies, failed) = turn_models(&mut session, "Answered turn.").await;
+    assert!(!failed && fallbacks.is_empty());
+    assert!(
+        replies.iter().all(|model| model == "claude-opus-5-5"),
+        "{replies:?}"
+    );
+    backend
+        .command(
+            json!({"action":"configure", "replyModel": "claude-opus-5-5", "overloadModel": "opus"}),
+        )
+        .await;
+    let (fallbacks, replies, failed) = turn_models(&mut session, "Overloaded turn.").await;
+    assert!(failed, "no fallback, though both settings name one");
+    assert!(fallbacks.is_empty(), "{fallbacks:?}");
+    assert_eq!(replies, ["<synthetic>"]);
+    session.pause().await.unwrap();
+    backend.stop().await;
+}
+
+// For a conversation from before replies kept their model, Devora reads the model from Claude's saved session: the
+// latest reply there names the model that answered, and a subagent's replies are saved apart, not in that file.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires CI-pinned Claude CLI, Node and Sapphire npm dependencies"]
+async fn pinned_cli_saves_each_reply_with_its_model_and_a_subagents_apart() {
+    check_pin().await;
+    let fixture = Fixture::new();
+    let mut backend = Backend::start(fixture.root.path()).await;
+    backend
+        .command(
+            json!({"action":"configure", "replyModel": "claude-opus-5-5",
+            "agentPrompt": "SUBAGENT_SAVED", "subagentCommand": "true", "agentBackground": false}),
+        )
+        .await;
+    let mut options = fixture.options(
+        backend.port,
+        Instructions::Append("Saved model probe".into()),
+    );
+    options.permission_mode = "default".into();
+    options.settings["permissions"] = json!({"allow":["Bash","Agent"]});
+    let mut session = Session::start(options.clone(), fixture.log())
+        .await
+        .unwrap();
+    let id = session.session_id();
+    for prompt in ["Hello.", "Start the subagent."] {
+        let (_, _, failed) = turn_models(&mut session, prompt).await;
+        assert!(!failed);
+    }
+    session.pause().await.unwrap();
+    backend.stop().await;
+    assert_eq!(
+        devora_agent::session::saved_model(&options, &id)
+            .unwrap()
+            .as_deref(),
+        Some("claude-opus-5-5")
+    );
+    let saved: Vec<_> = walkdir(&fixture.home.join(".claude/projects"))
+        .into_iter()
+        .filter(|path| path.extension().is_some_and(|e| e == "jsonl"))
+        .collect();
+    let main = saved
+        .iter()
+        .find(|path| path.file_stem().unwrap() == id.as_str())
+        .expect("the session's file");
+    let main_text = std::fs::read_to_string(main).unwrap();
+    assert!(
+        !main_text.contains("\"isSidechain\":true"),
+        "the main file holds the agent's own replies only"
+    );
+    assert!(
+        saved.iter().any(|path| path != main
+            && std::fs::read_to_string(path)
+                .unwrap()
+                .contains("\"isSidechain\":true")),
+        "the subagent's replies are saved apart: {saved:?}"
+    );
+}
+
+/// Every file under `root`.
+fn walkdir(root: &std::path::Path) -> Vec<PathBuf> {
+    let mut files = vec![];
+    for entry in std::fs::read_dir(root).into_iter().flatten().flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            files.extend(walkdir(&path));
+        } else {
+            files.push(path);
+        }
+    }
+    files
+}

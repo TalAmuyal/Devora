@@ -29,6 +29,9 @@ pub enum SystemKind {
     UnfinishedFirstPrompt,
     /// Devora restarted the agent's session and asked it to re-check its waits.
     RestartNotice,
+    /// The agent's replies now come from another model: `detail_json` is `{"from", "to", "fallback"}`, the two full
+    /// IDs and whether the CLI fell back to it, in which case `text` is the CLI's own sentence for it.
+    ModelChanged,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -53,6 +56,9 @@ pub enum TranscriptContent {
     },
     Assistant {
         text: String,
+        /// The model that wrote it, as the API names it (a full ID); none for items stored before it was kept.
+        #[serde(default)]
+        model: Option<String>,
     },
     Thinking {
         text: String,
@@ -111,7 +117,7 @@ impl TranscriptItem {
             }
             (
                 TranscriptChange::AppendText { sequence, text },
-                TranscriptContent::Assistant { text: current },
+                TranscriptContent::Assistant { text: current, .. },
             ) if self.sequence == *sequence => current.push_str(text),
             (
                 TranscriptChange::AppendThinking { sequence, text },

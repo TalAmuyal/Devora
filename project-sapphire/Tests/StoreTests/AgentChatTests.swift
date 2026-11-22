@@ -34,18 +34,18 @@ struct AgentChatTests {
 		let model = try AgentChat(store: store, core: core, tab: tab, name: "Delta")
 		let chat = Chat(
 			tab: tab.id, generation: 7, phase: .running, turnRunning: false, pauseRequested: false, globallyHeld: false, keepPaused: false,
-			sessionId: "cli", items: [], error: nil, questions: [], usageJson: nil, context: nil)
+			sessionId: "cli", items: [], error: nil, questions: [], usageJson: nil, context: nil, model: nil)
 		model.apply(.started(chat: chat))
 		let item = TranscriptItem(
 			sequence: 1, cliSession: "cli", parentToolUseId: nil, state: .streaming,
-			content: .assistant(text: "Hel"))
+			content: .assistant(text: "Hel", model: nil))
 		model.apply(.updated(tab: tab.id, generation: 7, update: .transcript(change: .upsert(item: item))))
 		model.apply(
 			.updated(
 				tab: tab.id, generation: 7,
 				update: .transcript(change: .appendText(sequence: 1, text: "lo"))))
 		#expect(model.items.count == 1)
-		#expect(model.items[0].content == .assistant(text: "Hello"))
+		#expect(model.items[0].content == .assistant(text: "Hello", model: nil))
 		model.apply(.updated(tab: tab.id, generation: 6, update: .failure(message: "stale")))
 		#expect(model.chat?.phase == .running)
 		let context = ChatContext(usedTokens: 2500, windowTokens: 200000, thresholdPercent: 75, defaultThresholdPercent: 75, ownThresholdPercent: nil, compaction: .idle)

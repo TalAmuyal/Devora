@@ -30,6 +30,7 @@ function interaction(tokens = inputTokens) {
     if (holdStream && message.index !== undefined) message.index = 0;
     if (message.type === 'message_start') {
       message.message.id += '_' + id;
+      if (replyModel !== undefined) message.message.model = replyModel;
       if (tokens !== undefined) {
         message.message.usage.input_tokens = tokens;
         message.message.usage.cache_read_input_tokens = 0;
@@ -87,6 +88,10 @@ let subagentCommand: string | undefined;
 // within the turn that starts it.
 let subagentInputTokens: number | undefined;
 let agentBackground = true;
+// The model the replies name (the recording's otherwise), and a model whose requests are answered "overloaded" (529),
+// which consumes no reply: the CLI retries, then falls back when its settings name a fallback model.
+let replyModel: string | undefined;
+let overloadModel: string | undefined;
 let notificationTool: { command: string; delayMs: number } | undefined;
 
 function userText(message: any): string {
@@ -163,6 +168,24 @@ peer.handleRequest = (request: any, response: any) => {
       settingsOAuth: request.headers.authorization === 'Bearer settings-oauth-token',
     }));
   }
+  if (overloadModel !== undefined && request.url?.startsWith('/v1/messages') && !request.url.includes('count_tokens')) {
+    const chunks: Buffer[] = [];
+    request.on('data', (chunk: Buffer) => chunks.push(chunk));
+    request.on('end', () => {
+      const raw = Buffer.concat(chunks);
+      if (String(JSON.parse(raw.toString('utf8')).model).includes(overloadModel!)) {
+        response.writeHead(529, { 'content-type': 'application/json' });
+        response.end(JSON.stringify({ type: 'error', error: { type: 'overloaded_error', message: 'Overloaded' } }));
+        return;
+      }
+      const replay: any = Readable.from([raw]);
+      replay.url = request.url;
+      replay.method = request.method;
+      replay.headers = request.headers;
+      handle(replay, response);
+    });
+    return;
+  }
   if (holdStream && request.url?.startsWith('/v1/messages')) {
     // Send a partial text response in one batch, without the cassette driver's
     // inter-event pacing. The native stream stays open until the CLI is stopped.
@@ -198,6 +221,8 @@ for await (const line of lines) {
     subagentCommand = command.subagentCommand;
     subagentInputTokens = command.subagentInputTokens;
     agentBackground = command.agentBackground ?? true;
+    replyModel = command.replyModel;
+    overloadModel = command.overloadModel;
     notificationTool = command.notificationTool;
     reset();
     process.stdout.write(JSON.stringify({ type: 'configured' }) + '\n');

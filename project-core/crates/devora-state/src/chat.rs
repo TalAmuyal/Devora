@@ -38,6 +38,23 @@ pub struct ChatContext {
     pub compaction: CompactionProgress,
 }
 
+/// The model an agent's replies come from, for its model widget.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ChatModel {
+    /// The latest reply's model in the agent's own conversation, a full ID; none until one is known.
+    pub latest: Option<String>,
+    /// How to show it: its name as Claude Code lists it, else its ID as it is.
+    pub label: Option<String>,
+    /// What the agent is set to: an alias or a full ID.
+    pub set_to: String,
+    /// The full ID that setting resolves to under the profile's model tiers, when known.
+    pub set_to_resolved: Option<String>,
+    /// The latest reply came from a model the setting doesn't resolve to (`opusplan` expects its Opus and Sonnet).
+    pub differs: bool,
+    /// Claude Code's sentence for the fallback the latest model came from.
+    pub fallback: Option<String>,
+}
+
 /// Where an agent's compaction is, as far as the user can act on it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CompactionProgress {
@@ -63,6 +80,7 @@ pub struct Chat {
     pub questions: Vec<PermissionQuestion>,
     pub usage_json: Option<String>,
     pub context: Option<ChatContext>,
+    pub model: Option<ChatModel>,
 }
 
 /// What an agent with a live runtime is doing, for knowing when everyone has stopped.
@@ -111,6 +129,7 @@ pub enum ChatUpdate {
     PermissionRemoved { request_id: String },
     Usage { payload_json: String },
     Context { context: ChatContext },
+    Model { model: ChatModel },
 }
 
 /// Named mutations of the transient projection, serialized by Store.
@@ -181,6 +200,7 @@ pub(crate) fn apply(
                 questions: vec![],
                 usage_json: None,
                 context: None,
+                model: None,
             };
             chats.retain(|c| c.tab != tab);
             chats.push(chat.clone());
@@ -273,6 +293,7 @@ pub(crate) fn apply(
                 }
                 ChatUpdate::Usage { payload_json } => chat.usage_json = Some(payload_json.clone()),
                 ChatUpdate::Context { context } => chat.context = Some(*context),
+                ChatUpdate::Model { model } => chat.model = Some(model.clone()),
             }
             Ok(ChatEvent::Updated {
                 tab,

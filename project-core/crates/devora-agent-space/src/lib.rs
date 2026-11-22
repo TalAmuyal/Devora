@@ -15,7 +15,7 @@ pub use compaction::{
 };
 pub use inputs::{fields, preview, Field, Source};
 pub use restart_notice::AppRun;
-pub use running::{GlobalPauseCheck, RunningSpace, SpaceEvent, SpaceHandle};
+pub use running::{ActiveModel, GlobalPauseCheck, RunningSpace, SpaceEvent, SpaceHandle};
 
 use db::{storage, Db};
 use devora_agent::session::{Instructions, Plugin, Resume, SessionOptions};

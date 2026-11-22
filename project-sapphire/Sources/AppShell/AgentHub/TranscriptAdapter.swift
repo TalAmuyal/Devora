@@ -28,7 +28,7 @@ extension TranscriptKit.TranscriptContent {
 	init(_ content: CoreBindings.TranscriptContent) {
 		switch content {
 		case .user(let text, let error): self = .user(text: text, error: error)
-		case .assistant(let text): self = .assistant(text: text)
+		case .assistant(let text, _): self = .assistant(text: text)
 		case .thinking(let text, let signature): self = .thinking(text: text, signature: signature)
 		case .tool(let toolUseId, let name, let inputJson, let verdict, let result):
 			self = .tool(
@@ -69,6 +69,7 @@ extension TranscriptKit.SystemKind {
 		case .result: self = .result
 		case .unfinishedFirstPrompt: self = .unfinishedFirstPrompt
 		case .restartNotice: self = .restartNotice
+		case .modelChanged: self = .modelChanged
 		}
 	}
 }

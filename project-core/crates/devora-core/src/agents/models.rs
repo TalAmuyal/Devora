@@ -71,6 +71,17 @@ impl ModelOptions {
         );
     }
 
+    /// The list cached for `profile` under exactly these launch settings, however old: what an agent launched with them
+    /// was offered, for reading its replies' models without asking the CLI.
+    pub(super) fn cached(&self, profile: &Path, settings: &Value) -> Option<ModelList> {
+        self.cache
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(profile)
+            .filter(|cached| cached.settings == *settings)
+            .map(|cached| cached.list.clone())
+    }
+
     /// The models an agent of `profile` is offered, launched with `context`: the cached list while it's under a day old
     /// and from the CLI version and launch settings an agent would get now, else a fresh one from an initialize-only
     /// launch.

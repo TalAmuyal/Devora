@@ -921,6 +921,7 @@ async fn large_history_reopens_with_only_the_tail_and_pages_back_in_order() {
             state: ItemState::Complete,
             content: TranscriptContent::Assistant {
                 text: format!("item {sequence}"),
+                model: None,
             },
         };
         tx.execute(

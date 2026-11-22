@@ -116,6 +116,7 @@ public final class AgentChat {
 			case .permissionRemoved(let id): value.questions.removeAll { $0.requestId == id }
 			case .usage(let json): value.usageJson = json
 			case .context(let context): value.context = context
+			case .model(let model): value.model = model
 			}
 			chat = value
 		default: return false
@@ -141,7 +142,7 @@ public final class AgentChat {
 		case .appendText(let sequence, let text):
 			guard let index = items.firstIndex(where: { $0.sequence == sequence }) else { return }
 			switch items[index].content {
-			case .assistant(let old): items[index].content = .assistant(text: old + text)
+			case .assistant(let old, let model): items[index].content = .assistant(text: old + text, model: model)
 			default: break
 			}
 		case .appendThinking(let sequence, let text):
