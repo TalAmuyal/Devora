@@ -170,6 +170,43 @@ pub fn get_claude_settings(
     config::read_claude_settings(profile_path.as_deref())
 }
 
+/// A full model ID Claude Code offers, with its model's name, for a model tier's suggestions.
+#[derive(serde::Serialize)]
+pub struct TierModel {
+    pub id: String,
+    pub name: String,
+}
+
+/// The full model IDs Claude Code offers an agent of `profile_path`, in the core's order (`ModelList::tier_choices`),
+/// for the Claude card's tier fields. Cached per profile by the core; only a cold call launches Claude Code
+/// (initialize-only, no session). A test run that names no fake CLI looks up nothing.
+#[tauri::command]
+pub async fn get_claude_model_options(
+    app: tauri::AppHandle,
+    models: State<'_, Arc<devora_core::agents::ModelOptions>>,
+    profile_path: String,
+) -> Result<Vec<TierModel>, String> {
+    if devora_core::agents::test_run_without_fake_claude() {
+        return Ok(vec![]);
+    }
+    let context = devora_core::agents::resolve_launch_context(
+        config::global_config_path()?,
+        app.path().resource_dir().ok(),
+    )
+    .await?;
+    let list = models
+        .get(std::path::Path::new(&profile_path), &context)
+        .await?;
+    Ok(list
+        .tier_choices()
+        .into_iter()
+        .map(|model| TierModel {
+            id: model.id,
+            name: model.name,
+        })
+        .collect())
+}
+
 /// Writes one Claude model/effort setting at the given scope.
 /// `state`: "value" (store `value`), "none" (store JSON null), "default" (remove the key).
 #[tauri::command]

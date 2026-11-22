@@ -82,11 +82,21 @@ pub struct AgentModelOption {
     pub effort_levels: Vec<String>,
 }
 
-/// The models Claude Code offers an agent, with the version of the CLI that listed them.
+/// A full model ID for a model tier, with its model's name.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct TierModel {
+    pub id: String,
+    pub name: String,
+}
+
+/// The models Claude Code offers, with the version of the CLI that listed them, each list in the core's order
+/// (`devora_agent::models::precedes`): what an agent's model can be (`ModelList::agent_choices`), and what a model tier
+/// can be (`ModelList::tier_choices`).
 #[derive(Debug, Clone, PartialEq, uniffi::Record)]
 pub struct AgentModelList {
     pub cli_version: Option<String>,
     pub models: Vec<AgentModelOption>,
+    pub tier_models: Vec<TierModel>,
 }
 
 impl AgentLaunch {
@@ -584,9 +594,16 @@ impl DevoraCore {
             .model_options(Path::new(&profile_path), context)
             .await?;
         Ok(AgentModelList {
-            cli_version: list.cli_version,
+            tier_models: list
+                .tier_choices()
+                .into_iter()
+                .map(|model| TierModel {
+                    id: model.id,
+                    name: model.name,
+                })
+                .collect(),
             models: list
-                .models
+                .agent_choices()
                 .into_iter()
                 .map(|model| AgentModelOption {
                     value: model.value,
@@ -596,6 +613,7 @@ impl DevoraCore {
                     effort_levels: model.effort_levels,
                 })
                 .collect(),
+            cli_version: list.cli_version,
         })
     }
     pub async fn interrupt_agent(&self, tab: u64, generation: u64) -> Result<(), CoreError> {

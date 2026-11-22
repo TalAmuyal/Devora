@@ -18,6 +18,7 @@ use devora_agent_space::{SpaceEvent, SpaceHandle};
 use devora_app::log::Log;
 pub use devora_config::agent::Scope;
 use devora_state::{ChatCommand, ChatPhase, ChatUpdate, Command, Event, SessionKind, Store};
+pub use models::ModelOptions;
 pub use operations::{Creation, CreationEvent};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -68,8 +69,8 @@ struct Inner {
     shutdown_problems: Vec<String>,
     /// The launch of the latest open, for reopening an agent from Keep paused.
     launch: Option<LaunchContext>,
-    /// The models each profile's agents are offered (`models`).
-    models: BTreeMap<PathBuf, models::Cached>,
+    /// The models each profile's agents are offered, which every agent start fills (`models`).
+    models: Arc<ModelOptions>,
     /// This app process, which an agent launched in another one was restarted
     /// from (its restart notice, `devora_agent_space::AppRun`).
     run: AppRun,
@@ -86,6 +87,22 @@ pub struct Agents {
     thread: Option<JoinHandle<()>>,
 }
 
+/// The launch context from the user's login shell and the app bundle's `Resources` directory, for a host without the
+/// agent registry (Ember's settings, which list the models Claude Code offers).
+pub async fn resolve_launch_context(
+    global_config: PathBuf,
+    resources: Option<PathBuf>,
+) -> Result<LaunchContext, String> {
+    launch::resolve(global_config, resources).await
+}
+
+/// Whether this is a test run (`DEVORA_TEST_MODE`) that names no fake Claude CLI (`DEVORA_TEST_CLAUDE_PROGRAM`): such a
+/// run must look up no models, which would launch the user's own `claude`.
+pub fn test_run_without_fake_claude() -> bool {
+    std::env::var("DEVORA_TEST_MODE").is_ok_and(|mode| mode == "1")
+        && std::env::var_os("DEVORA_TEST_CLAUDE_PROGRAM").is_none()
+}
+
 fn lock<T>(value: &Mutex<T>) -> MutexGuard<'_, T> {
     value.lock().unwrap_or_else(|e| e.into_inner())
 }
@@ -100,8 +117,8 @@ impl Agents {
             deletions: BTreeMap::new(),
             changed: Arc::new(Notify::new()),
             shutdown_problems: Vec::new(),
+            models: Arc::new(ModelOptions::new(log.clone())),
             launch: None,
-            models: BTreeMap::new(),
             run: AppRun::new(),
         }));
         let (stop, stopped) = oneshot::channel();
@@ -564,7 +581,8 @@ impl Agents {
     }
 
     /// The launch context from the user's login shell and the app bundle's
-    /// `Resources` directory, for hosts that supply nothing of their own.
+    /// `Resources` directory, for hosts that supply nothing of their own (`resolve_launch_context`, on the registry's
+    /// runtime).
     pub async fn resolve_launch(
         &self,
         global_config: PathBuf,
@@ -1042,7 +1060,7 @@ async fn run_session(
                     return Err(error);
                 }
                 if let SpaceEvent::Session(SessionEvent::Ready { capabilities, .. }) = &event {
-                    models::learned(inner, log, &key.profile, running.launch_settings(), devora_agent::models::decode(capabilities));
+                    lock(inner).models.clone().learned(&key.profile, running.launch_settings(), devora_agent::models::decode(capabilities));
                 }
                 publish(inner, state, key, generation, event);
             }

@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createClaudeConfigCard } from '../ClaudeConfigCard';
-import { invoke } from '../../../invoke';
+import { invoke, invokeLogOnly } from '../../../invoke';
 
-vi.mock('../../../invoke', () => ({ invoke: vi.fn() }));
+vi.mock('../../../invoke', () => ({ invoke: vi.fn(), invokeLogOnly: vi.fn() }));
 const invokeMock = vi.mocked(invoke);
+const invokeLogOnlyMock = vi.mocked(invokeLogOnly);
 
 const flush = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
 
@@ -23,7 +24,18 @@ const SETTINGS = {
   },
 };
 
+const MODELS = [
+  { id: 'claude-opus-5-5', name: 'Opus 5.5' },
+  { id: 'claude-sonnet-5-5', name: 'Sonnet 5.5' },
+  { id: 'claude-opus-4-8', name: 'Opus 4.8' },
+];
+
 beforeEach(() => {
+  invokeLogOnlyMock.mockReset();
+  invokeLogOnlyMock.mockImplementation(async (cmd: string) => {
+    if (cmd === 'get_claude_model_options') return MODELS;
+    throw new Error(`unexpected command ${cmd}`);
+  });
   invokeMock.mockReset();
   invokeMock.mockImplementation(async (cmd: string, args?: unknown) => {
     if (cmd === 'get_claude_settings') return SETTINGS;
@@ -44,7 +56,7 @@ afterEach(() => {
 });
 
 async function mountCard(profilePath: string | null = null): Promise<HTMLElement> {
-  const card = createClaudeConfigCard({ profilePath });
+  const card = createClaudeConfigCard({ profilePath, modelProfilePath: '/profiles/work' });
   await flush();
   return card;
 }
@@ -312,7 +324,7 @@ describe('createClaudeConfigCard', () => {
 
   it('does not focus the Custom input on the initial mount', async () => {
     // Attach before the async render so a stray focus() would actually take effect (and be caught).
-    const card = createClaudeConfigCard({ profilePath: null });
+    const card = createClaudeConfigCard({ profilePath: null, modelProfilePath: '/profiles/work' });
     document.body.appendChild(card);
     await flush();
     const input = row(card, 0).querySelector<HTMLInputElement>('.config-input');
@@ -359,7 +371,7 @@ describe('createClaudeConfigCard', () => {
       }
       throw new Error(`unexpected command ${cmd}`);
     });
-    const card = createClaudeConfigCard({ profilePath: null });
+    const card = createClaudeConfigCard({ profilePath: null, modelProfilePath: '/profiles/work' });
     document.body.appendChild(card);
     await flush();
 
@@ -397,5 +409,30 @@ describe('createClaudeConfigCard', () => {
     clickSegment(row(card, 0), 'None');
     await flush();
     expect(lastSetCall()).toMatchObject({ profilePath: '/home/me/devora' });
+  });
+});
+
+describe('ClaudeConfigCard model suggestions', () => {
+  it('suggests the model IDs Claude Code offers, in the core\'s order, on every tier field and not the permission mode', async () => {
+    const card = await mountCard('/profiles/work');
+    expect(invokeLogOnlyMock).toHaveBeenCalledWith('get_claude_model_options', { profilePath: '/profiles/work' });
+    const input = rowByLabel(card, 'Opus tier').querySelector<HTMLInputElement>('input.config-input')!;
+    expect(input.placeholder).toBe('model ID, then Enter');
+    const list = card.querySelector<HTMLDataListElement>(`datalist#${input.getAttribute('list')}`)!;
+    expect(Array.from(list.options).map((o) => [o.value, o.label])).toEqual(MODELS.map((m) => [m.id, m.name]));
+    expect(card.querySelectorAll('datalist')).toHaveLength(1);
+  });
+
+  it('leaves the fields as they are when Claude Code can\'t be asked', async () => {
+    invokeLogOnlyMock.mockRejectedValue(new Error('no claude'));
+    const card = await mountCard('/profiles/work');
+    const input = rowByLabel(card, 'Opus tier').querySelector<HTMLInputElement>('input.config-input')!;
+    expect(card.querySelector<HTMLDataListElement>(`datalist#${input.getAttribute('list')}`)!.options).toHaveLength(0);
+  });
+
+  it('asks for no models without a profile to ask for', async () => {
+    createClaudeConfigCard({ profilePath: null, modelProfilePath: null });
+    await flush();
+    expect(invokeLogOnlyMock).not.toHaveBeenCalled();
   });
 });

@@ -3,60 +3,95 @@
 //! day, from another CLI version, or from other launch settings (the profile's model tiers decide what an alias
 //! resolves to).
 
-use super::{lock, Agents, Inner};
+use super::Agents;
 use devora_agent::models::{self, ModelList};
 use devora_agent_space::{LaunchContext, Space};
 use devora_app::log::{Level, Log};
 use serde_json::Value;
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 /// How long a list serves before the CLI is asked again, even at the same version.
 const FRESH: Duration = Duration::from_secs(24 * 60 * 60);
 
 #[derive(Clone)]
-pub(super) struct Cached {
+struct Cached {
     list: ModelList,
     /// The launch settings the list was given under.
     settings: Value,
     at: Instant,
 }
 
-/// What an agent of `profile`, launched with `settings`, was just offered: logged, as the record of what a real login
-/// gets, and cached.
-pub(super) fn learned(
-    inner: &Mutex<Inner>,
-    log: &Log,
-    profile: &Path,
-    settings: &Value,
-    list: ModelList,
-) {
-    let models: Vec<String> = list
-        .models
-        .iter()
-        .map(|model| match &model.resolved_model {
-            Some(resolved) if *resolved != model.value => format!("{} → {resolved}", model.value),
-            _ => model.value.clone(),
-        })
-        .collect();
-    log.write(
-        Level::Info,
-        &format!(
-            "Claude models for {} (CLI {}): {}",
-            profile.display(),
-            list.cli_version.as_deref().unwrap_or("unknown"),
-            models.join(", ")
-        ),
-    );
-    lock(inner).models.insert(
-        profile.to_path_buf(),
-        Cached {
-            list,
-            settings: settings.clone(),
-            at: Instant::now(),
-        },
-    );
+/// The models each profile is offered, cached per profile. The agent registry keeps one, which every agent start fills;
+/// a host without agents (Ember's settings) keeps its own.
+pub struct ModelOptions {
+    cache: Mutex<BTreeMap<PathBuf, Cached>>,
+    log: Arc<Log>,
+}
+
+impl ModelOptions {
+    pub fn new(log: Arc<Log>) -> Self {
+        Self {
+            cache: Mutex::new(BTreeMap::new()),
+            log,
+        }
+    }
+
+    /// What an agent of `profile`, launched with `settings`, was just offered: logged, as the record of what a real login
+    /// gets, and cached.
+    pub(super) fn learned(&self, profile: &Path, settings: &Value, list: ModelList) {
+        let models: Vec<String> = list
+            .models
+            .iter()
+            .map(|model| match &model.resolved_model {
+                Some(resolved) if *resolved != model.value => {
+                    format!("{} → {resolved}", model.value)
+                }
+                _ => model.value.clone(),
+            })
+            .collect();
+        self.log.write(
+            Level::Info,
+            &format!(
+                "Claude models for {} (CLI {}): {}",
+                profile.display(),
+                list.cli_version.as_deref().unwrap_or("unknown"),
+                models.join(", ")
+            ),
+        );
+        self.cache.lock().unwrap_or_else(|e| e.into_inner()).insert(
+            profile.to_path_buf(),
+            Cached {
+                list,
+                settings: settings.clone(),
+                at: Instant::now(),
+            },
+        );
+    }
+
+    /// The models an agent of `profile` is offered, launched with `context`: the cached list while it's under a day old
+    /// and from the CLI version and launch settings an agent would get now, else a fresh one from an initialize-only
+    /// launch.
+    pub async fn get(&self, profile: &Path, context: &LaunchContext) -> Result<ModelList, String> {
+        let options = Space::probe_options(context, profile)?;
+        let cached = self
+            .cache
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(profile)
+            .cloned();
+        if let Some(cached) = cached.filter(|cached| cached.at.elapsed() < FRESH) {
+            let installed = models::cli_version(&options).await?;
+            if serves(&cached, cached.at.elapsed(), &installed, &options.settings) {
+                return Ok(cached.list);
+            }
+        }
+        let list = models::discover(&options).await?;
+        self.learned(profile, &options.settings, list.clone());
+        Ok(list)
+    }
 }
 
 /// Whether a cached list still answers for the CLI version installed now and the launch settings an agent would get now.
@@ -67,36 +102,18 @@ fn serves(cached: &Cached, age: Duration, installed: &str, settings: &Value) -> 
 }
 
 impl Agents {
-    /// The models an agent of `profile` is offered, launched with `context`: the cached list while it's under a day old
-    /// and from the CLI version and launch settings an agent would get now, else a fresh one from an initialize-only
-    /// launch.
+    /// The models an agent of `profile` is offered, launched with `context` (`ModelOptions::get`), on the registry's runtime.
     pub async fn model_options(
         &self,
         profile: &Path,
         context: LaunchContext,
     ) -> Result<ModelList, String> {
         let profile: PathBuf = profile.to_path_buf();
-        let cached = lock(&self.inner).models.get(&profile).cloned();
-        let inner = self.inner.clone();
-        let log = self.log.clone();
-        let (reply, received) = tokio::sync::oneshot::channel();
-        self.runtime.spawn(async move {
-            let result = async {
-                let options = Space::probe_options(&context, &profile)?;
-                if let Some(cached) = cached.filter(|cached| cached.at.elapsed() < FRESH) {
-                    let installed = models::cli_version(&options).await?;
-                    if serves(&cached, cached.at.elapsed(), &installed, &options.settings) {
-                        return Ok(cached.list);
-                    }
-                }
-                let list = models::discover(&options).await?;
-                learned(&inner, &log, &profile, &options.settings, list.clone());
-                Ok(list)
-            }
-            .await;
-            let _ = reply.send(result);
-        });
-        received.await.map_err(|e| e.to_string())?
+        let models = super::lock(&self.inner).models.clone();
+        self.runtime
+            .spawn(async move { models.get(&profile, &context).await })
+            .await
+            .map_err(|e| e.to_string())?
     }
 }
 

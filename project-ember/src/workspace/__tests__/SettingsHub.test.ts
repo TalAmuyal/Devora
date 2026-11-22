@@ -5,6 +5,7 @@ import { installModalStack, teardownModalStack } from '../../ui/components/__tes
 
 vi.mock('../../invoke', () => ({
   invoke: vi.fn(),
+  invokeLogOnly: vi.fn(async () => []),
 }));
 
 vi.mock('@tauri-apps/plugin-dialog', () => ({

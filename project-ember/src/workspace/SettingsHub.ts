@@ -519,7 +519,10 @@ export class SettingsHub {
 
   /** Append the per-scope settings cards (shared by User Defaults and per-profile panels). */
   private appendSettingsCards(container: HTMLElement, profilePath: string | null): void {
-    container.appendChild(createClaudeConfigCard({ profilePath }));
+    container.appendChild(createClaudeConfigCard({
+      profilePath,
+      modelProfilePath: profilePath ?? this.callbacks.getActiveProfilePath() ?? null,
+    }));
     container.appendChild(
       createConfigCard({ title: 'Terminal & Session', profilePath, fields: TERMINAL_FIELDS }),
     );

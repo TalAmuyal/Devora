@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-get-claude-model-options"
+description = "Enables the get_claude_model_options command without any pre-configured scope."
+commands.allow = ["get_claude_model_options"]
+
+[[permission]]
+identifier = "deny-get-claude-model-options"
+description = "Denies the get_claude_model_options command without any pre-configured scope."
+commands.deny = ["get_claude_model_options"]

@@ -60,7 +60,9 @@ pub fn decode(reply: &InitializeResponse) -> ModelList {
                         .unwrap_or_default()
                 };
             Some(ModelOption {
-                display_name: text(model, "displayName").unwrap_or_else(|| value.clone()),
+                display_name: text(model, "displayName")
+                    .filter(|name| !name.is_empty())
+                    .unwrap_or_else(|| value.clone()),
                 resolved_model: text(model, "resolvedModel"),
                 description: text(model, "description"),
                 effort_levels,
@@ -75,6 +77,108 @@ pub fn decode(reply: &InitializeResponse) -> ModelList {
             .and_then(Value::as_str)
             .map(str::to_owned),
         models,
+    }
+}
+
+/// A full model ID to offer where only an ID will do (a model tier, `ANTHROPIC_DEFAULT_<TIER>_MODEL`, is what an alias
+/// resolves to), with its model's name.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ModelId {
+    pub id: String,
+    pub name: String,
+}
+
+impl ModelOption {
+    /// An alias names a model it resolves to (`opus` → `claude-opus-5-5`); every other entry is a full ID.
+    pub fn is_alias(&self) -> bool {
+        self.resolved_model
+            .as_ref()
+            .is_some_and(|resolved| *resolved != self.value)
+    }
+
+    /// The full ID it stands for: what an alias resolves to, or the entry itself.
+    pub fn model_id(&self) -> &str {
+        self.resolved_model.as_deref().unwrap_or(&self.value)
+    }
+}
+
+impl ModelList {
+    /// What an agent's model can be: every entry but Claude Code's `default`, which is a choice rather than a model, in
+    /// [`precedes`]'s order. Picking an alias stores the alias, which follows Claude Code to newer models.
+    pub fn agent_choices(&self) -> Vec<ModelOption> {
+        let mut choices: Vec<_> = self
+            .models
+            .iter()
+            .filter(|model| model.value != "default")
+            .cloned()
+            .collect();
+        choices.sort_by(|a, b| order(a.model_id(), b.model_id()));
+        choices
+    }
+
+    /// What a model tier can be: each full ID once, an alias's resolution included and named by its alias (`default`,
+    /// a choice, names none), in [`precedes`]'s order.
+    pub fn tier_choices(&self) -> Vec<ModelId> {
+        let mut ids: Vec<ModelId> = Vec::new();
+        for model in self.models.iter().filter(|model| model.value != "default") {
+            if !ids.iter().any(|known| known.id == model.model_id()) {
+                ids.push(ModelId {
+                    id: model.model_id().to_owned(),
+                    name: model.display_name.clone(),
+                });
+            }
+        }
+        ids.sort_by(|a, b| order(&a.id, &b.id));
+        ids
+    }
+}
+
+/// Whether model `first` reads before `second`: Claude's models (`claude-<tier>-<major>[-<minor>][-<date>]`) by
+/// generation, newest first, then by tier (Fable, Opus, Sonnet, Haiku); every other ID after them, alphabetically.
+pub fn precedes(first: &str, second: &str) -> bool {
+    order(first, second) == std::cmp::Ordering::Less
+}
+
+fn order(first: &str, second: &str) -> std::cmp::Ordering {
+    use std::cmp::Ordering;
+    match (Generation::of(first), Generation::of(second)) {
+        (Some(a), Some(b)) => b
+            .version
+            .cmp(&a.version)
+            .then(a.tier.cmp(&b.tier))
+            .then_with(|| first.cmp(second)),
+        (Some(_), None) => Ordering::Less,
+        (None, Some(_)) => Ordering::Greater,
+        (None, None) => first.cmp(second),
+    }
+}
+
+struct Generation {
+    version: (u32, u32),
+    tier: usize,
+}
+
+impl Generation {
+    const TIERS: [&str; 4] = ["fable", "opus", "sonnet", "haiku"];
+
+    fn of(id: &str) -> Option<Self> {
+        let mut parts = id.split('-');
+        if parts.next()? != "claude" {
+            return None;
+        }
+        let family = parts.next()?;
+        let tier = Self::TIERS.iter().position(|tier| *tier == family)?;
+        let major = parts.next()?.parse().ok()?;
+        // A date suffix (`-20251001`) isn't a minor version.
+        let minor = parts
+            .next()
+            .and_then(|part| part.parse().ok())
+            .filter(|minor| *minor < 1000)
+            .unwrap_or(0);
+        Some(Self {
+            version: (major, minor),
+            tier,
+        })
     }
 }
 
@@ -249,12 +353,121 @@ mod tests {
         );
     }
 
+    fn option(value: &str, resolved: &str, name: &str) -> ModelOption {
+        ModelOption {
+            value: value.into(),
+            resolved_model: Some(resolved.into()),
+            display_name: name.into(),
+            description: None,
+            effort_levels: vec![],
+        }
+    }
+
+    /// A subscription's list, as Claude Code 2.1.312 gave it: its aliases, then other models' full IDs.
+    fn subscription() -> ModelList {
+        ModelList {
+            cli_version: Some("2.1.312".into()),
+            models: vec![
+                option("default", "claude-opus-5-5", "Default (recommended)"),
+                option("opus", "claude-opus-5-5", "Opus 5.5"),
+                option("sonnet", "claude-sonnet-5-5", "Sonnet 5.5"),
+                option("haiku", "claude-haiku-5-5", "Haiku 5.5"),
+                option(
+                    "claude-haiku-4-5-20251001",
+                    "claude-haiku-4-5-20251001",
+                    "Haiku 4.5",
+                ),
+                option("claude-opus-4-8", "claude-opus-4-8", "Opus 4.8"),
+                option("claude-sonnet-4-6", "claude-sonnet-4-6", "Sonnet 4.6"),
+            ],
+        }
+    }
+
+    #[test]
+    fn models_read_newest_generation_first_then_by_tier_then_the_rest_by_id() {
+        let mut ids = vec![
+            "claude-haiku-4-5-20251001",
+            "zeta-model",
+            "claude-opus-5",
+            "claude-sonnet-5-5",
+            "claude-opus-5-2",
+            "claude-fable-5-5",
+            "claude-mystery-6-0",
+            "claude-opus-4-8",
+            "claude-opus",
+            "alpha-model",
+            "claude-haiku-5-5",
+            "claude-opus-5-5",
+        ];
+        ids.sort_by(|a, b| order(a, b));
+        assert_eq!(
+            ids,
+            [
+                "claude-fable-5-5",
+                "claude-opus-5-5",
+                "claude-sonnet-5-5",
+                "claude-haiku-5-5",
+                "claude-opus-5-2",
+                "claude-opus-5",
+                "claude-opus-4-8",
+                "claude-haiku-4-5-20251001",
+                // Outside the scheme, alphabetically: another naming, an unknown family, no number at all.
+                "alpha-model",
+                "claude-mystery-6-0",
+                "claude-opus",
+                "zeta-model",
+            ]
+        );
+        assert!(precedes("claude-opus-5-5", "claude-opus-4-8"));
+    }
+
+    #[test]
+    fn an_agent_is_offered_every_model_but_claude_codes_default() {
+        let choices = subscription().agent_choices();
+        assert_eq!(
+            choices.iter().map(|c| c.value.as_str()).collect::<Vec<_>>(),
+            [
+                "opus",
+                "sonnet",
+                "haiku",
+                "claude-opus-4-8",
+                "claude-sonnet-4-6",
+                "claude-haiku-4-5-20251001"
+            ]
+        );
+        assert!(choices[0].is_alias() && !choices[3].is_alias());
+    }
+
+    #[test]
+    fn a_tier_is_offered_each_full_id_once_named_by_its_model() {
+        let ids = subscription().tier_choices();
+        assert_eq!(
+            ids.iter().map(|m| m.id.as_str()).collect::<Vec<_>>(),
+            [
+                "claude-opus-5-5",
+                "claude-sonnet-5-5",
+                "claude-haiku-5-5",
+                "claude-opus-4-8",
+                "claude-sonnet-4-6",
+                "claude-haiku-4-5-20251001",
+            ]
+        );
+        assert_eq!(
+            ids[0].name, "Opus 5.5",
+            "named by its alias, not by `default`"
+        );
+    }
+
     #[test]
     fn an_entry_without_a_value_is_skipped_and_the_rest_are_optional() {
         let list = decode(&reply(
-            json!([{"displayName": "Nameless"}, {"value": "fable"}]),
+            json!([{"displayName": "Nameless"}, {"value": "fable"}, {"value": "claude-next", "displayName": ""}]),
         ));
-        assert_eq!(list.models.len(), 1);
+        assert_eq!(list.models.len(), 2);
+        assert_eq!(
+            list.models[1].display_name, "claude-next",
+            "an empty name is no name"
+        );
         let fable = &list.models[0];
         assert_eq!(
             fable.display_name, "fable",
