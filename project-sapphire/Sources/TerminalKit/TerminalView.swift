@@ -25,10 +25,7 @@ final class TerminalView: NSView, @preconcurrency NSTextInputClient {
 	required init?(coder: NSCoder) { fatalError() }
 
 	isolated deinit {
-		if let surface {
-			TerminalRuntime.shared.surfaceFreed(surface)
-			ghostty_surface_free(surface)
-		}
+		if let surface { ghostty_surface_free(surface) }
 	}
 
 	override var acceptsFirstResponder: Bool { true }
@@ -71,7 +68,6 @@ final class TerminalView: NSView, @preconcurrency NSTextInputClient {
 			return
 		}
 		session.startedAt = .now
-		TerminalRuntime.shared.surfaceCreated(surface)
 		updateSurfaceSize()
 		updateTrackingAreas()
 		if window.firstResponder === self { ghostty_surface_set_focus(surface, true) }
