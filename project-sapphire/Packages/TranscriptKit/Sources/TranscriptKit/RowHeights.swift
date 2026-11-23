@@ -11,7 +11,7 @@ struct RowHeights {
 	private struct Entry {
 		let row: TranscriptEntry
 		let expanded: Bool
-		let diagrams: Int
+		let drawn: Int
 		let width: CGFloat
 		let height: CGFloat
 	}
@@ -20,11 +20,11 @@ struct RowHeights {
 	/// Per kind and expansion: the sum of measured heights and of the guesses for those same rows.
 	private var calibration: [Shape: (measured: CGFloat, guessed: CGFloat)] = [:]
 
-	/// `diagrams` fingerprints the row's Mermaid diagrams as drawn (none, placeholders, images): an image arriving makes the
-	/// row's height an estimate again.
-	func isExact(_ row: TranscriptEntry, expanded: Bool = false, diagrams: Int = 0, width: CGFloat) -> Bool {
+	/// `drawn` fingerprints what the row draws beyond its item: its Mermaid diagrams as drawn (none, placeholders, images)
+	/// and its time as shown, so an image arriving, or a day passing, makes the row's height an estimate again.
+	func isExact(_ row: TranscriptEntry, expanded: Bool = false, drawn: Int = 0, width: CGFloat) -> Bool {
 		guard let entry = entries[row.key] else { return false }
-		return entry.width == width && entry.row == row && entry.expanded == expanded && entry.diagrams == diagrams
+		return entry.width == width && entry.row == row && entry.expanded == expanded && entry.drawn == drawn
 	}
 
 	func height(_ row: TranscriptEntry, expanded: Bool = false, width: CGFloat) -> CGFloat {
@@ -37,13 +37,13 @@ struct RowHeights {
 		return estimate(row, expanded: expanded, width: width)
 	}
 
-	mutating func record(_ row: TranscriptEntry, expanded: Bool = false, diagrams: Int = 0, width: CGFloat, height: CGFloat) {
+	mutating func record(_ row: TranscriptEntry, expanded: Bool = false, drawn: Int = 0, width: CGFloat, height: CGFloat) {
 		let shape = Shape(row, expanded: expanded)
 		var sums = calibration[shape] ?? (0, 0)
 		sums.measured += height
 		sums.guessed += Self.guess(row, expanded: expanded, width: width)
 		calibration[shape] = sums
-		entries[row.key] = Entry(row: row, expanded: expanded, diagrams: diagrams, width: width, height: height)
+		entries[row.key] = Entry(row: row, expanded: expanded, drawn: drawn, width: width, height: height)
 	}
 
 	/// Forgets the rows no longer in the transcript.

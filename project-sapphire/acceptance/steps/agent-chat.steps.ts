@@ -69,11 +69,15 @@ Then("the agent chat's turn status is {string}", async function (this: SapphireW
 Then('the agent chat shows no turn status', async function (this: SapphireWorld) {
   await this.bridge.waitFor('no turn status', () => this.bridge.agentChat(), s => s.turnStatus === null);
 });
-// Today's rows show only the time, so none names the year.
-Then("every agent transcript row shows today's time", async function (this: SapphireWorld) {
-  const year = String(new Date().getFullYear());
-  await this.bridge.waitFor("every row showing today's time", () => this.bridge.agentChat(),
-    s => s.dom.rows.length > 0 && s.dom.rows.every(row => row.time !== null && row.time !== '' && !row.time.includes(year)));
+// A row from today shows only its time, and one from an earlier day (sent before midnight, read after) its date too.
+Then("every agent transcript row shows its time", async function (this: SapphireWorld) {
+  const fromToday = (stamp: number) => new Date(stamp).toDateString() === new Date().toDateString();
+  await this.bridge.waitFor('every row showing its time', () => this.bridge.agentChat(),
+    s => s.dom.rows.length > 0 && s.dom.rows.every(row => {
+      if (row.time === null || row.time === '' || row.createdAt === null) return false;
+      const year = String(new Date(row.createdAt).getFullYear());
+      return row.time.includes(year) !== fromToday(row.createdAt);
+    }));
 });
 Then('the agent transcript has no {string} row', async function (this: SapphireWorld, text: string) {
   const chat = await this.bridge.agentChat();

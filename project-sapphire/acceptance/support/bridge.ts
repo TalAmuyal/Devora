@@ -26,7 +26,7 @@ export interface AgentChatState {
   };
   dom: {
     text: string;
-    rows: { sequence: string; kind: string; text: string; offset: number; time: string | null }[];
+    rows: { sequence: string; kind: string; text: string; offset: number; time: string | null; createdAt: number | null }[];
     cards: number;
     /** Mermaid diagrams drawn, failed, still pending, and shown as source while their reply streams. */
     diagrams: { drawn: number; failed: number; pending: number; source: number };

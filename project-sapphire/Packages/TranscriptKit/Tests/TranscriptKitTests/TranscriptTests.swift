@@ -2,6 +2,7 @@ import AppKit
 import Foundation
 import SwiftUI
 import Testing
+import TestSupport
 
 @testable import TranscriptKit
 
@@ -125,6 +126,31 @@ struct TranscriptScrollViewTests {
 			steps += 1
 			await Task.yield()
 		}
+	}
+
+	@Test func aNewDayShowsYesterdaysRowsWithTheirDateAndMeasuresThemAgain() async throws {
+		let calendar = Calendar.autoupdatingCurrent
+		let evening = calendar.date(bySettingHour: 23, minute: 59, second: 0, of: Date())!
+		var now = evening.addingTimeInterval(30)
+		var prompt = item(1, .user(text: "Late question", error: nil))
+		prompt.createdAt = evening
+		let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 400), styleMask: [.titled], backing: .buffered, defer: false)
+		window.isReleasedWhenClosed = false
+		let view = TranscriptScrollView(anchor: nil)
+		view.clock = { now }
+		view.hasVerticalScroller = false
+		view.frame = window.contentView!.bounds
+		window.contentView!.addSubview(view)
+		view.apply([prompt])
+		let time = { (view.observation()["rows"] as! [[String: Any]])[0]["time"] as? String }
+		let today = try #require(time())
+		let measured = view.measurements
+
+		now = calendar.date(byAdding: .minute, value: 2, to: evening)!
+		NotificationCenter.default.post(name: .NSCalendarDayChanged, object: nil)
+		try await eventually { view.measurements > measured }
+		let yesterday = try #require(time())
+		#expect(yesterday != today && yesterday.contains(today), "\(yesterday) names the day of \(today)")
 	}
 
 	@Test func itOpensAtTheBottomWithTheVisibleRowsMeasured() {
