@@ -1716,3 +1716,51 @@ fn an_agent_is_set_only_to_a_model_it_is_offered_and_a_paused_one_launches_with_
         "claude-haiku-5-5"
     );
 }
+
+#[test]
+fn an_agent_still_paused_after_a_restart_can_be_set_to_a_model_its_next_launch_is_offered() {
+    let mut f = Fixture::new(true);
+    let events = f.core.subscribe_agent_chats().unwrap();
+    f.create("Resting");
+    let tab = f.open("Resting");
+    let chat = f.wait(&events, |c| c.tab == tab && c.phase == ChatPhase::Running);
+    f.core.pause_agent_after_turn(tab, chat.generation).unwrap();
+    f.wait(&events, |c| c.tab == tab && c.phase == ChatPhase::Paused);
+    block_on(f.core.shutdown_agents()).unwrap();
+    events.close().unwrap();
+
+    f.relaunch();
+    block_on(f.core.restore_agent_spaces(f.launch())).unwrap();
+    let events = f.core.subscribe_agent_chats().unwrap();
+    let paused = f.wait(&events, |c| c.tab == tab && c.phase == ChatPhase::Paused);
+    // It hasn't launched in this run, so the list comes from asking Claude Code with its next launch's settings.
+    assert_eq!(
+        block_on(
+            f.core
+                .set_agent_model(tab, paused.generation, "claude-made-up-9".into())
+        )
+        .unwrap_err()
+        .to_string(),
+        "Claude Code doesn't offer the model claude-made-up-9 to this agent."
+    );
+    block_on(
+        f.core
+            .set_agent_model(tab, paused.generation, "sonnet".into()),
+    )
+    .unwrap();
+
+    assert_eq!(f.open("Resting"), tab);
+    f.wait(&events, |c| c.tab == tab && c.phase == ChatPhase::Running);
+    let report = fs::read_to_string(f.profile.root.path().join("report.jsonl")).unwrap();
+    let starts: Vec<serde_json::Value> = report
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .filter(|v: &serde_json::Value| v["kind"] == "start")
+        .collect();
+    let args = starts.last().unwrap()["args"].as_array().unwrap();
+    assert_eq!(
+        args[args.iter().position(|v| v == "--model").unwrap() + 1],
+        "sonnet"
+    );
+    block_on(f.core.shutdown_agents()).unwrap();
+}

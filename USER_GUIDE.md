@@ -191,6 +191,16 @@ An agent reads its profile's threshold when it starts, so a change to the profil
 Compact Now runs the same steps the threshold does: right away on an idle agent, or when the current turn ends.
 A paused agent shows its context, but its threshold and Compact Now wait until it runs.
 
+## Agent model (Sapphire)
+
+The Model widget beside Context names the model the agent's latest reply came from; an orange glyph marks a reply from a model the agent isn't set to, and hovering it says why.
+Click the widget to change the agent's model: type to search, use ↑ and ↓ to move and Return to pick, or click one; Escape closes it.
+"Aliases" follow Claude Code to newer models ("Opus (currently 5.5)"); "Model IDs" pin one model.
+The list is what Claude Code offers the agent's profile.
+A pick is kept with the agent at once: an idle agent switches now, a running turn finishes on its model first, and a paused agent uses it when it resumes.
+Until a reply comes from the new model, the widget shows it in orange.
+If Claude Code refuses it, the widget and the popover say so; the agent keeps its current model for now and tries the pick again at its next launch.
+
 ## Global Pause (Sapphire)
 
 Use the title-bar Pause Devora button or the Pause Devora command in the palette to hold background work.

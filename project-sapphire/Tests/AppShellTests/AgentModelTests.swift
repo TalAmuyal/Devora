@@ -111,4 +111,59 @@ struct AgentModelTests {
 			model: model("claude-sonnet-4-5-20250929", label: "claude-sonnet-4-5-20250929"), paused: false)
 		#expect(AgentModelWidget.reserved(names: ["Opus 5.5"], presentation: unnamed) == ["Opus 5.5", "Pending"], "an ID may be cut")
 	}
+
+	func picked(awaiting: Bool, notTaken: String? = nil) -> ChatModel {
+		ChatModel(
+			latest: "claude-opus-5-5", label: "Sonnet 5.5", setTo: "sonnet", setToResolved: "claude-sonnet-5-5", differs: true,
+			fallback: nil, awaitingChange: awaiting, changeNotTaken: notTaken)
+	}
+
+	@Test func aModelJustPickedShowsInOrangeUntilItAnswersAndSaysWhyOnTheGlyph() {
+		let shown = AgentModelPresentation(model: picked(awaiting: true), paused: false)
+		#expect(shown.label == "Sonnet 5.5" && shown.changed && shown.mismatch)
+		#expect(shown.glyphTooltip == "Set to Sonnet 5.5; no reply from it yet.")
+		#expect(shown.tooltip == "Set to sonnet (claude-sonnet-5-5) · last reply from claude-opus-5-5")
+		#expect(shown.accessibilityValue == "Sonnet 5.5, no reply from it yet")
+		let answered = AgentModelPresentation(
+			model: ChatModel(
+				latest: "claude-sonnet-5-5", label: "Sonnet 5.5", setTo: "sonnet", setToResolved: "claude-sonnet-5-5",
+				differs: false, fallback: nil, awaitingChange: false, changeNotTaken: nil), paused: false)
+		#expect(!answered.changed && !answered.mismatch, "its first reply ends the mark")
+	}
+
+	@Test func aPickClaudeCodeRefusedSaysSoOnTheGlyphAndInThePopover() {
+		let refused = picked(awaiting: true, notTaken: "Model 'sonnet' not found")
+		let shown = AgentModelPresentation(model: refused, paused: false)
+		#expect(shown.mismatch)
+		#expect(shown.glyphTooltip?.hasPrefix("Claude Code didn't take sonnet (Model 'sonnet' not found).") == true)
+		#expect(shown.accessibilityValue == "Sonnet 5.5, not taken by Claude Code")
+		#expect(picker(refused).note?.hasPrefix("Claude Code didn't take sonnet") == true)
+	}
+
+	func picker(
+		_ model: ChatModel?, phase: ChatPhase = .running, turn: Bool = false, listed: Bool = true, failed: Bool = false,
+		globallyPaused: Bool = false
+	) -> AgentModelPickerPresentation {
+		let list = AgentModelList(
+			cliVersion: "2.1.326",
+			aliases: [ModelRow(value: "opus", label: "Opus (currently 5.5)", modelId: "claude-opus-5-5")],
+			modelIds: [ModelRow(value: "claude-opus-5-5", label: "Opus 5.5", modelId: "claude-opus-5-5")])
+		return AgentModelPickerPresentation(
+			model: model, phase: phase, globallyPaused: globallyPaused, turnRunning: turn,
+			suggestions: listed ? ModelSuggestions(list) : nil, lookupFailed: failed)
+	}
+
+	@Test func thePopoverSaysWhenAPickTakesEffectOrWhyNoneCanBeMade() {
+		let opus = model("claude-opus-5-5", label: "Opus 5.5")
+		#expect(picker(opus).note == nil && picker(opus).unavailableReason == nil, "idle: it applies at once")
+		#expect(picker(opus, turn: true).note == "A turn is running: the model you pick takes over when it ends.")
+		#expect(picker(opus, phase: .paused).note == "Paused: the model you pick runs when the agent resumes.")
+		#expect(picker(opus, phase: .paused, globallyPaused: true).unavailableReason == nil, "a held agent can be changed")
+		#expect(picker(opus, phase: .pausing).unavailableReason == "This agent is pausing")
+		#expect(picker(opus, phase: .opening).unavailableReason == "This agent is starting")
+		#expect(picker(opus, listed: false).unavailableReason == "Asking Claude Code for its models…")
+		#expect(picker(opus, listed: false, failed: true).unavailableReason?.hasPrefix("Claude Code couldn't be asked") == true)
+		#expect(picker(opus).current == "opus", "the list marks what the agent is set to")
+		#expect(picker(opus).rows(typed: "").map(\.completion) == ["opus", "claude-opus-5-5"])
+	}
 }

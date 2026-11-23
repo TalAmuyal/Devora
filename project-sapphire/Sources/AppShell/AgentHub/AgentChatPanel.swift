@@ -30,6 +30,13 @@ final class AgentPanelModel {
 		AgentModelPresentation(model: chat.chat?.model, paused: chat.chat?.phase == .paused)
 	}
 
+	var modelPicker: AgentModelPickerPresentation {
+		AgentModelPickerPresentation(
+			model: chat.chat?.model, phase: chat.chat?.phase, globallyPaused: chat.globallyPaused,
+			turnRunning: chat.chat?.turnRunning == true, suggestions: chat.modelSuggestions,
+			lookupFailed: chat.modelSuggestionsFailed)
+	}
+
 	var contextPresentation: AgentContextPresentation {
 		AgentContextPresentation(
 			context: chat.chat?.context, phase: chat.chat?.phase, pauseRequested: chat.chat?.pauseRequested == true,
@@ -101,7 +108,11 @@ struct AgentChatPanel: View {
 			AgentWidgetBar(
 				context: model.chat.chat?.context,
 				model: model.modelPresentation,
-				modelNames: model.chat.modelSuggestions?.rows(for: .agentModel).map(\.name) ?? [], enterSends: model.chat.enterSends,
+				modelNames: model.chat.modelSuggestions?.rows(for: .agentModel).map(\.name) ?? [],
+				modelPicker: model.modelPicker,
+				onModelOpen: { Task { await model.chat.loadModelSuggestions() } },
+				onModel: { picked in Task { await model.chat.setModel(picked) } },
+				enterSends: model.chat.enterSends,
 				showsSystem: model.chat.showsSystem, onShowsSystem: { model.chat.setShowsSystem($0) },
 				pause: model.pausePresentation,
 				compaction: model.contextPresentation,
@@ -196,6 +207,9 @@ struct AgentWidgetBar: View {
 	let context: ChatContext?
 	let model: AgentModelPresentation
 	let modelNames: [String]
+	let modelPicker: AgentModelPickerPresentation
+	let onModelOpen: () -> Void
+	let onModel: (String) -> Void
 	let enterSends: Bool
 	let showsSystem: Bool
 	let onShowsSystem: (Bool) -> Void
@@ -220,6 +234,7 @@ struct AgentWidgetBar: View {
 			AgentContextWidget(context: context)
 				.popover(compaction, onThreshold: onThreshold, onCompactNow: onCompactNow)
 			AgentModelWidget(presentation: model, names: modelNames)
+				.popover(modelPicker, onOpen: onModelOpen, onPick: onModel)
 			AgentSystemMessagesToggle(shows: showsSystem, onChange: onShowsSystem)
 			AgentPauseWidget(presentation: pause, onPause: onPause, onResume: onResume, onKeepPaused: onKeepPaused)
 			Spacer(minLength: 12)
@@ -349,6 +364,39 @@ extension AgentContextWidget {
 		onCompactNow: @escaping () -> Void
 	) -> some View {
 		ContextButton(widget: self, presentation: presentation, onThreshold: onThreshold, onCompactNow: onCompactNow)
+	}
+}
+
+extension AgentModelWidget {
+	/// Opens the model popover on a click, as a plain button around the widget; a pick closes it.
+	func popover(
+		_ presentation: AgentModelPickerPresentation, onOpen: @escaping () -> Void, onPick: @escaping (String) -> Void
+	) -> some View {
+		ModelButton(widget: self, presentation: presentation, onOpen: onOpen, onPick: onPick)
+	}
+}
+
+private struct ModelButton: View {
+	let widget: AgentModelWidget
+	let presentation: AgentModelPickerPresentation
+	let onOpen: () -> Void
+	let onPick: (String) -> Void
+	@State private var shown = false
+
+	var body: some View {
+		Button {
+			shown.toggle()
+			if shown { onOpen() }
+		} label: {
+			widget
+		}
+		.buttonStyle(.plain)
+		.popover(isPresented: $shown, arrowEdge: .top) {
+			AgentModelPopover(presentation: presentation, typed: "") { picked in
+				shown = false
+				onPick(picked)
+			}
+		}
 	}
 }
 
