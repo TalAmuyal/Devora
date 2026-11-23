@@ -11,7 +11,7 @@ struct AgentModelTests {
 	func model(_ latest: String?, label: String? = nil, differs: Bool = false, fallback: String? = nil) -> ChatModel {
 		ChatModel(
 			latest: latest, label: label, setTo: "opus", setToResolved: "claude-opus-5-5", differs: differs,
-			fallback: fallback)
+			fallback: fallback, awaitingChange: false, changeNotTaken: nil)
 	}
 
 	@Test func beforeAReplyIsKnownTheWidgetIsPendingAndGrayed() {

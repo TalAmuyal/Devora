@@ -24,6 +24,8 @@ pub enum SpaceEvent {
     Context(Context),
     /// The model the agent's replies come from, at the start and whenever that changes.
     Model(ActiveModel),
+    /// The model the user set the agent to in this run, whenever that or its telling changes.
+    ChosenModel(ChosenModel),
     /// A turn the space sent itself: compaction's, or the restart notice.
     TurnStarted,
     /// The CLI answered the running turn, or exited during it. Results the CLI
@@ -37,6 +39,46 @@ pub enum SpaceEvent {
 pub struct ActiveModel {
     pub latest: Option<String>,
     pub fallback: Option<String>,
+}
+
+/// Tells the CLI the model the user set, off the pump, reporting the outcome back to it.
+fn tell_model(
+    runtime: SessionHandle,
+    model: String,
+    told: mpsc::UnboundedSender<(String, Result<Value, String>)>,
+) {
+    let telling = runtime.set_model(model.clone());
+    tokio::spawn(async move {
+        let outcome = telling.await;
+        let _ = told.send((model, outcome));
+    });
+}
+
+/// A reply in the agent's own conversation from a model (not one Claude Code made up), which a chosen model awaits.
+fn is_reply(event: &SessionEvent) -> bool {
+    match event {
+        SessionEvent::Message(
+            message @ Message::Known(KnownMessage::Assistant { message: turn, .. }),
+        ) => {
+            message.is_main_thread()
+                && turn
+                    .extra
+                    .get("model")
+                    .and_then(Value::as_str)
+                    .is_some_and(devora_agent::protocol::is_model)
+        }
+        _ => false,
+    }
+}
+
+/// A model the user set the agent to while it runs (`SpaceHandle::set_model`): what it is, whether a reply has come
+/// since (until one has, the agent hasn't answered on it yet), and why its CLI didn't take it, if it didn't. A relaunch
+/// starts with none: the stored model is then simply what the agent runs.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ChosenModel {
+    pub set_to: Option<String>,
+    pub awaiting_reply: bool,
+    pub not_taken: Option<String>,
 }
 
 impl ActiveModel {
@@ -77,6 +119,8 @@ enum Action {
     /// The agent's own threshold, or none to follow the profile's.
     SetCompactThreshold(Option<u8>),
     CompactNow,
+    /// The model the agent runs from now on: stored, then told to the CLI between turns.
+    SetModel(String),
 }
 struct Command {
     action: Action,
@@ -133,8 +177,11 @@ impl SpaceHandle {
     ) -> Result<(), String> {
         self.call(Action::Permission(id, answer)).await.map(|_| ())
     }
-    pub async fn set_model(&self, model: String) -> Result<Value, String> {
-        self.runtime.set_model(model).await
+    /// Sets the model the agent runs: stored with the agent at once, so its next launch uses it, and told to its CLI
+    /// between turns (at once when idle, else when the running turn ends; a later change replaces one not yet told). A
+    /// change is never sent mid-turn: what the CLI does with one then hasn't been checked.
+    pub async fn set_model(&self, model: String) -> Result<(), String> {
+        self.call(Action::SetModel(model)).await.map(|_| ())
     }
     pub async fn set_permission_mode(&self, mode: String) -> Result<Value, String> {
         self.runtime.set_permission_mode(mode).await
@@ -474,7 +521,8 @@ fn begin(
         | Action::GlobalPauseChanged
         | Action::ExpectStop
         | Action::SetCompactThreshold(_)
-        | Action::CompactNow => return Err("the pump handles this action itself".into()),
+        | Action::CompactNow
+        | Action::SetModel(_) => return Err("the pump handles this action itself".into()),
         Action::Permission(id, answer) => {
             let (text, decision) = match answer {
                 PermissionAnswer::Allow => ("Permission allow requested", json!({"kind":"allow"})),
@@ -533,7 +581,8 @@ fn begin(
             | Action::GlobalPauseChanged
             | Action::ExpectStop
             | Action::SetCompactThreshold(_)
-            | Action::CompactNow => unreachable!("handled by the pump"),
+            | Action::CompactNow
+            | Action::SetModel(_) => unreachable!("handled by the pump"),
         };
         let _ = completions.send(Completion {
             sequence,
@@ -583,6 +632,10 @@ async fn pump(
     let mut pending = 0usize;
     // The turn running, by the ID the CLI answers it with, and a pause waiting for it to end.
     let mut turn_running: Option<String> = None;
+    // A model the user set this run, and one waiting for the running turn to end before the CLI is told.
+    let mut chosen = ChosenModel::default();
+    let mut untold: Option<String> = None;
+    let (told, mut tellings) = mpsc::unbounded_channel::<(String, Result<Value, String>)>();
     let mut stopping = false;
     let mut pause_after_turn: Option<oneshot::Sender<Result<Value, String>>> = None;
     // The threshold, before any usage arrives.
@@ -677,6 +730,13 @@ async fn pump(
             _ = tokio::time::sleep_until(deadline.unwrap_or_else(tokio::time::Instant::now)), if deadline.is_some() => {
                 pause(session.handle(), preparing.take().expect("checked").reply);
             }
+            Some((model, outcome)) = tellings.recv() => {
+                // Only the latest choice's telling counts; an older one's outcome is moot.
+                if chosen.set_to.as_deref() == Some(model.as_str()) {
+                    chosen.not_taken = outcome.err();
+                    let _ = events.send(SpaceEvent::ChosenModel(chosen.clone()));
+                }
+            }
             completion = completions.recv(), if pending > 0 => {
                 if let Some(completion) = completion {
                     if completion.failed_turn {
@@ -689,6 +749,10 @@ async fn pump(
             event = session.next_event() => {
                 let Some(event) = event else { return Ok(None); };
                 persist(space,transcript,&event,events)?;
+                if chosen.awaiting_reply && untold.is_none() && is_reply(&event) {
+                    chosen.awaiting_reply = false;
+                    let _ = events.send(SpaceEvent::ChosenModel(chosen.clone()));
+                }
                 if let SessionEvent::Message(Message::Known(KnownMessage::System(System::BackgroundTasksChanged { tasks, .. }))) = &event {
                     background = tasks.clone();
                 }
@@ -728,6 +792,9 @@ async fn pump(
                 // A spawn is the space's own bookkeeping (the CLI it records), not the host's.
                 if !matches!(event, SessionEvent::Spawned(_)) { let _ = events.send(SpaceEvent::Session(event)); }
                 if ended { let _ = events.send(SpaceEvent::TurnEnded); }
+                if let Some(model) = untold.take_if(|_| ended) {
+                    tell_model(session.handle(), model, told.clone());
+                }
                 if ended && (pause_after_turn.is_some() || globally_paused()) {
                     // Every pause reason uses the same boundary before compaction.
                     step = None;
@@ -767,6 +834,20 @@ async fn pump(
                         let outcome = space.db.set_compact_threshold(percent).map(|()| {
                             compaction.set_threshold(percent);
                             let _ = events.send(SpaceEvent::Context(compaction.context()));
+                            Value::Null
+                        });
+                        let _ = reply.send(outcome);
+                    }
+                    Some(Command { action: Action::SetModel(model), reply }) => {
+                        let outcome = space.set_model(&model).map(|()| {
+                            chosen = ChosenModel { set_to: Some(model.clone()), awaiting_reply: true, not_taken: None };
+                            let _ = events.send(SpaceEvent::ChosenModel(chosen.clone()));
+                            if turn_running.is_some() {
+                                untold = Some(model);
+                            } else {
+                                untold = None;
+                                tell_model(session.handle(), model, told.clone());
+                            }
                             Value::Null
                         });
                         let _ = reply.send(outcome);

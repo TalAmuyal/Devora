@@ -292,6 +292,23 @@ impl Db {
         Ok(())
     }
 
+    /// Stores the model and effort the agent runs from its next launch on.
+    pub fn set_model(&mut self, choice: &crate::ModelChoice) -> Result<(), String> {
+        let form: String = self
+            .conn
+            .query_row("SELECT form FROM space WHERE id=0", [], |row| row.get(0))
+            .map_err(storage)?;
+        let mut form: CreationForm = serde_json::from_str(&form).map_err(storage)?;
+        form.model = Some(choice.clone());
+        self.conn
+            .execute(
+                "UPDATE space SET form=?1 WHERE id=0",
+                [serde_json::to_string(&form).map_err(storage)?],
+            )
+            .map_err(storage)?;
+        Ok(())
+    }
+
     /// Records the CLI running for this agent, or that none is.
     pub fn record_cli(&mut self, cli: Option<&CliProcess>) -> Result<(), String> {
         let cli = cli
@@ -544,6 +561,39 @@ mod tests {
     use super::*;
     use devora_agent::transcript::{ItemState, SystemKind};
     use std::collections::BTreeMap;
+
+    #[test]
+    fn a_changed_model_is_stored_with_the_agent() {
+        let root = tempfile::tempdir().unwrap();
+        let mut db = Db::create(
+            &root.path().join("space.db"),
+            &Identity {
+                name: "Delta".into(),
+                role: "Developer".into(),
+            },
+            &CreationForm {
+                name: "Delta".into(),
+                role: None,
+                repos: vec![],
+                inputs: BTreeMap::new(),
+                keep_coding_instructions: true,
+                model: Some(crate::ModelChoice {
+                    model: "opus".into(),
+                    effort: Some("high".into()),
+                }),
+            },
+            "instructions",
+        )
+        .unwrap();
+        db.finish_creation().unwrap();
+        let choice = crate::ModelChoice {
+            model: "sonnet".into(),
+            effort: Some("high".into()),
+        };
+        db.set_model(&choice).unwrap();
+        let form = db.load().unwrap().1;
+        assert_eq!(form.model, Some(choice));
+    }
 
     #[test]
     fn lifecycle_and_whole_history_commit_atomically_and_deltas_never_write() {

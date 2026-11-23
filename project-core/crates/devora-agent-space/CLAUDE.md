@@ -17,3 +17,9 @@ The actor keeps the agent's background tasks as the CLI lists them (`System::Bac
 ## The running CLI
 
 Schema version 4 adds `space.cli_process`: the running CLI's identity, its pid and start time (`devora_agent::session::CliProcess`, from `SessionEvent::Spawned`, which the space keeps to itself). It is cleared when the CLI ends under Devora's watch. A launch that finds a recorded CLI still running (an earlier Devora died without stopping it) stops its whole tree (`stop_tree`) before resuming, since two CLIs on one session fork it. A pid whose start time differs is another process and is left alone. An orphaned CLI can't run tools meanwhile, since its Judgess callback can't be answered.
+
+## Changing the agent's model
+
+`SpaceHandle::set_model` stores the model with the agent at once (its form's `model`, keeping the effort) and tells the CLI (`SessionHandle::set_model`) only between turns: during a turn it waits for the turn's end, and a later choice replaces an untold one. `SessionHandle::set_model` queues its request when called, so a turn sent after it runs on the new model even before the CLI answers; the pinned-CLI suite asserts that. A paused agent's model is written straight to its database (`Space::set_model`) and is what it launches with.
+The actor publishes `ChosenModel`: what was chosen in this run, whether no reply has come from it yet (cleared by the first main-thread reply after the CLI was told, never by one from the turn that was running), and why the CLI refused it, if it did; the stored choice stands either way. A relaunch starts without one.
+The registry (`devora-core`'s `Agents::set_model`) refuses a model the agent's latest launch wasn't offered (`ModelList::offers`, against the list cached for its launch settings), and refuses while the agent is starting or pausing.

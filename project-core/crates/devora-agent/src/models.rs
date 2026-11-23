@@ -95,6 +95,13 @@ impl ModelOption {
 }
 
 impl ModelList {
+    /// Whether an agent may be set to `model`: an alias this list names, or a model ID it offers (dated or not).
+    pub fn offers(&self, model: &str) -> bool {
+        self.models
+            .iter()
+            .any(|option| option.value == model || same_model(option.model_id(), model))
+    }
+
     /// The name the CLI gives the model `id` (a full ID), if it lists that model.
     pub fn name_of(&self, id: &str) -> Option<&str> {
         self.models

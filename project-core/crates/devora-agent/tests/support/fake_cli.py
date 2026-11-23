@@ -95,6 +95,7 @@ def question():
 
 ignore_interrupt = False
 visual_tool = False
+reply_after_answer = False
 report({"kind":"start","args":args,"environment":dict(os.environ),"cwd":os.getcwd(),"pid":os.getpid()})
 for line in sys.stdin:
     message = json.loads(line)
@@ -102,7 +103,7 @@ for line in sys.stdin:
     if kind == "control_request":
         request = message["request"]
         subtype = request["subtype"]
-        report({"kind":subtype})
+        report({"kind":subtype, **({"model":request["model"]} if subtype == "set_model" else {})})
         if subtype == "interrupt" and ignore_interrupt:
             continue
         if subtype == "stop_task":
@@ -124,6 +125,9 @@ for line in sys.stdin:
             continue
         if subtype == "set_model" and request.get("model") == "hang":
             emit({"type":"fake_control_waiting"})
+            continue
+        if subtype == "set_model" and request.get("model") == "refused":
+            emit({"type":"control_response","response":{"subtype":"error","request_id":message["request_id"],"error":"model refused"}})
             continue
         if subtype == "initialize":
             if session_id is None and os.environ.get("DEVORA_FAKE_PROBE_STALL"):
@@ -155,6 +159,9 @@ for line in sys.stdin:
             emit({"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"visual-tool","content":"Visual tool result"}]}})
             visual_tool = False
         emit({"type":"fake_answer","answer":message["response"].get("response", {"error":message["response"].get("error")})})
+        if reply_after_answer:
+            reply_after_answer = False
+            emit(recorded("assistant"))
         result()
     elif kind == "user":
         report({"kind":"user","message":message["message"],"uuid":message.get("uuid")})
@@ -171,6 +178,9 @@ for line in sys.stdin:
             os._exit(70)
         if text == "permission":
             question()
+        elif text == "permission-then-reply":
+            question()
+            reply_after_answer = True
         elif text == "cancel-permission":
             question()
             emit({"type":"control_cancel_request","request_id":"question"})

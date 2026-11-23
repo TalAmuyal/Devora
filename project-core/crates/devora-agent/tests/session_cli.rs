@@ -263,12 +263,14 @@ async fn pinned_cli_preserves_user_sources_and_explicit_configuration_for_all_pr
         result(&mut session).await;
         if index == 0 {
             let handle = session.handle();
-            handle.set_model("sonnet".into()).await.unwrap();
+            // Queued ahead of the turn and not yet answered: the CLI still runs that turn on it.
             handle.set_permission_mode("plan".into()).await.unwrap();
+            let telling = handle.set_model("sonnet".into());
             handle
                 .send_turn(turn_id(), "Reply once more.".into())
                 .await
                 .unwrap();
+            telling.await.unwrap();
             result(&mut session).await;
         }
         session.pause().await.unwrap();

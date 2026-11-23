@@ -2,8 +2,8 @@ use devora_agent::protocol::{KnownMessage, Message};
 use devora_agent::session::{stop_tree, CliProcess, SessionEvent};
 use devora_agent::transcript::{SystemKind, TranscriptChange, TranscriptContent};
 use devora_agent_space::{
-    model_defaults, template, AppRun, CreationForm, LaunchContext, ModelChoice, RunningSpace,
-    Space, SpaceEvent,
+    model_defaults, template, AppRun, ChosenModel, CreationForm, LaunchContext, ModelChoice,
+    RunningSpace, Space, SpaceEvent,
 };
 use devora_app::log::Log;
 use devora_platform::processes::{ProcessTable, SystemProcessTable};
@@ -2272,4 +2272,111 @@ async fn a_task_that_wont_stop_falls_back_to_the_pause_and_its_notice_still_name
     let rows = launch_and_settle(&fixture, &context, &log, &fixture.run).await;
     assert_eq!(rows.len(), 1);
     assert!(rows[0].0.contains("stopped a watcher (shell)"), "{rows:?}");
+}
+
+async fn next_chosen(running: &mut RunningSpace) -> ChosenModel {
+    tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            if let Some(SpaceEvent::ChosenModel(chosen)) = running.next_update().await {
+                return chosen;
+            }
+        }
+    })
+    .await
+    .unwrap()
+}
+
+fn models_told(fixture: &Fixture) -> Vec<String> {
+    std::fs::read_to_string(fixture.root.path().join("report.jsonl"))
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
+        .filter(|entry| entry["kind"] == "set_model")
+        .map(|entry| entry["model"].as_str().unwrap().to_owned())
+        .collect()
+}
+
+#[tokio::test]
+async fn a_chosen_model_is_stored_at_once_and_told_to_the_cli_only_between_turns_the_last_one_winning(
+) {
+    let fixture = Fixture::new();
+    let context = fixture.context();
+    let space = fixture.create(fixture.form("Foxtrot")).unwrap();
+    let log = Arc::new(Log::open(&fixture.root.path().join("log")).unwrap());
+    let mut running = space
+        .start(&context, log.clone(), &fixture.run)
+        .await
+        .unwrap();
+    let handle = running.handle();
+    // The fake CLI holds this turn on a permission question until it is answered, then replies.
+    handle
+        .send_turn("permission-then-reply".into())
+        .await
+        .unwrap();
+    let request = tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            if let Some(SpaceEvent::Session(SessionEvent::PermissionRequested {
+                request_id, ..
+            })) = running.next_update().await
+            {
+                return request_id;
+            }
+        }
+    })
+    .await
+    .unwrap();
+
+    handle.set_model("claude-sonnet-5-5".into()).await.unwrap();
+    handle.set_model("claude-opus-5-5".into()).await.unwrap();
+    let chosen = ChosenModel {
+        set_to: Some("claude-opus-5-5".into()),
+        awaiting_reply: true,
+        not_taken: None,
+    };
+    assert_eq!(
+        next_chosen(&mut running).await.set_to.as_deref(),
+        Some("claude-sonnet-5-5")
+    );
+    assert_eq!(next_chosen(&mut running).await, chosen);
+    assert_eq!(
+        models_told(&fixture),
+        Vec::<String>::new(),
+        "never mid-turn"
+    );
+
+    handle
+        .answer_permission(request, devora_agent::session::PermissionAnswer::Allow)
+        .await
+        .unwrap();
+    // The turn's own replies came from the model it started on, so the change still awaits one.
+    assert_eq!(next_chosen(&mut running).await, chosen, "told, and taken");
+    assert_eq!(models_told(&fixture), ["claude-opus-5-5"]);
+    handle.send_turn("hello".into()).await.unwrap();
+    assert_eq!(
+        next_chosen(&mut running).await,
+        ChosenModel {
+            awaiting_reply: false,
+            ..chosen
+        },
+        "the first reply since the change clears its mark"
+    );
+
+    // Idle: told at once. A CLI that refuses it keeps the stored choice, and says so.
+    handle.set_model("refused".into()).await.unwrap();
+    let refused = ChosenModel {
+        set_to: Some("refused".into()),
+        awaiting_reply: true,
+        not_taken: None,
+    };
+    assert_eq!(next_chosen(&mut running).await, refused);
+    assert_eq!(
+        next_chosen(&mut running).await,
+        ChosenModel {
+            not_taken: Some("model refused".into()),
+            ..refused
+        }
+    );
+    assert!(running.pause().await.unwrap().graceful);
+    let stored = Space::open(&fixture.profile, "Foxtrot").unwrap();
+    assert_eq!(stored.form().model.as_ref().unwrap().model, "refused");
 }

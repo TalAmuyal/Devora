@@ -1,6 +1,6 @@
 use devora_agent::models::ModelList;
 use devora_agent::session::SessionEvent;
-use devora_agent_space::{ActiveModel, CompactionProgress, SpaceEvent};
+use devora_agent_space::{ActiveModel, ChosenModel, CompactionProgress, SpaceEvent};
 use devora_state::{ChatCommand, ChatModel, ChatUpdate, PermissionQuestion, Store};
 
 pub(super) fn update(state: &Store, tab: u64, generation: u64, update: ChatUpdate) {
@@ -43,7 +43,7 @@ pub(super) fn publish(state: &Store, tab: u64, generation: u64, event: SpaceEven
             },
         ),
         // The registry presents it, with the model list its launch was offered (`model`).
-        SpaceEvent::Model(_) => {}
+        SpaceEvent::Model(_) | SpaceEvent::ChosenModel(_) => {}
         SpaceEvent::TurnStarted => {
             update(state, tab, generation, ChatUpdate::Turn { running: true })
         }
@@ -55,21 +55,39 @@ pub(super) fn publish(state: &Store, tab: u64, generation: u64, event: SpaceEven
 
 /// The model widget's view of `active` for an agent set to `set_to`, named and checked against `list`, the models its
 /// launch was offered; a model with no name (or no list) shows its ID as it is, and claims no mismatch.
-pub(super) fn model(active: &ActiveModel, set_to: &str, list: Option<&ModelList>) -> ChatModel {
+pub(super) fn model(
+    active: &ActiveModel,
+    chosen: &ChosenModel,
+    launch_model: &str,
+    list: Option<&ModelList>,
+) -> ChatModel {
+    let set_to = chosen.set_to.as_deref().unwrap_or(launch_model);
+    let name = |id: &str| {
+        list.and_then(|list| list.name_of(id))
+            .unwrap_or(id)
+            .to_owned()
+    };
     let latest = active.latest.as_deref();
+    // A model just chosen is what the widget names until the agent has answered on it; it's marked as a mismatch meanwhile.
+    let label = if chosen.awaiting_reply {
+        let resolved = list.and_then(|list| list.resolve(set_to)).unwrap_or(set_to);
+        Some(name(resolved))
+    } else {
+        latest.map(name)
+    };
     ChatModel {
         latest: active.latest.clone(),
-        label: latest.map(|id| {
-            list.and_then(|list| list.name_of(id))
-                .unwrap_or(id)
-                .to_owned()
-        }),
+        label,
         set_to: set_to.to_owned(),
         set_to_resolved: list
             .and_then(|list| list.resolve(set_to))
             .map(str::to_owned),
-        differs: matches!((latest, list), (Some(id), Some(list)) if !list.expects(set_to, id)),
+        differs: chosen.awaiting_reply
+            || chosen.not_taken.is_some()
+            || matches!((latest, list), (Some(id), Some(list)) if !list.expects(set_to, id)),
         fallback: active.fallback.clone(),
+        awaiting_change: chosen.awaiting_reply,
+        change_not_taken: chosen.not_taken.clone(),
     }
 }
 
@@ -165,6 +183,7 @@ mod tests {
     fn a_reply_from_the_model_set_shows_its_name_and_no_mismatch() {
         let shown = model(
             &active(Some("claude-opus-5-5"), None),
+            &ChosenModel::default(),
             "opus",
             Some(&list("claude-opus-5-5")),
         );
@@ -178,6 +197,7 @@ mod tests {
         let sentence = "Switched to Sonnet 5.5 due to high demand for Opus 5.5";
         let shown = model(
             &active(Some("claude-sonnet-5-5"), Some(sentence)),
+            &ChosenModel::default(),
             "opus",
             Some(&list("claude-opus-5-5")),
         );
@@ -188,13 +208,19 @@ mod tests {
 
     #[test]
     fn without_a_reply_or_a_list_nothing_is_claimed() {
-        let pending = model(&active(None, None), "opus", Some(&list("claude-opus-5-5")));
+        let pending = model(
+            &active(None, None),
+            &ChosenModel::default(),
+            "opus",
+            Some(&list("claude-opus-5-5")),
+        );
         assert_eq!(
             (pending.latest, pending.label, pending.differs),
             (None, None, false)
         );
         let unlisted = model(
             &active(Some("claude-sonnet-4-5-20250929"), None),
+            &ChosenModel::default(),
             "opus",
             None,
         );
@@ -205,5 +231,75 @@ mod tests {
         );
         assert!(!unlisted.differs, "no list, no guess");
         assert_eq!(unlisted.set_to_resolved, None);
+    }
+
+    fn chose(model: &str, awaiting_reply: bool, not_taken: Option<&str>) -> ChosenModel {
+        ChosenModel {
+            set_to: Some(model.into()),
+            awaiting_reply,
+            not_taken: not_taken.map(str::to_owned),
+        }
+    }
+
+    #[test]
+    fn a_model_just_chosen_is_named_and_marked_until_the_agent_answers_on_it() {
+        let list = list("claude-opus-5-5");
+        let shown = model(
+            &active(Some("claude-opus-5-5"), None),
+            &chose("sonnet", true, None),
+            "opus",
+            Some(&list),
+        );
+        assert_eq!(
+            shown.label.as_deref(),
+            Some("Sonnet 5.5"),
+            "the chosen model, not the last reply's"
+        );
+        assert_eq!(
+            shown.latest.as_deref(),
+            Some("claude-opus-5-5"),
+            "what last answered stays known"
+        );
+        assert_eq!(shown.set_to, "sonnet");
+        assert!(shown.differs && shown.awaiting_change);
+        let answered = model(
+            &active(Some("claude-sonnet-5-5"), None),
+            &chose("sonnet", false, None),
+            "opus",
+            Some(&list),
+        );
+        assert_eq!(answered.label.as_deref(), Some("Sonnet 5.5"));
+        assert!(
+            !answered.differs && !answered.awaiting_change,
+            "it answered on the chosen model"
+        );
+    }
+
+    #[test]
+    fn after_the_first_reply_a_fallback_shows_as_an_ordinary_mismatch() {
+        let shown = model(
+            &active(Some("claude-opus-5-5"), Some("Switched to Opus 5.5")),
+            &chose("sonnet", false, None),
+            "opus",
+            Some(&list("claude-opus-5-5")),
+        );
+        assert_eq!(
+            shown.label.as_deref(),
+            Some("Opus 5.5"),
+            "the model that answered"
+        );
+        assert!(shown.differs && !shown.awaiting_change);
+    }
+
+    #[test]
+    fn a_change_the_session_didnt_take_shows_as_a_mismatch_with_why() {
+        let shown = model(
+            &active(Some("claude-opus-5-5"), None),
+            &chose("sonnet", false, Some("set_model failed")),
+            "opus",
+            Some(&list("claude-opus-5-5")),
+        );
+        assert!(shown.differs);
+        assert_eq!(shown.change_not_taken.as_deref(), Some("set_model failed"));
     }
 }

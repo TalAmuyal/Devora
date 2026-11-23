@@ -381,6 +381,8 @@ pub struct ChatModel {
     pub set_to_resolved: Option<String>,
     pub differs: bool,
     pub fallback: Option<String>,
+    pub awaiting_change: bool,
+    pub change_not_taken: Option<String>,
 }
 #[uniffi::remote(Enum)]
 pub enum CompactionProgress {
@@ -697,6 +699,16 @@ impl DevoraCore {
         self.agents
             .set_compact_threshold(tab, generation, percent)
             .await?;
+        Ok(())
+    }
+    /// Sets the agent's model to one its latest launch was offered; a running agent's CLI takes it between turns.
+    pub async fn set_agent_model(
+        &self,
+        tab: u64,
+        generation: u64,
+        model: String,
+    ) -> Result<(), CoreError> {
+        self.agents.set_model(tab, generation, model).await?;
         Ok(())
     }
     pub async fn compact_agent_now(&self, tab: u64, generation: u64) -> Result<(), CoreError> {
