@@ -119,10 +119,23 @@ public final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NS
 
 	private var follower: PaletteFollower?
 	private var clockObservers: [NSObjectProtocol] = []
+	/// Bumped when the time zone or locale changes, or the day: how the rows' times read changed.
+	private var timesRead = 0
+	private var cachedDay: DateInterval?
+	/// Today, by the clock, in the user's calendar.
+	private var today: DateInterval {
+		let now = clock()
+		if let day = cachedDay, day.contains(now) { return day }
+		let day = Calendar.autoupdatingCurrent.dateInterval(of: .day, for: now) ?? DateInterval(start: now, duration: 0)
+		cachedDay = day
+		return day
+	}
 
 	/// The rows' times read differently now: the visible rows are drawn and measured again at once, keeping the bottom or
 	/// the reader's place, and the rest as they come into view, as after a diagram is drawn.
 	func timesChanged() {
+		timesRead += 1
+		cachedDay = nil
 		guard !entries.isEmpty else { return }
 		let anchor = following ? nil : visiblePin
 		findPending()
@@ -366,17 +379,19 @@ public final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NS
 		return outcomes
 	}
 
-	/// A fingerprint of what the row draws beyond its item, its diagrams as drawn and its time as shown, so a measured
-	/// height is exact only for them; 0 for a card, or for a row with neither (diagrams not parsed yet count as none:
-	/// the measurement parses them).
+	/// A fingerprint of what the row draws beyond its item, its diagrams as drawn and how its time reads, so a measured
+	/// height is exact only for them; 0 for a card. It runs for every row on every update, so it formats no time: a time
+	/// reads differently only when its stamp leaves today, or the time zone or locale changes (`timesRead`).
 	private func drawnPrint(_ row: Int) -> Int {
 		guard let item = entries[row].item else { return 0 }
-		let shown = item.createdAt.map { TranscriptTime($0, now: clock(), calendar: .autoupdatingCurrent).shown }
+		var hasher = Hasher()
+		if let createdAt = item.createdAt {
+			hasher.combine(today.contains(createdAt))
+			hasher.combine(timesRead)
+		}
 		guard let document = documents[item.sequence]?.document,
 			let outcomes = diagrams(of: item, in: document, requesting: false)
-		else { return shown.map { $0.hashValue } ?? 0 }
-		var hasher = Hasher()
-		hasher.combine(shown)
+		else { return hasher.finalize() }
 		for source in document.diagrams {
 			switch outcomes[source] {
 			case .drawn(let drawn): hasher.combine(ObjectIdentifier(drawn.image))
