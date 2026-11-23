@@ -116,6 +116,7 @@ struct TranscriptCardTests {
 		let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 400), styleMask: [.titled], backing: .buffered, defer: false)
 		window.isReleasedWhenClosed = false
 		let view = TranscriptScrollView(anchor: nil)
+		view.showsSystem = true
 		view.hasVerticalScroller = false
 		view.frame = window.contentView!.bounds
 		window.contentView!.addSubview(view)

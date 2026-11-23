@@ -140,7 +140,7 @@ Devora owns compaction (ADR-012, `devora-agent-space`'s `compaction.rs`). The sp
 
 The version-2 space schema contains `cli_sessions` and `events` (ordered sequence, CLI identity, kind and JSON payload). Items keep their sequence when completed or annotated. History reads are sequence-paginated in both directions. `history_before` uses an exclusive optional cursor (None selects the latest page), returns chronological items and clamps limits to 1–500. Opening a version-1 space for writing adds these history tables and registers the existing CLI identity in one transaction. Versions 3, 4 and 5 add the restart notice's, the running CLI's and the agent's own compaction threshold's columns, migrating older versions in the same transaction. Read-only listing and history reads accept older versions without migrating them, and newer versions are rejected. The pinned native resume contract verifies retained model context with no replayed earlier messages, so history has no replay-deduplication mechanism.
 
-Agent chat drafts and scroll anchors belong to app state, keyed by canonical owning profile and space name so tab closure retains them.
+Agent chat drafts, scroll anchors and whether the chat shows its system messages (`show_system`, off by default, app-state schema version 9, through `SetAgentShowSystem`) belong to app state, keyed by canonical owning profile and space name so tab closure retains them and a paused agent's chat can change them.
 SetAgentDraft and SetAgentScroll write through the state transaction and publish AgentViewChanged.
 ClearAgentView removes that presentation state after space deletion.
 The app-state migration adds the agent_views table without changing existing tabs or panes.

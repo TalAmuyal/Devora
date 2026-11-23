@@ -257,6 +257,7 @@ struct TranscriptDiagramTests {
 		window.appearance = appearance.flatMap(NSAppearance.init(named:))
 		let (renderer, announced) = renderer(drawer)
 		let view = TranscriptScrollView(anchor: nil, renderer: renderer)
+		view.showsSystem = true
 		view.hasVerticalScroller = false
 		view.frame = window.contentView!.bounds
 		window.contentView!.addSubview(view)

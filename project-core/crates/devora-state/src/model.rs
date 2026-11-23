@@ -136,6 +136,9 @@ pub struct AgentViewState {
     /// a restore doesn't launch it, nor does a release.
     #[serde(default)]
     pub paused: bool,
+    /// The chat shows its system messages (tool calls, thinking, the session's notes), which it hides by default.
+    #[serde(default)]
+    pub show_system: bool,
 }
 
 /// The top visible transcript item and its offset, or None for following output.

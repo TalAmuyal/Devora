@@ -99,6 +99,7 @@ struct TranscriptScrollViewTests {
 		let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 400), styleMask: [.titled], backing: .buffered, defer: false)
 		window.isReleasedWhenClosed = false
 		let view = TranscriptScrollView(anchor: anchor)
+		view.showsSystem = true
 		view.hasVerticalScroller = false
 		view.frame = window.contentView!.bounds
 		view.autoresizingMask = [.width, .height]
@@ -313,6 +314,7 @@ struct TranscriptScrollViewTests {
 		window.isReleasedWhenClosed = false
 		defer { window.close() }
 		let view = TranscriptScrollView(anchor: nil)
+		view.showsSystem = true
 		view.frame = window.contentView!.bounds
 		view.autoresizingMask = [.width, .height]
 		window.contentView!.addSubview(view)
@@ -394,6 +396,7 @@ struct TranscriptScrollBenchmark {
 		let window = NSWindow(contentRect: NSRect(x: 100, y: 100, width: 900, height: 700), styleMask: [.titled], backing: .buffered, defer: false)
 		window.isReleasedWhenClosed = false
 		let view = TranscriptScrollView(anchor: nil)
+		view.showsSystem = true
 		view.frame = window.contentView!.bounds
 		view.autoresizingMask = [.width, .height]
 		window.contentView!.addSubview(view)
@@ -426,6 +429,7 @@ struct TranscriptScrollBenchmark {
 			let window = NSWindow(contentRect: NSRect(x: 100, y: 100, width: 900, height: 700), styleMask: [.titled], backing: .buffered, defer: false)
 			window.isReleasedWhenClosed = false
 			let view = TranscriptScrollView(anchor: nil)
+			view.showsSystem = true
 			view.frame = window.contentView!.bounds
 			view.autoresizingMask = [.width, .height]
 			window.contentView!.addSubview(view)
@@ -441,6 +445,7 @@ struct TranscriptScrollBenchmark {
 		let window = NSWindow(contentRect: NSRect(x: 100, y: 100, width: 900, height: 700), styleMask: [.titled], backing: .buffered, defer: false)
 		window.isReleasedWhenClosed = false
 		let view = TranscriptScrollView(anchor: nil)
+		view.showsSystem = true
 		view.frame = window.contentView!.bounds
 		view.autoresizingMask = [.width, .height]
 		window.contentView!.addSubview(view)
@@ -559,7 +564,7 @@ struct TranscriptWheelTargetTests {
 	}
 
 	private func view(_ name: String, into views: Views) -> TranscriptView {
-		TranscriptView(items: transcript(50), hasOlder: false, anchor: nil, onScroll: { _ in }, onNeedsOlder: {}, onView: { views.byName[name] = $0 })
+		TranscriptView(items: transcript(50), hasOlder: false, anchor: nil, showsSystem: false, onScroll: { _ in }, onNeedsOlder: {}, onView: { views.byName[name] = $0 })
 	}
 
 	private func shown(_ content: some View) async -> NSWindow {
@@ -590,7 +595,7 @@ struct TranscriptWheelTargetTests {
 		let views = Views()
 		let lines = (0..<30).map { "line \($0): " + String(repeating: "wide ", count: 80) }.joined(separator: "\n")
 		let code = TranscriptItem(sequence: 1, cliSession: "s", parentToolUseId: nil, state: .complete, content: .assistant(text: "```\n\(lines)\n```", model: nil))
-		let window = await shown(TranscriptView(items: [code], hasOlder: false, anchor: nil, onScroll: { _ in }, onNeedsOlder: {}, onView: { views.byName["code"] = $0 }))
+		let window = await shown(TranscriptView(items: [code], hasOlder: false, anchor: nil, showsSystem: false, onScroll: { _ in }, onNeedsOlder: {}, onView: { views.byName["code"] = $0 }))
 		defer { window.close() }
 		let view = try #require(views.byName["code"])
 		let point = NSPoint(x: 300, y: 200)
@@ -668,6 +673,7 @@ struct TranscriptExpansionTests {
 		let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 400), styleMask: [.titled], backing: .buffered, defer: false)
 		window.isReleasedWhenClosed = false
 		let view = TranscriptScrollView(anchor: nil)
+		view.showsSystem = true
 		view.hasVerticalScroller = false
 		view.frame = window.contentView!.bounds
 		window.contentView!.addSubview(view)
@@ -739,6 +745,7 @@ struct TranscriptToggleAtTheBottomTests {
 		window.isReleasedWhenClosed = false
 		defer { window.close() }
 		let view = TranscriptScrollView(anchor: nil)
+		view.showsSystem = true
 		view.hasVerticalScroller = false
 		view.frame = window.contentView!.bounds
 		window.contentView!.addSubview(view)

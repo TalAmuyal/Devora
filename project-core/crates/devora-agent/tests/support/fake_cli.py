@@ -194,6 +194,19 @@ for line in sys.stdin:
                 assistant["message"]["content"] = [{"type":"text","text":f"History turn {turn}"}]
                 emit(assistant)
             result()
+        elif text.startswith("tools:"):
+            # A turn of tool calls, each with its result, then a reply: a transcript that is nearly all system messages.
+            for call in range(int(text[6:])):
+                assistant = recorded("assistant")
+                assistant["message"]["id"] = f"tools-{call}"
+                assistant["message"]["content"] = [{"type":"tool_use","id":f"tools-{call}","name":"Read","input":{"file_path":f"file-{call}"}}]
+                emit(assistant)
+                emit({"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":f"tools-{call}","content":"read"}]}})
+            assistant = recorded("assistant")
+            assistant["message"]["id"] = "tools-done"
+            assistant["message"]["content"] = [{"type":"text","text":"Done with the tools"}]
+            emit(assistant)
+            result()
         elif text == "wide-code":
             # A code block much wider than any transcript, for scrolling over it.
             lines = "\n".join(f"line {n}: " + "wide " * 80 for n in range(15))

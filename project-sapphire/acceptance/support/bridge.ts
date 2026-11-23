@@ -39,6 +39,8 @@ export interface AgentChatState {
   running: boolean;
   /** The items the chat holds, shown or not: a turn's plain end isn't a row. */
   items: number;
+  /** Whether the chat shows its system messages (the Widget Bar's toggle). */
+  showsSystem: boolean;
   /** The spinner's line under the transcript while a turn runs: the step's name and its start (ms since the epoch). */
   turnStatus: { step: string; sinceMs: string } | null;
   enterSends: boolean;
@@ -398,6 +400,11 @@ export class Bridge {
 
   async chatAction(action: string, text?: string): Promise<void> {
     await this.request('POST', '/test/agent-chat', { action, text });
+  }
+
+  /** The Widget Bar's System messages toggle. */
+  async showSystemMessages(show: boolean): Promise<void> {
+    await this.request('POST', '/test/agent-chat', { action: 'showSystem', value: show });
   }
 
   /** The context popover's threshold slider, or its Reset with `null`. */

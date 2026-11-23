@@ -79,6 +79,7 @@ struct AgentChatPanel: View {
 					questions: (model.chat.chat?.questions ?? []).map(TranscriptKit.PermissionQuestion.init),
 					generation: model.chat.chat?.generation ?? 0, hasOlder: model.chat.hasOlder,
 					anchor: model.chat.anchor.map(TranscriptKit.ChatScrollAnchor.init),
+					showsSystem: model.chat.showsSystem,
 					onScroll: { model.chat.saveScroll($0.map(CoreBindings.ChatScrollAnchor.init)) },
 					onNeedsOlder: { Task { await model.chat.older() } },
 					onAnswer: { id, action, generation in Task { await model.chat.answer(id, action: action, generation: generation) } },
@@ -101,6 +102,7 @@ struct AgentChatPanel: View {
 				context: model.chat.chat?.context,
 				model: model.modelPresentation,
 				modelNames: model.chat.modelSuggestions?.rows(for: .agentModel).map(\.name) ?? [], enterSends: model.chat.enterSends,
+				showsSystem: model.chat.showsSystem, onShowsSystem: { model.chat.setShowsSystem($0) },
 				pause: model.pausePresentation,
 				compaction: model.contextPresentation,
 				turnRunning: model.chat.chat?.turnRunning == true,
@@ -195,6 +197,8 @@ struct AgentWidgetBar: View {
 	let model: AgentModelPresentation
 	let modelNames: [String]
 	let enterSends: Bool
+	let showsSystem: Bool
+	let onShowsSystem: (Bool) -> Void
 	let pause: AgentPausePresentation
 	let compaction: AgentContextPresentation
 	let turnRunning: Bool
@@ -216,6 +220,7 @@ struct AgentWidgetBar: View {
 			AgentContextWidget(context: context)
 				.popover(compaction, onThreshold: onThreshold, onCompactNow: onCompactNow)
 			AgentModelWidget(presentation: model, names: modelNames)
+			AgentSystemMessagesToggle(shows: showsSystem, onChange: onShowsSystem)
 			AgentPauseWidget(presentation: pause, onPause: onPause, onResume: onResume, onKeepPaused: onKeepPaused)
 			Spacer(minLength: 12)
 			if turnRunning {
@@ -228,6 +233,38 @@ struct AgentWidgetBar: View {
 					.accessibilityHint(sendHint)
 			}
 		}
+	}
+}
+
+/// Shows or hides the chat's system messages (tool calls, thinking, the session's notes): their glyph and a native
+/// switch, held together in a capsule, with what it does in the tooltip. What needs the user (errors, permission
+/// requests) shows either way.
+struct AgentSystemMessagesToggle: View {
+	let shows: Bool
+	let onChange: (Bool) -> Void
+
+	static func help(_ shows: Bool) -> String {
+		shows
+			? "System messages: shown. Hide tool calls, thinking and the session's notes"
+			: "System messages: hidden. Show tool calls, thinking and the session's notes"
+	}
+
+	var body: some View {
+		HStack(spacing: 6) {
+			Image(systemName: "text.bubble").foregroundStyle(.secondary).accessibilityHidden(true)
+			Toggle("System messages", isOn: Binding(get: { shows }, set: onChange))
+				.toggleStyle(.switch)
+				.controlSize(.mini)
+				.labelsHidden()
+		}
+		.padding(.horizontal, 8).padding(.vertical, 3)
+		.background(.quaternary, in: Capsule())
+		.overlay(Capsule().strokeBorder(Color(nsColor: .separatorColor), lineWidth: 1))
+		.help(Self.help(shows))
+		.accessibilityElement(children: .combine)
+		.accessibilityLabel("System messages")
+		.accessibilityValue(shows ? "shown" : "hidden")
+		.accessibilityIdentifier("agent-system-messages")
 	}
 }
 

@@ -139,6 +139,7 @@ final class TestBridge {
 				var observation: [String: Any] = ["dom": transcript.observation(), "draft": panel.chat.draft, "canSend": panel.chat.canSend]
 				// The items the chat holds, shown or not ("Turn completed" isn't a row).
 				observation["items"] = panel.chat.items.count
+				observation["showsSystem"] = panel.chat.showsSystem
 				observation["phase"] = panel.chat.chat.map { String(describing: $0.phase) } ?? "opening"
 				observation["context"] = panel.chat.chat?.context.map {
 					[
@@ -182,6 +183,10 @@ final class TestBridge {
 				case "send": await panel.chat.send()
 				case "stop": await panel.chat.stop()
 				case "pause": panel.chat.pause()
+				// What the Widget Bar's System messages toggle does.
+				case "showSystem":
+					guard let show = body["value"] as? Bool else { throw BridgeError(status: 400, "missing show value") }
+					panel.chat.setShowsSystem(show)
 				case "keepPaused":
 					guard let keep = body["value"] as? Bool else { throw BridgeError(status: 400, "missing Keep paused value") }
 					await panel.chat.setKeepPaused(keep)
