@@ -93,7 +93,11 @@ jobs:
       - run: mise run test
 
   test-ember:
-    runs-on: macos-15
+    # Ember's jobs share Sapphire's image: GitHub's macos-15 pool often had no runner to give at busy hours.
+    runs-on: xcode-27
+    env:
+      # The image's default Xcode moves with patch releases; build with the one Sapphire does.
+      DEVELOPER_DIR: /Applications/Xcode_27.1.app/Contents/Developer
     needs: check-changes
     if: needs.check-changes.outputs.should-build == 'true'
     steps:
@@ -107,15 +111,15 @@ jobs:
         uses: actions/cache@v5
         with:
           path: project-ember/src-tauri/target
-          key: ember-rust-${{ runner.os }}-${{ hashFiles('project-ember/src-tauri/Cargo.lock') }}
-          restore-keys: ember-rust-${{ runner.os }}-
+          key: ember-rust-xcode-27-${{ hashFiles('project-ember/src-tauri/Cargo.lock') }}
+          restore-keys: ember-rust-xcode-27-
 
       - name: Cache npm modules
         uses: actions/cache@v5
         with:
           path: project-ember/node_modules
-          key: ember-npm-${{ runner.os }}-${{ hashFiles('project-ember/package-lock.json', 'project-ember/scripts/patch-xterm.ts') }}
-          restore-keys: ember-npm-${{ runner.os }}-
+          key: ember-npm-xcode-27-${{ hashFiles('project-ember/package-lock.json', 'project-ember/scripts/patch-xterm.ts') }}
+          restore-keys: ember-npm-xcode-27-
 
       - name: Rust tests
         run: mise run ember-test
@@ -124,7 +128,11 @@ jobs:
         run: mise exec -C project-ember -- npx tsc --noEmit
 
   build-and-release:
-    runs-on: macos-15
+    # Ember's jobs share Sapphire's image: GitHub's macos-15 pool often had no runner to give at busy hours.
+    runs-on: xcode-27
+    env:
+      # The image's default Xcode moves with patch releases; build with the one Sapphire does.
+      DEVELOPER_DIR: /Applications/Xcode_27.1.app/Contents/Developer
     needs: [check-changes, test, test-ember]
     if: needs.check-changes.outputs.should-build == 'true'
     steps:
@@ -140,15 +148,15 @@ jobs:
         uses: actions/cache@v5
         with:
           path: project-ember/src-tauri/target
-          key: ember-rust-${{ runner.os }}-${{ hashFiles('project-ember/src-tauri/Cargo.lock') }}
-          restore-keys: ember-rust-${{ runner.os }}-
+          key: ember-rust-xcode-27-${{ hashFiles('project-ember/src-tauri/Cargo.lock') }}
+          restore-keys: ember-rust-xcode-27-
 
       - name: Cache Ember npm modules
         uses: actions/cache@v5
         with:
           path: project-ember/node_modules
-          key: ember-npm-${{ runner.os }}-${{ hashFiles('project-ember/package-lock.json', 'project-ember/scripts/patch-xterm.ts') }}
-          restore-keys: ember-npm-${{ runner.os }}-
+          key: ember-npm-xcode-27-${{ hashFiles('project-ember/package-lock.json', 'project-ember/scripts/patch-xterm.ts') }}
+          restore-keys: ember-npm-xcode-27-
 
       - name: Import the signing identity
         env:
