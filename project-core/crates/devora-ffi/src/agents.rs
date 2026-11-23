@@ -303,6 +303,7 @@ pub struct TranscriptItem {
     pub parent_tool_use_id: Option<String>,
     pub state: ItemState,
     pub content: TranscriptContent,
+    pub created_at_ms: Option<u64>,
 }
 #[uniffi::remote(Enum)]
 pub enum TranscriptChange {

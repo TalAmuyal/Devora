@@ -509,6 +509,7 @@ mod tests {
                 parent_tool_use_id: parent.map(Into::into),
                 state,
                 content,
+                created_at_ms: None,
             };
             self.update(
                 ChatUpdate::Transcript {

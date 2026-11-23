@@ -16,7 +16,7 @@ private func card(_ rules: String?) -> PermissionCard {
 }
 
 private func entry(_ sequence: UInt64, _ content: TranscriptContent) -> TranscriptItem {
-	TranscriptItem(sequence: sequence, cliSession: "s", parentToolUseId: nil, state: .complete, content: content)
+	TranscriptItem(sequence: sequence, cliSession: "s", parentToolUseId: nil, state: .complete, content: content, createdAt: nil)
 }
 
 private func reply(_ sequence: UInt64) -> TranscriptItem { entry(sequence, .assistant(text: "Reply \(sequence).", model: nil)) }

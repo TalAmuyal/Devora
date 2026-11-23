@@ -193,6 +193,7 @@ impl Transcript {
             parent_tool_use_id: parent,
             state,
             content,
+            created_at_ms: None,
         };
         self.next_sequence += 1;
         self.items.push(item.clone());

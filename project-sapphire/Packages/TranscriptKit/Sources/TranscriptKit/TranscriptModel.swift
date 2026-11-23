@@ -1,3 +1,5 @@
+import Foundation
+
 /// What the transcript shows, in TranscriptKit's own types, so that it builds and tests without the Rust core.
 /// They mirror the core's chat projection (`devora-agent::transcript`), and the host maps the core's values into them;
 /// the names, cases and labels are the core's, so the mapping is one to one.
@@ -9,13 +11,19 @@ public struct TranscriptItem: Equatable, Hashable, Sendable {
 	public var parentToolUseId: String?
 	public var state: ItemState
 	public var content: TranscriptContent
+	/// When the item was first stored; none for an item stored before Devora kept the time.
+	public var createdAt: Date?
 
-	public init(sequence: UInt64, cliSession: String, parentToolUseId: String?, state: ItemState, content: TranscriptContent) {
+	public init(
+		sequence: UInt64, cliSession: String, parentToolUseId: String?, state: ItemState, content: TranscriptContent,
+		createdAt: Date?
+	) {
 		self.sequence = sequence
 		self.cliSession = cliSession
 		self.parentToolUseId = parentToolUseId
 		self.state = state
 		self.content = content
+		self.createdAt = createdAt
 	}
 }
 

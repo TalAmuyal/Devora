@@ -1,4 +1,5 @@
 @testable import AppShell
+import Foundation
 import CoreBindings
 import Testing
 import TranscriptKit
@@ -7,7 +8,9 @@ import TranscriptKit
 /// still compile.
 struct TranscriptAdapterTests {
 	private func item(_ content: CoreBindings.TranscriptContent, state: CoreBindings.ItemState = .complete) -> CoreBindings.TranscriptItem {
-		CoreBindings.TranscriptItem(sequence: 7, cliSession: "cli", parentToolUseId: "parent", state: state, content: content)
+		CoreBindings.TranscriptItem(
+			sequence: 7, cliSession: "cli", parentToolUseId: "parent", state: state, content: content,
+			createdAtMs: 1_795_000_000_123)
 	}
 
 	@Test func everyKindOfItemKeepsItsFields() {
@@ -33,8 +36,13 @@ struct TranscriptAdapterTests {
 		for (core, expected) in cases {
 			#expect(
 				TranscriptKit.TranscriptItem(item(core, state: .streaming), name: { _ in nil })
-					== TranscriptKit.TranscriptItem(sequence: 7, cliSession: "cli", parentToolUseId: "parent", state: .streaming, content: expected))
+					== TranscriptKit.TranscriptItem(
+						sequence: 7, cliSession: "cli", parentToolUseId: "parent", state: .streaming, content: expected,
+						createdAt: Date(timeIntervalSince1970: 1_795_000_000.123)))
 		}
+		var undated = item(.unknown(json: "{}"))
+		undated.createdAtMs = nil
+		#expect(TranscriptKit.TranscriptItem(undated, name: { _ in nil }).createdAt == nil)
 	}
 
 	@Test func questionsAndTheScrollAnchorKeepTheirFields() {

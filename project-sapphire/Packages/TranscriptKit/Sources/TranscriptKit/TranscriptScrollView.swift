@@ -300,7 +300,7 @@ public final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NS
 		let expanded = isExpanded(row)
 		// A collapsed thought shows only its summary, so it isn't parsed until it opens.
 		guard let text = TranscriptRowModel.markdown(of: item.content), expanded || RowHeights.Kind(item) != .thinking else {
-			return TranscriptRowModel(item, document: nil, expanded: expanded)
+			return TranscriptRowModel(item, document: nil, expanded: expanded, now: Date(), calendar: .current)
 		}
 		let document: MarkdownDocument
 		if let cached = documents[item.sequence], cached.text == text {
@@ -309,7 +309,9 @@ public final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NS
 			document = MarkdownDocument(text)
 			documents[item.sequence] = (text, document)
 		}
-		return TranscriptRowModel(item, document: document, expanded: expanded, diagrams: diagrams(of: item, in: document, requesting: true))
+		return TranscriptRowModel(
+			item, document: document, expanded: expanded, diagrams: diagrams(of: item, in: document, requesting: true),
+			now: Date(), calendar: .current)
 	}
 
 	// MARK: Diagrams
@@ -711,8 +713,8 @@ public final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NS
 		adjusting = wasAdjusting
 	}
 
-	/// What the test bridge reads: every item row's sequence, kind (the web transcript's `chat-<kind>` class), text and
-	/// top relative to the visible area's top, the cards, every row's text in order, how many diagrams are drawn, failed,
+	/// What the test bridge reads: every item row's sequence, kind (the web transcript's `chat-<kind>` class), text, top
+	/// relative to the visible area's top and the time it shows (null for none), the cards, every row's text in order, how many diagrams are drawn, failed,
 	/// pending or shown as their source while streaming, and the web transcript's other fields. Nothing native runs a row's content, so there are no scripts or unsafe attributes to count.
 	public func observation() -> [String: Any] {
 		let top = contentView.bounds.minY
@@ -727,6 +729,7 @@ public final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NS
 				rows.append([
 					"sequence": String(item.sequence), "kind": "chat-item chat-\(model.kind.rawValue)",
 					"text": model.plainText, "offset": Int((table.rect(ofRow: row).minY - top).rounded()),
+					"time": model.time?.shown ?? NSNull(),
 				])
 				texts.append(model.plainText)
 				for source in model.document?.diagrams ?? [] {

@@ -69,6 +69,12 @@ Then("the agent chat's turn status is {string}", async function (this: SapphireW
 Then('the agent chat shows no turn status', async function (this: SapphireWorld) {
   await this.bridge.waitFor('no turn status', () => this.bridge.agentChat(), s => s.turnStatus === null);
 });
+// Today's rows show only the time, so none names the year.
+Then("every agent transcript row shows today's time", async function (this: SapphireWorld) {
+  const year = String(new Date().getFullYear());
+  await this.bridge.waitFor("every row showing today's time", () => this.bridge.agentChat(),
+    s => s.dom.rows.length > 0 && s.dom.rows.every(row => row.time !== null && row.time !== '' && !row.time.includes(year)));
+});
 Then('the agent transcript has no {string} row', async function (this: SapphireWorld, text: string) {
   const chat = await this.bridge.agentChat();
   assert.ok(!chat.dom.rows.some(row => row.text === text), `a "${text}" row is shown: ${JSON.stringify(chat.dom.rows.map(row => row.text))}`);

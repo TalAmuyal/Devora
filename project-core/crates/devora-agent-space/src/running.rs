@@ -313,8 +313,8 @@ pub(crate) async fn start(
                 ),
             }
         }
-        let interrupted = transcript.interrupt(!space.resume.has_conversation);
-        space.db.save_changes(None, &interrupted)?;
+        let mut interrupted = transcript.interrupt(!space.resume.has_conversation);
+        space.db.save_changes(None, &mut interrupted)?;
         transcript.release_completed();
         let history = space.history()?;
         // A CLI an earlier Devora left running (it died without stopping it) would
@@ -366,7 +366,7 @@ pub(crate) async fn start(
         Ok(session) => session,
         Err(error) => {
             let change = transcript.system(SystemKind::Failure, &error, json!({}));
-            space.db.save_changes(None, &[change])?;
+            space.db.save_changes(None, &mut [change])?;
             return Err(error);
         }
     };
@@ -485,7 +485,7 @@ fn persist(
     };
     let model_before = ActiveModel::of(transcript);
     changes.extend(transcript.event(event));
-    space.db.save_changes(resume.as_ref(), &changes)?;
+    space.db.save_changes(resume.as_ref(), &mut changes)?;
     transcript.release_completed();
     if let Some(resume) = resume {
         space.resume = resume;
@@ -507,7 +507,7 @@ fn begin(
     completions: mpsc::UnboundedSender<Completion>,
     events: &mpsc::UnboundedSender<SpaceEvent>,
 ) -> Result<(), String> {
-    let change = match &command.action {
+    let mut change = match &command.action {
         Action::Turn { text, .. } => transcript.submit(text.clone()),
         Action::RestartNotice { id, notice } => transcript.intention(
             SystemKind::RestartNotice,
@@ -550,13 +550,15 @@ fn begin(
     let sequence = item.sequence;
     let saved = match &command.action {
         Action::RestartNotice { id, notice } => space.db.save_notice_attempt(
-            &change,
+            &mut change,
             &RestartNotice {
                 attempt: Some(id.clone()),
                 ..notice.clone()
             },
         ),
-        _ => space.db.save_changes(None, std::slice::from_ref(&change)),
+        _ => space
+            .db
+            .save_changes(None, std::slice::from_mut(&mut change)),
     };
     if let Err(error) = saved {
         let _ = command.reply.send(Err(error.clone()));
@@ -920,14 +922,14 @@ fn send_step(
     completions: mpsc::UnboundedSender<Completion>,
     events: &mpsc::UnboundedSender<SpaceEvent>,
 ) -> Result<String, String> {
-    let announcement = transcript.system(
+    let mut announcement = transcript.system(
         SystemKind::Compaction,
         step.announcement(&compaction.context()),
         json!({}),
     );
     space
         .db
-        .save_changes(None, std::slice::from_ref(&announcement))?;
+        .save_changes(None, std::slice::from_mut(&mut announcement))?;
     let _ = events.send(SpaceEvent::Transcript(announcement));
     let _ = events.send(SpaceEvent::Context(compaction.context()));
     // Nobody waits for the outcome; it is recorded like any turn's.
@@ -1002,11 +1004,14 @@ fn finish(
     events: &mpsc::UnboundedSender<SpaceEvent>,
     completion: Completion,
 ) -> Result<(), String> {
-    if let Some(change) = transcript.settle(
+    if let Some(mut change) = transcript.settle(
         completion.sequence,
         completion.result.as_ref().err().cloned(),
     ) {
-        if let Err(error) = space.db.save_changes(None, std::slice::from_ref(&change)) {
+        if let Err(error) = space
+            .db
+            .save_changes(None, std::slice::from_mut(&mut change))
+        {
             let _ = completion.reply.send(Err(error.clone()));
             return Err(error);
         }
