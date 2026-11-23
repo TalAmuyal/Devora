@@ -179,7 +179,9 @@ impl SpaceHandle {
     }
     /// Sets the model the agent runs: stored with the agent at once, so its next launch uses it, and told to its CLI
     /// between turns (at once when idle, else when the running turn ends; a later change replaces one not yet told). A
-    /// change is never sent mid-turn: what the CLI does with one then hasn't been checked.
+    /// change is never sent during a turn Devora sent, since what the CLI does with one then hasn't been checked; a turn
+    /// the CLI started itself (a background task's notification) isn't one the actor knows of, so a change is sent
+    /// during it.
     pub async fn set_model(&self, model: String) -> Result<(), String> {
         self.call(Action::SetModel(model)).await.map(|_| ())
     }
