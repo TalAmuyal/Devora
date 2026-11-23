@@ -10,28 +10,41 @@ extension View {
 	func modelSuggestions(_ rows: [ModelSuggestions.Row], showsModelIDs: Bool) -> some View {
 		let width = ModelSuggestionsMenu.idColumnWidth(rows)
 		return textInputSuggestions {
-			ForEach(rows) { row in
-				Group {
-					if showsModelIDs {
-						HStack(spacing: 16) {
-							(Text(row.name) + Text(row.alias.map { " · \($0)" } ?? "").foregroundStyle(.secondary))
-								.lineLimit(1)
-								.frame(maxWidth: .infinity, alignment: .leading)
-							Text(row.modelID).monospaced().foregroundStyle(.secondary)
-								.frame(width: width, alignment: .leading)
-								.layoutPriority(1)
+			// A section per kind, "Aliases" then "Model IDs", with the menu's separator between them; a tier's field has
+			// only the second, still labelled, so the fields look alike.
+			ForEach(ModelSuggestionsMenu.sections(rows), id: \.0) { section, rows in
+				Section(section.rawValue) {
+					ForEach(rows) { row in
+						Group {
+							if showsModelIDs {
+								HStack(spacing: 16) {
+									Text(row.name).lineLimit(1)
+										.frame(maxWidth: .infinity, alignment: .leading)
+									Text(row.modelID).monospaced().foregroundStyle(.secondary)
+										.frame(width: width, alignment: .leading)
+										.layoutPriority(1)
+								}
+							} else {
+								Text(row.name).lineLimit(1)
+							}
 						}
-					} else {
-						Text(row.name).lineLimit(1)
+						.textInputCompletion(row.completion)
 					}
 				}
-				.textInputCompletion(row.completion)
 			}
 		}
 	}
 }
 
 enum ModelSuggestionsMenu {
+	/// The rows by section, in the sections' order, leaving out a section with none.
+	static func sections(_ rows: [ModelSuggestions.Row]) -> [(ModelSuggestions.Row.Section, [ModelSuggestions.Row])] {
+		[ModelSuggestions.Row.Section.aliases, .modelIDs].compactMap { section in
+			let inSection = rows.filter { $0.section == section }
+			return inSection.isEmpty ? nil : (section, inSection)
+		}
+	}
+
 	static func idColumnWidth(_ rows: [ModelSuggestions.Row]) -> CGFloat {
 		let font = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
 		return rows.map { ceil(($0.modelID as NSString).size(withAttributes: [.font: font]).width) }.max() ?? 0

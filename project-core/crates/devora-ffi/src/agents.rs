@@ -71,43 +71,67 @@ impl AgentCreationForm {
     }
 }
 
-/// A model Claude Code offers an agent: `value` is what to store and pass (an alias such as `opus` follows the CLI to
-/// newer models), `resolved_model` what it resolves to today.
+/// One row of a model field (`devora_agent::models::ModelRow`): `value` is what picking it stores (an alias for a tier, a
+/// full ID for a model), `model_id` the model it runs today.
 #[derive(Debug, Clone, PartialEq, uniffi::Record)]
-pub struct AgentModelOption {
+pub struct ModelRow {
     pub value: String,
-    pub resolved_model: Option<String>,
-    pub display_name: String,
-    pub description: Option<String>,
-    /// Lowest first; empty when it takes no effort.
-    pub effort_levels: Vec<String>,
+    pub label: String,
+    pub model_id: String,
 }
 
-/// A full model ID for a model tier, with its model's name.
-#[derive(Debug, Clone, PartialEq, uniffi::Record)]
-pub struct TierModel {
-    pub id: String,
-    pub name: String,
-}
-
-/// The models Claude Code offers, with the version of the CLI that listed them, each list in the core's order
-/// (`devora_agent::models::precedes`): what an agent's model can be (`ModelList::agent_choices`), and what a model tier
-/// can be (`ModelList::tier_choices`).
+/// The models Claude Code offers, as every model field shows them (`ModelList::sections`), with the version of the CLI
+/// that listed them: the tiers its aliases name, then every model by its version.
 #[derive(Debug, Clone, PartialEq, uniffi::Record)]
 pub struct AgentModelList {
     pub cli_version: Option<String>,
-    pub models: Vec<AgentModelOption>,
-    pub tier_models: Vec<TierModel>,
+    pub aliases: Vec<ModelRow>,
+    pub model_ids: Vec<ModelRow>,
 }
 
-/// The name of the model `id` among `models` (a list's `tier_models`, each full ID once), by the core's rule for model IDs:
+/// The rows of `list` that match what's `typed` into a model field, by the core's one rule for every field
+/// (`ModelSections::narrowed`): a tier by its own name, a model by its name or ID; every row while the field holds exactly
+/// a value one of them stores.
+#[uniffi::export]
+pub fn narrow_models(list: AgentModelList, typed: String) -> Result<AgentModelList, CoreError> {
+    let core = |rows: Vec<ModelRow>| -> Vec<devora_core::agents::ModelRow> {
+        rows.into_iter()
+            .map(|row| devora_core::agents::ModelRow {
+                value: row.value,
+                label: row.label,
+                model_id: row.model_id,
+            })
+            .collect()
+    };
+    let back = |rows: Vec<devora_core::agents::ModelRow>| -> Vec<ModelRow> {
+        rows.into_iter()
+            .map(|row| ModelRow {
+                value: row.value,
+                label: row.label,
+                model_id: row.model_id,
+            })
+            .collect()
+    };
+    let narrowed = devora_core::agents::ModelSections {
+        aliases: core(list.aliases),
+        model_ids: core(list.model_ids),
+    }
+    .narrowed(&typed);
+    Ok(AgentModelList {
+        cli_version: list.cli_version,
+        aliases: back(narrowed.aliases),
+        model_ids: back(narrowed.model_ids),
+    })
+}
+
+/// The name of the model `id` among `models` (a list's `model_ids`, each model once), by the core's rule for model IDs:
 /// a dated snapshot is its undated model (`claude-sonnet-4-5-20250929` is `claude-sonnet-4-5`). None when it isn't listed.
 #[uniffi::export]
-pub fn model_name(models: Vec<TierModel>, id: String) -> Result<Option<String>, CoreError> {
+pub fn model_name(models: Vec<ModelRow>, id: String) -> Result<Option<String>, CoreError> {
     Ok(models
         .into_iter()
-        .find(|model| devora_core::agents::same_model(&model.id, &id))
-        .map(|model| model.name))
+        .find(|model| devora_core::agents::same_model(&model.model_id, &id))
+        .map(|model| model.label))
 }
 
 impl AgentLaunch {
@@ -643,27 +667,20 @@ impl DevoraCore {
             .agents
             .model_options(Path::new(&profile_path), context)
             .await?;
+        let sections = list.sections();
+        let rows = |rows: Vec<devora_core::agents::ModelRow>| {
+            rows.into_iter()
+                .map(|row| ModelRow {
+                    value: row.value,
+                    label: row.label,
+                    model_id: row.model_id,
+                })
+                .collect()
+        };
         Ok(AgentModelList {
-            tier_models: list
-                .tier_choices()
-                .into_iter()
-                .map(|model| TierModel {
-                    id: model.id,
-                    name: model.name,
-                })
-                .collect(),
-            models: list
-                .agent_choices()
-                .into_iter()
-                .map(|model| AgentModelOption {
-                    value: model.value,
-                    resolved_model: model.resolved_model,
-                    display_name: model.display_name,
-                    description: model.description,
-                    effort_levels: model.effort_levels,
-                })
-                .collect(),
             cli_version: list.cli_version,
+            aliases: rows(sections.aliases),
+            model_ids: rows(sections.model_ids),
         })
     }
     pub async fn interrupt_agent(&self, tab: u64, generation: u64) -> Result<(), CoreError> {

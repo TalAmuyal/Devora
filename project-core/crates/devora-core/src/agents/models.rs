@@ -53,6 +53,8 @@ struct Probes {
 pub struct ModelOptions {
     cache: Mutex<BTreeMap<PathBuf, Cached>>,
     probes: Mutex<Probes>,
+    /// The aliases Claude Code listed that Devora doesn't know as a tier, each logged once.
+    unknown_aliases: Mutex<std::collections::BTreeSet<String>>,
     log: Arc<Log>,
 }
 
@@ -61,6 +63,7 @@ impl ModelOptions {
         Self {
             cache: Mutex::new(BTreeMap::new()),
             probes: Mutex::new(Probes::default()),
+            unknown_aliases: Mutex::new(std::collections::BTreeSet::new()),
             log,
         }
     }
@@ -68,6 +71,19 @@ impl ModelOptions {
     /// What an agent of `profile`, launched with `settings`, was just offered: logged, as the record of what a real login
     /// gets, and cached.
     pub(super) fn learned(&self, profile: &Path, settings: &Value, list: ModelList) {
+        for alias in list.unknown_aliases() {
+            if self
+                .unknown_aliases
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .insert(alias.to_owned())
+            {
+                self.log.write(
+                    Level::Info,
+                    &format!("Claude Code lists `{alias}`, a tier Devora doesn't know; its model lists show it first"),
+                );
+            }
+        }
         let models: Vec<String> = list
             .models
             .iter()

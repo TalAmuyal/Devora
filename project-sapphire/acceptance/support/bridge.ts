@@ -276,7 +276,7 @@ export interface AgentHubState {
 /** A row of a model field's suggestions menu, in the menu's order: what it shows, and what picking it puts in the field. */
 export interface ModelSuggestionRow {
   name: string;
-  alias: string | null;
+  section: 'Aliases' | 'Model IDs';
   modelID: string;
   completion: string;
 }

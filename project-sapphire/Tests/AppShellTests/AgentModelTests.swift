@@ -92,8 +92,11 @@ struct AgentModelTests {
 
 	@Test func aChangeRowNamesADatedSnapshotByItsUndatedModelAsTheWidgetDoes() {
 		let list = AgentModelList(
-			cliVersion: "2.1.326", models: [],
-			tierModels: [TierModel(id: "claude-sonnet-4-5", name: "Sonnet 4.5"), TierModel(id: "claude-opus-5-5", name: "Opus 5.5")])
+			cliVersion: "2.1.326", aliases: [],
+			modelIds: [
+				ModelRow(value: "claude-sonnet-4-5", label: "Sonnet 4.5", modelId: "claude-sonnet-4-5"),
+				ModelRow(value: "claude-opus-5-5", label: "Opus 5.5", modelId: "claude-opus-5-5"),
+			])
 		let suggestions = ModelSuggestions(list)
 		let core = changeRow(
 			#"{"from":"claude-opus-5-5","to":"claude-sonnet-4-5-20250929","fallback":false}"#,

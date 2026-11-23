@@ -2,59 +2,61 @@ import CoreBindings
 import Store
 import Testing
 
-/// A subscription's list as the core hands it over (Claude Code 2.1.312's): an agent's choices and a tier's, each in the
-/// core's order, which the core's own tests cover (`devora_agent::models`).
+/// A list as the core hands it over (its own tests cover how it's built: `devora_agent::models`): the tiers, then every
+/// model by its version. The Haiku tier points at Sonnet here, as a profile can set it.
 private let subscription = ModelSuggestions(AgentModelList(
-	cliVersion: "2.1.312",
-	models: [
-		option("opus", "claude-opus-5-5", "Opus 5.5"),
-		option("sonnet", "claude-sonnet-5-5", "Sonnet 5.5"),
-		option("haiku", "claude-haiku-5-5", "Haiku 5.5"),
-		option("claude-opus-4-8", "claude-opus-4-8", "Opus 4.8"),
-		option("claude-sonnet-4-6", "claude-sonnet-4-6", "Sonnet 4.6"),
-		option("claude-haiku-4-5-20251001", "claude-haiku-4-5-20251001", "Haiku 4.5"),
+	cliVersion: "2.1.329",
+	aliases: [
+		row("fable", "Fable (currently 5.2)", "claude-fable-5-2"), row("opus", "Opus (currently 5.5)", "claude-opus-5-5"),
+		row("sonnet", "Sonnet (currently 5.5)", "claude-sonnet-5-5"),
+		row("haiku", "Haiku (currently Sonnet 5.5)", "claude-sonnet-5-5"),
 	],
-	tierModels: [
-		TierModel(id: "claude-opus-5-5", name: "Opus 5.5"), TierModel(id: "claude-sonnet-5-5", name: "Sonnet 5.5"),
-		TierModel(id: "claude-opus-4-8", name: "Opus 4.8"),
+	modelIds: [
+		row("claude-fable-5-2", "Fable 5.2", "claude-fable-5-2"), row("claude-opus-5-5", "Opus 5.5", "claude-opus-5-5"),
+		row("claude-sonnet-5-5", "Sonnet 5.5", "claude-sonnet-5-5"), row("claude-opus-4-8", "Opus 4.8", "claude-opus-4-8"),
 	]))
 
-private func option(_ value: String, _ resolved: String?, _ name: String) -> AgentModelOption {
-	AgentModelOption(value: value, resolvedModel: resolved, displayName: name, description: nil, effortLevels: [])
+private func row(_ value: String, _ label: String, _ id: String) -> ModelRow {
+	ModelRow(value: value, label: label, modelId: id)
 }
 
 struct ModelSuggestionsTests {
-	@Test func anAgentsRowsKeepTheCoresOrderAndAPickStoresTheAlias() {
+	@Test func anAgentIsOfferedTheTiersThenEveryModelByVersionInTheCoresOrder() {
 		let rows = subscription.rows(for: .agentModel)
 		#expect(rows.map(\.completion) == [
-			"opus", "sonnet", "haiku", "claude-opus-4-8", "claude-sonnet-4-6", "claude-haiku-4-5-20251001",
+			"fable", "opus", "sonnet", "haiku", "claude-fable-5-2", "claude-opus-5-5", "claude-sonnet-5-5", "claude-opus-4-8",
 		])
-		let opus = rows[0]
-		#expect((opus.name, opus.alias, opus.modelID) == ("Opus 5.5", "opus", "claude-opus-5-5"))
-		#expect(rows[3].alias == nil, "A full ID is stored as itself")
+		#expect(rows.map(\.section) == Array(repeating: .aliases, count: 4) + Array(repeating: .modelIDs, count: 4))
+		#expect((rows[3].name, rows[3].modelID) == ("Haiku (currently Sonnet 5.5)", "claude-sonnet-5-5"))
 	}
 
-	@Test func aTiersRowsAreTheCoresFullIDs() {
+	@Test func aTierIsOfferedOnlyTheModelsByVersion() {
 		let rows = subscription.rows(for: .tier)
-		#expect(rows.map(\.completion) == ["claude-opus-5-5", "claude-sonnet-5-5", "claude-opus-4-8"])
-		#expect((rows[0].name, rows[0].alias) == ("Opus 5.5", nil))
+		#expect(rows.map(\.completion) == ["claude-fable-5-2", "claude-opus-5-5", "claude-sonnet-5-5", "claude-opus-4-8"])
+		#expect(rows.allSatisfy { $0.section == .modelIDs }, "A tier points at a model, not at another tier")
 	}
 
-	@Test func theMenuNarrowsToWhatIsTypedUnlessItIsAlreadyAPick() {
-		#expect(subscription.rows(for: .agentModel, typed: "son").map(\.completion) == ["sonnet", "claude-sonnet-4-6"])
+	@Test func typingNarrowsATierRowByItsOwnNameAndAModelRowByItsNameOrID() {
+		#expect(
+			subscription.rows(for: .agentModel, typed: "son").map(\.completion) == ["sonnet", "claude-sonnet-5-5"],
+			"Not \"Haiku (currently Sonnet 5.5)\": a tier is found by its own name")
 		#expect(subscription.rows(for: .agentModel, typed: "4.8").map(\.completion) == ["claude-opus-4-8"], "By name too")
 		#expect(subscription.rows(for: .agentModel, typed: "nothing-like-it").isEmpty)
-		#expect(subscription.rows(for: .agentModel, typed: "opus").count == 6, "A picked value shows every alternative")
+		#expect(subscription.rows(for: .agentModel, typed: "opus").count == 8, "A picked value shows every row")
 	}
 
 	@Test func theNoteNeverCallsAValueWrong() {
-		#expect(subscription.note(for: "sonnet") == "Suggestions from Claude Code 2.1.312. Any model name works.")
-		#expect(subscription.note(for: "claude-opus-5-5") == "Suggestions from Claude Code 2.1.312. Any model name works.")
-		#expect(subscription.note(for: "opusplan") == "Opus while planning, Sonnet for the rest.")
+		#expect(subscription.note(for: "sonnet") == "Suggestions from Claude Code 2.1.329. Any model name works.")
+		#expect(subscription.note(for: "claude-opus-5-5") == "Suggestions from Claude Code 2.1.329. Any model name works.")
 		#expect(subscription.note(for: "my-proxy-model") == "Any model name works.")
-		#expect(ModelSuggestions.note(for: "opusplan", listedBy: nil) == "Opus while planning, Sonnet for the rest.")
 		#expect(ModelSuggestions.note(for: "sonnet", listedBy: nil) == "Any model name works.")
 		#expect(subscription.note(for: " ") == "Required: pick a model or type its name.")
+	}
+
+	@Test func aModelIsNamedByTheCoresRuleADatedSnapshotIncluded() {
+		let list = ModelSuggestions(AgentModelList(
+			cliVersion: "2.1.326", aliases: [], modelIds: [row("claude-sonnet-4-5", "Sonnet 4.5", "claude-sonnet-4-5")]))
+		#expect(list.name(of: "claude-sonnet-4-5-20250929") == "Sonnet 4.5")
 	}
 }
 

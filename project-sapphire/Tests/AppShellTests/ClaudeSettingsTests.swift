@@ -149,7 +149,9 @@ struct ClaudeSettingsLookupTests {
 	@Test func theCardIsLoadedAndUsableWhileTheModelListIsStillBeingAskedFor() async throws {
 		let scope = ClaudeScope()
 		let (gate, open) = AsyncStream<Void>.makeStream()
-		let list = AgentModelList(cliVersion: "2.1.312", models: [], tierModels: [TierModel(id: "claude-opus-5-5", name: "Opus 5.5")])
+		let list = AgentModelList(
+			cliVersion: "2.1.312", aliases: [],
+			modelIds: [ModelRow(value: "claude-opus-5-5", label: "Opus 5.5", modelId: "claude-opus-5-5")])
 		let model = scope.model(suggest: {
 			for await _ in gate { break }
 			return ModelSuggestions(list)

@@ -53,7 +53,7 @@ Feature: Claude launch configuration
     And "echo PM=:$DEVORA_CCC_PERMISSION_MODE:" is typed in the terminal
     Then the terminal should contain "PM=::"
 
-  Scenario: A model tier suggests the model IDs Claude Code offers, newest first
+  Scenario: A model tier suggests every model Claude Code offers by its version, newest major first, then by tier
     Given a profile "Work" with 1 active workspaces
     And the Workspace Hub is open
     When the user presses "P"
@@ -61,13 +61,13 @@ Feature: Claude launch configuration
     When the user opens the "User Defaults" settings detail
     And the user switches Claude "opus-model" to "Custom"
     Then Claude "opus-model" should suggest the model IDs, in order:
-      | claude-opus-5-5           |
-      | claude-sonnet-5-5         |
-      | claude-haiku-5-5          |
       | claude-fable-5-1          |
       | claude-fable-5            |
+      | claude-opus-5-5           |
       | claude-opus-5             |
+      | claude-sonnet-5-5         |
       | claude-sonnet-5           |
+      | claude-haiku-5-5          |
       | claude-opus-4-8           |
       | claude-opus-4-7           |
       | claude-opus-4-6           |

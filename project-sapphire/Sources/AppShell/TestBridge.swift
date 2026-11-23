@@ -903,10 +903,10 @@ final class TestBridge {
 	}
 
 	/// The New Agent dialog's form and its creation's progress.
-	/// A model field's suggestions menu, in its order: each row's name, alias, ID and what picking it puts in the field.
+	/// A model field's suggestions menu, in its order: each row's name, section, ID and what picking it puts in the field.
 	private static func suggestionsState(_ rows: [ModelSuggestions.Row]) -> [[String: Any]] {
 		rows.map { row in
-			["name": row.name, "alias": row.alias ?? NSNull(), "modelID": row.modelID, "completion": row.completion] as [String: Any]
+			["name": row.name, "section": row.section.rawValue, "modelID": row.modelID, "completion": row.completion] as [String: Any]
 		}
 	}
 
