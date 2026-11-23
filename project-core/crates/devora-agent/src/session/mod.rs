@@ -32,6 +32,7 @@ use devora_app::log::Log;
 pub use launch::{Instructions, Plugin, Resume, SessionOptions};
 pub use saved::{saved_model, saved_turn};
 use serde_json::{Map, Value};
+use std::future::Future;
 use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot, watch};
 use tokio::task::JoinHandle;
@@ -130,14 +131,32 @@ pub struct SessionHandle {
 }
 
 impl SessionHandle {
-    async fn call<T>(&self, command: impl FnOnce(Reply<T>) -> Command) -> Result<T, String> {
+    async fn call<T: Send + 'static>(
+        &self,
+        command: impl FnOnce(Reply<T>) -> Command,
+    ) -> Result<T, String> {
+        self.request(command).await
+    }
+
+    /// Queues `command` now, ahead of anything asked later, and answers once the session has.
+    fn request<T>(
+        &self,
+        command: impl FnOnce(Reply<T>) -> Command,
+    ) -> impl Future<Output = Result<T, String>> + Send + 'static
+    where
+        T: Send + 'static,
+    {
         let (reply, received) = oneshot::channel();
-        self.commands
+        let sent = self
+            .commands
             .send(command(reply))
-            .map_err(|_| "session has stopped")?;
-        received
-            .await
-            .map_err(|_| "session stopped before answering")?
+            .map_err(|_| "session has stopped".to_owned());
+        async move {
+            sent?;
+            received
+                .await
+                .map_err(|_| "session stopped before answering")?
+        }
     }
 
     /// Pause while another task drains events, retaining the resumable ID.
@@ -186,8 +205,12 @@ impl SessionHandle {
     }
 
     /// Change the model for subsequent turns.
-    pub async fn set_model(&self, model: String) -> Result<Value, String> {
-        self.call(|reply| {
+    /// Queued at once, so a turn sent after this call runs on `model`.
+    pub fn set_model(
+        &self,
+        model: String,
+    ) -> impl Future<Output = Result<Value, String>> + Send + 'static {
+        self.request(|reply| {
             Command::Control(
                 ControlRequest::SetModel {
                     model: crate::protocol::Nullable::Value(model),
@@ -196,7 +219,6 @@ impl SessionHandle {
                 reply,
             )
         })
-        .await
     }
 
     /// Answer a currently pending question. A late answer to a withdrawn question

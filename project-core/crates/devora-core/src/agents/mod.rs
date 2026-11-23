@@ -11,7 +11,7 @@ mod running;
 pub use devora_agent::models::{same_model, ModelRow, ModelSections};
 use devora_agent::session::SessionEvent;
 pub use devora_agent::session::{PermissionAnswer, Plugin};
-use devora_agent_space::{ActiveModel, RunningSpace, SpaceEvent, SpaceHandle};
+use devora_agent_space::{ActiveModel, ChosenModel, RunningSpace, SpaceEvent, SpaceHandle};
 use devora_agent_space::{AppRun, Space};
 pub use devora_agent_space::{
     CreationForm, Entry as SpaceEntry, Field, LaunchContext, ModelChoice, Source,
@@ -21,6 +21,7 @@ pub use devora_config::agent::Scope;
 use devora_state::{ChatCommand, ChatPhase, ChatUpdate, Command, Event, SessionKind, Store};
 pub use models::{ModelOptions, MODEL_LOOKUP_GRACE};
 pub use operations::{Creation, CreationEvent};
+use serde_json::Value;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -56,6 +57,8 @@ struct Owner {
     done: watch::Sender<bool>,
     /// From launching its runtime until the runtime has stopped.
     live: bool,
+    /// The settings its latest launch ran with, which key the models it was offered (`ModelOptions::cached`).
+    launch_settings: Option<Value>,
 }
 
 struct Inner {
@@ -241,6 +244,7 @@ impl Agents {
                             keep_paused: view.as_ref().is_some_and(|view| view.paused),
                             done,
                             live: false,
+                            launch_settings: None,
                         },
                     );
                     inner.changed.notify_one();
@@ -694,6 +698,50 @@ impl Agents {
         received.await.map_err(|e| e.to_string())?
     }
 
+    /// Sets the agent on `tab` to `model`, which the models its latest launch was offered must include. A running agent
+    /// stores it and tells its CLI between turns (`SpaceHandle::set_model`); a paused one stores it for its next launch.
+    pub async fn set_model(&self, tab: u64, generation: u64, model: String) -> Result<(), String> {
+        let (key, handle, settings) = {
+            let inner = lock(&self.inner);
+            let (key, owner) = inner
+                .owners
+                .iter()
+                .find(|(_, o)| o.tab == Some(tab))
+                .ok_or("agent is not open")?;
+            if inner.closing || owner.generation != generation {
+                return Err("agent generation is stale".into());
+            }
+            if owner.live && (*owner.pause.borrow() || owner.handle.is_none()) {
+                return Err("This agent is starting or pausing. Set its model once it has.".into());
+            }
+            let settings = owner.launch_settings.clone().ok_or(
+                "This agent hasn't run yet, so Devora doesn't know the models it's offered.",
+            )?;
+            (
+                key.clone(),
+                owner.handle.clone().filter(|_| owner.live),
+                settings,
+            )
+        };
+        let models = lock(&self.inner).models.clone();
+        let offered = models
+            .cached(&key.profile, &settings)
+            .ok_or("Devora doesn't know the models this agent is offered.")?;
+        if !offered.offers(&model) {
+            return Err(format!(
+                "Claude Code doesn't offer the model {model} to this agent."
+            ));
+        }
+        match handle {
+            Some(handle) => handle.set_model(model).await,
+            None => self
+                .runtime
+                .spawn_blocking(move || Space::open(&key.profile, &key.name)?.set_model(&model))
+                .await
+                .map_err(|e| e.to_string())?,
+        }
+    }
+
     fn handle(&self, tab: u64, generation: u64) -> Result<SpaceHandle, String> {
         let inner = lock(&self.inner);
         let owner = inner
@@ -1044,6 +1092,8 @@ async fn run_session(
         let owner = inner.owners.get_mut(key).ok_or("agent owner disappeared")?;
         owner.handle = Some(running.handle());
     }
+    // The model the user set the agent to in this run, as the space last said.
+    let mut chosen = ChosenModel::default();
     // The model the agent's replies come from, as the space last said.
     let mut active = ActiveModel {
         latest: None,
@@ -1073,18 +1123,26 @@ async fn run_session(
                 }
                 let ready = matches!(&event, SpaceEvent::Session(SessionEvent::Ready { .. }));
                 if let SpaceEvent::Session(SessionEvent::Ready { capabilities, .. }) = &event {
-                    lock(inner).models.clone().learned(&key.profile, running.launch_settings(), devora_agent::models::decode(capabilities));
+                    let mut inner = lock(inner);
+                    inner.models.clone().learned(&key.profile, running.launch_settings(), devora_agent::models::decode(capabilities));
+                    if let Some(owner) = inner.owners.get_mut(key).filter(|o| o.run_id == generation) {
+                        owner.launch_settings = Some(running.launch_settings().clone());
+                    }
                 }
                 match event {
                     SpaceEvent::Model(model) => {
                         active = model;
-                        present_model(inner, state, key, generation, &running, &active);
+                        present_model(inner, state, key, generation, &running, &active, &chosen);
+                    }
+                    SpaceEvent::ChosenModel(model) => {
+                        chosen = model;
+                        present_model(inner, state, key, generation, &running, &active, &chosen);
                     }
                     event => publish(inner, state, key, generation, event),
                 }
                 // The list this launch was just offered names the model, and says whether it's the one set.
                 if ready {
-                    present_model(inner, state, key, generation, &running, &active);
+                    present_model(inner, state, key, generation, &running, &active, &chosen);
                 }
             }
         }
@@ -1099,11 +1157,12 @@ fn present_model(
     run_id: u64,
     running: &RunningSpace,
     active: &ActiveModel,
+    chosen: &ChosenModel,
 ) {
     let list = lock(inner)
         .models
         .cached(&key.profile, running.launch_settings());
-    let model = events::model(active, running.launch_model(), list.as_ref());
+    let model = events::model(active, chosen, running.launch_model(), list.as_ref());
     let inner = lock(inner);
     if let Some(owner) = inner.owners.get(key).filter(|o| o.run_id == run_id) {
         if let Some(tab) = owner.tab {

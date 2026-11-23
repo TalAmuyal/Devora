@@ -15,7 +15,9 @@ pub use compaction::{
 };
 pub use inputs::{fields, preview, Field, Source};
 pub use restart_notice::AppRun;
-pub use running::{ActiveModel, GlobalPauseCheck, RunningSpace, SpaceEvent, SpaceHandle};
+pub use running::{
+    ActiveModel, ChosenModel, GlobalPauseCheck, RunningSpace, SpaceEvent, SpaceHandle,
+};
 
 use db::{storage, Db};
 use devora_agent::session::{Instructions, Plugin, Resume, SessionOptions};
@@ -446,6 +448,22 @@ impl Space {
     }
     pub fn form(&self) -> &CreationForm {
         &self.form
+    }
+    /// Sets the model the agent launches with from now on, keeping its effort; an agent created before the model was
+    /// chosen at creation (no stored choice) gets Claude Code's default effort. A running agent's goes through
+    /// `SpaceHandle::set_model`, which also tells its CLI.
+    pub fn set_model(&mut self, model: &str) -> Result<(), String> {
+        let choice = ModelChoice {
+            model: model.to_owned(),
+            effort: self
+                .form
+                .model
+                .as_ref()
+                .and_then(|choice| choice.effort.clone()),
+        };
+        self.db.set_model(&choice)?;
+        self.form.model = Some(choice);
+        Ok(())
     }
     pub fn instructions(&self) -> &str {
         &self.instructions

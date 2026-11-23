@@ -53,6 +53,10 @@ pub struct ChatModel {
     pub differs: bool,
     /// Claude Code's sentence for the fallback the latest model came from.
     pub fallback: Option<String>,
+    /// The user set the agent to another model and it hasn't answered on it yet: the label names the chosen model.
+    pub awaiting_change: bool,
+    /// Why the running session didn't take the model the user set (it stays stored for the next launch).
+    pub change_not_taken: Option<String>,
 }
 
 /// What a running turn is doing now, for the line beside the chat's spinner, and since when: the step's start, in
@@ -255,6 +259,10 @@ pub enum ChatCommand {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[expect(
+    clippy::large_enum_variant,
+    reason = "devora-ffi mirrors this enum for UniFFI, which can't carry a boxed Chat; one is sent per opened chat"
+)]
 pub enum ChatEvent {
     Snapshot {
         chats: Vec<Chat>,

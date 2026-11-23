@@ -1658,3 +1658,61 @@ fn lookups_after_the_first_are_served_from_the_cache() {
         .count();
     assert_eq!(lookups, 1, "one CLI launch for three lookups");
 }
+
+#[test]
+fn an_agent_is_set_only_to_a_model_it_is_offered_and_a_paused_one_launches_with_it() {
+    let f = Fixture::new(false);
+    f.create("Models");
+    let tab = f.open("Models");
+    let events = f.core.subscribe_agent_chats().unwrap();
+    let chat = f.wait(&events, |c| {
+        c.phase == ChatPhase::Running && c.model.is_some()
+    });
+    assert_eq!(
+        block_on(
+            f.core
+                .set_agent_model(tab, chat.generation, "claude-made-up-9".into())
+        )
+        .unwrap_err()
+        .to_string(),
+        "Claude Code doesn't offer the model claude-made-up-9 to this agent."
+    );
+
+    block_on(
+        f.core
+            .set_agent_model(tab, chat.generation, "sonnet".into()),
+    )
+    .unwrap();
+    let changed = f.wait(&events, |c| {
+        c.model.as_ref().is_some_and(|m| m.awaiting_change)
+    });
+    let model = changed.model.unwrap();
+    assert_eq!(model.set_to, "sonnet");
+    assert_eq!(
+        model.label.as_deref(),
+        Some("Sonnet 5.5"),
+        "named as the model just chosen"
+    );
+    assert!(model.differs, "shown apart until a reply comes from it");
+
+    f.core.pause_agent_after_turn(tab, chat.generation).unwrap();
+    let paused = f.wait(&events, |c| c.phase == ChatPhase::Paused);
+    block_on(
+        f.core
+            .set_agent_model(tab, paused.generation, "claude-haiku-5-5".into()),
+    )
+    .unwrap();
+    f.open("Models");
+    f.wait(&events, |c| c.tab == tab && c.phase == ChatPhase::Running);
+    let report = fs::read_to_string(f.profile.root.path().join("report.jsonl")).unwrap();
+    let starts: Vec<serde_json::Value> = report
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .filter(|v: &serde_json::Value| v["kind"] == "start")
+        .collect();
+    let args = starts.last().unwrap()["args"].as_array().unwrap();
+    assert_eq!(
+        args[args.iter().position(|v| v == "--model").unwrap() + 1],
+        "claude-haiku-5-5"
+    );
+}

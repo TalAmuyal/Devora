@@ -95,6 +95,17 @@ impl ModelOption {
 }
 
 impl ModelList {
+    /// Whether an agent may be set to `model`: what a row of its [`sections`](Self::sections) stores, a model ID dated or
+    /// not, so never what [`IGNORED`] names.
+    pub fn offers(&self, model: &str) -> bool {
+        let sections = self.sections();
+        sections
+            .aliases
+            .iter()
+            .chain(&sections.model_ids)
+            .any(|row| row.value == model || same_model(&row.value, model))
+    }
+
     /// The name the CLI gives the model `id` (a full ID), if it lists that model.
     pub fn name_of(&self, id: &str) -> Option<&str> {
         self.models
@@ -561,6 +572,24 @@ mod tests {
             list.expects("some-future-alias", "claude-haiku-5-5"),
             "no guess"
         );
+    }
+
+    #[test]
+    fn an_agent_may_be_set_only_to_what_the_model_fields_offer() {
+        let mut list = tiers("claude-opus-5-5");
+        list.models
+            .push(option("opusplan", "claude-opus-5-5", "Opus Plan Mode"));
+        for offered in [
+            "opus",
+            "claude-opus-5-5",
+            "claude-opus-4-8",
+            "claude-sonnet-4-5-20250929",
+        ] {
+            assert!(list.offers(offered), "{offered}");
+        }
+        for refused in ["default", "opusplan", "haiku", "claude-made-up-9"] {
+            assert!(!list.offers(refused), "{refused}");
+        }
     }
 
     #[test]
