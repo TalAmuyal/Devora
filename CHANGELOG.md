@@ -20,6 +20,7 @@ Types of changes:
 
 ### Added
 
+- Devora Sapphire's Model widget changes an agent's model: a click opens a searchable list of what Claude Code offers (its aliases, then every model ID), driven by the keyboard too; a running turn finishes on its model first, a paused agent uses the pick when it resumes, and the widget shows the pick in orange until the agent answers on it
 - Devora Sapphire shows which model an agent is actually using: a Model widget beside Context names the model its latest reply came from ("Pending" until one is known), marks a reply from a model the agent isn't set to with an orange glyph that explains it on hover, and the transcript adds one row where the replying model changes, with each reply's model in its hover title
 - Devora Ember's Claude Launch Settings suggest the model IDs Claude Code offers on the Opus, Sonnet and Haiku tiers' Custom fields, newest first, each with its model's name; any other model ID still works
 - Devora Sapphire suggests the models Claude Code offers: the New Agent dialog's model field (which starts at the latest Opus and requires a model) and a model tier's Custom field list them newest first, by name in the dialog and by name and ID for a tier; any other model name still works

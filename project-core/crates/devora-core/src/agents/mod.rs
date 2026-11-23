@@ -698,10 +698,12 @@ impl Agents {
         received.await.map_err(|e| e.to_string())?
     }
 
-    /// Sets the agent on `tab` to `model`, which the models its latest launch was offered must include. A running agent
-    /// stores it and tells its CLI between turns (`SpaceHandle::set_model`); a paused one stores it for its next launch.
+    /// Sets the agent on `tab` to `model`, which must be one the agent is offered: a running agent's by the list its own
+    /// launch was offered, a paused one's by the list its next launch would be (asking Claude Code when that isn't
+    /// cached, so it works after a restart too). A running agent stores it and tells its CLI between turns
+    /// (`SpaceHandle::set_model`); a paused one stores it for its next launch.
     pub async fn set_model(&self, tab: u64, generation: u64, model: String) -> Result<(), String> {
-        let (key, handle, settings) = {
+        let (key, running, next_launch) = {
             let inner = lock(&self.inner);
             let (key, owner) = inner
                 .owners
@@ -711,28 +713,57 @@ impl Agents {
             if inner.closing || owner.generation != generation {
                 return Err("agent generation is stale".into());
             }
-            if owner.live && (*owner.pause.borrow() || owner.handle.is_none()) {
-                return Err("This agent is starting or pausing. Set its model once it has.".into());
-            }
-            let settings = owner.launch_settings.clone().ok_or(
-                "This agent hasn't run yet, so Devora doesn't know the models it's offered.",
-            )?;
-            (
-                key.clone(),
-                owner.handle.clone().filter(|_| owner.live),
-                settings,
-            )
+            let running = match (owner.live, &owner.handle, &owner.launch_settings) {
+                (false, ..) => None,
+                (true, Some(handle), Some(settings)) if !*owner.pause.borrow() => {
+                    Some((handle.clone(), settings.clone()))
+                }
+                (true, ..) => {
+                    return Err(
+                        "This agent is starting or pausing. Set its model once it has.".into(),
+                    )
+                }
+            };
+            (key.clone(), running, inner.launch.clone())
         };
         let models = lock(&self.inner).models.clone();
-        let offered = models
-            .cached(&key.profile, &settings)
-            .ok_or("Devora doesn't know the models this agent is offered.")?;
+        let offered = match &running {
+            Some((_, settings)) => models
+                .cached(&key.profile, settings)
+                .ok_or("Devora doesn't know the models this agent is offered.")?,
+            None => {
+                let context =
+                    next_launch.ok_or("Devora doesn't know how to launch this agent yet.")?;
+                let profile = key.profile.clone();
+                self.runtime
+                    .spawn(async move { models.get(&profile, &context).await })
+                    .await
+                    .map_err(|e| e.to_string())??
+            }
+        };
         if !offered.offers(&model) {
             return Err(format!(
                 "Claude Code doesn't offer the model {model} to this agent."
             ));
         }
-        match handle {
+        // Asking Claude Code takes seconds, in which a paused agent may have resumed: its running session takes it then.
+        let running = match running {
+            Some((handle, _)) => Some(handle),
+            None => {
+                let inner = lock(&self.inner);
+                let owner = inner.owners.get(&key).ok_or("agent is not open")?;
+                match (owner.live, &owner.handle) {
+                    (false, _) => None,
+                    (true, Some(handle)) if !*owner.pause.borrow() => Some(handle.clone()),
+                    (true, _) => {
+                        return Err(
+                            "This agent is starting or pausing. Set its model once it has.".into(),
+                        )
+                    }
+                }
+            }
+        };
+        match running {
             Some(handle) => handle.set_model(model).await,
             None => self
                 .runtime

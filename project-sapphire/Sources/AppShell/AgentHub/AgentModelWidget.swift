@@ -10,6 +10,8 @@ struct AgentModelPresentation: Equatable {
 	let named: Bool
 	let grayed: Bool
 	let mismatch: Bool
+	/// Whether the label is a model the user just picked, which no reply has come from yet: it shows in orange.
+	let changed: Bool
 	/// The widget's tooltip: the full ID and what the agent is set to.
 	let tooltip: String
 	/// The glyph's own tooltip, explaining a mismatch: what answered, what it's set to, and Claude Code's sentence.
@@ -21,11 +23,40 @@ struct AgentModelPresentation: Equatable {
 
 	init(model: ChatModel?, paused: Bool) {
 		let setTo = model.map { Self.setting($0) }
+		if let model, model.awaitingChange, let name = model.label {
+			label = name
+			named = true
+			grayed = paused
+			mismatch = true
+			changed = true
+			let since = model.latest.map { "last reply from \($0)" }
+			tooltip = ["Set to \(setTo ?? model.setTo)", since, paused ? "paused" : nil].compactMap { $0 }.joined(separator: " · ")
+			glyphTooltip = "Set to \(name); no reply from it yet."
+			accessibilityValue = [name, "no reply from it yet", paused ? "paused" : nil].compactMap { $0 }.joined(separator: ", ")
+			return
+		}
+		if let model, let refused = model.changeNotTaken {
+			// The agent goes on with the model it had, which the label names; the glyph says what was refused.
+			label = model.latest == nil ? Self.pending : model.label ?? model.latest ?? Self.pending
+			named = model.latest != nil && model.label != nil && model.label != model.latest
+			grayed = paused || model.latest == nil
+			mismatch = true
+			changed = false
+			tooltip = [
+				model.latest.map { paused ? "Last reply: \($0)" : $0 } ?? "Waiting for the first reply", "set to \(setTo ?? model.setTo)",
+				paused ? "paused" : nil,
+			].compactMap { $0 }.joined(separator: " · ")
+			glyphTooltip = "Claude Code didn't take \(model.setTo) (\(refused)). The agent will try it again at its next launch."
+			accessibilityValue = [label, "Claude Code didn't take \(model.setTo)", paused ? "paused" : nil].compactMap { $0 }
+				.joined(separator: ", ")
+			return
+		}
 		guard let model, let latest = model.latest else {
 			label = Self.pending
 			named = false
 			grayed = true
 			mismatch = false
+			changed = false
 			tooltip = ["Waiting for the first reply", setTo.map { "set to \($0)" }].compactMap { $0 }.joined(separator: " · ")
 			glyphTooltip = nil
 			accessibilityValue = ["Pending", setTo.map { "set to \($0)" }].compactMap { $0 }.joined(separator: ", ")
@@ -36,6 +67,7 @@ struct AgentModelPresentation: Equatable {
 		named = model.label != nil && model.label != latest
 		grayed = paused
 		mismatch = model.differs
+		changed = false
 		let reply = paused ? "Last reply: \(latest)" : latest
 		tooltip = [reply, setTo.map { "set to \($0)" }, paused ? "paused" : nil].compactMap { $0 }.joined(separator: " · ")
 		glyphTooltip = model.differs
@@ -80,6 +112,7 @@ struct AgentModelWidget: View {
 			}
 			.overlay(alignment: .leading) {
 				Text(presentation.label).lineLimit(1).truncationMode(.tail)
+					.foregroundStyle(presentation.changed ? AnyShapeStyle(.orange) : AnyShapeStyle(presentation.grayed ? .secondary : .primary))
 			}
 		}
 		.font(.callout)

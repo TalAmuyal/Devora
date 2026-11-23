@@ -2373,8 +2373,10 @@ async fn a_chosen_model_is_stored_at_once_and_told_to_the_cli_only_between_turns
         next_chosen(&mut running).await,
         ChosenModel {
             not_taken: Some("model refused".into()),
+            awaiting_reply: false,
             ..refused
-        }
+        },
+        "a refused model never replies, so nothing awaits it"
     );
     assert!(running.pause().await.unwrap().graceful);
     let stored = Space::open(&fixture.profile, "Foxtrot").unwrap();

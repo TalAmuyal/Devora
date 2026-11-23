@@ -16,10 +16,10 @@ func writeConfigWithAProfile(in dir: URL, appearance: String? = nil) throws -> U
 }
 
 /// Launches the app over the fake CLI with a profile and a scratch state of its own, creates the agent "Echo" from the
-/// Agent Hub, and returns the app and the agent's prompt editor. Quitting in teardown reaps the fake agent before the
-/// scratch directory goes.
+/// Agent Hub, and returns the app, the agent's prompt editor and the scratch directory (with the fake CLI's report).
+/// Quitting in teardown reaps the fake agent before the scratch directory goes.
 @MainActor
-func launchWithANewAgent(_ test: XCTestCase, scratchName: String) throws -> (XCUIApplication, XCUIElement) {
+func launchWithANewAgent(_ test: XCTestCase, scratchName: String) throws -> (XCUIApplication, XCUIElement, URL) {
 	let scratch = FileManager.default.temporaryDirectory.appending(path: "\(scratchName)-\(UUID().uuidString)")
 	try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
 	let config = try writeConfigWithAProfile(in: scratch)
@@ -46,7 +46,7 @@ func launchWithANewAgent(_ test: XCTestCase, scratchName: String) throws -> (XCU
 	app.buttons["Create"].click()
 	let editor = app.textViews["agent-prompt"]
 	XCTAssertTrue(editor.waitForExistence(timeout: 15), "Creating an agent must open its editor")
-	return (app, editor)
+	return (app, editor, scratch)
 }
 
 extension XCUIApplication {

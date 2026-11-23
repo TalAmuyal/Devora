@@ -301,5 +301,12 @@ mod tests {
         );
         assert!(shown.differs);
         assert_eq!(shown.change_not_taken.as_deref(), Some("set_model failed"));
+        assert_eq!(
+            shown.label.as_deref(),
+            Some("Opus 5.5"),
+            "the model still answering, not the refused one"
+        );
+        assert!(!shown.awaiting_change, "a refused model never replies");
+        assert_eq!(shown.set_to, "sonnet", "the refused pick stays stored");
     }
 }

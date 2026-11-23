@@ -6,7 +6,7 @@ final class AgentContextUITests: XCTestCase {
 	@MainActor
 	func testContextPopoverSetsTheThresholdAndDisablesItsControlsForAPausedAgent() throws {
 		continueAfterFailure = false
-		let (app, editor) = try launchWithANewAgent(self, scratchName: "sapphire-context")
+		let (app, editor, _) = try launchWithANewAgent(self, scratchName: "sapphire-context")
 		let send = app.buttons["Send"]
 		editor.click()
 		editor.typeText("first")

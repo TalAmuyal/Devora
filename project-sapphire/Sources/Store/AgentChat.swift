@@ -12,6 +12,9 @@ public final class AgentChat {
 	/// The models Claude Code offers this agent's profile: the model widget's width fits their names, and the transcript's
 	/// model-change rows are named by them. Nil until they arrive, or when Claude Code can't be asked.
 	public private(set) var modelSuggestions: ModelSuggestions?
+	/// Whether the latest ask for `modelSuggestions` ended without them (no CLI, not logged in, a timeout); asking again
+	/// clears it.
+	public private(set) var modelSuggestionsFailed = false
 	public let name: String
 	public private(set) var chat: Chat?
 	public private(set) var items: [TranscriptItem] = []
@@ -271,7 +274,16 @@ public final class AgentChat {
 	/// Asks once for the models the profile is offered (`modelSuggestions`); the core caches the list.
 	public func loadModelSuggestions() async {
 		guard modelSuggestions == nil else { return }
+		modelSuggestionsFailed = false
 		modelSuggestions = await store?.modelSuggestions(profilePath: profile)
+		modelSuggestionsFailed = modelSuggestions == nil
+	}
+
+	/// Sets the agent's model to one Claude Code offers it: stored with the agent at once, and taken by its CLI between
+	/// turns, or at its next launch when paused (the core's `set_agent_model`).
+	public func setModel(_ model: String) async {
+		guard let generation = chat?.generation else { return }
+		do { try await core.setAgentModel(tab: tab, generation: generation, model: model) } catch { fail(error) }
 	}
 
 	/// This agent's own compaction threshold, or nil to follow its profile's.
