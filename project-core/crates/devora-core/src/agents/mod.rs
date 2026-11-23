@@ -746,8 +746,25 @@ impl Agents {
                 "Claude Code doesn't offer the model {model} to this agent."
             ));
         }
+        // Asking Claude Code takes seconds, in which a paused agent may have resumed: its running session takes it then.
+        let running = match running {
+            Some((handle, _)) => Some(handle),
+            None => {
+                let inner = lock(&self.inner);
+                let owner = inner.owners.get(&key).ok_or("agent is not open")?;
+                match (owner.live, &owner.handle) {
+                    (false, _) => None,
+                    (true, Some(handle)) if !*owner.pause.borrow() => Some(handle.clone()),
+                    (true, _) => {
+                        return Err(
+                            "This agent is starting or pausing. Set its model once it has.".into(),
+                        )
+                    }
+                }
+            }
+        };
         match running {
-            Some((handle, _)) => handle.set_model(model).await,
+            Some(handle) => handle.set_model(model).await,
             None => self
                 .runtime
                 .spawn_blocking(move || Space::open(&key.profile, &key.name)?.set_model(&model))

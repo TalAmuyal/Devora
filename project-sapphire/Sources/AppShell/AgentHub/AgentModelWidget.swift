@@ -23,20 +23,32 @@ struct AgentModelPresentation: Equatable {
 
 	init(model: ChatModel?, paused: Bool) {
 		let setTo = model.map { Self.setting($0) }
-		if let model, model.awaitingChange || model.changeNotTaken != nil, let name = model.label {
+		if let model, model.awaitingChange, let name = model.label {
 			label = name
 			named = true
 			grayed = paused
 			mismatch = true
-			changed = model.awaitingChange
+			changed = true
 			let since = model.latest.map { "last reply from \($0)" }
 			tooltip = ["Set to \(setTo ?? model.setTo)", since, paused ? "paused" : nil].compactMap { $0 }.joined(separator: " · ")
-			glyphTooltip = model.changeNotTaken.map {
-				"Claude Code didn't take \(model.setTo) (\($0)). The agent will try it again at its next launch."
-			} ?? "Set to \(name); no reply from it yet."
-			accessibilityValue = [
-				name, model.changeNotTaken != nil ? "not taken by Claude Code" : "no reply from it yet", paused ? "paused" : nil,
-			].compactMap { $0 }.joined(separator: ", ")
+			glyphTooltip = "Set to \(name); no reply from it yet."
+			accessibilityValue = [name, "no reply from it yet", paused ? "paused" : nil].compactMap { $0 }.joined(separator: ", ")
+			return
+		}
+		if let model, let refused = model.changeNotTaken {
+			// The agent goes on with the model it had, which the label names; the glyph says what was refused.
+			label = model.latest == nil ? Self.pending : model.label ?? model.latest ?? Self.pending
+			named = model.latest != nil && model.label != nil && model.label != model.latest
+			grayed = paused || model.latest == nil
+			mismatch = true
+			changed = false
+			tooltip = [
+				model.latest.map { paused ? "Last reply: \($0)" : $0 } ?? "Waiting for the first reply", "set to \(setTo ?? model.setTo)",
+				paused ? "paused" : nil,
+			].compactMap { $0 }.joined(separator: " · ")
+			glyphTooltip = "Claude Code didn't take \(model.setTo) (\(refused)). The agent will try it again at its next launch."
+			accessibilityValue = [label, "Claude Code didn't take \(model.setTo)", paused ? "paused" : nil].compactMap { $0 }
+				.joined(separator: ", ")
 			return
 		}
 		guard let model, let latest = model.latest else {

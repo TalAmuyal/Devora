@@ -736,6 +736,10 @@ async fn pump(
                 // Only the latest choice's telling counts; an older one's outcome is moot.
                 if chosen.set_to.as_deref() == Some(model.as_str()) {
                     chosen.not_taken = outcome.err();
+                    // A refused model never replies: the agent goes on with the one it had.
+                    if chosen.not_taken.is_some() {
+                        chosen.awaiting_reply = false;
+                    }
                     let _ = events.send(SpaceEvent::ChosenModel(chosen.clone()));
                 }
             }

@@ -131,13 +131,27 @@ struct AgentModelTests {
 		#expect(!answered.changed && !answered.mismatch, "its first reply ends the mark")
 	}
 
-	@Test func aPickClaudeCodeRefusedSaysSoOnTheGlyphAndInThePopover() {
-		let refused = picked(awaiting: true, notTaken: "Model 'sonnet' not found")
+	@Test func aPickClaudeCodeRefusedNamesTheModelStillAnsweringAndSaysWhatWasRefused() {
+		// What the core sends once Claude Code refused "sonnet": the pick stays stored, nothing awaits it, and the label
+		// names the model still answering.
+		let refused = ChatModel(
+			latest: "claude-opus-5-5", label: "Opus 5.5", setTo: "sonnet", setToResolved: "claude-sonnet-5-5", differs: true,
+			fallback: nil, awaitingChange: false, changeNotTaken: "Model 'sonnet' not found")
 		let shown = AgentModelPresentation(model: refused, paused: false)
-		#expect(shown.mismatch)
-		#expect(shown.glyphTooltip?.hasPrefix("Claude Code didn't take sonnet (Model 'sonnet' not found).") == true)
-		#expect(shown.accessibilityValue == "Sonnet 5.5, not taken by Claude Code")
+		#expect(shown.label == "Opus 5.5" && !shown.changed && shown.mismatch, "plain: the old model, with the glyph's mark")
+		#expect(
+			shown.glyphTooltip
+				== "Claude Code didn't take sonnet (Model 'sonnet' not found). The agent will try it again at its next launch.")
+		#expect(shown.accessibilityValue == "Opus 5.5, Claude Code didn't take sonnet")
 		#expect(picker(refused).note?.hasPrefix("Claude Code didn't take sonnet") == true)
+
+		// Refused before the agent's first reply: still Pending, with the same mark.
+		let early = ChatModel(
+			latest: nil, label: nil, setTo: "sonnet", setToResolved: "claude-sonnet-5-5", differs: true, fallback: nil,
+			awaitingChange: false, changeNotTaken: "Model 'sonnet' not found")
+		let pending = AgentModelPresentation(model: early, paused: false)
+		#expect(pending.label == "Pending" && pending.grayed && pending.mismatch)
+		#expect(pending.accessibilityValue == "Pending, Claude Code didn't take sonnet")
 	}
 
 	func picker(
