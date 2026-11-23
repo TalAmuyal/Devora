@@ -22,11 +22,14 @@ The Agent Spaces of the selected profile (ADR-012, `Sources/AppShell/AgentHub/`)
 ## Model suggestions
 
 `Store.modelSuggestions` asks the core for the models Claude Code offers a profile (`agent_model_options`, cached by the core, so only a cold call waits for the CLI) and wraps them in `ModelSuggestions`, the one object every model field takes (the New Agent dialog, the Claude card's tiers, later an agent's model widget): it orders, labels and narrows them, and the views only draw it (`modelSuggestions(_:showsModelIDs:)`, SwiftUI's native `textInputSuggestions` menu).
-One list, no headings, in the core's order (`devora_agent::models::precedes`, the same in Ember): by generation, newest first, then by tier, then every other ID alphabetically; the core also leaves out Claude Code's `default` for an agent and gives a tier its full IDs once.
-An agent's model is offered Claude Code's aliases (picking one stores the alias, which follows Claude Code to newer models) and other models' full IDs, but not Claude Code's `default`: an agent is created with a model chosen. A tier, which is what an alias resolves to, is offered full IDs only.
-The menu is as wide as its field: in the New Agent dialog's narrow column a row shows only its name (its ID when it has none); a tier's row has its name, with the stored alias beside it, on the left and its full ID on the right, in a monospaced column as wide as the longest ID (`showsModelIDs`).
+Its rows and their order are the core's, the same in Ember (`devora_agent::models::ModelList::sections`), in two sections, each under its label with the menu's separator between them:
+"Aliases", the tiers Claude Code's aliases name, each as "Opus (currently 5.5)" (picking one stores the alias, which follows Claude Code to newer models), a tier Devora doesn't know first; then "Model IDs", every model once by its version, the current ones included, by major version, tier, then version (picking one pins it).
+Neither shows what the core ignores (`models::IGNORED`: Claude Code's `default` and `opusplan`, which agents don't offer).
+An agent's model is offered both sections; a tier, which is what an alias resolves to, only "Model IDs".
+Typing narrows the rows by the core's one rule (`ModelSections::narrowed`, the FFI's `narrow_models`): a tier by its own name ("son" finds Sonnet, not "Haiku (currently Sonnet 5.5)"), a model by its name or ID; a value already picked shows every row.
+The menu is as wide as its field: in the New Agent dialog's narrow column a row shows only its label; a tier field's row has its name on the left and its full ID on the right, in a monospaced column as wide as the longest ID (`showsModelIDs`).
 The New Agent field starts as `opus`, the latest Opus by definition, whatever the profile's default model; a model is required (Create is disabled, and the note says so, while the field is empty).
-The field works at once and takes any name: no suggestions (none yet, or Claude Code couldn't be asked, a warning in the log, never a banner; a test run that names no fake CLI, `DEVORA_TEST_CLAUDE_PROGRAM`, doesn't ask at all, so a test never runs the user's own `claude`) leave it a plain text field, and the note under the New Agent field never calls a value wrong (`opusplan`, which the list doesn't name, says what it does).
+The field works at once and takes any name: no suggestions (none yet, or Claude Code couldn't be asked, a warning in the log, never a banner; a test run that names no fake CLI, `DEVORA_TEST_CLAUDE_PROGRAM`, doesn't ask at all, so a test never runs the user's own `claude`) leave it a plain text field, and the note under the New Agent field never calls a value wrong.
 
 ## Agent chat
 

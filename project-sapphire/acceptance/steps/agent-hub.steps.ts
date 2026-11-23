@@ -209,9 +209,9 @@ When('the user types {string} as the new agent\'s model', async function (this: 
 });
 
 Then('the New Agent model field should suggest, in order:', async function (this: SapphireWorld, table: DataTable) {
-  const expected = table.hashes().map((row) => `${row.name} → ${row.stores}`);
+  const expected = table.hashes().map((row) => `${row.section}: ${row.name} → ${row.stores}`);
   await waitForDialog(this, `the suggestions ${JSON.stringify(expected)}`, (dialog) =>
-    JSON.stringify(dialog.modelSuggestions.map((row) => `${row.name} → ${row.completion}`)) === JSON.stringify(expected));
+    JSON.stringify(dialog.modelSuggestions.map((row) => `${row.section}: ${row.name} → ${row.completion}`)) === JSON.stringify(expected));
 });
 
 Then('the New Agent dialog should not allow Create', async function (this: SapphireWorld) {

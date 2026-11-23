@@ -177,8 +177,9 @@ pub struct TierModel {
     pub name: String,
 }
 
-/// The full model IDs Claude Code offers an agent of `profile_path`, in the core's order (`ModelList::tier_choices`),
-/// for the Claude card's tier fields. Cached per profile by the core; only a cold call launches Claude Code
+/// Every model Claude Code offers an agent of `profile_path` by its version, as the core lists them for a model field
+/// (`ModelList::sections`'s model IDs, since a tier points at a model, not at another tier), for the Claude card's tier
+/// fields. Cached per profile by the core; only a cold call launches Claude Code
 /// (initialize-only, no session). A test run that names no fake CLI looks up nothing.
 #[tauri::command]
 pub async fn get_claude_model_options(
@@ -198,11 +199,12 @@ pub async fn get_claude_model_options(
         .get(std::path::Path::new(&profile_path), &context)
         .await?;
     Ok(list
-        .tier_choices()
+        .sections()
+        .model_ids
         .into_iter()
-        .map(|model| TierModel {
-            id: model.id,
-            name: model.name,
+        .map(|row| TierModel {
+            id: row.model_id,
+            name: row.label,
         })
         .collect())
 }

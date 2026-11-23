@@ -1,17 +1,22 @@
 import CoreBindings
 import Foundation
 
-/// The models Claude Code offers, as suggestions for a model field: one list, ordered, labelled and narrowed to what's
-/// typed, for the views to draw. For each place a model is chosen: an agent's model (New Agent, later its Main Model
-/// widget), which takes an alias or a full ID, and a model tier (`ANTHROPIC_DEFAULT_<TIER>_MODEL`), which is what an alias
-/// resolves to, so it takes full IDs only.
+/// The models Claude Code offers, as every model field shows them (the core's `ModelList::sections`), narrowed to what's
+/// typed, for the views to draw. An agent's model (the New Agent dialog, its Model widget) is offered both sections: the
+/// tiers Claude Code's aliases name ("Opus (currently 5.5)"; picking one stores the alias, which follows Claude Code to
+/// newer models), then every model by its version (picking one pins it). A model tier (`ANTHROPIC_DEFAULT_<TIER>_MODEL`)
+/// points at a model, not at another tier, so it's offered the second section only.
 public struct ModelSuggestions: Equatable, Sendable {
-	/// One suggestion: what picking it puts in the field (`completion`), its name and, beside it, the stored alias, and its
-	/// full model ID.
+	/// One suggestion: its section, what picking it puts in the field (`completion`), its label, and the model it runs.
 	public struct Row: Equatable, Sendable, Identifiable {
+		public enum Section: String, Equatable, Sendable {
+			case aliases = "Aliases"
+			case modelIDs = "Model IDs"
+		}
+
+		public let section: Section
 		public let completion: String
 		public let name: String
-		public let alias: String?
 		public let modelID: String
 		public var id: String { completion }
 	}
@@ -22,46 +27,31 @@ public struct ModelSuggestions: Equatable, Sendable {
 	}
 
 	public let cliVersion: String?
-	let models: [AgentModelOption]
-	let tierModels: [TierModel]
+	let aliases: [ModelRow]
+	let modelIDs: [ModelRow]
 
 	public init(_ list: AgentModelList) {
 		cliVersion = list.cliVersion
-		models = list.models
-		tierModels = list.tierModels
+		aliases = list.aliases
+		modelIDs = list.modelIds
 	}
 
 	/// The name Claude Code gives the model `id` (a full ID), by the core's rule: a dated snapshot is its undated model.
 	public func name(of id: String) -> String? {
-		(try? modelName(models: tierModels, id: id)) ?? nil
+		(try? modelName(models: modelIDs, id: id)) ?? nil
 	}
 
-	/// The rows for `use`, in the core's order (newest generation first, then by tier, then any other model by ID),
-	/// narrowed to the rows whose ID, alias or name contain `typed` (unless it's a row's own value).
+	/// The rows for `use`, in the core's order, narrowed to what's `typed` by the core's rule for every model field (a tier by
+	/// its own name, a model by its name or ID; every row while the field holds exactly a value one of them stores).
 	public func rows(for use: Use, typed: String = "") -> [Row] {
-		var typed = typed.trimmingCharacters(in: .whitespaces)
-		let rows: [Row]
-		switch use {
-		case .agentModel:
-			// The core leaves out Claude Code's `default`, a choice rather than a model: an agent is created with a model chosen.
-			rows = models.map { model in
-				let isAlias = model.resolvedModel.map { $0 != model.value } ?? false
-				return Row(
-					completion: model.value, name: model.displayName, alias: isAlias ? model.value : nil,
-					modelID: model.resolvedModel ?? model.value)
-			}
-		case .tier:
-			rows = tierModels.map { Row(completion: $0.id, name: $0.name, alias: nil, modelID: $0.id) }
-		}
-		// A value already picked shows every alternative, not only itself.
-		if rows.contains(where: { $0.completion == typed }) { typed = "" }
-		return rows.filter { row in
-			typed.isEmpty || [row.modelID, row.name, row.alias ?? ""].contains { $0.localizedCaseInsensitiveContains(typed) }
-		}
+		let offered = AgentModelList(cliVersion: cliVersion, aliases: use == .agentModel ? aliases : [], modelIds: modelIDs)
+		let shown = (try? narrowModels(list: offered, typed: typed)) ?? offered
+		return shown.aliases.map { Row(section: .aliases, completion: $0.value, name: $0.label, modelID: $0.modelId) }
+			+ shown.modelIds.map { Row(section: .modelIDs, completion: $0.value, name: $0.label, modelID: $0.modelId) }
 	}
 
 	/// What the note under an agent's model field says about `value`: that one is required when it's empty, never that a
-	/// value is wrong, since any model name works, and what `opusplan`, which the list doesn't name, does.
+	/// value is wrong, since any model name works.
 	public func note(for value: String) -> String {
 		Self.note(for: value, listedBy: self)
 	}
@@ -70,13 +60,12 @@ public struct ModelSuggestions: Equatable, Sendable {
 	public static func note(for value: String, listedBy suggestions: ModelSuggestions?) -> String {
 		let value = value.trimmingCharacters(in: .whitespaces)
 		if value.isEmpty { return "Required: pick a model or type its name." }
-		if value == "opusplan" { return "Opus while planning, Sonnet for the rest." }
 		guard let suggestions, let version = suggestions.cliVersion, suggestions.lists(value) else { return "Any model name works." }
 		return "Suggestions from Claude Code \(version). Any model name works."
 	}
 
 	func lists(_ value: String) -> Bool {
-		models.contains { $0.value == value || $0.resolvedModel == value } || tierModels.contains { $0.id == value }
+		(aliases + modelIDs).contains { $0.value == value || $0.modelId == value }
 	}
 }
 

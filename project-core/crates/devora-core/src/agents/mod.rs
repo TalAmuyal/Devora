@@ -8,7 +8,7 @@ mod models;
 mod operations;
 mod running;
 
-pub use devora_agent::models::same_model;
+pub use devora_agent::models::{same_model, ModelRow, ModelSections};
 use devora_agent::session::SessionEvent;
 pub use devora_agent::session::{PermissionAnswer, Plugin};
 use devora_agent_space::{ActiveModel, RunningSpace, SpaceEvent, SpaceHandle};

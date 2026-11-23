@@ -80,14 +80,6 @@ pub fn decode(reply: &InitializeResponse) -> ModelList {
     }
 }
 
-/// A full model ID to offer where only an ID will do (a model tier, `ANTHROPIC_DEFAULT_<TIER>_MODEL`, is what an alias
-/// resolves to), with its model's name.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ModelId {
-    pub id: String,
-    pub name: String,
-}
-
 impl ModelOption {
     /// An alias names a model it resolves to (`opus` → `claude-opus-5-5`); every other entry is a full ID.
     pub fn is_alias(&self) -> bool {
@@ -137,49 +129,168 @@ impl ModelList {
             .is_none_or(|resolved| same_model(resolved, model))
     }
 
-    /// What an agent's model can be: every entry but Claude Code's `default`, which is a choice rather than a model, in
-    /// [`precedes`]'s order. Picking an alias stores the alias, which follows Claude Code to newer models.
-    pub fn agent_choices(&self) -> Vec<ModelOption> {
-        let mut choices: Vec<_> = self
+    /// The list as every model field shows it: the tiers Claude Code's aliases name, then every model by its version.
+    ///
+    /// - **Aliases**, picking one stores the alias, which follows Claude Code to newer models: those Devora doesn't know as
+    ///   a tier first, alphabetically (a new tier is shown, not hidden), then Fable, Opus, Sonnet and Haiku. Each reads
+    ///   "Opus (currently 5.5)": the tier, then what it resolves to today, without repeating the tier's word ("Haiku
+    ///   (currently Sonnet 5.5)" when the profile points Haiku at Sonnet; the ID when Claude Code gives no name).
+    /// - **Model IDs**, picking one pins that version: each model once, the ones the aliases resolve to included, by major
+    ///   version (newest first), then tier, then version (newest first); an ID that doesn't read as Claude's model naming
+    ///   goes last, alphabetically.
+    ///
+    /// Neither shows what [`IGNORED`] names.
+    pub fn sections(&self) -> ModelSections {
+        let shown = self
             .models
             .iter()
-            .filter(|model| model.value != "default")
-            .cloned()
-            .collect();
-        choices.sort_by(|a, b| order(a.model_id(), b.model_id()));
-        choices
-    }
-
-    /// What a model tier can be: each full ID once, an alias's resolution included and named by its alias (`default`,
-    /// a choice, names none), in [`precedes`]'s order.
-    pub fn tier_choices(&self) -> Vec<ModelId> {
-        let mut ids: Vec<ModelId> = Vec::new();
-        for model in self.models.iter().filter(|model| model.value != "default") {
-            if !ids.iter().any(|known| known.id == model.model_id()) {
-                ids.push(ModelId {
-                    id: model.model_id().to_owned(),
-                    name: model.display_name.clone(),
-                });
+            .filter(|model| !IGNORED.contains(&model.value.as_str()));
+        let mut aliases: Vec<&ModelOption> =
+            shown.clone().filter(|model| model.is_alias()).collect();
+        aliases.sort_by(|a, b| alias_order(&a.value, &b.value));
+        let mut model_ids: Vec<ModelRow> = Vec::new();
+        // A model's own entry names it best; an alias's name stands in for a model Claude Code lists only by its alias.
+        for model in shown
+            .clone()
+            .filter(|model| !model.is_alias())
+            .chain(aliases.iter().copied())
+        {
+            let id = model.model_id();
+            if model_ids.iter().any(|row| row.model_id == id) {
+                continue;
             }
+            let name = model_name(model);
+            model_ids.push(ModelRow {
+                value: id.to_owned(),
+                label: name.unwrap_or(id).to_owned(),
+                model_id: id.to_owned(),
+            });
         }
-        ids.sort_by(|a, b| order(&a.id, &b.id));
-        ids
+        model_ids.sort_by(|a, b| model_order(&a.model_id, &b.model_id));
+        ModelSections {
+            aliases: aliases
+                .into_iter()
+                .map(|model| ModelRow {
+                    value: model.value.clone(),
+                    label: alias_label(model),
+                    model_id: model.model_id().to_owned(),
+                })
+                .collect(),
+            model_ids,
+        }
+    }
+
+    /// The aliases Claude Code lists that Devora doesn't know as a tier (and doesn't ignore): a new tier, shown first.
+    pub fn unknown_aliases(&self) -> Vec<&str> {
+        self.models
+            .iter()
+            .filter(|model| model.is_alias() && !IGNORED.contains(&model.value.as_str()))
+            .map(|model| model.value.as_str())
+            .filter(|alias| !Generation::TIERS.contains(alias))
+            .collect()
     }
 }
 
-/// Whether model `first` reads before `second`: Claude's models (`claude-<tier>-<major>[-<minor>][-<date>]`) by
-/// generation, newest first, then by tier (Fable, Opus, Sonnet, Haiku); every other ID after them, alphabetically.
-pub fn precedes(first: &str, second: &str) -> bool {
-    order(first, second) == std::cmp::Ordering::Less
+/// What Claude Code lists that no model field shows: its own `default`, a choice rather than a model, and `opusplan`,
+/// which Devora's agents don't offer (`ccc`'s Default model setting still stores it).
+pub const IGNORED: [&str; 2] = ["default", "opusplan"];
+
+/// One row of a model field.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ModelRow {
+    /// What picking it stores: an alias for a tier, a full ID for a model.
+    pub value: String,
+    pub label: String,
+    /// The model it runs today, a full ID.
+    pub model_id: String,
 }
 
-fn order(first: &str, second: &str) -> std::cmp::Ordering {
+/// A model list as every model field shows it ([`ModelList::sections`]).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ModelSections {
+    pub aliases: Vec<ModelRow>,
+    pub model_ids: Vec<ModelRow>,
+}
+
+impl ModelSections {
+    /// The rows that match what's `typed` into a model field, so every field narrows alike: a tier by its own name ("son"
+    /// finds Sonnet, not "Haiku (currently Sonnet 5.5)"), a model by its name or ID, ignoring case. A field holding exactly
+    /// a value one row stores (as the New Agent field opens with `opus`) has typed nothing yet, so every row shows.
+    pub fn narrowed(&self, typed: &str) -> ModelSections {
+        let typed = typed.trim().to_lowercase();
+        if typed.is_empty()
+            || self
+                .aliases
+                .iter()
+                .chain(&self.model_ids)
+                .any(|row| row.value.to_lowercase() == typed)
+        {
+            return self.clone();
+        }
+        let has = |text: &str| text.to_lowercase().contains(&typed);
+        ModelSections {
+            aliases: self
+                .aliases
+                .iter()
+                .filter(|row| has(&row.value))
+                .cloned()
+                .collect(),
+            model_ids: self
+                .model_ids
+                .iter()
+                .filter(|row| has(&row.label) || has(&row.model_id))
+                .cloned()
+                .collect(),
+        }
+    }
+}
+
+/// The name Claude Code gives `model`, unless it's only the tier's word (an API-key login names `opus` just "Opus").
+fn model_name(model: &ModelOption) -> Option<&str> {
+    let name = model.display_name.trim();
+    (!name.is_empty() && !name.eq_ignore_ascii_case(&model.value)).then_some(name)
+}
+
+/// "Opus (currently 5.5)": the alias as a tier's name, then what it resolves to, without the tier's word again.
+fn alias_label(model: &ModelOption) -> String {
+    let tier = capitalized(&model.value);
+    let current = match model_name(model) {
+        Some(name) => name.strip_prefix(&format!("{tier} ")).unwrap_or(name),
+        None => model.model_id(),
+    };
+    format!("{tier} (currently {current})")
+}
+
+fn capitalized(word: &str) -> String {
+    let mut chars = word.chars();
+    chars
+        .next()
+        .map(|first| first.to_uppercase().chain(chars).collect())
+        .unwrap_or_default()
+}
+
+/// Aliases Devora doesn't know as a tier first, alphabetically, then the tiers in their order.
+fn alias_order(first: &str, second: &str) -> std::cmp::Ordering {
+    let tier = |alias: &str| Generation::TIERS.iter().position(|tier| *tier == alias);
+    match (tier(first), tier(second)) {
+        (Some(a), Some(b)) => a.cmp(&b),
+        (Some(_), None) => std::cmp::Ordering::Greater,
+        (None, Some(_)) => std::cmp::Ordering::Less,
+        (None, None) => first.cmp(second),
+    }
+}
+
+/// Claude's models by major version (newest first), then tier, then version (newest first); every other ID after them,
+/// alphabetically.
+fn model_order(first: &str, second: &str) -> std::cmp::Ordering {
     use std::cmp::Ordering;
     match (Generation::of(first), Generation::of(second)) {
         (Some(a), Some(b)) => b
             .version
-            .cmp(&a.version)
+            .0
+            .cmp(&a.version.0)
             .then(a.tier.cmp(&b.tier))
+            .then(b.version.cmp(&a.version))
             .then_with(|| first.cmp(second)),
         (Some(_), None) => Ordering::Less,
         (None, Some(_)) => Ordering::Greater,
@@ -495,77 +606,139 @@ mod tests {
     }
 
     #[test]
-    fn models_read_newest_generation_first_then_by_tier_then_the_rest_by_id() {
-        let mut ids = vec![
-            "claude-haiku-4-5-20251001",
-            "zeta-model",
-            "claude-opus-5",
-            "claude-sonnet-5-5",
-            "claude-opus-5-2",
-            "claude-fable-5-5",
-            "claude-mystery-6-0",
-            "claude-opus-4-8",
-            "claude-opus",
-            "alpha-model",
-            "claude-haiku-5-5",
-            "claude-opus-5-5",
-        ];
-        ids.sort_by(|a, b| order(a, b));
+    fn the_aliases_read_as_tiers_new_ones_first_and_the_ignored_values_appear_nowhere() {
+        let list = ModelList {
+            cli_version: Some("2.1.329".into()),
+            models: vec![
+                option("default", "claude-opus-5-5", "Default (recommended)"),
+                option("opusplan", "claude-opus-5-5", "Opus Plan"),
+                option("haiku", "claude-sonnet-5-5", "Sonnet 5.5"),
+                option("sonnet", "claude-sonnet-5-5", "Sonnet 5.5"),
+                option("opus", "claude-opus-5-5", "Opus"),
+                option("fable", "claude-fable-5-2", "Fable 5.2"),
+                option("zest", "claude-zest-1-9", "Zest 1.9"),
+                option("ace", "claude-ace-2-2", "Ace 2.2"),
+            ],
+        };
+        let sections = list.sections();
+        let labels: Vec<&str> = sections
+            .aliases
+            .iter()
+            .map(|row| row.label.as_str())
+            .collect();
         assert_eq!(
-            ids,
+            labels,
             [
-                "claude-fable-5-5",
-                "claude-opus-5-5",
-                "claude-sonnet-5-5",
-                "claude-haiku-5-5",
-                "claude-opus-5-2",
-                "claude-opus-5",
-                "claude-opus-4-8",
-                "claude-haiku-4-5-20251001",
-                // Outside the scheme, alphabetically: another naming, an unknown family, no number at all.
+                "Ace (currently 2.2)",
+                "Zest (currently 1.9)",
+                "Fable (currently 5.2)",
+                "Opus (currently claude-opus-5-5)",
+                "Sonnet (currently 5.5)",
+                "Haiku (currently Sonnet 5.5)",
+            ],
+            "new tiers first; a name that's only the tier's word shows the ID"
+        );
+        assert_eq!(
+            sections.aliases[5].value, "haiku",
+            "picking a tier stores its alias"
+        );
+        let all: Vec<&str> = sections
+            .aliases
+            .iter()
+            .chain(&sections.model_ids)
+            .map(|row| row.value.as_str())
+            .collect();
+        assert!(
+            !all.contains(&"default") && !all.contains(&"opusplan"),
+            "{all:?}"
+        );
+        assert_eq!(list.unknown_aliases(), ["zest", "ace"]);
+    }
+
+    #[test]
+    fn typing_narrows_a_tier_by_its_own_name_and_a_model_by_its_name_or_id() {
+        let row = |value: &str, label: &str, id: &str| ModelRow {
+            value: value.into(),
+            label: label.into(),
+            model_id: id.into(),
+        };
+        let sections = ModelSections {
+            aliases: vec![
+                row("sonnet", "Sonnet (currently 5.5)", "claude-sonnet-5-5"),
+                row("haiku", "Haiku (currently Sonnet 5.5)", "claude-sonnet-5-5"),
+            ],
+            model_ids: vec![
+                row("claude-sonnet-5-5", "Sonnet 5.5", "claude-sonnet-5-5"),
+                row("claude-opus-4-8", "Opus 4.8", "claude-opus-4-8"),
+            ],
+        };
+        let values = |narrowed: ModelSections| -> Vec<String> {
+            narrowed
+                .aliases
+                .into_iter()
+                .chain(narrowed.model_ids)
+                .map(|row| row.value)
+                .collect()
+        };
+        assert_eq!(
+            values(sections.narrowed("SON")),
+            ["sonnet", "claude-sonnet-5-5"],
+            "not Haiku, whose tier is another's name"
+        );
+        assert_eq!(
+            values(sections.narrowed("4.8")),
+            ["claude-opus-4-8"],
+            "by name"
+        );
+        assert_eq!(
+            values(sections.narrowed("opus-4")),
+            ["claude-opus-4-8"],
+            "by ID"
+        );
+        assert_eq!(
+            values(sections.narrowed("haiku")).len(),
+            4,
+            "a picked value shows every row"
+        );
+        assert!(values(sections.narrowed("nothing-like-it")).is_empty());
+    }
+
+    #[test]
+    fn every_model_appears_once_by_its_version_by_major_then_tier_then_newest() {
+        let mut list = subscription();
+        list.models.extend([
+            option("fable", "claude-fable-5-2", "Fable 5.2"),
+            option("claude-fable-5-1", "claude-fable-5-1", "Fable 5.1"),
+            option("claude-opus-5", "claude-opus-5", "Opus 5"),
+            option("claude-sonnet-5", "claude-sonnet-5", "Sonnet 5"),
+            option("claude-opus-4-7", "claude-opus-4-7", "Opus 4.7"),
+            option("zeta-model", "zeta-model", "Zeta"),
+            option("alpha-model", "alpha-model", ""),
+        ]);
+        let rows = list.sections().model_ids;
+        let labels: Vec<&str> = rows.iter().map(|row| row.label.as_str()).collect();
+        assert_eq!(
+            labels,
+            [
+                "Fable 5.2",
+                "Fable 5.1",
+                "Opus 5.5",
+                "Opus 5",
+                "Sonnet 5.5",
+                "Sonnet 5",
+                "Haiku 5.5",
+                "Opus 4.8",
+                "Opus 4.7",
+                "Sonnet 4.6",
+                "Haiku 4.5",
                 "alpha-model",
-                "claude-mystery-6-0",
-                "claude-opus",
-                "zeta-model",
-            ]
-        );
-        assert!(precedes("claude-opus-5-5", "claude-opus-4-8"));
-    }
-
-    #[test]
-    fn an_agent_is_offered_every_model_but_claude_codes_default() {
-        let choices = subscription().agent_choices();
-        assert_eq!(
-            choices.iter().map(|c| c.value.as_str()).collect::<Vec<_>>(),
-            [
-                "opus",
-                "sonnet",
-                "haiku",
-                "claude-opus-4-8",
-                "claude-sonnet-4-6",
-                "claude-haiku-4-5-20251001"
-            ]
-        );
-        assert!(choices[0].is_alias() && !choices[3].is_alias());
-    }
-
-    #[test]
-    fn a_tier_is_offered_each_full_id_once_named_by_its_model() {
-        let ids = subscription().tier_choices();
-        assert_eq!(
-            ids.iter().map(|m| m.id.as_str()).collect::<Vec<_>>(),
-            [
-                "claude-opus-5-5",
-                "claude-sonnet-5-5",
-                "claude-haiku-5-5",
-                "claude-opus-4-8",
-                "claude-sonnet-4-6",
-                "claude-haiku-4-5-20251001",
-            ]
+                "Zeta",
+            ],
+            "the current models included, once; what doesn't read as Claude's naming last"
         );
         assert_eq!(
-            ids[0].name, "Opus 5.5",
-            "named by its alias, not by `default`"
+            rows[2].value, "claude-opus-5-5",
+            "picking a model pins its version"
         );
     }
 

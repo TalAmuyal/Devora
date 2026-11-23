@@ -1598,7 +1598,7 @@ fn the_agents_own_threshold_and_compact_now_reach_its_chat_and_a_paused_agent_re
 }
 
 #[test]
-fn the_models_a_profile_is_offered_come_from_its_cli_in_the_cores_order() {
+fn the_models_a_profile_is_offered_come_from_its_cli_as_every_model_field_shows_them() {
     let f = Fixture::new(false);
     let list = block_on(
         f.core
@@ -1609,19 +1609,33 @@ fn the_models_a_profile_is_offered_come_from_its_cli_in_the_cores_order() {
         list.cli_version.is_some(),
         "the CLI's version comes with its list"
     );
-    let options = &list.models;
-    let values: Vec<_> = options.iter().map(|o| o.value.as_str()).collect();
+    let aliases: Vec<(&str, &str)> = list
+        .aliases
+        .iter()
+        .map(|row| (row.value.as_str(), row.label.as_str()))
+        .collect();
     assert_eq!(
-        &values[..3],
-        ["opus", "sonnet", "haiku"],
-        "the core's order, without Claude Code's default"
+        aliases,
+        [
+            ("fable", "Fable (currently 5.1)"),
+            ("opus", "Opus (currently 5.5)"),
+            ("sonnet", "Sonnet (currently 5.5)"),
+            ("haiku", "Haiku (currently 5.5)"),
+        ],
+        "the tiers in their order, without Claude Code's default"
     );
-    assert!(!values.contains(&"default"));
-    assert_eq!(list.tier_models[0].id, "claude-opus-5-5");
-    let opus = &options[0];
-    assert_eq!(opus.resolved_model.as_deref(), Some("claude-opus-5-5"));
-    assert_eq!(opus.display_name, "Opus 5.5");
-    assert!(!opus.effort_levels.is_empty());
+    let first = &list.model_ids[0];
+    assert_eq!(
+        (first.value.as_str(), first.label.as_str()),
+        ("claude-fable-5-1", "Fable 5.1"),
+        "every model by its version, the newest major first, then by tier"
+    );
+    assert!(
+        list.model_ids
+            .iter()
+            .any(|row| row.model_id == "claude-opus-5-5"),
+        "the models the aliases resolve to are listed by version too"
+    );
 }
 
 // The fake CLI answers `--version` with the version of the recording it replies with, as a real CLI agrees with its own

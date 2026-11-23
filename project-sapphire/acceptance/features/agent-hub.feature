@@ -80,22 +80,24 @@ Feature: Agent Hub
     When the user opens the New Agent dialog
     And the user names the new agent "Echo"
     Then the New Agent model field should suggest, in order:
-      | name       | stores                    |
-      | Opus 5.5   | opus                      |
-      | Sonnet 5.5 | sonnet                    |
-      | Haiku 5.5  | haiku                     |
-      | Fable 5.1  | fable                     |
-      | Fable 5    | claude-fable-5            |
-      | Opus 5     | claude-opus-5             |
-      | Sonnet 5   | claude-sonnet-5           |
-      | Opus 4.8   | claude-opus-4-8           |
-      | Opus 4.7   | claude-opus-4-7           |
-      | Opus 4.6   | claude-opus-4-6           |
-      | Sonnet 4.6 | claude-sonnet-4-6         |
-      | Haiku 4.5  | claude-haiku-4-5-20251001 |
+      | section   | name                   | stores                    |
+      | Aliases   | Fable (currently 5.1)  | fable                     |
+      | Aliases   | Opus (currently 5.5)   | opus                      |
+      | Aliases   | Sonnet (currently 5.5) | sonnet                    |
+      | Aliases   | Haiku (currently 5.5)  | haiku                     |
+      | Model IDs | Fable 5.1              | claude-fable-5-1          |
+      | Model IDs | Fable 5                | claude-fable-5            |
+      | Model IDs | Opus 5.5               | claude-opus-5-5           |
+      | Model IDs | Opus 5                 | claude-opus-5             |
+      | Model IDs | Sonnet 5.5             | claude-sonnet-5-5         |
+      | Model IDs | Sonnet 5               | claude-sonnet-5           |
+      | Model IDs | Haiku 5.5              | claude-haiku-5-5          |
+      | Model IDs | Opus 4.8               | claude-opus-4-8           |
+      | Model IDs | Opus 4.7               | claude-opus-4-7           |
+      | Model IDs | Opus 4.6               | claude-opus-4-6           |
+      | Model IDs | Sonnet 4.6             | claude-sonnet-4-6         |
+      | Model IDs | Haiku 4.5              | claude-haiku-4-5-20251001 |
     And the New Agent model note should read "Suggestions from Claude Code 2.1.312. Any model name works."
-    When the user types "opusplan" as the new agent's model
-    Then the New Agent model note should read "Opus while planning, Sonnet for the rest."
     When the user types "" as the new agent's model
     Then the New Agent model note should read "Required: pick a model or type its name."
     And the New Agent dialog should not allow Create
