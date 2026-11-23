@@ -27,13 +27,13 @@ Feature: Claude settings and the shared Asana token
     When the user switches Claude "opus-model" to "Custom"
     Then Claude "opus-model" should offer no suggestions
     And Claude "opus-model" should suggest the model IDs, in order:
-      | claude-opus-5-5           |
-      | claude-sonnet-5-5         |
-      | claude-haiku-5-5          |
       | claude-fable-5-1          |
       | claude-fable-5            |
+      | claude-opus-5-5           |
       | claude-opus-5             |
+      | claude-sonnet-5-5         |
       | claude-sonnet-5           |
+      | claude-haiku-5-5          |
       | claude-opus-4-8           |
       | claude-opus-4-7           |
       | claude-opus-4-6           |
