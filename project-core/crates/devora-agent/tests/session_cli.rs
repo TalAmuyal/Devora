@@ -904,7 +904,7 @@ async fn pinned_cli_hook_ask_forces_a_question_in_auto_mode() {
 }
 
 // A pause during a turn (the path a closed tab, a quit or a hold takes) interrupts it, and Claude Code answers with
-// the turn's error result before it exits: the result the transcript words "Turn stopped", since Devora asked for it.
+// the turn's error result, naming the turn, before it exits: the result the transcript words "Turn stopped", since Devora asked for it.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[ignore = "requires CI-pinned Claude CLI, Node and Sapphire npm dependencies"]
 async fn pinned_cli_answers_a_pause_mid_turn_with_the_turns_error_result_before_it_exits() {
@@ -916,9 +916,10 @@ async fn pinned_cli_answers_a_pause_mid_turn_with_the_turns_error_result_before_
         .await;
     let options = fixture.options(backend.port, Instructions::Append("Pause probe".into()));
     let mut session = Session::start(options, fixture.log()).await.unwrap();
+    let sent = turn_id();
     session
         .handle()
-        .send_turn(turn_id(), "Say something long.".into())
+        .send_turn(sent.clone(), "Say something long.".into())
         .await
         .unwrap();
     tokio::time::timeout(Duration::from_secs(20), async {
@@ -955,6 +956,8 @@ async fn pinned_cli_answers_a_pause_mid_turn_with_the_turns_error_result_before_
     assert!(stopped.interrupted_turn);
     let result = result.expect("a result before the session stopped");
     assert!(result.is_error, "{result:?}");
+    // It names the turn it ends, so the space ends that turn (and the chat's spinner) on it, as on any result.
+    assert!(result.answers(&sent), "{result:?}");
     backend.stop().await;
 }
 

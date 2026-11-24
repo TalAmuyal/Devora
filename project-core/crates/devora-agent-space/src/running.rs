@@ -872,6 +872,9 @@ async fn pump(
                 if let Some(completion) = completion {
                     if completion.failed_turn && ActiveTurn::is_ours(&turn_running) {
                         turn_running = None;
+                        // No result will end it: the restart notice and a compaction step have no other end, and the
+                        // chat ends a turn only on the space's word.
+                        let _ = events.send(SpaceEvent::TurnEnded);
                     }
                     finish(space,transcript,events,completion)?;
                     pending -= 1;

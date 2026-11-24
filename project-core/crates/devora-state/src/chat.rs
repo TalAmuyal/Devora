@@ -218,6 +218,11 @@ pub enum ChatUpdate {
     /// A turn started or ended: one the agent's CLI started itself when `by_agent`. A start of the agent's own turn
     /// doesn't replace one already shown (a prompt sent just before it began joined it), and an end ends only a turn
     /// of its own kind, so a late end of the agent's turn never ends the user's.
+    ///
+    /// The known limit: a prompt sent during the agent's turn makes the turn the user's, so if that send fails, its end
+    /// leaves no turn shown, and the agent's own turn's end, if it comes, is then ignored. A send fails only when the
+    /// CLI can't take it (restarting, or gone), which most likely ended the agent's turn too; showing no turn beats a
+    /// spinner left on.
     Turn {
         running: bool,
         by_agent: bool,
@@ -718,6 +723,15 @@ mod tests {
         assert_eq!(shown(&chat), (true, false));
         chat.update(ours(false), 900);
         assert_eq!(shown(&chat), (false, false), "no spinner is left on");
+
+        // The known limit: a send that fails during the agent's turn ends the shown turn, and the agent's own end,
+        // if it comes, then changes nothing; nothing is left on.
+        chat.update(agents(true), 1000);
+        chat.update(ours(true), 1100);
+        chat.update(ours(false), 1200);
+        assert_eq!(shown(&chat), (false, false), "the failed send's end");
+        chat.update(agents(false), 1300);
+        assert_eq!(shown(&chat), (false, false));
     }
 
     #[test]
