@@ -767,14 +767,24 @@ impl Agents {
         };
         match running {
             Some(handle) => handle.set_model(model).await,
-            None => self
-                .runtime
-                .spawn_blocking(move || Space::open(&key.profile, &key.name)?.set_model(&model))
-                .await
-                .map_err(|e| e.to_string())?,
+            None => {
+                let stored = key.clone();
+                self.runtime
+                    .spawn_blocking(move || {
+                        Space::open(&stored.profile, &stored.name)?.set_model(&model)
+                    })
+                    .await
+                    .map_err(|e| e.to_string())??;
+                // The levels the effort offers are the new model's.
+                self.present_paused_effort(&key).await;
+                Ok(())
+            }
         }
     }
 
+    // `set_effort` and `set_model` route a pick the same way (find the owner, running or paused, check what it's
+    // offered, look again after the wait, then tell the session or write the space): a third setter shares that routing
+    // with them rather than copying it.
     /// Sets the effort of the agent on `tab` (none is Claude Code's default) to a level its model takes, which the
     /// models it's offered say, as `set_model` checks a model: a running agent's model is the one its chat shows it set
     /// to, a paused one's the one its next launch would run. A level the model doesn't take is refused, since the CLI
@@ -880,13 +890,48 @@ impl Agents {
         };
         match running {
             Some(handle) => handle.set_effort(effort).await,
-            None => self
+            None => {
+                let stored = key.clone();
+                self.runtime
+                    .spawn_blocking(move || {
+                        Space::open(&stored.profile, &stored.name)?
+                            .set_effort(effort.as_deref(), &model)
+                    })
+                    .await
+                    .map_err(|e| e.to_string())??;
+                self.present_paused_effort(&key).await;
+                Ok(())
+            }
+        }
+    }
+
+    /// Shows a paused agent's stored effort on its chat again, after a pick changed it or its model.
+    async fn present_paused_effort(&self, key: &Key) {
+        let (run_id, context) = {
+            let inner = lock(&self.inner);
+            let Some(owner) = inner.owners.get(key) else {
+                return;
+            };
+            (owner.run_id, inner.launch.clone())
+        };
+        let Some(context) = context else { return };
+        let (profile, name, launch) = (key.profile.clone(), key.name.clone(), context.clone());
+        let options = self
+            .runtime
+            .spawn_blocking(move || Space::open(&profile, &name)?.session_options(&launch))
+            .await;
+        if let Ok(Ok(options)) = options {
+            let _ = self
                 .runtime
-                .spawn_blocking(move || {
-                    Space::open(&key.profile, &key.name)?.set_effort(effort.as_deref(), &model)
-                })
-                .await
-                .map_err(|e| e.to_string())?,
+                .spawn(present_stored_effort(
+                    self.inner.clone(),
+                    self.state.clone(),
+                    key.clone(),
+                    run_id,
+                    options,
+                    context,
+                ))
+                .await;
         }
     }
 
@@ -1183,6 +1228,17 @@ async fn run_session(
     let globally_paused =
         global_pause::check(inner.clone(), state.clone(), key.clone(), generation);
     publish(inner, state, key, generation, SpaceEvent::Restored(history));
+    // What it will launch with, shown before it launches, so a paused or held agent shows its effort too.
+    if let Ok(options) = space.session_options(&context) {
+        tokio::spawn(present_stored_effort(
+            inner.clone(),
+            state.clone(),
+            key.clone(),
+            generation,
+            options,
+            context.clone(),
+        ));
+    }
     while globally_paused() && state.global_paused() && !*pause.borrow() {
         if let Some(owner) = lock(inner).owners.get(key) {
             phase(state, owner, ChatPhase::Paused);
@@ -1331,6 +1387,37 @@ fn present_model(
         if let Some(tab) = owner.tab {
             events::update(state, tab, owner.generation, ChatUpdate::Model { model });
             events::update(state, tab, owner.generation, ChatUpdate::Effort { effort });
+        }
+    }
+}
+
+/// Shows the effort an agent not running yet will launch with (`options`), with the levels its model takes, from the
+/// models its launch would be offered (asking Claude Code when that list isn't cached): a paused or held agent's widget
+/// has it before any launch, and a running one's is replaced by `present_model` once it runs.
+async fn present_stored_effort(
+    inner: Arc<Mutex<Inner>>,
+    state: Arc<Store>,
+    key: Key,
+    run_id: u64,
+    options: devora_agent::session::SessionOptions,
+    context: LaunchContext,
+) {
+    let models = lock(&inner).models.clone();
+    let list = models.get(&key.profile, &context).await.ok();
+    let effort = events::effort(
+        None,
+        &options.model,
+        options.effort.as_deref(),
+        list.as_ref(),
+    );
+    let inner = lock(&inner);
+    if let Some(owner) = inner
+        .owners
+        .get(&key)
+        .filter(|o| o.run_id == run_id && !o.live)
+    {
+        if let Some(tab) = owner.tab {
+            events::update(&state, tab, owner.generation, ChatUpdate::Effort { effort });
         }
     }
 }

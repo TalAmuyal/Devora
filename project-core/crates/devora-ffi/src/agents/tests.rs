@@ -223,11 +223,20 @@ impl Fixture {
     }
 }
 
-/// The fake CLI's launches recorded in a `report.jsonl`.
+/// Whether a fake CLI report line is an agent's launch: not a lookup of the models Claude Code offers, which runs the
+/// same CLI with no session (`--no-session-persistence`), and which showing an agent's effort may start.
+fn is_agent_start(entry: &serde_json::Value) -> bool {
+    entry["kind"] == "start"
+        && !entry["args"]
+            .as_array()
+            .is_some_and(|args| args.iter().any(|arg| arg == "--no-session-persistence"))
+}
+
+/// The fake CLI's agent launches recorded in a `report.jsonl`.
 fn launches_before_release(report: &[u8]) -> usize {
     String::from_utf8_lossy(report)
         .lines()
-        .filter(|line| serde_json::from_str::<serde_json::Value>(line).unwrap()["kind"] == "start")
+        .filter(|line| is_agent_start(&serde_json::from_str::<serde_json::Value>(line).unwrap()))
         .count()
 }
 
@@ -452,7 +461,7 @@ fn permissions_interrupt_recovery_and_owning_profile_are_projected() {
     let starts: Vec<serde_json::Value> = report
         .lines()
         .map(|l| serde_json::from_str(l).unwrap())
-        .filter(|v: &serde_json::Value| v["kind"] == "start")
+        .filter(|v: &serde_json::Value| is_agent_start(v))
         .collect();
     let args = starts[0]["args"].as_array().unwrap();
     assert_eq!(
@@ -810,10 +819,9 @@ fn global_pause_keep_choice_is_reversible_and_release_during_a_turn_honors_it() 
         assert_eq!(
             report
                 .lines()
-                .filter(
-                    |line| serde_json::from_str::<serde_json::Value>(line).unwrap()["kind"]
-                        == "start"
-                )
+                .filter(|line| is_agent_start(
+                    &serde_json::from_str::<serde_json::Value>(line).unwrap()
+                ))
                 .count(),
             1
         );
@@ -1708,7 +1716,7 @@ fn an_agent_is_set_only_to_a_model_it_is_offered_and_a_paused_one_launches_with_
     let starts: Vec<serde_json::Value> = report
         .lines()
         .map(|l| serde_json::from_str(l).unwrap())
-        .filter(|v: &serde_json::Value| v["kind"] == "start")
+        .filter(|v: &serde_json::Value| is_agent_start(v))
         .collect();
     let args = starts.last().unwrap()["args"].as_array().unwrap();
     assert_eq!(
@@ -1755,7 +1763,7 @@ fn an_agent_still_paused_after_a_restart_can_be_set_to_a_model_its_next_launch_i
     let starts: Vec<serde_json::Value> = report
         .lines()
         .map(|l| serde_json::from_str(l).unwrap())
-        .filter(|v: &serde_json::Value| v["kind"] == "start")
+        .filter(|v: &serde_json::Value| is_agent_start(v))
         .collect();
     let args = starts.last().unwrap()["args"].as_array().unwrap();
     assert_eq!(
@@ -1810,17 +1818,33 @@ fn an_agents_effort_is_one_its_model_takes_shown_with_those_levels_and_a_paused_
     block_on(f.core.restore_agent_spaces(f.launch())).unwrap();
     let events = f.core.subscribe_agent_chats().unwrap();
     let paused = f.wait(&events, |c| c.tab == tab && c.phase == ChatPhase::Paused);
-    // Still paused after a restart: checked against the models its next launch would be offered.
+    // Still paused after a restart, never launched in this run: its chat shows what it will launch with.
+    f.wait(&events, |c| {
+        c.tab == tab
+            && c.effort
+                .as_ref()
+                .is_some_and(|e| e.set_to.as_deref() == Some("xhigh") && e.levels.len() == 5)
+    });
+    // Checked against the models its next launch would be offered, and shown at once.
     block_on(
         f.core
             .set_agent_effort(tab, paused.generation, Some("low".into())),
     )
     .unwrap();
+    f.wait(&events, |c| {
+        c.tab == tab
+            && c.effort
+                .as_ref()
+                .is_some_and(|e| e.set_to.as_deref() == Some("low"))
+    });
     block_on(
         f.core
             .set_agent_model(tab, paused.generation, "claude-haiku-4-5-20251001".into()),
     )
     .unwrap();
+    f.wait(&events, |c| {
+        c.tab == tab && c.effort.as_ref().is_some_and(|e| e.levels.is_empty())
+    });
     assert_eq!(
         block_on(
             f.core
@@ -1848,7 +1872,7 @@ fn an_agents_effort_is_one_its_model_takes_shown_with_those_levels_and_a_paused_
     let starts: Vec<serde_json::Value> = report
         .lines()
         .map(|l| serde_json::from_str(l).unwrap())
-        .filter(|v: &serde_json::Value| v["kind"] == "start")
+        .filter(|v: &serde_json::Value| is_agent_start(v))
         .collect();
     let args = starts.last().unwrap()["args"].as_array().unwrap();
     assert_eq!(
