@@ -1740,9 +1740,10 @@ fn walkdir(root: &std::path::Path) -> Vec<PathBuf> {
 }
 
 // A turn the CLI starts itself (a background task reporting) opens with `init` and ends with a result naming no turn
-// of ours. A turn sent during it joins it: no `init` of its own, and one result, answering it. A background task
-// finishing during a turn we sent is folded into that turn: no `init`, and its one result answers ours. The space
-// actor's `ActiveTurn` rests on all three.
+// of ours, and no `init` comes while idle, not even after a model change or an interrupt with nothing running. A turn
+// sent during the CLI's own joins it: no `init` of its own, and one result, answering it. A background task finishing
+// during a turn we sent is folded into that turn: no `init`, and its one result answers ours. The space actor's
+// `ActiveTurn` rests on all of it: a stray `init` while idle would hold a pause until the next result.
 #[tokio::test]
 #[ignore]
 async fn pinned_cli_brackets_its_own_turns_and_folds_overlapping_ones() {
@@ -1783,6 +1784,7 @@ async fn pinned_cli_brackets_its_own_turns_and_folds_overlapping_ones() {
         .expect("offline CLI deadline")
     }
     for overlap in [
+        "the CLI's own turn alone",
         "a turn sent during the CLI's own",
         "a task finishing during ours",
     ] {
@@ -1808,7 +1810,26 @@ async fn pinned_cli_brackets_its_own_turns_and_folds_overlapping_ones() {
         assert_eq!(next(&mut session).await, Seen::Init);
         assert_eq!(next(&mut session).await, Seen::Result(vec![first]));
         let second = turn_id();
-        if overlap == "a turn sent during the CLI's own" {
+        if overlap == "the CLI's own turn alone" {
+            assert_eq!(next(&mut session).await, Seen::Init, "{overlap}");
+            assert_eq!(
+                next(&mut session).await,
+                Seen::Result(vec![]),
+                "{overlap}: its result names no turn of ours"
+            );
+            // Requests answered while idle: if either opened a turn, its `init` would come before the next turn's.
+            let _ = handle.set_model("sonnet".into()).await;
+            let _ = handle.interrupt().await;
+            handle
+                .send_turn(second.clone(), "The next turn.".into())
+                .await
+                .unwrap();
+            assert_eq!(
+                next(&mut session).await,
+                Seen::Init,
+                "{overlap}: the next turn's"
+            );
+        } else if overlap == "a turn sent during the CLI's own" {
             // The shell finishes, and the CLI opens a turn of its own.
             assert_eq!(next(&mut session).await, Seen::Init, "{overlap}");
             handle
