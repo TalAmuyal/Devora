@@ -70,6 +70,8 @@ public final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NS
 		}
 	}
 	let colors = TranscriptTheme()
+	/// What time it is, for the rows' times ("today" is the clock's day); a test sets it to change the day.
+	var clock: () -> Date = Date.init
 	private var diagramToken: UUID?
 	private(set) var measurements = 0
 
@@ -106,9 +108,43 @@ public final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NS
 			self, selector: #selector(frameChanged), name: NSView.frameDidChangeNotification, object: contentView)
 		paletteChanged()
 		follower = PaletteFollower(self) { [weak self] in self?.paletteChanged() }
+		// A new day shows yesterday's rows with their date, and a time zone or locale changes how every time reads.
+		for name in [Notification.Name.NSCalendarDayChanged, .NSSystemTimeZoneDidChange, NSLocale.currentLocaleDidChangeNotification] {
+			clockObservers.append(
+				NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+					MainActor.assumeIsolated { self?.timesChanged() }
+				})
+		}
 	}
 
 	private var follower: PaletteFollower?
+	private var clockObservers: [NSObjectProtocol] = []
+	/// Bumped when the time zone or locale changes, or the day: how the rows' times read changed.
+	private var timesRead = 0
+	private var cachedDay: DateInterval?
+	/// Today, by the clock, in the user's calendar.
+	private var today: DateInterval {
+		let now = clock()
+		if let day = cachedDay, day.contains(now) { return day }
+		let day = Calendar.autoupdatingCurrent.dateInterval(of: .day, for: now) ?? DateInterval(start: now, duration: 0)
+		cachedDay = day
+		return day
+	}
+
+	/// The rows' times read differently now: the visible rows are drawn and measured again at once, keeping the bottom or
+	/// the reader's place, and the rest as they come into view, as after a diagram is drawn.
+	func timesChanged() {
+		timesRead += 1
+		cachedDay = nil
+		guard !entries.isEmpty else { return }
+		let anchor = following ? nil : visiblePin
+		findPending()
+		let visible = visibleRows
+		table.reloadData(forRowIndexes: visible, columnIndexes: [0])
+		let changed = measure(visible)
+		if !changed.isEmpty { noteHeights(changed, keeping: anchor) }
+		scheduleIdle()
+	}
 
 	private func paletteChanged() {
 		diagramTheme = WebPalette.variables(for: effectiveAppearance, page: .windowBackgroundColor)
@@ -121,6 +157,7 @@ public final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NS
 		idle?.invalidate()
 		scrollReport?.cancel()
 		if let wheelMonitor { NSEvent.removeMonitor(wheelMonitor) }
+		for observer in clockObservers { NotificationCenter.default.removeObserver(observer) }
 	}
 
 	var width: CGFloat { max(200, contentView.bounds.width) }
@@ -300,7 +337,7 @@ public final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NS
 		let expanded = isExpanded(row)
 		// A collapsed thought shows only its summary, so it isn't parsed until it opens.
 		guard let text = TranscriptRowModel.markdown(of: item.content), expanded || RowHeights.Kind(item) != .thinking else {
-			return TranscriptRowModel(item, document: nil, expanded: expanded)
+			return TranscriptRowModel(item, document: nil, expanded: expanded, now: clock(), calendar: .autoupdatingCurrent)
 		}
 		let document: MarkdownDocument
 		if let cached = documents[item.sequence], cached.text == text {
@@ -309,7 +346,9 @@ public final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NS
 			document = MarkdownDocument(text)
 			documents[item.sequence] = (text, document)
 		}
-		return TranscriptRowModel(item, document: document, expanded: expanded, diagrams: diagrams(of: item, in: document, requesting: true))
+		return TranscriptRowModel(
+			item, document: document, expanded: expanded, diagrams: diagrams(of: item, in: document, requesting: true),
+			now: clock(), calendar: .autoupdatingCurrent)
 	}
 
 	// MARK: Diagrams
@@ -340,13 +379,19 @@ public final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NS
 		return outcomes
 	}
 
-	/// A fingerprint of what the row's diagrams show, so a measured height is exact only for them; 0 for a row without
-	/// any, or not parsed yet (its measurement parses it).
-	private func diagramPrint(_ row: Int) -> Int {
-		guard let item = entries[row].item, let document = documents[item.sequence]?.document,
-			let outcomes = diagrams(of: item, in: document, requesting: false)
-		else { return 0 }
+	/// A fingerprint of what the row draws beyond its item, its diagrams as drawn and how its time reads, so a measured
+	/// height is exact only for them; 0 for a card. It runs for every row on every update, so it formats no time: a time
+	/// reads differently only when its stamp leaves today, or the time zone or locale changes (`timesRead`).
+	private func drawnPrint(_ row: Int) -> Int {
+		guard let item = entries[row].item else { return 0 }
 		var hasher = Hasher()
+		if let createdAt = item.createdAt {
+			hasher.combine(today.contains(createdAt))
+			hasher.combine(timesRead)
+		}
+		guard let document = documents[item.sequence]?.document,
+			let outcomes = diagrams(of: item, in: document, requesting: false)
+		else { return hasher.finalize() }
 		for source in document.diagrams {
 			switch outcomes[source] {
 			case .drawn(let drawn): hasher.combine(ObjectIdentifier(drawn.image))
@@ -379,7 +424,7 @@ public final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NS
 
 	private func findPending() {
 		let width = width
-		pending = IndexSet(entries.indices.filter { !heights.isExact(entries[$0], expanded: isExpanded($0), diagrams: diagramPrint($0), width: width) })
+		pending = IndexSet(entries.indices.filter { !heights.isExact(entries[$0], expanded: isExpanded($0), drawn: drawnPrint($0), width: width) })
 	}
 
 	/// The item rows, as table rows.
@@ -424,7 +469,7 @@ public final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NS
 			measurer.rootView = AnyView(view(row).frame(width: width))
 			measurements += 1
 			let height = max(1, ceil(measurer.fittingSize.height))
-			heights.record(entry, expanded: expanded, diagrams: diagramPrint(row), width: width, height: height)
+			heights.record(entry, expanded: expanded, drawn: drawnPrint(row), width: width, height: height)
 			pending.remove(row)
 			if height != tableHeights[entry.key] { changed.insert(row) }
 		}
@@ -711,8 +756,8 @@ public final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NS
 		adjusting = wasAdjusting
 	}
 
-	/// What the test bridge reads: every item row's sequence, kind (the web transcript's `chat-<kind>` class), text and
-	/// top relative to the visible area's top, the cards, every row's text in order, how many diagrams are drawn, failed,
+	/// What the test bridge reads: every item row's sequence, kind (the web transcript's `chat-<kind>` class), text, top
+	/// relative to the visible area's top, the time it shows and its stamp in Unix ms (null for none), the cards, every row's text in order, how many diagrams are drawn, failed,
 	/// pending or shown as their source while streaming, and the web transcript's other fields. Nothing native runs a row's content, so there are no scripts or unsafe attributes to count.
 	public func observation() -> [String: Any] {
 		let top = contentView.bounds.minY
@@ -727,6 +772,8 @@ public final class TranscriptScrollView: NSScrollView, NSTableViewDataSource, NS
 				rows.append([
 					"sequence": String(item.sequence), "kind": "chat-item chat-\(model.kind.rawValue)",
 					"text": model.plainText, "offset": Int((table.rect(ofRow: row).minY - top).rounded()),
+					"time": model.time?.shown ?? NSNull(),
+					"createdAt": item.createdAt.map { Int(($0.timeIntervalSince1970 * 1000).rounded()) as Any } ?? NSNull(),
 				])
 				texts.append(model.plainText)
 				for source in model.document?.diagrams ?? [] {

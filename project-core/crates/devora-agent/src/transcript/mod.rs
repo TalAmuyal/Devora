@@ -88,6 +88,10 @@ pub struct TranscriptItem {
     pub parent_tool_use_id: Option<String>,
     pub state: ItemState,
     pub content: TranscriptContent,
+    /// When the item was first stored, in Unix milliseconds. The agent space's database stamps it and owns it, so it
+    /// isn't part of the stored payload; an item stored before it was kept has none.
+    #[serde(skip)]
+    pub created_at_ms: Option<u64>,
 }
 
 impl TranscriptItem {

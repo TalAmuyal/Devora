@@ -38,7 +38,7 @@ struct AgentChatTests {
 		model.apply(.started(chat: chat))
 		let item = TranscriptItem(
 			sequence: 1, cliSession: "cli", parentToolUseId: nil, state: .streaming,
-			content: .assistant(text: "Hel", model: nil))
+			content: .assistant(text: "Hel", model: nil), createdAtMs: nil)
 		model.apply(.updated(tab: tab.id, generation: 7, update: .transcript(change: .upsert(item: item))))
 		model.apply(
 			.updated(

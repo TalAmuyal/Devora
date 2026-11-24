@@ -2,18 +2,24 @@ import AppKit
 import SwiftUI
 
 /// What one row draws: its item, the item's Markdown (parsed once per content), whether a thinking or tool row is
-/// expanded, and its Mermaid diagrams (nil while it streams, when they show as their source).
+/// expanded, its Mermaid diagrams (nil while it streams, when they show as their source), and its time as of `now` in
+/// `calendar` (none for an item stored before Devora kept the time).
 public struct TranscriptRowModel: Equatable {
 	let item: TranscriptItem
 	let document: MarkdownDocument?
 	let expanded: Bool
 	let diagrams: [String: DiagramOutcome]?
+	let time: TranscriptTime?
 
-	init(_ item: TranscriptItem, document: MarkdownDocument?, expanded: Bool = false, diagrams: [String: DiagramOutcome]? = nil) {
+	init(
+		_ item: TranscriptItem, document: MarkdownDocument?, expanded: Bool = false,
+		diagrams: [String: DiagramOutcome]? = nil, now: Date, calendar: Calendar
+	) {
 		self.item = item
 		self.document = document
 		self.expanded = expanded
 		self.diagrams = diagrams
+		time = item.createdAt.map { TranscriptTime($0, now: now, calendar: calendar) }
 	}
 
 	public enum Kind: String {
@@ -64,7 +70,7 @@ public struct TranscriptRowModel: Equatable {
 		}
 	}
 
-	/// What VoiceOver says first: the row's kind, and its state where it has one.
+	/// What VoiceOver says first: the row's kind, its time, and its state where it has one ("You, 10:41").
 	var accessibilityLabel: String {
 		var parts: [String]
 		switch item.content {
@@ -74,6 +80,7 @@ public struct TranscriptRowModel: Equatable {
 		case .tool(_, let name, _, let verdict, _): parts = ["Tool \(name)"] + (verdict.map { ["Judgess \($0.kind)"] } ?? [])
 		case .system, .unknown: parts = ["System"]
 		}
+		if let time { parts.append(time.shown) }
 		if collapsible { parts.append(expanded ? "expanded" : "collapsed") }
 		if item.state == .interrupted { parts.append("interrupted") }
 		if item.state == .failed { parts.append("failed") }
@@ -148,10 +155,13 @@ struct TranscriptRow: View {
 		case .user(let text, let error):
 			VStack(alignment: .trailing, spacing: 4) {
 				UserBubbleLayout {
-					markdown(text)
-						.foregroundStyle(.white)
-						.environment(\.transcriptTheme, .onBubble)
-						.padding(.horizontal, 12).padding(.vertical, 8)
+					VStack(alignment: .trailing, spacing: 2) {
+						markdown(text)
+							.environment(\.transcriptTheme, .onBubble)
+						timeLabel.opacity(0.75)
+					}
+					.foregroundStyle(.white)
+					.padding(.horizontal, 12).padding(.vertical, 8)
 						.background(Color(nsColor: .systemBlue), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
 				}
 				if let error { Text(error).font(.callout).foregroundStyle(theme.error) }
@@ -160,13 +170,19 @@ struct TranscriptRow: View {
 		case .assistant(let text, _):
 			VStack(alignment: .leading, spacing: 4) {
 				markdown(text)
-				stateNote
+				HStack(spacing: 8) {
+					timeLabel.foregroundStyle(theme.secondary)
+					stateNote
+				}
 			}
 			.frame(maxWidth: .infinity, alignment: .leading)
 			.padding(.trailing, Self.replyTrailing)
 		default:
 			VStack(alignment: .leading, spacing: 4) {
-				content
+				HStack(alignment: .firstTextBaseline, spacing: 8) {
+					content
+					timeLabel.foregroundStyle(theme.secondary)
+				}
 				stateNote
 			}
 			.padding(.horizontal, 10).padding(.vertical, 5)
@@ -179,6 +195,11 @@ struct TranscriptRow: View {
 	/// A grey bubble's fill: tinted red for an error, which shows whatever the system messages' toggle says.
 	private var bubbleFill: Color {
 		model.item.isError ? Color(nsColor: .systemRed).opacity(scheme == .dark ? 0.22 : 0.12) : Color(nsColor: .quaternarySystemFill)
+	}
+
+	/// The row's time, small, with the full date and time as its tooltip; nothing for a row without one.
+	@ViewBuilder private var timeLabel: some View {
+		if let time = model.time { Text(time.shown).font(.caption2).monospacedDigit().help(time.full) }
 	}
 
 	/// What became of an item that didn't finish, under it.

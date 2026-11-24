@@ -412,6 +412,7 @@ mod chat_tests {
                 text: sequence.to_string(),
                 model: None,
             },
+            created_at_ms: None,
         };
         store
             .dispatch_chat(ChatCommand::Update {
@@ -472,6 +473,7 @@ mod chat_tests {
                 text: String::new(),
                 model: None,
             },
+            created_at_ms: None,
         };
         store
             .dispatch_chat(ChatCommand::Update {

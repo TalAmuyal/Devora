@@ -2,11 +2,12 @@ import AppKit
 import Foundation
 import SwiftUI
 import Testing
+import TestSupport
 
 @testable import TranscriptKit
 
 private func item(_ sequence: UInt64, _ content: TranscriptContent, state: ItemState = .complete) -> TranscriptItem {
-	TranscriptItem(sequence: sequence, cliSession: "s", parentToolUseId: nil, state: state, content: content)
+	TranscriptItem(sequence: sequence, cliSession: "s", parentToolUseId: nil, state: state, content: content, createdAt: nil)
 }
 
 private func reply(_ sequence: UInt64, _ text: String = "A reply.") -> TranscriptItem {
@@ -125,6 +126,31 @@ struct TranscriptScrollViewTests {
 			steps += 1
 			await Task.yield()
 		}
+	}
+
+	@Test func aNewDayShowsYesterdaysRowsWithTheirDateAndMeasuresThemAgain() async throws {
+		let calendar = Calendar.autoupdatingCurrent
+		let evening = calendar.date(bySettingHour: 23, minute: 59, second: 0, of: Date())!
+		var now = evening.addingTimeInterval(30)
+		var prompt = item(1, .user(text: "Late question", error: nil))
+		prompt.createdAt = evening
+		let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 400), styleMask: [.titled], backing: .buffered, defer: false)
+		window.isReleasedWhenClosed = false
+		let view = TranscriptScrollView(anchor: nil)
+		view.clock = { now }
+		view.hasVerticalScroller = false
+		view.frame = window.contentView!.bounds
+		window.contentView!.addSubview(view)
+		view.apply([prompt])
+		let time = { (view.observation()["rows"] as! [[String: Any]])[0]["time"] as? String }
+		let today = try #require(time())
+		let measured = view.measurements
+
+		now = calendar.date(byAdding: .minute, value: 2, to: evening)!
+		NotificationCenter.default.post(name: .NSCalendarDayChanged, object: nil)
+		try await eventually { view.measurements > measured }
+		let yesterday = try #require(time())
+		#expect(yesterday != today && yesterday.contains(today), "\(yesterday) names the day of \(today)")
 	}
 
 	@Test func itOpensAtTheBottomWithTheVisibleRowsMeasured() {
@@ -594,7 +620,7 @@ struct TranscriptWheelTargetTests {
 	@Test func aCodeBlocksOwnScrollViewIsPartOfTheTranscript() async throws {
 		let views = Views()
 		let lines = (0..<30).map { "line \($0): " + String(repeating: "wide ", count: 80) }.joined(separator: "\n")
-		let code = TranscriptItem(sequence: 1, cliSession: "s", parentToolUseId: nil, state: .complete, content: .assistant(text: "```\n\(lines)\n```", model: nil))
+		let code = TranscriptItem(sequence: 1, cliSession: "s", parentToolUseId: nil, state: .complete, content: .assistant(text: "```\n\(lines)\n```", model: nil), createdAt: nil)
 		let window = await shown(TranscriptView(items: [code], hasOlder: false, anchor: nil, showsSystem: false, onScroll: { _ in }, onNeedsOlder: {}, onView: { views.byName["code"] = $0 }))
 		defer { window.close() }
 		let view = try #require(views.byName["code"])
@@ -629,22 +655,22 @@ private func tool(_ sequence: UInt64, verdict: String? = "approve", result: Stri
 
 struct TranscriptRowModelTests {
 	@Test func copyTakesTheSourceAndTheBridgeTheWebTranscriptsText() {
-		let reply = TranscriptRowModel(item(1, .assistant(text: "A **bold** [link](https://example.com)", model: nil)), document: nil)
+		let reply = TranscriptRowModel(item(1, .assistant(text: "A **bold** [link](https://example.com)", model: nil)), document: nil, now: .now, calendar: .current)
 		#expect(reply.source == "A **bold** [link](https://example.com)")
-		let call = TranscriptRowModel(tool(2), document: nil)
+		let call = TranscriptRowModel(tool(2), document: nil, now: .now, calendar: .current)
 		#expect(call.source == "Bash\n\n{\n  \"command\" : \"pwd\",\n  \"description\" : \"cwd\"\n}\n\n/tmp")
 		#expect(call.plainText.hasPrefix("Bash\nJudgess approve\n{"))
-		#expect(TranscriptRowModel(tool(3, verdict: nil, result: nil), document: nil).plainText.hasSuffix("Awaiting result…"))
+		#expect(TranscriptRowModel(tool(3, verdict: nil, result: nil), document: nil, now: .now, calendar: .current).plainText.hasSuffix("Awaiting result…"))
 	}
 
 	@Test func voiceOverHearsTheKindThenWhatIsShown() {
-		let collapsed = TranscriptRowModel(tool(1), document: nil)
+		let collapsed = TranscriptRowModel(tool(1), document: nil, now: .now, calendar: .current)
 		#expect(collapsed.accessibilityLabel == "Tool Bash, Judgess approve, collapsed")
 		#expect(collapsed.accessibilityValue == "")
-		let open = TranscriptRowModel(thought(2), document: nil, expanded: true)
+		let open = TranscriptRowModel(thought(2), document: nil, expanded: true, now: .now, calendar: .current)
 		#expect(open.accessibilityLabel == "Thinking, expanded")
 		#expect(open.accessibilityValue == "Consider **this**.")
-		let stopped = TranscriptRowModel(item(3, .assistant(text: "Half", model: nil), state: .interrupted), document: nil)
+		let stopped = TranscriptRowModel(item(3, .assistant(text: "Half", model: nil), state: .interrupted), document: nil, now: .now, calendar: .current)
 		#expect(stopped.accessibilityLabel == "Agent, interrupted")
 	}
 
@@ -764,17 +790,40 @@ struct TranscriptToggleAtTheBottomTests {
 struct ModelRowTests {
 	@Test func aRepliesHoverTitleNamesTheModelThatWroteIt() {
 		let reply = item(42, .assistant(text: "Done.", model: "claude-sonnet-5-5"))
-		#expect(TranscriptRowModel(reply, document: nil).helpTitle == "#42 · claude-sonnet-5-5")
-		#expect(TranscriptRowModel(item(7, .assistant(text: "Done.", model: nil)), document: nil).helpTitle == "#7")
+		#expect(TranscriptRowModel(reply, document: nil, now: .now, calendar: .current).helpTitle == "#42 · claude-sonnet-5-5")
+		#expect(TranscriptRowModel(item(7, .assistant(text: "Done.", model: nil)), document: nil, now: .now, calendar: .current).helpTitle == "#7")
+	}
+
+	@Test func aRowShowsTheTimeForTodayTheDateForOlderAndTheFullDateAsItsTooltip() throws {
+		var calendar = Calendar(identifier: .gregorian)
+		calendar.locale = Locale(identifier: "en_GB")
+		calendar.timeZone = try #require(TimeZone(identifier: "Europe/Berlin"))
+		let at = { (day: Int, hour: Int, minute: Int) in
+			calendar.date(from: DateComponents(year: 2026, month: 11, day: day, hour: hour, minute: minute))!
+		}
+		let now = at(23, 18, 5)
+		let today = TranscriptTime(at(23, 10, 41), now: now, calendar: calendar)
+		#expect(today.shown == "10:41")
+		#expect(today.full.contains("Monday") && today.full.contains("2026") && today.full.contains("10:41"))
+		let yesterday = TranscriptTime(at(22, 23, 59), now: now, calendar: calendar)
+		#expect(yesterday.shown.contains("22 Nov 2026") && yesterday.shown.contains("23:59"))
+		#expect(yesterday.full.contains("Sunday"))
+
+		var prompt = item(1, .user(text: "Hi", error: nil))
+		prompt.createdAt = at(23, 10, 41)
+		#expect(TranscriptRowModel(prompt, document: nil, now: now, calendar: calendar).accessibilityLabel == "You, 10:41")
+		let old = TranscriptRowModel(item(2, .user(text: "Hi", error: nil)), document: nil, now: now, calendar: calendar)
+		#expect(old.time == nil)
+		#expect(old.accessibilityLabel == "You")
 	}
 
 	@Test func aModelChangeRowIsSpokenInTheWordsItsDetailGives() {
 		let detail = #"{"from":"a","to":"b","fallback":false,"spoken":"Model changed from A to B"}"#
 		let row = TranscriptRowModel(
-			item(3, .system(kind: .modelChanged, text: "Model changed: A → B", detailJson: detail)), document: nil)
+			item(3, .system(kind: .modelChanged, text: "Model changed: A → B", detailJson: detail)), document: nil, now: .now, calendar: .current)
 		#expect(row.accessibilityValue == "Model changed from A to B")
 		let unspoken = TranscriptRowModel(
-			item(4, .system(kind: .modelChanged, text: "Model changed: A → B", detailJson: "{}")), document: nil)
+			item(4, .system(kind: .modelChanged, text: "Model changed: A → B", detailJson: "{}")), document: nil, now: .now, calendar: .current)
 		#expect(unspoken.accessibilityValue == "Model changed: A → B")
 	}
 }

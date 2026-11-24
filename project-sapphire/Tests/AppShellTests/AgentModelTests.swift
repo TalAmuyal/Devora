@@ -57,7 +57,7 @@ struct AgentModelTests {
 	func changeRow(_ detail: String, text: String) -> CoreBindings.TranscriptItem {
 		CoreBindings.TranscriptItem(
 			sequence: 3, cliSession: "cli", parentToolUseId: nil, state: .complete,
-			content: .system(kind: .modelChanged, text: text, detailJson: detail))
+			content: .system(kind: .modelChanged, text: text, detailJson: detail), createdAtMs: nil)
 	}
 
 	/// The adapted row's text, and its spoken form from its detail.

@@ -12,7 +12,8 @@ extension TranscriptKit.TranscriptItem {
 		self.init(
 			sequence: item.sequence, cliSession: item.cliSession, parentToolUseId: item.parentToolUseId,
 			state: TranscriptKit.ItemState(item.state),
-			content: Self.namingModels(TranscriptKit.TranscriptContent(item.content), name: name))
+			content: Self.namingModels(TranscriptKit.TranscriptContent(item.content), name: name),
+			createdAt: item.createdAtMs.map { Date(timeIntervalSince1970: Double($0) / 1000) })
 	}
 
 	/// A model-change row in the models' names, with its spoken form ("from … to …") in its detail as `spoken`. One the CLI

@@ -813,7 +813,7 @@ async fn a_real_v1_shape_lists_without_migration_then_upgrades_and_reopens_with_
         .is_empty());
     assert_eq!(version(), 1);
     let space = Space::open(&fixture.profile, "Legacy").unwrap();
-    assert_eq!(version(), 5);
+    assert_eq!(version(), 6);
     assert_eq!(space.instructions(), "Frozen legacy instructions");
     assert_eq!(space.identity().role, "Legacy role");
     assert_eq!(space.saved_session().session_id, previous_id);
@@ -851,7 +851,7 @@ async fn a_real_v1_shape_lists_without_migration_then_upgrades_and_reopens_with_
     }
     running.pause().await.unwrap();
     let reopened = Space::open(&fixture.profile, "Legacy").unwrap();
-    assert_eq!(version(), 5);
+    assert_eq!(version(), 6);
     assert!(reopened.history().unwrap().iter().any(|item| matches!(&item.content, devora_agent::transcript::TranscriptContent::User { text, .. } if text == "Legacy prompt")));
     assert_eq!(reopened.instructions(), "Frozen legacy instructions");
 }
@@ -923,6 +923,7 @@ async fn large_history_reopens_with_only_the_tail_and_pages_back_in_order() {
                 text: format!("item {sequence}"),
                 model: None,
             },
+            created_at_ms: None,
         };
         tx.execute(
             "INSERT INTO events(sequence,cli_session,kind,payload) VALUES(?1,?2,'assistant',?3)",
@@ -980,6 +981,66 @@ async fn large_history_reopens_with_only_the_tail_and_pages_back_in_order() {
             break;
         }
     }
+    running.pause().await.unwrap();
+}
+
+// The time a UI shows on a row is the one its item was first stored with: the same on every update of the item, live
+// and after a relaunch.
+#[tokio::test]
+async fn each_item_reaches_the_ui_with_the_time_it_was_first_stored() {
+    let fixture = Fixture::new();
+    let context = fixture.context();
+    let space = fixture.create(fixture.form("Delta")).unwrap();
+    let log = Arc::new(Log::open(&fixture.root.path().join("log")).unwrap());
+    let mut running = space
+        .start(&context, log.clone(), &fixture.run)
+        .await
+        .unwrap();
+    running.handle().send_turn("a turn".into()).await.unwrap();
+    let mut live: std::collections::BTreeMap<u64, Vec<Option<u64>>> = Default::default();
+    tokio::time::timeout(Duration::from_secs(10), async {
+        while let Some(update) = running.next_update().await {
+            match update {
+                SpaceEvent::Transcript(devora_agent::transcript::TranscriptChange::Upsert {
+                    item,
+                }) => live
+                    .entry(item.sequence)
+                    .or_default()
+                    .push(item.created_at_ms),
+                SpaceEvent::TurnEnded => break,
+                _ => {}
+            }
+        }
+    })
+    .await
+    .expect("the turn ends");
+    running.pause().await.unwrap();
+    assert!(live.len() > 1, "the turn's prompt and its reply at least");
+    let stored = Space::read_history(&fixture.profile, "Delta", 0, 500).unwrap();
+    for item in &stored {
+        assert!(
+            item.created_at_ms.is_some(),
+            "item {} has a time",
+            item.sequence
+        );
+        // The pause's exit note is stored after the turn, which is all this reads live.
+        let times = live.get(&item.sequence).map_or(&[][..], Vec::as_slice);
+        assert!(
+            times.iter().all(|time| *time == item.created_at_ms),
+            "item {} reached the UI with {times:?}, stored with {:?}",
+            item.sequence,
+            item.created_at_ms
+        );
+    }
+    let mut running = Space::open(&fixture.profile, "Delta")
+        .unwrap()
+        .start(&context, log, &fixture.run)
+        .await
+        .unwrap();
+    let Some(SpaceEvent::Restored(restored)) = running.next_update().await else {
+        panic!("expected the restored tail")
+    };
+    assert_eq!(restored, stored);
     running.pause().await.unwrap();
 }
 
@@ -1664,7 +1725,7 @@ async fn a_space_from_before_restart_notices_is_owed_one_on_its_first_launch_aft
     let connection = rusqlite::Connection::open(&database).unwrap();
     connection
         .execute_batch(
-            "ALTER TABLE space DROP COLUMN compact_threshold; ALTER TABLE space DROP COLUMN cli_process; ALTER TABLE space DROP COLUMN launched_run; ALTER TABLE space DROP COLUMN restart_notice; PRAGMA user_version = 2;",
+            "ALTER TABLE events DROP COLUMN created_at; ALTER TABLE space DROP COLUMN compact_threshold; ALTER TABLE space DROP COLUMN cli_process; ALTER TABLE space DROP COLUMN launched_run; ALTER TABLE space DROP COLUMN restart_notice; PRAGMA user_version = 2;",
         )
         .unwrap();
     assert_eq!(
@@ -1677,7 +1738,7 @@ async fn a_space_from_before_restart_notices_is_owed_one_on_its_first_launch_aft
         connection
             .pragma_query_value::<u32, _>(None, "user_version", |row| row.get(0))
             .unwrap(),
-        5
+        6
     );
 }
 

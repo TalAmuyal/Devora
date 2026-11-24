@@ -234,7 +234,7 @@ private let webRenderer: URL? = {
 }()
 
 private func row(_ sequence: UInt64, _ text: String, state: ItemState = .complete) -> TranscriptItem {
-	TranscriptItem(sequence: sequence, cliSession: "s", parentToolUseId: nil, state: state, content: .assistant(text: text, model: nil))
+	TranscriptItem(sequence: sequence, cliSession: "s", parentToolUseId: nil, state: state, content: .assistant(text: text, model: nil), createdAt: nil)
 }
 
 private let diagramReply = "A diagram:\n\n```mermaid\nflowchart LR\n  A --> B\n```"
