@@ -86,6 +86,32 @@ def start_notification_turn():
         emit(recorded("system"))
         emit(recorded("stream_event"))
 
+def own_turns(directory):
+    """Turns the CLI starts itself, as when a background task reports, on the test's cues in `directory`: `start` opens
+    one, then `end` ends it with a result naming no user message, or `crash` kills the CLI during it."""
+    global notification_turn
+    def cue(*names):
+        while True:
+            for name in names:
+                if (directory / name).exists():
+                    (directory / name).unlink()
+                    return name
+            time.sleep(0.01)
+    while True:
+        cue("start")
+        start_notification_turn()
+        if cue("end", "crash") == "crash":
+            os._exit(70)
+        with output:
+            # A prompt sent during the turn was folded into it and already answered it.
+            if notification_turn:
+                notification_turn = False
+                report({"kind":"own_turn_ended"})
+                unrequested_result()
+
+if os.environ.get("DEVORA_FAKE_OWN_TURNS"):
+    threading.Thread(target=own_turns, args=(pathlib.Path(os.environ["DEVORA_FAKE_OWN_TURNS"]),), daemon=True).start()
+
 def question():
     emit({"type":"control_request","request_id":"question","request":{
         "subtype":"can_use_tool","tool_name":"Bash","input":{"command":"custom-tool"},
@@ -140,7 +166,6 @@ for line in sys.stdin:
             response = recorded("control_response")
             response["response"]["request_id"] = message["request_id"]
             emit(response)
-            emit(recorded("system"))
             if os.environ.get("DEVORA_FAKE_CRASH_UNUSED"):
                 marker = pathlib.Path(os.environ["DEVORA_FAKE_CRASH_UNUSED"])
                 if not marker.exists():
@@ -165,6 +190,11 @@ for line in sys.stdin:
         result()
     elif kind == "user":
         report({"kind":"user","message":message["message"],"uuid":message.get("uuid")})
+        # As the CLI does, a prompt sent during a turn it started itself joins that turn, whose one result answers the
+        # prompt, and opens no turn of its own (probed on the pinned CLI).
+        with output:
+            folded = notification_turn
+            notification_turn = False
         sent_turn = message.get("uuid")
         text = message["message"]["content"]
         # Dies once on Devora's restart notice, before or after saving it, as a crash mid-delivery would.
@@ -176,6 +206,9 @@ for line in sys.stdin:
         if crash:
             pathlib.Path(marker).touch()
             os._exit(70)
+        # As the CLI does, `init` opens each turn, and nothing else sends one (the recordings).
+        if not folded:
+            emit(recorded("system"))
         if text == "permission":
             question()
         elif text == "permission-then-reply":

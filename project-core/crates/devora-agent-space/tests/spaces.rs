@@ -2443,3 +2443,228 @@ async fn a_chosen_model_is_stored_at_once_and_told_to_the_cli_only_between_turns
     let stored = Space::open(&fixture.profile, "Foxtrot").unwrap();
     assert_eq!(stored.form().model.as_ref().unwrap().model, "refused");
 }
+
+/// A space whose fake CLI starts turns of its own (as when a background task reports) on cues the test writes.
+struct OwnTurns {
+    fixture: Fixture,
+    cues: PathBuf,
+    log: Arc<Log>,
+}
+
+impl OwnTurns {
+    fn new() -> Self {
+        let fixture = Fixture::new();
+        let cues = fixture.root.path().join("own-turns");
+        std::fs::create_dir_all(&cues).unwrap();
+        let log = Arc::new(Log::open(&fixture.root.path().join("log")).unwrap());
+        fixture.create(fixture.form("Delta")).unwrap();
+        Self { fixture, cues, log }
+    }
+
+    async fn start(&self) -> RunningSpace {
+        let mut context = self.fixture.context();
+        context.environment.insert(
+            "DEVORA_FAKE_OWN_TURNS".into(),
+            self.cues.display().to_string(),
+        );
+        Space::open(&self.fixture.profile, "Delta")
+            .unwrap()
+            .start(&context, self.log.clone(), &self.fixture.run)
+            .await
+            .unwrap()
+    }
+
+    fn cue(&self, name: &str) {
+        std::fs::write(self.cues.join(name), "").unwrap();
+    }
+
+    /// Starts a turn of the CLI's own, and returns once the actor has seen it start.
+    async fn begin(&self, running: &mut RunningSpace) {
+        self.cue("start");
+        until(running, |update| {
+            matches!(
+                update,
+                SpaceEvent::Session(SessionEvent::Message(Message::Known(KnownMessage::System(
+                    devora_agent::protocol::System::Init { .. }
+                ))))
+            )
+        })
+        .await;
+    }
+
+    /// The fake's report, in order: what reached the CLI, and its own turns ending.
+    fn reported(&self) -> Vec<String> {
+        std::fs::read_to_string(self.fixture.root.path().join("report.jsonl"))
+            .unwrap()
+            .lines()
+            .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
+            .filter_map(|entry| match entry["kind"].as_str().unwrap() {
+                "own_turn_ended" | "eof" | "set_model" | "interrupt" => {
+                    Some(entry["kind"].as_str().unwrap().to_owned())
+                }
+                "user" => Some(format!(
+                    "user {}",
+                    entry["message"]["content"].as_str().unwrap_or("")
+                )),
+                _ => None,
+            })
+            .collect()
+    }
+}
+
+impl OwnTurns {
+    /// The report once it has an entry starting with `prefix`: Devora publishes what it sends once it's committed,
+    /// before the CLI has read it.
+    async fn reported_with(&self, prefix: &str) -> Vec<String> {
+        tokio::time::timeout(Duration::from_secs(10), async {
+            loop {
+                let reported = self.reported();
+                if reported.iter().any(|entry| entry.starts_with(prefix)) {
+                    return reported;
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .unwrap_or_else(|_| panic!("no {prefix} in {:?}", self.reported()))
+    }
+}
+
+/// Waits for an update `done` accepts.
+async fn until(running: &mut RunningSpace, mut done: impl FnMut(&SpaceEvent) -> bool) {
+    tokio::time::timeout(Duration::from_secs(10), async {
+        while let Some(update) = running.next_update().await {
+            if done(&update) {
+                return;
+            }
+        }
+        panic!("the space ended");
+    })
+    .await
+    .expect("the update came")
+}
+
+fn position(reported: &[String], prefix: &str) -> usize {
+    reported
+        .iter()
+        .position(|entry| entry.starts_with(prefix))
+        .unwrap_or_else(|| panic!("no {prefix} in {reported:?}"))
+}
+
+// A pause during a turn the CLI started itself waits for that turn's end, as it does for a turn Devora sent: the
+// CLI's input closes only after it.
+#[tokio::test]
+async fn a_pause_waits_for_a_turn_the_cli_started_itself() {
+    let space = OwnTurns::new();
+    let mut running = space.start().await;
+    space.begin(&mut running).await;
+    let pausing = tokio::spawn(running.handle().pause_after_turn());
+    // Commands are handled in order: once this one is answered, the actor has seen the pause.
+    running.handle().set_compact_threshold(None).await.unwrap();
+    assert!(!pausing.is_finished());
+    space.cue("end");
+    tokio::time::timeout(Duration::from_secs(10), pausing)
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    let reported = space.reported();
+    assert!(
+        position(&reported, "own_turn_ended") < position(&reported, "eof"),
+        "{reported:?}"
+    );
+}
+
+// A model chosen during a turn the CLI started itself is told to the CLI once that turn ends, never mid-turn.
+#[tokio::test]
+async fn a_model_chosen_during_a_turn_the_cli_started_itself_is_told_after_it() {
+    let space = OwnTurns::new();
+    let mut running = space.start().await;
+    space.begin(&mut running).await;
+    running.handle().set_model("sonnet".into()).await.unwrap();
+    assert!(!space.reported().iter().any(|entry| entry == "set_model"));
+    space.cue("end");
+    let reported = space.reported_with("set_model").await;
+    assert!(
+        position(&reported, "own_turn_ended") < position(&reported, "set_model"),
+        "{reported:?}"
+    );
+    running.pause().await.unwrap();
+}
+
+// A compaction asked for during a turn the CLI started itself starts at that turn's end, as during Devora's own.
+#[tokio::test]
+async fn a_compaction_asked_for_during_a_turn_the_cli_started_itself_starts_at_its_end() {
+    let space = OwnTurns::new();
+    let mut running = space.start().await;
+    space.begin(&mut running).await;
+    running.handle().compact_now().await.unwrap();
+    assert!(!space
+        .reported()
+        .iter()
+        .any(|entry| entry.starts_with("user ")));
+    space.cue("end");
+    let reported = space.reported_with("user ").await;
+    assert!(
+        position(&reported, "own_turn_ended") < position(&reported, "user "),
+        "{reported:?}"
+    );
+    running.pause().await.unwrap();
+}
+
+// A prompt sent during a turn the CLI started itself joins that turn, whose one result answers it (as the pinned CLI
+// does): the turn is then Devora's, it ends with that result, and the agent pauses after it.
+#[tokio::test]
+async fn a_prompt_sent_during_a_turn_the_cli_started_itself_joins_it() {
+    let space = OwnTurns::new();
+    let mut running = space.start().await;
+    space.begin(&mut running).await;
+    running.handle().send_turn("drift".into()).await.unwrap();
+    until(&mut running, |update| {
+        matches!(update, SpaceEvent::TurnEnded)
+    })
+    .await;
+    tokio::time::timeout(Duration::from_secs(10), running.handle().pause_after_turn())
+        .await
+        .expect("no turn is left running")
+        .unwrap();
+}
+
+// However a turn the CLI started itself ends (its result, Stop's interrupted result, or the CLI crashing during it),
+// it ends: nothing is left waiting for it, and the agent pauses at once afterwards.
+#[tokio::test]
+async fn a_turn_the_cli_started_itself_never_outlives_its_end() {
+    for ending in ["result", "stop", "crash"] {
+        let space = OwnTurns::new();
+        let mut running = space.start().await;
+        space.begin(&mut running).await;
+        match ending {
+            "result" => space.cue("end"),
+            "stop" => {
+                running.handle().interrupt().await.unwrap();
+            }
+            _ => space.cue("crash"),
+        }
+        until(&mut running, |update| match ending {
+            "crash" => matches!(update, SpaceEvent::Session(SessionEvent::Exited { .. })),
+            _ => matches!(
+                update,
+                SpaceEvent::Session(SessionEvent::Message(Message::Known(KnownMessage::Result(
+                    _
+                ))))
+            ),
+        })
+        .await;
+        if ending == "crash" {
+            // The worker restarts the CLI after a crash; the agent is idle again once it's back.
+            until(&mut running, |update| {
+                matches!(update, SpaceEvent::Session(SessionEvent::Ready { .. }))
+            })
+            .await;
+        }
+        tokio::time::timeout(Duration::from_secs(10), running.handle().pause_after_turn())
+            .await
+            .unwrap_or_else(|_| panic!("{ending}: the turn stuck"))
+            .unwrap();
+    }
+}

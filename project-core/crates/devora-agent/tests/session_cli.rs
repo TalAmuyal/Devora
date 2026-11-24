@@ -1738,3 +1738,102 @@ fn walkdir(root: &std::path::Path) -> Vec<PathBuf> {
     }
     files
 }
+
+// A turn the CLI starts itself (a background task reporting) opens with `init` and ends with a result naming no turn
+// of ours. A turn sent during it joins it: no `init` of its own, and one result, answering it. A background task
+// finishing during a turn we sent is folded into that turn: no `init`, and its one result answers ours. The space
+// actor's `ActiveTurn` rests on all three.
+#[tokio::test]
+#[ignore]
+async fn pinned_cli_brackets_its_own_turns_and_folds_overlapping_ones() {
+    use devora_agent::protocol::System;
+    check_pin().await;
+    #[derive(Debug, PartialEq)]
+    enum Seen {
+        Init,
+        Result(Vec<String>),
+    }
+    async fn next(session: &mut Session) -> Seen {
+        tokio::time::timeout(Duration::from_secs(45), async {
+            while let Some(event) = session.next_event().await {
+                match event {
+                    SessionEvent::Message(Message::Known(KnownMessage::System(System::Init {
+                        ..
+                    }))) => return Seen::Init,
+                    SessionEvent::Message(Message::Known(KnownMessage::Result(result))) => {
+                        let answers = result
+                            .extra
+                            .get("user_message_uuids")
+                            .and_then(Value::as_array)
+                            .map(|ids| {
+                                ids.iter()
+                                    .filter_map(|id| id.as_str().map(str::to_owned))
+                                    .collect()
+                            })
+                            .unwrap_or_default();
+                        return Seen::Result(answers);
+                    }
+                    SessionEvent::Failed(error) => panic!("{error}"),
+                    _ => {}
+                }
+            }
+            panic!("CLI ended")
+        })
+        .await
+        .expect("offline CLI deadline")
+    }
+    for overlap in [
+        "a turn sent during the CLI's own",
+        "a task finishing during ours",
+    ] {
+        let fixture = Fixture::new();
+        let mut backend = Backend::start(fixture.root.path()).await;
+        let reacted = fixture.root.path().join("reacted");
+        // The notification turn's reply is held long enough to send a turn into it.
+        backend
+            .command(json!({"action":"configure","toolCommand":"sleep 2","toolBackground":true,
+                "notificationTool": {"command": format!("touch {}", reacted.display()), "delayMs": 4000}}))
+            .await;
+        let mut options =
+            fixture.options(backend.port, Instructions::Append("Overlap probe".into()));
+        options.permission_mode = "default".into();
+        options.settings["permissions"] = json!({"allow":["Bash"]});
+        let mut session = Session::start(options, fixture.log()).await.unwrap();
+        let handle = session.handle();
+        let first = turn_id();
+        handle
+            .send_turn(first.clone(), "Start the shell.".into())
+            .await
+            .unwrap();
+        assert_eq!(next(&mut session).await, Seen::Init);
+        assert_eq!(next(&mut session).await, Seen::Result(vec![first]));
+        let second = turn_id();
+        if overlap == "a turn sent during the CLI's own" {
+            // The shell finishes, and the CLI opens a turn of its own.
+            assert_eq!(next(&mut session).await, Seen::Init, "{overlap}");
+            handle
+                .send_turn(second.clone(), "A prompt during it.".into())
+                .await
+                .unwrap();
+        } else {
+            // A turn of ours running a foreground tool for longer than the shell has left.
+            backend
+                .command(json!({"action":"configure","toolCommand":"sleep 5","toolBackground":false,
+                    "notificationTool": {"command": format!("touch {}", reacted.display()), "delayMs": 200}}))
+                .await;
+            handle
+                .send_turn(second.clone(), "Run the long tool.".into())
+                .await
+                .unwrap();
+            assert_eq!(next(&mut session).await, Seen::Init, "{overlap}");
+        }
+        assert_eq!(
+            next(&mut session).await,
+            Seen::Result(vec![second]),
+            "{overlap}: one result, answering ours"
+        );
+        let _ = handle.pause().await;
+        while session.next_event().await.is_some() {}
+        backend.stop().await;
+    }
+}

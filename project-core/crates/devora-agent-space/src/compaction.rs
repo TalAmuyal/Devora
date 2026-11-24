@@ -216,6 +216,25 @@ impl Compaction {
         }
     }
 
+    /// The end of a turn the agent's CLI started itself (`ActiveTurn::Agents`): a compaction the user asked for during
+    /// it starts now, and an interrupted or failed one drops the request, as at the end of a turn Devora sent. The
+    /// threshold isn't checked here yet, so such turns alone never start a compaction (`compact` in `running.rs`).
+    pub fn agents_turn_ended(&mut self, result: &TurnResult) -> Option<Step> {
+        if let Some(window) = context_window(result) {
+            self.context.window_tokens = window;
+        }
+        if result.is_error {
+            self.requested = false;
+            return None;
+        }
+        if self.stage == Stage::Idle && self.requested {
+            self.requested = false;
+            self.stage = Stage::SavingMemory;
+            return Some(Step::SaveMemory(Trigger::Requested));
+        }
+        None
+    }
+
     /// A compaction boundary: Devora's own `/compact`, or one the CLI made itself,
     /// after which the agent refreshes its memory once the current turn ends.
     /// `post_tokens` is how full the context is now.
