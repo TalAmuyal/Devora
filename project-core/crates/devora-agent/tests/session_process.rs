@@ -364,13 +364,14 @@ async fn pause_interrupts_before_eof_and_reopening_resumes_the_same_id() {
 }
 
 #[tokio::test]
-async fn crash_recovery_preserves_id_model_and_mode_and_bounds_crash_loops() {
+async fn crash_recovery_preserves_id_model_effort_and_mode_and_bounds_crash_loops() {
     let fixture = Fixture::new();
     let mut session = Session::start(fixture.options(), fixture.log())
         .await
         .unwrap();
     let handle = session.handle();
     handle.set_model("sonnet".into()).await.unwrap();
+    handle.set_effort(Some("max".into())).await.unwrap();
     handle.set_permission_mode("plan".into()).await.unwrap();
     let id = session.session_id().to_owned();
     handle
@@ -393,6 +394,7 @@ async fn crash_recovery_preserves_id_model_and_mode_and_bounds_crash_loops() {
     for (key, value) in [
         ("--resume", id.as_str()),
         ("--model", "sonnet"),
+        ("--effort", "max"),
         ("--permission-mode", "plan"),
     ] {
         let index = args.iter().position(|arg| arg == key).unwrap();

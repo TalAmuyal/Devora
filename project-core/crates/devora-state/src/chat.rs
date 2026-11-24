@@ -59,6 +59,20 @@ pub struct ChatModel {
     pub change_not_taken: Option<String>,
 }
 
+/// The effort the agent runs at, for its effort widget.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ChatEffort {
+    /// The level the agent is set to; none is Claude Code's default.
+    pub set_to: Option<String>,
+    /// The levels its current model takes, lowest first, as Claude Code lists them; empty when it takes none, or when
+    /// the list isn't known.
+    pub levels: Vec<String>,
+    /// Set during a turn: the CLI takes it when the turn ends.
+    pub pending: bool,
+    /// Why the running session didn't take the level the user set (it stays stored for the next launch).
+    pub not_taken: Option<String>,
+}
+
 /// What a running turn is doing now, for the line beside the chat's spinner, and since when: the step's start, in
 /// milliseconds since the Unix epoch on the core's clock, kept while the step stays the same and taken again when it
 /// changes. It lives only in memory: a turn doesn't survive a relaunch.
@@ -151,6 +165,7 @@ pub struct Chat {
     pub usage_json: Option<String>,
     pub context: Option<ChatContext>,
     pub model: Option<ChatModel>,
+    pub effort: Option<ChatEffort>,
     pub step: Option<ChatStep>,
 }
 
@@ -227,6 +242,9 @@ pub enum ChatUpdate {
     },
     Context {
         context: ChatContext,
+    },
+    Effort {
+        effort: ChatEffort,
     },
     Model {
         model: ChatModel,
@@ -313,6 +331,7 @@ pub(crate) fn apply(
                 usage_json: None,
                 context: None,
                 model: None,
+                effort: None,
                 step: None,
             };
             chats.retain(|c| c.tab != tab);
@@ -407,6 +426,7 @@ pub(crate) fn apply(
                 ChatUpdate::Usage { payload_json } => chat.usage_json = Some(payload_json.clone()),
                 ChatUpdate::Context { context } => chat.context = Some(*context),
                 ChatUpdate::Model { model } => chat.model = Some(model.clone()),
+                ChatUpdate::Effort { effort } => chat.effort = Some(effort.clone()),
                 ChatUpdate::Step { step } => chat.step = step.clone(),
             }
             let mut events = vec![ChatEvent::Updated {

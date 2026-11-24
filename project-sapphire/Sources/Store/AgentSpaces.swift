@@ -273,7 +273,7 @@ extension Store {
 								chat.pause = false
 								chat.turn = false
 								chat.questions = []
-							case .restore, .transcript, .usage, .context, .model, .step, .globalHold, .keepPaused: continue
+							case .restore, .transcript, .usage, .context, .model, .effort, .step, .globalHold, .keepPaused: continue
 							}
 							chats[tab] = chat
 						}

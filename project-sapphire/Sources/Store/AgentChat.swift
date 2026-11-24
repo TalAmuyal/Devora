@@ -131,6 +131,7 @@ public final class AgentChat {
 			case .usage(let json): value.usageJson = json
 			case .context(let context): value.context = context
 			case .model(let model): value.model = model
+			case .effort(let effort): value.effort = effort
 			case .step(let step): value.step = step
 			}
 			chat = value

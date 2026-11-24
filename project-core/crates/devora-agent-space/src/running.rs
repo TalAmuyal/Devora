@@ -26,6 +26,8 @@ pub enum SpaceEvent {
     Model(ActiveModel),
     /// The model the user set the agent to in this run, whenever that or its telling changes.
     ChosenModel(ChosenModel),
+    /// The effort the user set the agent to in this run, whenever that or its telling changes.
+    ChosenEffort(ChosenEffort),
     /// A turn the space sent itself: compaction's, or the restart notice.
     TurnStarted,
     /// The CLI answered the running turn, or exited during it. Results the CLI
@@ -54,6 +56,19 @@ fn tell_model(
     });
 }
 
+/// Tells the CLI the effort the user set, off the pump, reporting the outcome back to it.
+fn tell_effort(
+    runtime: SessionHandle,
+    effort: Option<String>,
+    told: mpsc::UnboundedSender<(Option<String>, Result<Value, String>)>,
+) {
+    let telling = runtime.set_effort(effort.clone());
+    tokio::spawn(async move {
+        let outcome = telling.await;
+        let _ = told.send((effort, outcome));
+    });
+}
+
 /// A reply in the agent's own conversation from a model (not one Claude Code made up), which a chosen model awaits.
 fn is_reply(event: &SessionEvent) -> bool {
     match event {
@@ -78,6 +93,17 @@ fn is_reply(event: &SessionEvent) -> bool {
 pub struct ChosenModel {
     pub set_to: Option<String>,
     pub awaiting_reply: bool,
+    pub not_taken: Option<String>,
+}
+
+/// An effort the user set the agent to while it runs (`SpaceHandle::set_effort`; none is Claude Code's default): whether
+/// the CLI hasn't been told yet (a turn is running), and why it refused it, if it did. The CLI answers an effort it can't
+/// apply with a success (it runs the nearest level the model takes), so a refusal is an error answer, such as from a CLI
+/// that doesn't know the request. A relaunch starts with none: the stored effort is then what the agent runs.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ChosenEffort {
+    pub set_to: Option<String>,
+    pub pending: bool,
     pub not_taken: Option<String>,
 }
 
@@ -121,6 +147,8 @@ enum Action {
     CompactNow,
     /// The model the agent runs from now on: stored, then told to the CLI between turns.
     SetModel(String),
+    /// The effort the agent runs from now on (none is Claude Code's default): stored, then told to the CLI between turns.
+    SetEffort(Option<String>),
 }
 struct Command {
     action: Action,
@@ -183,6 +211,11 @@ impl SpaceHandle {
     pub async fn set_model(&self, model: String) -> Result<(), String> {
         self.call(Action::SetModel(model)).await.map(|_| ())
     }
+    /// Sets the effort the agent runs (none is Claude Code's default), as `set_model` sets its model: stored at once, and
+    /// told to its CLI between turns, a later change replacing one not yet told.
+    pub async fn set_effort(&self, effort: Option<String>) -> Result<(), String> {
+        self.call(Action::SetEffort(effort)).await.map(|_| ())
+    }
     pub async fn set_permission_mode(&self, mode: String) -> Result<Value, String> {
         self.runtime.set_permission_mode(mode).await
     }
@@ -244,6 +277,7 @@ pub struct RunningSpace {
     worker: Option<JoinHandle<Result<Option<StopInfo>, String>>>,
     settings: Value,
     model: String,
+    effort: Option<String>,
 }
 impl RunningSpace {
     pub fn handle(&self) -> SpaceHandle {
@@ -256,6 +290,10 @@ impl RunningSpace {
     /// The model the CLI was launched with (`SessionOptions::model`): what the agent is set to, an alias or a full ID.
     pub fn launch_model(&self) -> &str {
         &self.model
+    }
+    /// The effort the CLI was launched with (`SessionOptions::effort`); none leaves it to Claude Code.
+    pub fn launch_effort(&self) -> Option<&str> {
+        self.effort.as_deref()
     }
     pub async fn next_update(&mut self) -> Option<SpaceEvent> {
         self.events.recv().await
@@ -295,6 +333,7 @@ pub(crate) async fn start(
     let run = run.clone();
     let settings = options.settings.clone();
     let model = options.model.clone();
+    let effort = options.effort.clone();
     let launch = options.clone();
     let launch_log = log.clone();
     let (mut space, mut transcript, history, notice) = tokio::task::spawn_blocking(move || {
@@ -387,6 +426,7 @@ pub(crate) async fn start(
         runtime: session.handle(),
         commands,
     };
+    let launch_model = model.clone();
     let worker = tokio::spawn(async move {
         let result = pump(
             &mut space,
@@ -396,6 +436,7 @@ pub(crate) async fn start(
             &events,
             received_commands,
             globally_paused,
+            &launch_model,
         )
         .await;
         if let Err(error) = &result {
@@ -427,6 +468,7 @@ pub(crate) async fn start(
         worker: Some(worker),
         settings,
         model,
+        effort,
     })
 }
 
@@ -522,7 +564,8 @@ fn begin(
         | Action::ExpectStop
         | Action::SetCompactThreshold(_)
         | Action::CompactNow
-        | Action::SetModel(_) => return Err("the pump handles this action itself".into()),
+        | Action::SetModel(_)
+        | Action::SetEffort(_) => return Err("the pump handles this action itself".into()),
         Action::Permission(id, answer) => {
             let (text, decision) = match answer {
                 PermissionAnswer::Allow => ("Permission allow requested", json!({"kind":"allow"})),
@@ -584,7 +627,8 @@ fn begin(
             | Action::ExpectStop
             | Action::SetCompactThreshold(_)
             | Action::CompactNow
-            | Action::SetModel(_) => unreachable!("handled by the pump"),
+            | Action::SetModel(_)
+            | Action::SetEffort(_) => unreachable!("handled by the pump"),
         };
         let _ = completions.send(Completion {
             sequence,
@@ -683,6 +727,7 @@ impl Preparing {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn pump(
     space: &mut Space,
     session: &mut Session,
@@ -691,6 +736,7 @@ async fn pump(
     events: &mpsc::UnboundedSender<SpaceEvent>,
     mut commands: mpsc::UnboundedReceiver<Command>,
     globally_paused: GlobalPauseCheck,
+    launch_model: &str,
 ) -> Result<Option<StopInfo>, String> {
     let (completed, mut completions) = mpsc::unbounded_channel::<Completion>();
     let mut pending = 0usize;
@@ -700,6 +746,11 @@ async fn pump(
     let mut chosen = ChosenModel::default();
     let mut untold: Option<String> = None;
     let (told, mut tellings) = mpsc::unbounded_channel::<(String, Result<Value, String>)>();
+    // Likewise an effort the user set this run (none is Claude Code's default), and one waiting to be told.
+    let mut chosen_effort: Option<ChosenEffort> = None;
+    let mut untold_effort: Option<Option<String>> = None;
+    let (told_effort, mut effort_tellings) =
+        mpsc::unbounded_channel::<(Option<String>, Result<Value, String>)>();
     let mut stopping = false;
     let mut pause_after_turn: Option<oneshot::Sender<Result<Value, String>>> = None;
     // The threshold, before any usage arrives.
@@ -805,6 +856,14 @@ async fn pump(
                     let _ = events.send(SpaceEvent::ChosenModel(chosen.clone()));
                 }
             }
+            Some((effort, outcome)) = effort_tellings.recv() => {
+                // Only the latest choice's telling counts.
+                if let Some(chosen) = chosen_effort.as_mut().filter(|chosen| chosen.set_to == effort) {
+                    chosen.pending = false;
+                    chosen.not_taken = outcome.err();
+                    let _ = events.send(SpaceEvent::ChosenEffort(chosen.clone()));
+                }
+            }
             completion = completions.recv(), if pending > 0 => {
                 if let Some(completion) = completion {
                     if completion.failed_turn && ActiveTurn::is_ours(&turn_running) {
@@ -862,6 +921,9 @@ async fn pump(
                 if let Some(model) = untold.take_if(|_| finished.is_some()) {
                     tell_model(session.handle(), model, told.clone());
                 }
+                if let Some(effort) = untold_effort.take_if(|_| finished.is_some()) {
+                    tell_effort(session.handle(), effort, told_effort.clone());
+                }
                 if finished.is_some() && (pause_after_turn.is_some() || globally_paused()) {
                     // Every pause reason uses the same boundary before compaction.
                     step = None;
@@ -914,6 +976,22 @@ async fn pump(
                             } else {
                                 untold = None;
                                 tell_model(session.handle(), model, told.clone());
+                            }
+                            Value::Null
+                        });
+                        let _ = reply.send(outcome);
+                    }
+                    Some(Command { action: Action::SetEffort(effort), reply }) => {
+                        let running_model = chosen.set_to.as_deref().unwrap_or(launch_model).to_owned();
+                        let outcome = space.set_effort(effort.as_deref(), &running_model).map(|()| {
+                            let pending = turn_running.is_some();
+                            chosen_effort = Some(ChosenEffort { set_to: effort.clone(), pending, not_taken: None });
+                            let _ = events.send(SpaceEvent::ChosenEffort(chosen_effort.clone().expect("just set")));
+                            if pending {
+                                untold_effort = Some(effort);
+                            } else {
+                                untold_effort = None;
+                                tell_effort(session.handle(), effort, told_effort.clone());
                             }
                             Value::Null
                         });

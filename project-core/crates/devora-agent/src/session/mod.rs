@@ -204,6 +204,24 @@ impl SessionHandle {
         .await
     }
 
+    /// Change the effort of subsequent turns, or with none go back to the model's default. Queued at once, as `set_model`
+    /// is. A level the model doesn't take runs at the nearest one below it, and a model that takes none gets none: the CLI
+    /// answers success either way (the pinned-CLI suite).
+    pub fn set_effort(
+        &self,
+        effort: Option<String>,
+    ) -> impl Future<Output = Result<Value, String>> + Send + 'static {
+        self.request(move |reply| {
+            Command::Control(
+                ControlRequest::ApplyFlagSettings {
+                    settings: serde_json::json!({ "effortLevel": effort }),
+                    extra: Map::new(),
+                },
+                reply,
+            )
+        })
+    }
+
     /// Change the model for subsequent turns.
     /// Queued at once, so a turn sent after this call runs on `model`.
     pub fn set_model(

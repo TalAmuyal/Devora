@@ -629,6 +629,12 @@ impl Worker {
                     model: Nullable::Value(model),
                     ..
                 } => self.model = model.clone(),
+                // Remembered as the model is, so a CLI restarted after a crash runs the effort the user set.
+                ControlRequest::ApplyFlagSettings { settings, .. } => {
+                    if let Some(level) = settings.get("effortLevel") {
+                        self.options.effort = level.as_str().map(str::to_owned);
+                    }
+                }
                 _ => {}
             }
         } else if matches!(pending.request, ControlRequest::Initialize { .. }) {

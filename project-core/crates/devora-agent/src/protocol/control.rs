@@ -27,6 +27,14 @@ pub enum ControlRequest {
         #[serde(flatten)]
         extra: Map<String, Value>,
     },
+    /// Merges `settings` into the session's flag settings, as its launch flags set them: `{"effortLevel": …}` changes the
+    /// effort of the turns that follow (null goes back to the model's default). The CLI answers with a success that has
+    /// no `response`.
+    ApplyFlagSettings {
+        settings: Value,
+        #[serde(flatten)]
+        extra: Map<String, Value>,
+    },
     /// Ends one background task: its processes stop, with no model turn for a
     /// shell, while a stopped subagent makes the CLI run a notification turn.
     StopTask {
@@ -83,6 +91,8 @@ impl PermissionRequest {
 pub enum ControlResponse {
     Success {
         request_id: String,
+        /// Null when the CLI sends none, as it does for `apply_flag_settings`.
+        #[serde(default)]
         response: Value,
         #[serde(flatten)]
         extra: Map<String, Value>,
