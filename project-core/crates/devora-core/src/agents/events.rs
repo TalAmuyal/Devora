@@ -1,7 +1,7 @@
 use devora_agent::models::ModelList;
 use devora_agent::session::SessionEvent;
-use devora_agent_space::{ActiveModel, ChosenModel, CompactionProgress, SpaceEvent};
-use devora_state::{ChatCommand, ChatModel, ChatUpdate, PermissionQuestion, Store};
+use devora_agent_space::{ActiveModel, ChosenEffort, ChosenModel, CompactionProgress, SpaceEvent};
+use devora_state::{ChatCommand, ChatEffort, ChatModel, ChatUpdate, PermissionQuestion, Store};
 
 pub(super) fn update(state: &Store, tab: u64, generation: u64, update: ChatUpdate) {
     // Closed tabs and older generations deliberately discard late updates.
@@ -43,13 +43,34 @@ pub(super) fn publish(state: &Store, tab: u64, generation: u64, event: SpaceEven
             },
         ),
         // The registry presents it, with the model list its launch was offered (`model`).
-        SpaceEvent::Model(_) | SpaceEvent::ChosenModel(_) => {}
+        SpaceEvent::Model(_) | SpaceEvent::ChosenModel(_) | SpaceEvent::ChosenEffort(_) => {}
         SpaceEvent::TurnStarted => {
             update(state, tab, generation, ChatUpdate::Turn { running: true })
         }
         SpaceEvent::TurnEnded => {
             update(state, tab, generation, ChatUpdate::Turn { running: false })
         }
+    }
+}
+
+/// The effort widget's view: the level set in this run (`chosen`), else the one the agent launched with, and the levels
+/// the model it's set to takes (the chosen model, else its launch model), from `list`, the models its launch was offered.
+pub(super) fn effort(
+    chosen: Option<&ChosenEffort>,
+    model: &str,
+    launch_effort: Option<&str>,
+    list: Option<&ModelList>,
+) -> ChatEffort {
+    ChatEffort {
+        set_to: chosen.map_or(launch_effort.map(str::to_owned), |chosen| {
+            chosen.set_to.clone()
+        }),
+        levels: list
+            .and_then(|list| list.effort_levels(model))
+            .map(<[String]>::to_vec)
+            .unwrap_or_default(),
+        pending: chosen.is_some_and(|chosen| chosen.pending),
+        not_taken: chosen.and_then(|chosen| chosen.not_taken.clone()),
     }
 }
 
@@ -308,5 +329,37 @@ mod tests {
         );
         assert!(!shown.awaiting_change, "a refused model never replies");
         assert_eq!(shown.set_to, "sonnet", "the refused pick stays stored");
+    }
+
+    #[test]
+    fn the_effort_shown_is_the_one_set_this_run_else_the_launchs_with_the_models_levels() {
+        let mut list = list("claude-opus-5-5");
+        list.models[0].effort_levels = vec!["low".into(), "high".into()];
+        let launched = effort(None, "opus", Some("high"), Some(&list));
+        assert_eq!(
+            (
+                launched.set_to.as_deref(),
+                launched.levels.clone(),
+                launched.pending
+            ),
+            (
+                Some("high"),
+                vec!["low".to_owned(), "high".to_owned()],
+                false
+            )
+        );
+        let pending = ChosenEffort {
+            set_to: None,
+            pending: true,
+            not_taken: None,
+        };
+        let changed = effort(Some(&pending), "opus", Some("high"), Some(&list));
+        assert_eq!(
+            (changed.set_to, changed.pending),
+            (None, true),
+            "Claude Code default, set during a turn"
+        );
+        let unknown = effort(None, "opus", Some("high"), None);
+        assert!(unknown.levels.is_empty(), "no list, no levels claimed");
     }
 }

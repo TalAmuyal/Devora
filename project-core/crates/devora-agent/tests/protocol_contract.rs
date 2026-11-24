@@ -239,6 +239,13 @@ fn host_messages_and_unrecorded_control_variants_match_the_wire_contract() {
             json!({"subtype":"set_model","model":"haiku"}),
         ),
         (
+            ControlRequest::ApplyFlagSettings {
+                settings: json!({"effortLevel": "high"}),
+                extra: Map::new(),
+            },
+            json!({"subtype":"apply_flag_settings","settings":{"effortLevel":"high"}}),
+        ),
+        (
             ControlRequest::McpMessage {
                 server_name: "devora".into(),
                 message: json!({"jsonrpc":"2.0","method":"tools/list","id":7}),
@@ -407,4 +414,23 @@ fn a_result_answers_only_the_user_turns_it_names() {
     ] {
         assert!(!result(unrequested).answers("turn-id"));
     }
+}
+
+#[test]
+fn a_success_with_no_response_is_an_empty_one() {
+    // What the CLI answers `apply_flag_settings` with: no `response` at all.
+    let Message::Known(KnownMessage::ControlResponse { response, .. }) = decode(
+        json!({"type":"control_response","response":{"request_id":"devora-2","subtype":"success"}}),
+    ) else {
+        panic!("a control response");
+    };
+    let Extensible::Known(ControlResponse::Success {
+        request_id,
+        response,
+        ..
+    }) = response
+    else {
+        panic!("a known success: {response:?}");
+    };
+    assert_eq!((request_id.as_str(), response), ("devora-2", Value::Null));
 }

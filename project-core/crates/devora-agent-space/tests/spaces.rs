@@ -2,8 +2,8 @@ use devora_agent::protocol::{KnownMessage, Message};
 use devora_agent::session::{stop_tree, CliProcess, SessionEvent};
 use devora_agent::transcript::{SystemKind, TranscriptChange, TranscriptContent};
 use devora_agent_space::{
-    model_defaults, template, AppRun, ChosenModel, CreationForm, LaunchContext, ModelChoice,
-    RunningSpace, Space, SpaceEvent,
+    model_defaults, template, AppRun, ChosenEffort, ChosenModel, CreationForm, LaunchContext,
+    ModelChoice, RunningSpace, Space, SpaceEvent,
 };
 use devora_app::log::Log;
 use devora_platform::processes::{ProcessTable, SystemProcessTable};
@@ -2667,4 +2667,118 @@ async fn a_turn_the_cli_started_itself_never_outlives_its_end() {
             .unwrap_or_else(|_| panic!("{ending}: the turn stuck"))
             .unwrap();
     }
+}
+
+async fn next_chosen_effort(running: &mut RunningSpace) -> ChosenEffort {
+    tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            if let Some(SpaceEvent::ChosenEffort(chosen)) = running.next_update().await {
+                return chosen;
+            }
+        }
+    })
+    .await
+    .unwrap()
+}
+
+fn efforts_told(fixture: &Fixture) -> Vec<serde_json::Value> {
+    std::fs::read_to_string(fixture.root.path().join("report.jsonl"))
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
+        .filter(|entry| entry["kind"] == "apply_flag_settings")
+        .map(|entry| entry["settings"]["effortLevel"].clone())
+        .collect()
+}
+
+#[tokio::test]
+async fn a_chosen_effort_is_stored_at_once_and_told_to_the_cli_only_between_turns_the_last_one_winning(
+) {
+    let fixture = Fixture::new();
+    let mut context = fixture.context();
+    context
+        .environment
+        .insert("DEVORA_FAKE_EFFORT_REFUSED".into(), "low".into());
+    let space = fixture.create(fixture.form("Golf")).unwrap();
+    let log = Arc::new(Log::open(&fixture.root.path().join("log")).unwrap());
+    let mut running = space
+        .start(&context, log.clone(), &fixture.run)
+        .await
+        .unwrap();
+    let handle = running.handle();
+    // The fake CLI holds this turn on a permission question until it is answered.
+    handle.send_turn("permission".into()).await.unwrap();
+    let request = tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            if let Some(SpaceEvent::Session(SessionEvent::PermissionRequested {
+                request_id, ..
+            })) = running.next_update().await
+            {
+                return request_id;
+            }
+        }
+    })
+    .await
+    .unwrap();
+
+    handle.set_effort(Some("high".into())).await.unwrap();
+    handle.set_effort(Some("max".into())).await.unwrap();
+    let max = ChosenEffort {
+        set_to: Some("max".into()),
+        pending: true,
+        not_taken: None,
+    };
+    assert_eq!(
+        next_chosen_effort(&mut running).await.set_to.as_deref(),
+        Some("high")
+    );
+    assert_eq!(next_chosen_effort(&mut running).await, max);
+    assert!(efforts_told(&fixture).is_empty(), "never mid-turn");
+
+    handle
+        .answer_permission(request, devora_agent::session::PermissionAnswer::Allow)
+        .await
+        .unwrap();
+    assert_eq!(
+        next_chosen_effort(&mut running).await,
+        ChosenEffort {
+            pending: false,
+            ..max
+        },
+        "told when the turn ended"
+    );
+    assert_eq!(efforts_told(&fixture), [serde_json::json!("max")]);
+
+    // Idle: told at once. Claude Code default is no level; a CLI that refuses a level keeps it stored, and says why.
+    handle.set_effort(None).await.unwrap();
+    assert_eq!(next_chosen_effort(&mut running).await.set_to, None);
+    handle.set_effort(Some("low".into())).await.unwrap();
+    let refused = loop {
+        let chosen = next_chosen_effort(&mut running).await;
+        if chosen.not_taken.is_some() {
+            break chosen;
+        }
+    };
+    assert_eq!(
+        refused,
+        ChosenEffort {
+            set_to: Some("low".into()),
+            pending: false,
+            not_taken: Some("effort refused".into())
+        }
+    );
+    assert_eq!(
+        efforts_told(&fixture),
+        [
+            serde_json::json!("max"),
+            serde_json::Value::Null,
+            serde_json::json!("low")
+        ]
+    );
+    assert!(running.pause().await.unwrap().graceful);
+    let stored = Space::open(&fixture.profile, "Golf").unwrap();
+    assert_eq!(
+        stored.form().model.as_ref().unwrap().effort.as_deref(),
+        Some("low")
+    );
 }

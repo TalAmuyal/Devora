@@ -129,7 +129,8 @@ for line in sys.stdin:
     if kind == "control_request":
         request = message["request"]
         subtype = request["subtype"]
-        report({"kind":subtype, **({"model":request["model"]} if subtype == "set_model" else {})})
+        report({"kind":subtype, **({"model":request["model"]} if subtype == "set_model" else {}),
+            **({"settings":request["settings"]} if subtype == "apply_flag_settings" else {})})
         if subtype == "interrupt" and ignore_interrupt:
             continue
         if subtype == "stop_task":
@@ -151,6 +152,14 @@ for line in sys.stdin:
             continue
         if subtype == "set_model" and request.get("model") == "hang":
             emit({"type":"fake_control_waiting"})
+            continue
+        if subtype == "apply_flag_settings":
+            # As the CLI answers it: a success with no `response`, and an error only when it can't take the request at all.
+            refused = os.environ.get("DEVORA_FAKE_EFFORT_REFUSED")
+            if refused and request.get("settings", {}).get("effortLevel") == refused:
+                emit({"type":"control_response","response":{"subtype":"error","request_id":message["request_id"],"error":"effort refused"}})
+            else:
+                emit({"type":"control_response","response":{"subtype":"success","request_id":message["request_id"]}})
             continue
         if subtype == "set_model" and request.get("model") == "refused":
             emit({"type":"control_response","response":{"subtype":"error","request_id":message["request_id"],"error":"model refused"}})

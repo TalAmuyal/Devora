@@ -1858,3 +1858,116 @@ async fn pinned_cli_brackets_its_own_turns_and_folds_overlapping_ones() {
         backend.stop().await;
     }
 }
+
+// An agent's effort changes between turns without a relaunch (`set_effort`, the CLI's `apply_flag_settings`), as each
+// request's `output_config.effort` shows; clearing it goes back to the model's default. A level the model doesn't take
+// runs at the nearest one it does below it, and a model that takes none gets none; the CLI answers success either way.
+// In the recorded model list (the fixtures' `claude-2.1.312/basic.jsonl`), every model that takes an effort takes `low`
+// and `max`, the ends of the CLI's scale, so a level a model lacks lies between two it takes: the one case of the rule
+// there is, pinned here on two models.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires CI-pinned Claude CLI, Node and Sapphire npm dependencies"]
+async fn pinned_cli_changes_the_effort_between_turns_and_runs_an_unsupported_level_at_the_one_below(
+) {
+    check_pin().await;
+    let fixture = Fixture::new();
+    let mut backend = Backend::start(fixture.root.path()).await;
+    let efforts = |snapshot: Value| -> Vec<Option<String>> {
+        snapshot["requests"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|request| request["body"].get("messages").is_some())
+            .map(|request| {
+                request["body"]
+                    .pointer("/output_config/effort")
+                    .and_then(Value::as_str)
+                    .map(str::to_owned)
+            })
+            .collect()
+    };
+    let port = backend.port;
+    let start = |model: &str, effort: &str| {
+        let mut options = fixture.options(port, Instructions::Append("Effort probe".into()));
+        options.model = model.into();
+        options.effort = Some(effort.into());
+        options
+    };
+    let level = |effort: &str| Some(effort.to_owned());
+
+    backend.command(json!({"action":"configure"})).await;
+    let mut session = Session::start(start("opus", "low"), fixture.log())
+        .await
+        .unwrap();
+    turn_models(&mut session, "At launch.").await;
+    session
+        .handle()
+        .set_effort(Some("high".into()))
+        .await
+        .unwrap();
+    turn_models(&mut session, "Changed.").await;
+    session.handle().set_effort(None).await.unwrap();
+    turn_models(&mut session, "Cleared.").await;
+    session.pause().await.unwrap();
+    assert_eq!(
+        efforts(backend.command(json!({"action":"snapshot"})).await),
+        [level("low"), level("high"), level("medium")],
+        "launch, a change, then the model's default"
+    );
+
+    backend.command(json!({"action":"configure"})).await;
+    let mut session = Session::start(start("claude-sonnet-4-6", "xhigh"), fixture.log())
+        .await
+        .unwrap();
+    turn_models(&mut session, "Unsupported at launch.").await;
+    session
+        .handle()
+        .set_effort(Some("low".into()))
+        .await
+        .unwrap();
+    turn_models(&mut session, "Supported.").await;
+    session
+        .handle()
+        .set_effort(Some("xhigh".into()))
+        .await
+        .unwrap();
+    turn_models(&mut session, "Unsupported, live.").await;
+    session.pause().await.unwrap();
+    assert_eq!(
+        efforts(backend.command(json!({"action":"snapshot"})).await),
+        [level("high"), level("low"), level("high")],
+        "Sonnet 4.6 takes no xhigh: it runs high"
+    );
+
+    // Another model without xhigh, so the rule isn't one model's quirk.
+    backend.command(json!({"action":"configure"})).await;
+    let mut session = Session::start(start("claude-opus-4-6", "xhigh"), fixture.log())
+        .await
+        .unwrap();
+    turn_models(&mut session, "Opus 4.6, unsupported.").await;
+    session.pause().await.unwrap();
+    assert_eq!(
+        efforts(backend.command(json!({"action":"snapshot"})).await),
+        [level("high")],
+        "Opus 4.6 takes no xhigh: it runs high"
+    );
+
+    backend.command(json!({"action":"configure"})).await;
+    let mut session = Session::start(start("claude-haiku-4-5-20251001", "high"), fixture.log())
+        .await
+        .unwrap();
+    turn_models(&mut session, "No effort at all.").await;
+    session
+        .handle()
+        .set_effort(Some("max".into()))
+        .await
+        .unwrap();
+    turn_models(&mut session, "Still none.").await;
+    session.pause().await.unwrap();
+    assert_eq!(
+        efforts(backend.command(json!({"action":"snapshot"})).await),
+        [None, None],
+        "Haiku 4.5 takes no effort"
+    );
+    backend.stop().await;
+}

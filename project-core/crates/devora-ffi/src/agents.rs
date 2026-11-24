@@ -5,10 +5,10 @@ use devora_core::agents::{
     self, CreationForm, Field, LaunchContext, ModelChoice, PermissionAnswer, Scope, Source,
 };
 use devora_core::state::{
-    AgentActivity, Chat, ChatContext, ChatEvent, ChatModel, ChatPhase, ChatStep, ChatUpdate,
-    CompactionProgress, ItemState, PermissionQuestion, RunningAgent, RunningAgents, StepActivity,
-    Subscription, SystemKind, ToolResult, ToolVerdict, TranscriptChange, TranscriptContent,
-    TranscriptItem,
+    AgentActivity, Chat, ChatContext, ChatEffort, ChatEvent, ChatModel, ChatPhase, ChatStep,
+    ChatUpdate, CompactionProgress, ItemState, PermissionQuestion, RunningAgent, RunningAgents,
+    StepActivity, Subscription, SystemKind, ToolResult, ToolVerdict, TranscriptChange,
+    TranscriptContent, TranscriptItem,
 };
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -339,6 +339,7 @@ pub struct Chat {
     pub usage_json: Option<String>,
     pub context: Option<ChatContext>,
     pub model: Option<ChatModel>,
+    pub effort: Option<ChatEffort>,
     pub step: Option<ChatStep>,
 }
 #[uniffi::remote(Record)]
@@ -375,6 +376,13 @@ pub struct ChatContext {
     pub compaction: CompactionProgress,
 }
 #[uniffi::remote(Record)]
+pub struct ChatEffort {
+    pub set_to: Option<String>,
+    pub levels: Vec<String>,
+    pub pending: bool,
+    pub not_taken: Option<String>,
+}
+#[uniffi::remote(Record)]
 pub struct ChatModel {
     pub latest: Option<String>,
     pub label: Option<String>,
@@ -407,6 +415,7 @@ pub enum ChatUpdate {
     PermissionRemoved { request_id: String },
     Usage { payload_json: String },
     Context { context: ChatContext },
+    Effort { effort: ChatEffort },
     Model { model: ChatModel },
     Step { step: Option<ChatStep> },
 }
@@ -700,6 +709,17 @@ impl DevoraCore {
         self.agents
             .set_compact_threshold(tab, generation, percent)
             .await?;
+        Ok(())
+    }
+    /// Sets the agent's effort (none is Claude Code's default) to a level its model takes; a running agent's CLI takes it
+    /// between turns.
+    pub async fn set_agent_effort(
+        &self,
+        tab: u64,
+        generation: u64,
+        effort: Option<String>,
+    ) -> Result<(), CoreError> {
+        self.agents.set_effort(tab, generation, effort).await?;
         Ok(())
     }
     /// Sets the agent's model to one its latest launch was offered; a running agent's CLI takes it between turns.

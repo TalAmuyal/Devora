@@ -124,6 +124,22 @@ impl ModelList {
         }
     }
 
+    /// The effort levels an agent set to `setting` takes, lowest first: its entry's (an alias, or a full ID with or
+    /// without its date), else the entry of the model the setting resolves to; empty when it takes none. None when the
+    /// list doesn't know the setting, so nothing is claimed about it.
+    pub fn effort_levels(&self, setting: &str) -> Option<&[String]> {
+        let resolved = self.resolve(setting).unwrap_or(setting);
+        self.models
+            .iter()
+            .find(|model| model.value == setting || same_model(&model.value, setting))
+            .or_else(|| {
+                self.models
+                    .iter()
+                    .find(|model| same_model(model.model_id(), resolved))
+            })
+            .map(|model| model.effort_levels.as_slice())
+    }
+
     /// Whether a reply from `model` is what an agent set to `setting` runs: what the setting resolves to, or for
     /// `opusplan` its Opus or its Sonnet. A setting this list can't resolve expects anything, rather than a guess.
     pub fn expects(&self, setting: &str, model: &str) -> bool {
@@ -571,6 +587,43 @@ mod tests {
         assert!(
             list.expects("some-future-alias", "claude-haiku-5-5"),
             "no guess"
+        );
+    }
+
+    #[test]
+    fn the_effort_levels_a_setting_takes_are_its_entrys_or_its_resolved_models() {
+        let levels = |levels: &[&str]| levels.iter().map(|l| l.to_string()).collect::<Vec<_>>();
+        let mut list = tiers("claude-opus-5-5");
+        for model in &mut list.models {
+            model.effort_levels = match model.value.as_str() {
+                "claude-sonnet-4-5" => vec![],
+                "claude-opus-4-8" => levels(&["low", "medium", "high", "max"]),
+                _ => levels(&["low", "medium", "high", "xhigh", "max"]),
+            };
+        }
+        assert_eq!(
+            list.effort_levels("opus").unwrap(),
+            levels(&["low", "medium", "high", "xhigh", "max"])
+        );
+        assert_eq!(
+            list.effort_levels("claude-opus-4-8").unwrap(),
+            levels(&["low", "medium", "high", "max"])
+        );
+        assert_eq!(
+            list.effort_levels("claude-opus-5-5").unwrap(),
+            levels(&["low", "medium", "high", "xhigh", "max"]),
+            "a full ID an alias resolves to"
+        );
+        assert!(
+            list.effort_levels("claude-sonnet-4-5-20250929")
+                .unwrap()
+                .is_empty(),
+            "a dated ID, of a model that takes none"
+        );
+        assert_eq!(
+            list.effort_levels("claude-made-up-9"),
+            None,
+            "nothing claimed"
         );
     }
 

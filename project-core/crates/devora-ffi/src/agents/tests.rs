@@ -1764,3 +1764,96 @@ fn an_agent_still_paused_after_a_restart_can_be_set_to_a_model_its_next_launch_i
     );
     block_on(f.core.shutdown_agents()).unwrap();
 }
+
+#[test]
+fn an_agents_effort_is_one_its_model_takes_shown_with_those_levels_and_a_paused_one_launches_with_it(
+) {
+    let mut f = Fixture::new(true);
+    let events = f.core.subscribe_agent_chats().unwrap();
+    f.create("Effort");
+    let tab = f.open("Effort");
+    let chat = f.wait(&events, |c| {
+        c.tab == tab
+            && c.phase == ChatPhase::Running
+            && c.effort.as_ref().is_some_and(|e| !e.levels.is_empty())
+    });
+    assert_eq!(
+        chat.effort.as_ref().unwrap().levels,
+        ["low", "medium", "high", "xhigh", "max"],
+        "the levels its model takes, as Claude Code lists them"
+    );
+    assert_eq!(
+        block_on(
+            f.core
+                .set_agent_effort(tab, chat.generation, Some("turbo".into()))
+        )
+        .unwrap_err()
+        .to_string(),
+        "The model sonnet takes low, medium, high, xhigh, max, not turbo."
+    );
+    block_on(
+        f.core
+            .set_agent_effort(tab, chat.generation, Some("xhigh".into())),
+    )
+    .unwrap();
+    f.wait(&events, |c| {
+        c.effort
+            .as_ref()
+            .is_some_and(|e| e.set_to.as_deref() == Some("xhigh"))
+    });
+
+    f.core.pause_agent_after_turn(tab, chat.generation).unwrap();
+    f.wait(&events, |c| c.tab == tab && c.phase == ChatPhase::Paused);
+    block_on(f.core.shutdown_agents()).unwrap();
+    events.close().unwrap();
+    f.relaunch();
+    block_on(f.core.restore_agent_spaces(f.launch())).unwrap();
+    let events = f.core.subscribe_agent_chats().unwrap();
+    let paused = f.wait(&events, |c| c.tab == tab && c.phase == ChatPhase::Paused);
+    // Still paused after a restart: checked against the models its next launch would be offered.
+    block_on(
+        f.core
+            .set_agent_effort(tab, paused.generation, Some("low".into())),
+    )
+    .unwrap();
+    block_on(
+        f.core
+            .set_agent_model(tab, paused.generation, "claude-haiku-4-5-20251001".into()),
+    )
+    .unwrap();
+    assert_eq!(
+        block_on(
+            f.core
+                .set_agent_effort(tab, paused.generation, Some("high".into()))
+        )
+        .unwrap_err()
+        .to_string(),
+        "The model claude-haiku-4-5-20251001 takes no effort level."
+    );
+    block_on(f.core.set_agent_effort(tab, paused.generation, None)).unwrap();
+    block_on(
+        f.core
+            .set_agent_model(tab, paused.generation, "opus".into()),
+    )
+    .unwrap();
+    block_on(
+        f.core
+            .set_agent_effort(tab, paused.generation, Some("high".into())),
+    )
+    .unwrap();
+
+    assert_eq!(f.open("Effort"), tab);
+    f.wait(&events, |c| c.tab == tab && c.phase == ChatPhase::Running);
+    let report = fs::read_to_string(f.profile.root.path().join("report.jsonl")).unwrap();
+    let starts: Vec<serde_json::Value> = report
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .filter(|v: &serde_json::Value| v["kind"] == "start")
+        .collect();
+    let args = starts.last().unwrap()["args"].as_array().unwrap();
+    assert_eq!(
+        args[args.iter().position(|v| v == "--effort").unwrap() + 1],
+        "high"
+    );
+    block_on(f.core.shutdown_agents()).unwrap();
+}

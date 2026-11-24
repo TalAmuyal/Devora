@@ -16,7 +16,7 @@ pub use compaction::{
 pub use inputs::{fields, preview, Field, Source};
 pub use restart_notice::AppRun;
 pub use running::{
-    ActiveModel, ChosenModel, GlobalPauseCheck, RunningSpace, SpaceEvent, SpaceHandle,
+    ActiveModel, ChosenEffort, ChosenModel, GlobalPauseCheck, RunningSpace, SpaceEvent, SpaceHandle,
 };
 
 use db::{storage, Db};
@@ -461,6 +461,24 @@ impl Space {
                 .as_ref()
                 .and_then(|choice| choice.effort.clone()),
         };
+        self.db.set_model(&choice)?;
+        self.form.model = Some(choice);
+        Ok(())
+    }
+    /// Sets the effort the agent launches with from now on (none leaves it to Claude Code), keeping its model; an agent
+    /// created before the model was chosen at creation (no stored choice) keeps `running_model`, the one it runs now. A
+    /// running agent's goes through `SpaceHandle::set_effort`, which also tells its CLI.
+    pub fn set_effort(&mut self, effort: Option<&str>, running_model: &str) -> Result<(), String> {
+        let choice = ModelChoice {
+            model: self
+                .form
+                .model
+                .as_ref()
+                .map_or(running_model, |choice| choice.model.as_str())
+                .to_owned(),
+            effort: effort.map(str::to_owned),
+        };
+        validate_model(&choice)?;
         self.db.set_model(&choice)?;
         self.form.model = Some(choice);
         Ok(())

@@ -11,7 +11,9 @@ mod running;
 pub use devora_agent::models::{same_model, ModelRow, ModelSections};
 use devora_agent::session::SessionEvent;
 pub use devora_agent::session::{PermissionAnswer, Plugin};
-use devora_agent_space::{ActiveModel, ChosenModel, RunningSpace, SpaceEvent, SpaceHandle};
+use devora_agent_space::{
+    ActiveModel, ChosenEffort, ChosenModel, RunningSpace, SpaceEvent, SpaceHandle,
+};
 use devora_agent_space::{AppRun, Space};
 pub use devora_agent_space::{
     CreationForm, Entry as SpaceEntry, Field, LaunchContext, ModelChoice, Source,
@@ -773,6 +775,121 @@ impl Agents {
         }
     }
 
+    /// Sets the effort of the agent on `tab` (none is Claude Code's default) to a level its model takes, which the
+    /// models it's offered say, as `set_model` checks a model: a running agent's model is the one its chat shows it set
+    /// to, a paused one's the one its next launch would run. A level the model doesn't take is refused, since the CLI
+    /// would take it silently and run another. A running agent stores it and tells its CLI between turns
+    /// (`SpaceHandle::set_effort`); a paused one stores it for its next launch.
+    pub async fn set_effort(
+        &self,
+        tab: u64,
+        generation: u64,
+        effort: Option<String>,
+    ) -> Result<(), String> {
+        let (key, running, next_launch) = {
+            let inner = lock(&self.inner);
+            let (key, owner) = inner
+                .owners
+                .iter()
+                .find(|(_, o)| o.tab == Some(tab))
+                .ok_or("agent is not open")?;
+            if inner.closing || owner.generation != generation {
+                return Err("agent generation is stale".into());
+            }
+            let running = match (owner.live, &owner.handle, &owner.launch_settings) {
+                (false, ..) => None,
+                (true, Some(handle), Some(settings)) if !*owner.pause.borrow() => {
+                    Some((handle.clone(), settings.clone()))
+                }
+                (true, ..) => {
+                    return Err(
+                        "This agent is starting or pausing. Set its effort once it has.".into(),
+                    )
+                }
+            };
+            (key.clone(), running, inner.launch.clone())
+        };
+        let models = lock(&self.inner).models.clone();
+        let (offered, model) = match &running {
+            Some((_, settings)) => {
+                let offered = models
+                    .cached(&key.profile, settings)
+                    .ok_or("Devora doesn't know the models this agent is offered.")?;
+                let model = self
+                    .state
+                    .chat_snapshot()
+                    .into_iter()
+                    .find(|chat| chat.tab == tab)
+                    .and_then(|chat| chat.model)
+                    .map(|model| model.set_to)
+                    .ok_or("Devora doesn't know this agent's model yet.")?;
+                (offered, model)
+            }
+            None => {
+                let context =
+                    next_launch.ok_or("Devora doesn't know how to launch this agent yet.")?;
+                let (profile, name, launch) =
+                    (key.profile.clone(), key.name.clone(), context.clone());
+                let model = self
+                    .runtime
+                    .spawn_blocking(move || {
+                        Space::open(&profile, &name)?
+                            .session_options(&launch)
+                            .map(|options| options.model)
+                    })
+                    .await
+                    .map_err(|e| e.to_string())??;
+                let profile = key.profile.clone();
+                let offered = self
+                    .runtime
+                    .spawn(async move { models.get(&profile, &context).await })
+                    .await
+                    .map_err(|e| e.to_string())??;
+                (offered, model)
+            }
+        };
+        if let Some(level) = &effort {
+            let levels = offered.effort_levels(&model).unwrap_or_default();
+            if !levels.contains(level) {
+                return Err(if levels.is_empty() {
+                    format!("The model {model} takes no effort level.")
+                } else {
+                    format!(
+                        "The model {model} takes {}, not {level}.",
+                        levels.join(", ")
+                    )
+                });
+            }
+        }
+        // Asking Claude Code takes seconds, in which a paused agent may have resumed: its running session takes it then.
+        let running = match running {
+            Some((handle, _)) => Some(handle),
+            None => {
+                let inner = lock(&self.inner);
+                let owner = inner.owners.get(&key).ok_or("agent is not open")?;
+                match (owner.live, &owner.handle) {
+                    (false, _) => None,
+                    (true, Some(handle)) if !*owner.pause.borrow() => Some(handle.clone()),
+                    (true, _) => {
+                        return Err(
+                            "This agent is starting or pausing. Set its effort once it has.".into(),
+                        )
+                    }
+                }
+            }
+        };
+        match running {
+            Some(handle) => handle.set_effort(effort).await,
+            None => self
+                .runtime
+                .spawn_blocking(move || {
+                    Space::open(&key.profile, &key.name)?.set_effort(effort.as_deref(), &model)
+                })
+                .await
+                .map_err(|e| e.to_string())?,
+        }
+    }
+
     fn handle(&self, tab: u64, generation: u64) -> Result<SpaceHandle, String> {
         let inner = lock(&self.inner);
         let owner = inner
@@ -1125,6 +1242,8 @@ async fn run_session(
     }
     // The model the user set the agent to in this run, as the space last said.
     let mut chosen = ChosenModel::default();
+    // The effort the user set the agent to in this run, as the space last said.
+    let mut chosen_effort: Option<ChosenEffort> = None;
     // The model the agent's replies come from, as the space last said.
     let mut active = ActiveModel {
         latest: None,
@@ -1163,24 +1282,30 @@ async fn run_session(
                 match event {
                     SpaceEvent::Model(model) => {
                         active = model;
-                        present_model(inner, state, key, generation, &running, &active, &chosen);
+                        present_model(inner, state, key, generation, &running, &active, &chosen, chosen_effort.as_ref());
+                    }
+                    SpaceEvent::ChosenEffort(effort) => {
+                        chosen_effort = Some(effort);
+                        present_model(inner, state, key, generation, &running, &active, &chosen, chosen_effort.as_ref());
                     }
                     SpaceEvent::ChosenModel(model) => {
                         chosen = model;
-                        present_model(inner, state, key, generation, &running, &active, &chosen);
+                        present_model(inner, state, key, generation, &running, &active, &chosen, chosen_effort.as_ref());
                     }
                     event => publish(inner, state, key, generation, event),
                 }
                 // The list this launch was just offered names the model, and says whether it's the one set.
                 if ready {
-                    present_model(inner, state, key, generation, &running, &active, &chosen);
+                    present_model(inner, state, key, generation, &running, &active, &chosen, chosen_effort.as_ref());
                 }
             }
         }
     }
 }
 
-/// Shows `active` on the agent's tab, named and checked against the models its launch was offered.
+/// Shows `active` on the agent's tab, named and checked against the models its launch was offered, and the effort it's
+/// set to, with the levels its model takes.
+#[allow(clippy::too_many_arguments)]
 fn present_model(
     inner: &Mutex<Inner>,
     state: &Store,
@@ -1189,15 +1314,23 @@ fn present_model(
     running: &RunningSpace,
     active: &ActiveModel,
     chosen: &ChosenModel,
+    chosen_effort: Option<&ChosenEffort>,
 ) {
     let list = lock(inner)
         .models
         .cached(&key.profile, running.launch_settings());
     let model = events::model(active, chosen, running.launch_model(), list.as_ref());
+    let effort = events::effort(
+        chosen_effort,
+        chosen.set_to.as_deref().unwrap_or(running.launch_model()),
+        running.launch_effort(),
+        list.as_ref(),
+    );
     let inner = lock(inner);
     if let Some(owner) = inner.owners.get(key).filter(|o| o.run_id == run_id) {
         if let Some(tab) = owner.tab {
             events::update(state, tab, owner.generation, ChatUpdate::Model { model });
+            events::update(state, tab, owner.generation, ChatUpdate::Effort { effort });
         }
     }
 }
