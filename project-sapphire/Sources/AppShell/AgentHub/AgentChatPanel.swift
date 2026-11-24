@@ -117,6 +117,7 @@ struct AgentChatPanel: View {
 				pause: model.pausePresentation,
 				compaction: model.contextPresentation,
 				turnRunning: model.chat.chat?.turnRunning == true,
+				agentTurn: model.chat.chat?.agentTurn == true,
 				canSend: model.chat.canSend, onSend: { Task { await model.chat.send() } },
 				onStop: { Task { await model.chat.stop() } },
 				onPause: { model.chat.pause() }, onResume: { Task { await model.chat.retry() } },
@@ -216,6 +217,8 @@ struct AgentWidgetBar: View {
 	let pause: AgentPausePresentation
 	let compaction: AgentContextPresentation
 	let turnRunning: Bool
+	/// The running turn is one the agent started itself: the user can still send, and the prompt joins it.
+	let agentTurn: Bool
 	let canSend: Bool
 	let onSend: () -> Void
 	let onStop: () -> Void
@@ -224,6 +227,13 @@ struct AgentWidgetBar: View {
 	let onKeepPaused: (Bool) -> Void
 	let onThreshold: (UInt8?) -> Void
 	let onCompactNow: () -> Void
+
+	/// The turn actions the bar shows: Stop while a turn runs, Send while none does, and both during a turn the agent
+	/// started itself (a prompt joins it). Stop comes first, so Send keeps its place at the end; during a turn the user
+	/// sent, Stop replaces it.
+	static func actions(turnRunning: Bool, agentTurn: Bool) -> (stop: Bool, send: Bool) {
+		(stop: turnRunning, send: !turnRunning || agentTurn)
+	}
 
 	var sendHint: String {
 		enterSends ? "Enter sends · Shift+Enter newline" : "⌘Enter / Ctrl+Enter sends · Enter newline"
@@ -238,13 +248,15 @@ struct AgentWidgetBar: View {
 			AgentSystemMessagesToggle(shows: showsSystem, onChange: onShowsSystem)
 			AgentPauseWidget(presentation: pause, onPause: onPause, onResume: onResume, onKeepPaused: onKeepPaused)
 			Spacer(minLength: 12)
-			if turnRunning {
+			let actions = Self.actions(turnRunning: turnRunning, agentTurn: agentTurn)
+			if actions.stop {
 				Button("■ Stop", action: onStop)
-					.help("Interrupt the current turn")
+					.help(agentTurn ? "Interrupt the turn the agent started itself" : "Interrupt the current turn")
 					.accessibilityIdentifier("agent-stop")
-			} else {
+			}
+			if actions.send {
 				Button("Send", action: onSend).disabled(!canSend)
-					.help(sendHint)
+					.help(agentTurn ? "\(sendHint) · Joins the turn the agent is running" : sendHint)
 					.accessibilityHint(sendHint)
 			}
 		}

@@ -33,6 +33,10 @@ pub enum SpaceEvent {
     /// The CLI answered the running turn, or exited during it. Results the CLI
     /// produces by itself (background work finishing, a resume) end nothing.
     TurnEnded,
+    /// The CLI started a turn itself (`ActiveTurn::Agents`), as when a background task reports.
+    AgentTurnStarted,
+    /// The turn the CLI started itself ended. One a turn Devora sent joined becomes that turn, and ends as it does.
+    AgentTurnEnded,
 }
 
 /// The model of the latest reply in the agent's own conversation (a full ID; none before one is known), and Claude
@@ -902,7 +906,8 @@ async fn pump(
                 let stop = match &event { SessionEvent::Stopped(info) => Some(info.clone()), _ => None };
                 // A crash ends the turn too; recovery resumes without it.
                 let finished = ActiveTurn::observe(&mut turn_running, &event);
-                if ActiveTurn::starts(&turn_running, &event) {
+                let agent_turn_started = ActiveTurn::starts(&turn_running, &event);
+                if agent_turn_started {
                     turn_running = Some(ActiveTurn::Agents);
                 }
                 let ended = matches!(finished, Some(ActiveTurn::Ours(_)));
@@ -918,6 +923,8 @@ async fn pump(
                 // A spawn is the space's own bookkeeping (the CLI it records), not the host's.
                 if !matches!(event, SessionEvent::Spawned(_)) { let _ = events.send(SpaceEvent::Session(event)); }
                 if ended { let _ = events.send(SpaceEvent::TurnEnded); }
+                if matches!(finished, Some(ActiveTurn::Agents)) { let _ = events.send(SpaceEvent::AgentTurnEnded); }
+                if agent_turn_started { let _ = events.send(SpaceEvent::AgentTurnStarted); }
                 if let Some(model) = untold.take_if(|_| finished.is_some()) {
                     tell_model(session.handle(), model, told.clone());
                 }

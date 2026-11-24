@@ -169,3 +169,32 @@ Feature: Agent chat panel
     Then the agent "Echo" should be idle
     And the agent transcript contains "Before the tools"
 
+  # A background task reporting makes Claude Code start a turn of its own. The chat shows it running, with Stop to end
+  # it, and keeps Send: a prompt joins that turn, which is then the user's.
+  Scenario: The agent's own turn shows as running, and a prompt sent during it joins it
+    When the user drafts the agent prompt "stream"
+    And the agent starts a turn of its own
+    Then the agent chat offers "Stop and Send"
+    And the agent chat can send
+    And the agent chat's turn status is "Working"
+    When the user sends the agent prompt "stream"
+    Then the agent chat offers "only Stop"
+    When the user stops the agent turn
+    Then the agent chat offers "only Send"
+    And the agent chat shows no turn status
+
+  Scenario: Stop ends the agent's own turn as a stop, not a failure
+    When the user shows the agent's system messages
+    And the agent starts a turn of its own
+    And the user stops the agent turn
+    Then the agent chat offers "only Send"
+    And the agent transcript contains "Turn stopped"
+
+  Scenario: A pause during the agent's own turn waits for it, with Stop to end it sooner
+    When the user drafts the agent prompt "later"
+    And the agent starts a turn of its own
+    And the user requests Pause in the agent chat
+    Then the agent chat offers "Stop and Send"
+    And the agent chat cannot send
+    When the user stops the agent turn
+    Then the agent chat is paused

@@ -234,7 +234,7 @@ extension Store {
 	/// Folds the chats' lifecycle into `agentStatuses` off the main actor, hopping to it only when a status changes, since the chats also carry every streamed token.
 	func pullAgentStatuses(from subscription: ChatSubscription) -> Task<Void, Never> {
 		Task.detached { [weak self] in
-			var chats: [UInt64: (phase: ChatPhase, turn: Bool, questions: Set<String>, pause: Bool)] = [:]
+			var chats: [UInt64: (phase: ChatPhase, turn: Bool, agentTurn: Bool, questions: Set<String>, pause: Bool)] = [:]
 			var published: [UInt64: AgentStatus] = [:]
 			var running: RunningAgents?
 			do {
@@ -243,35 +243,36 @@ extension Store {
 						switch event {
 						case .snapshot(let all, let agents):
 							chats = Dictionary(uniqueKeysWithValues: all.map {
-								($0.tab, ($0.phase, $0.turnRunning, Set($0.questions.map(\.requestId)), $0.pauseRequested))
+								($0.tab, ($0.phase, $0.turnRunning, $0.agentTurn, Set($0.questions.map(\.requestId)), $0.pauseRequested))
 							})
 							running = agents
 						case .running(let agents):
 							running = agents
 						case .started(let chat):
-							chats[chat.tab] = (chat.phase, chat.turnRunning, [], chat.pauseRequested)
+							chats[chat.tab] = (chat.phase, chat.turnRunning, chat.agentTurn, [], chat.pauseRequested)
 						case .closed(let tab):
 							chats[tab] = nil
 						case .updated(let tab, _, let update):
 							guard var chat = chats[tab] else { continue }
 							switch update {
-							case .turn(let running): chat.turn = running
+							case .turn(let running, let byAgent):
+								foldTurn(running: &chat.turn, agentTurn: &chat.agentTurn, started: running, byAgent: byAgent)
 							case .pauseRequested(let requested): chat.pause = requested
 							case .generation: chat.questions = []
 							case .phase(let phase):
 								chat.phase = phase
 								if phase == .paused || phase == .failed { chat.pause = false }
-								if phase != .running { chat.questions = []; chat.turn = false }
+								if phase != .running { chat.questions = []; chat.turn = false; chat.agentTurn = false }
 							case .ready:
 								chat.phase = .running
-								chat.turn = false
+								chat.turn = false; chat.agentTurn = false
 								chat.questions = []
 							case .permissionRequested(let question): chat.questions.insert(question.requestId)
 							case .permissionRemoved(let id): chat.questions.remove(id)
 							case .failure:
 								chat.phase = .failed
 								chat.pause = false
-								chat.turn = false
+								chat.turn = false; chat.agentTurn = false
 								chat.questions = []
 							case .restore, .transcript, .usage, .context, .model, .effort, .step, .globalHold, .keepPaused: continue
 							}
