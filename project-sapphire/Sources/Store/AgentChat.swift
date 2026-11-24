@@ -282,6 +282,13 @@ public final class AgentChat {
 
 	/// Sets the agent's model to one Claude Code offers it: stored with the agent at once, and taken by its CLI between
 	/// turns, or at its next launch when paused (the core's `set_agent_model`).
+	/// Sets the agent's effort (nil is Claude Code's default) to a level its model takes: stored with the agent at once,
+	/// and taken by its CLI between turns, or at its next launch when paused (the core's `set_agent_effort`).
+	public func setEffort(_ effort: String?) async {
+		guard let generation = chat?.generation else { return }
+		do { try await core.setAgentEffort(tab: tab, generation: generation, effort: effort) } catch { fail(error) }
+	}
+
 	public func setModel(_ model: String) async {
 		guard let generation = chat?.generation else { return }
 		do { try await core.setAgentModel(tab: tab, generation: generation, model: model) } catch { fail(error) }

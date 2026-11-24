@@ -64,9 +64,12 @@ pub struct ChatModel {
 pub struct ChatEffort {
     /// The level the agent is set to; none is Claude Code's default.
     pub set_to: Option<String>,
-    /// The levels its current model takes, lowest first, as Claude Code lists them; empty when it takes none, or when
+    /// The levels its current model takes, lowest first, as Claude Code lists them; empty when it takes none, none when
     /// the list isn't known.
-    pub levels: Vec<String>,
+    pub levels: Option<Vec<String>>,
+    /// What Claude Code runs instead of `set_to` when the model doesn't take it: the nearest level below that it takes
+    /// (the pinned-CLI suite asserts the rule). None when it takes the level set, or there's no level below to name.
+    pub runs_as: Option<String>,
     /// Set during a turn: the CLI takes it when the turn ends.
     pub pending: bool,
     /// Why the running session didn't take the level the user set (it stays stored for the next launch).

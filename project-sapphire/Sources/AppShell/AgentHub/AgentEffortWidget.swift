@@ -1,0 +1,131 @@
+import CoreBindings
+import SwiftUI
+
+/// What the Effort widget shows and offers, from the core's `ChatEffort`: the level the agent runs at (Claude Code's
+/// words, or "default"), the levels its model takes, and when a pick applies. A pick is stored with the agent at once; a
+/// running agent's CLI takes it between turns, and a paused one runs it when it resumes.
+struct AgentEffortPresentation: Equatable {
+	static let defaultLabel = "default"
+	static let noEffort = "—"
+
+	/// What the widget reads: the level that runs, "default" for Claude Code's, "—" for a model that takes none.
+	let label: String
+	let grayed: Bool
+	/// Orange: a pick waiting for the turn to end, a level the model runs as another, or one Claude Code refused.
+	let marked: Bool
+	/// The level stored, which the menu checks; nil is Claude Code's default.
+	let setTo: String?
+	/// The levels the menu offers after "Claude Code default", lowest first.
+	let levels: [String]
+	/// The menu's first, disabled line: why nothing can be picked, or what's different from what was set.
+	let note: String?
+	/// Whether a pick can be made now.
+	let enabled: Bool
+	let tooltip: String
+	let accessibilityValue: String
+
+	init(effort: ChatEffort?, phase: ChatPhase?, turnRunning: Bool, globallyPaused: Bool) {
+		let setTo = effort?.setTo
+		let levels = effort?.levels
+		let takesNone = levels?.isEmpty == true
+		let runsAs = effort?.runsAs
+		self.setTo = setTo
+		self.levels = levels ?? []
+		let paused = phase == .paused || globallyPaused
+		let unavailable: String? =
+			switch phase {
+			case .running, .paused: nil
+			case .opening: "This agent is starting"
+			case .pausing: "This agent is pausing"
+			default: "This agent isn't running"
+			}
+		if takesNone {
+			label = Self.noEffort
+		} else {
+			label = runsAs ?? setTo ?? Self.defaultLabel
+		}
+		grayed = takesNone || paused
+		marked = !takesNone && (effort?.pending == true || runsAs != nil || effort?.notTaken != nil)
+		enabled = unavailable == nil && levels != nil && !takesNone
+		let set = setTo ?? "Claude Code default"
+		if let unavailable {
+			note = unavailable
+		} else if levels == nil {
+			note = "Waiting for the levels Claude Code offers"
+		} else if takesNone {
+			note = "This model takes no effort level."
+		} else if let refused = effort?.notTaken {
+			note = "Claude Code didn't take \(set) (\(refused)). It's tried again at the next launch."
+		} else if let runsAs, let setTo {
+			note = "This model runs \(setTo) as \(runsAs)."
+		} else if effort?.pending == true {
+			note = "\(set) applies when this turn ends."
+		} else if turnRunning {
+			note = "A turn is running: a new level applies when it ends."
+		} else if paused {
+			note = "Paused: the level you pick applies when the agent resumes."
+		} else {
+			note = nil
+		}
+		tooltip = ["Effort: \(set)", runsAs.map { "runs as \($0)" }, note].compactMap { $0 }.joined(separator: " · ")
+		accessibilityValue = [label, note].compactMap { $0 }.joined(separator: ", ")
+	}
+}
+
+/// The Effort widget in an agent's widget bar: a gauge and the level, at a fixed width that fits every level Claude Code
+/// has, opening a native menu of "Claude Code default" and the levels the agent's model takes, the stored one checked.
+struct AgentEffortWidget: View {
+	static let reserved = [AgentEffortPresentation.defaultLabel, AgentEffortPresentation.noEffort, "low", "medium", "high", "xhigh", "max"]
+
+	let presentation: AgentEffortPresentation
+	let onPick: (String?) -> Void
+
+	var body: some View {
+		Menu {
+			if let note = presentation.note {
+				Text(note)
+				Divider()
+			}
+			Button {
+				onPick(nil)
+			} label: {
+				item("Claude Code default", checked: presentation.setTo == nil)
+			}
+			.disabled(!presentation.enabled)
+			Divider()
+			ForEach(presentation.levels, id: \.self) { level in
+				Button {
+					onPick(level)
+				} label: {
+					item(level, checked: presentation.setTo == level)
+				}
+				.disabled(!presentation.enabled)
+				.accessibilityIdentifier("agent-effort-\(level)")
+			}
+		} label: {
+			HStack(spacing: 5) {
+				Image(systemName: "gauge.with.dots.needle.67percent")
+					.foregroundStyle(presentation.marked ? AnyShapeStyle(.orange) : AnyShapeStyle(.secondary))
+				ZStack(alignment: .leading) {
+					ForEach(Self.reserved, id: \.self) { Text($0).hidden() }
+					Text(presentation.label)
+						.foregroundStyle(
+							presentation.marked
+								? AnyShapeStyle(.orange) : AnyShapeStyle(presentation.grayed ? .secondary : .primary))
+				}
+			}
+			.font(.callout)
+		}
+		.menuStyle(.borderlessButton)
+		.fixedSize()
+		.help(presentation.tooltip)
+		.accessibilityLabel("Agent effort")
+		.accessibilityValue(presentation.accessibilityValue)
+		.accessibilityIdentifier("agent-effort")
+	}
+
+	@ViewBuilder
+	private func item(_ title: String, checked: Bool) -> some View {
+		if checked { Label(title, systemImage: "checkmark") } else { Text(title) }
+	}
+}
