@@ -178,10 +178,8 @@ impl SpaceHandle {
         self.call(Action::Permission(id, answer)).await.map(|_| ())
     }
     /// Sets the model the agent runs: stored with the agent at once, so its next launch uses it, and told to its CLI
-    /// between turns (at once when idle, else when the running turn ends; a later change replaces one not yet told). A
-    /// change is never sent during a turn Devora sent, since what the CLI does with one then hasn't been checked; a turn
-    /// the CLI started itself (a background task's notification) isn't one the actor knows of, so a change is sent
-    /// during it.
+    /// between turns (at once when idle, else when the running turn ends, one Devora sent or one the CLI started itself;
+    /// a later change replaces one not yet told), since what the CLI does with one mid-turn hasn't been checked.
     pub async fn set_model(&self, model: String) -> Result<(), String> {
         self.call(Action::SetModel(model)).await.map(|_| ())
     }
@@ -598,6 +596,68 @@ fn begin(
     Ok(())
 }
 
+/// The turn the CLI is running, as the actor knows it: one Devora sent, or one the CLI started itself (when a background
+/// task reports, it runs a notification turn of its own). Every "between turns" check (a pause's boundary, telling the
+/// CLI a new model, starting a compaction the user asked for) waits for either kind.
+///
+/// How it moves (`observe`), so that it never sticks:
+/// - none, then `init`: the CLI started a turn itself (`Agents`);
+/// - `Agents`, then a turn Devora sends: that turn is now the one running (`Ours`), since the CLI folds a turn sent
+///   during its own into it and answers it with one result (probed on the pinned CLI);
+/// - `Agents` ends on any result (its own, or the interrupt's after Stop), or on the CLI exiting, stopping or failing;
+/// - `Ours` ends on the result answering it, or on the CLI exiting (and on a failed send, `Completion::failed_turn`);
+///   a result that answers no turn of Devora's passes it by. A failed send clears the turn even when it had joined the
+///   CLI's own, which may still run: a failed send most likely means the CLI is gone, and its exit follows;
+/// - another `init` while either runs changes nothing: the CLI sends one per turn, and a background task finishing
+///   during Devora's turn is folded into it, with no `init` and no result of its own (probed on the pinned CLI).
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum ActiveTurn {
+    /// A turn Devora sent, by the ID the CLI answers it with.
+    Ours(String),
+    /// A turn the CLI started itself.
+    Agents,
+}
+
+impl ActiveTurn {
+    /// Folds `event` into the turn running, and returns the turn it ended, if any.
+    fn observe(running: &mut Option<ActiveTurn>, event: &SessionEvent) -> Option<ActiveTurn> {
+        let ends = match (running.as_ref()?, event) {
+            (
+                ActiveTurn::Ours(id),
+                SessionEvent::Message(Message::Known(KnownMessage::Result(result))),
+            ) => result.answers(id),
+            (ActiveTurn::Ours(_), SessionEvent::Exited { .. }) => true,
+            (
+                ActiveTurn::Agents,
+                SessionEvent::Message(Message::Known(KnownMessage::Result(_))),
+            )
+            | (
+                ActiveTurn::Agents,
+                SessionEvent::Exited { .. } | SessionEvent::Stopped(_) | SessionEvent::Failed(_),
+            ) => true,
+            _ => false,
+        };
+        if ends {
+            running.take()
+        } else {
+            None
+        }
+    }
+
+    /// Whether `event` starts a turn the CLI runs by itself, with none running.
+    fn starts(running: &Option<ActiveTurn>, event: &SessionEvent) -> bool {
+        running.is_none()
+            && matches!(
+                event,
+                SessionEvent::Message(Message::Known(KnownMessage::System(System::Init { .. })))
+            )
+    }
+
+    fn is_ours(running: &Option<ActiveTurn>) -> bool {
+        matches!(running, Some(ActiveTurn::Ours(_)))
+    }
+}
+
 /// A pause stopping the agent's background tasks before it closes the CLI's
 /// input, so the CLI then exits by itself and the pause is only a pause.
 /// A stopped subagent makes the CLI run a notification turn of its own, in
@@ -634,8 +694,8 @@ async fn pump(
 ) -> Result<Option<StopInfo>, String> {
     let (completed, mut completions) = mpsc::unbounded_channel::<Completion>();
     let mut pending = 0usize;
-    // The turn running, by the ID the CLI answers it with, and a pause waiting for it to end.
-    let mut turn_running: Option<String> = None;
+    // The turn running, Devora's or the CLI's own, which a pause waits for.
+    let mut turn_running: Option<ActiveTurn> = None;
     // A model the user set this run, and one waiting for the running turn to end before the CLI is told.
     let mut chosen = ChosenModel::default();
     let mut untold: Option<String> = None;
@@ -747,7 +807,7 @@ async fn pump(
             }
             completion = completions.recv(), if pending > 0 => {
                 if let Some(completion) = completion {
-                    if completion.failed_turn {
+                    if completion.failed_turn && ActiveTurn::is_ours(&turn_running) {
                         turn_running = None;
                     }
                     finish(space,transcript,events,completion)?;
@@ -773,7 +833,7 @@ async fn pump(
                             tokio::spawn(async move { let _ = runtime.interrupt().await; });
                         }
                         // Its result names no turn of ours.
-                        SessionEvent::Message(Message::Known(KnownMessage::Result(_))) if turn_running.is_none() => {
+                        SessionEvent::Message(Message::Known(KnownMessage::Result(_))) if !ActiveTurn::is_ours(&turn_running) => {
                             prepared.agent_turns -= 1;
                         }
                         _ => {}
@@ -782,12 +842,12 @@ async fn pump(
                 let terminal = matches!(event,SessionEvent::Stopped(_) | SessionEvent::Failed(_));
                 let stop = match &event { SessionEvent::Stopped(info) => Some(info.clone()), _ => None };
                 // A crash ends the turn too; recovery resumes without it.
-                let ended = turn_running.as_deref().is_some_and(|id| match &event {
-                    SessionEvent::Message(Message::Known(KnownMessage::Result(result))) => result.answers(id),
-                    SessionEvent::Exited { .. } => true,
-                    _ => false,
-                });
-                let mut step = compact(compaction,&event,ended,events);
+                let finished = ActiveTurn::observe(&mut turn_running, &event);
+                if ActiveTurn::starts(&turn_running, &event) {
+                    turn_running = Some(ActiveTurn::Agents);
+                }
+                let ended = matches!(finished, Some(ActiveTurn::Ours(_)));
+                let mut step = compact(compaction,&event,finished.as_ref(),events);
                 if ended {
                     // Only its own result delivers the notice; a crash leaves the attempt for the next launch to check.
                     if let SessionEvent::Message(Message::Known(KnownMessage::Result(result))) = &event {
@@ -795,22 +855,21 @@ async fn pump(
                             space.db.notice_delivered(&id)?;
                         }
                     }
-                    turn_running = None;
                 }
                 // A spawn is the space's own bookkeeping (the CLI it records), not the host's.
                 if !matches!(event, SessionEvent::Spawned(_)) { let _ = events.send(SpaceEvent::Session(event)); }
                 if ended { let _ = events.send(SpaceEvent::TurnEnded); }
-                if let Some(model) = untold.take_if(|_| ended) {
+                if let Some(model) = untold.take_if(|_| finished.is_some()) {
                     tell_model(session.handle(), model, told.clone());
                 }
-                if ended && (pause_after_turn.is_some() || globally_paused()) {
+                if finished.is_some() && (pause_after_turn.is_some() || globally_paused()) {
                     // Every pause reason uses the same boundary before compaction.
                     step = None;
                     compaction.reset();
                     let _ = events.send(SpaceEvent::Context(compaction.context()));
                 }
                 if let Some(step) = step {
-                    turn_running = Some(send_step(space,transcript,compaction,&step,session.handle(),completed.clone(),events)?);
+                    turn_running = Some(ActiveTurn::Ours(send_step(space,transcript,compaction,&step,session.handle(),completed.clone(),events)?));
                     pending += 1;
                 }
                 if terminal {
@@ -877,7 +936,7 @@ async fn pump(
                             Some(step) => {
                                 let sent = send_step(space,transcript,compaction,&step,session.handle(),completed.clone(),events);
                                 let _ = reply.send(sent.as_ref().map(|_| Value::Null).map_err(Clone::clone));
-                                turn_running = Some(sent?);
+                                turn_running = Some(ActiveTurn::Ours(sent?));
                                 pending += 1;
                             }
                             None => { let _ = reply.send(Err("A compaction is already under way.".into())); }
@@ -886,15 +945,15 @@ async fn pump(
                     Some(command) if matches!(command.action, Action::Turn { .. } | Action::RestartNotice { .. }) && (globally_paused() || stopping || pause_after_turn.is_some()) => {
                         let _ = command.reply.send(Err("This agent is pausing. It starts no new turn until it resumes.".into()));
                     }
-                    // Its failed send would otherwise end the running turn.
-                    Some(command) if matches!(command.action, Action::Turn { .. } | Action::RestartNotice { .. }) && turn_running.is_some() => {
+                    // Its failed send would otherwise end the running turn. One sent during the CLI's own turn joins it.
+                    Some(command) if matches!(command.action, Action::Turn { .. } | Action::RestartNotice { .. }) && ActiveTurn::is_ours(&turn_running) => {
                         let _ = command.reply.send(Err("a turn is already running".into()));
                     }
                     Some(command) => {
                         match &command.action {
-                            Action::Turn { id, .. } => turn_running = Some(id.clone()),
+                            Action::Turn { id, .. } => turn_running = Some(ActiveTurn::Ours(id.clone())),
                             Action::RestartNotice { id, .. } => {
-                                turn_running = Some(id.clone());
+                                turn_running = Some(ActiveTurn::Ours(id.clone()));
                                 notice_turn = Some(id.clone());
                             }
                             _ => {}
@@ -961,13 +1020,12 @@ fn pause(runtime: SessionHandle, reply: oneshot::Sender<Result<Value, String>>) 
     });
 }
 
-/// Feeds compaction the session's usage, the results ending our turns and
-/// boundaries, publishing the context as it changes; returns the turn
-/// compaction asks for, if any.
+/// Feeds compaction the session's usage, the results ending turns (`ended`, of either kind) and compaction
+/// boundaries, publishing the context as it changes; returns the step compaction asks for, if any.
 fn compact(
     compaction: &mut Compaction,
     event: &SessionEvent,
-    ended_our_turn: bool,
+    ended: Option<&ActiveTurn>,
     events: &mpsc::UnboundedSender<SpaceEvent>,
 ) -> Option<crate::compaction::Step> {
     let before = compaction.context();
@@ -979,9 +1037,14 @@ fn compact(
             compaction.usage(usage);
             None
         }
-        SessionEvent::Message(Message::Known(KnownMessage::Result(result))) if ended_our_turn => {
-            compaction.result(result)
-        }
+        SessionEvent::Message(Message::Known(KnownMessage::Result(result))) => match ended {
+            Some(ActiveTurn::Ours(_)) => compaction.result(result),
+            // A turn the agent started itself only starts a compaction the user asked for during it. The point where a
+            // threshold check for such turns belongs: without one, an agent that works from its background tasks
+            // never reaches a point where Devora compacts it.
+            Some(ActiveTurn::Agents) => compaction.agents_turn_ended(result),
+            None => None,
+        },
         SessionEvent::Compacted(metadata) => {
             compaction.compacted(metadata);
             None
