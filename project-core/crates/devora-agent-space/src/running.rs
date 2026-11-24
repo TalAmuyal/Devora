@@ -606,7 +606,8 @@ fn begin(
 ///   during its own into it and answers it with one result (probed on the pinned CLI);
 /// - `Agents` ends on any result (its own, or the interrupt's after Stop), or on the CLI exiting, stopping or failing;
 /// - `Ours` ends on the result answering it, or on the CLI exiting (and on a failed send, `Completion::failed_turn`);
-///   a result that answers no turn of Devora's passes it by;
+///   a result that answers no turn of Devora's passes it by. A failed send clears the turn even when it had joined the
+///   CLI's own, which may still run: a failed send most likely means the CLI is gone, and its exit follows;
 /// - another `init` while either runs changes nothing: the CLI sends one per turn, and a background task finishing
 ///   during Devora's turn is folded into it, with no `init` and no result of its own (probed on the pinned CLI).
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1019,10 +1020,8 @@ fn pause(runtime: SessionHandle, reply: oneshot::Sender<Result<Value, String>>) 
     });
 }
 
-/// Feeds compaction the session's usage, the results ending our turns and
-/// boundaries, publishing the context as it changes; returns the turn
-/// compaction asks for, if any.
-/// Moves the compaction on from `event`, which ended `ended`, if it ended a turn; returns the step to send next.
+/// Feeds compaction the session's usage, the results ending turns (`ended`, of either kind) and compaction
+/// boundaries, publishing the context as it changes; returns the step compaction asks for, if any.
 fn compact(
     compaction: &mut Compaction,
     event: &SessionEvent,
