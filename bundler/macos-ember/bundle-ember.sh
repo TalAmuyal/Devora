@@ -1,6 +1,9 @@
 #!/bin/bash
 
 set -eEo pipefail
+# Ember runs on macOS 26 and newer (tauri.conf.json's minimumSystemVersion). Everything built here, the helpers bundled
+# with it included, targets that: the C code the crates compile otherwise targets the build machine's SDK.
+export MACOSX_DEPLOYMENT_TARGET=26.0
 
 HELPER_TEXT="Usage: $0 [--help|-h] [--open] [--name <name>] [--suffix <suffix>]
 
