@@ -135,9 +135,9 @@ It checks new/legacy assets, app/channel selection, completion source, copy/quar
 
 The **test** job runs on `ubuntu-latest`, which is free for public repos and cheap for private ones.
 
-The **build-and-release** job runs on `macos-15` because the build process requires macOS-specific tools (`hdiutil`, `plutil`, Xcode toolchain).
-MacOS runners on GitHub Actions are roughly 10x more expensive than Linux runners.
-The test job is deliberately kept on Linux to avoid unnecessary MacOS runner usage -- the build job only runs after tests pass.
+The **build-and-release** job runs on macOS because the build process requires macOS-specific tools (`hdiutil`, `plutil`, Xcode toolchain): on `xcode-27`, the image Sapphire's jobs and Ember's CI use, with the same pinned Xcode, so what CI tests is built on the image that ships it.
+GitHub's `macos-15` pool often had no runner to give at busy hours, while `xcode-27` always had one.
+Standard GitHub-hosted runners, these macOS ones included, are free for a public repository; what the plan limits is how many macOS jobs run at once, so the build job still runs only after the tests pass.
 
 ## Troubleshooting
 

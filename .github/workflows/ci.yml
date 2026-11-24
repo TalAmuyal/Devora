@@ -43,7 +43,11 @@ jobs:
   test-ember:
     needs: changes
     if: needs.changes.outputs.ember == 'true'
-    runs-on: macos-15
+    # Ember's jobs share Sapphire's image: GitHub's macos-15 pool often had no runner to give at busy hours.
+    runs-on: xcode-27
+    env:
+      # The image's default Xcode moves with patch releases; build with the one Sapphire does.
+      DEVELOPER_DIR: /Applications/Xcode_27.1.app/Contents/Developer
     steps:
       - uses: actions/checkout@v6
 
@@ -55,8 +59,8 @@ jobs:
         uses: actions/cache@v5
         with:
           path: project-ember/src-tauri/target
-          key: ember-rust-${{ runner.os }}-${{ hashFiles('project-ember/src-tauri/Cargo.lock') }}
-          restore-keys: ember-rust-${{ runner.os }}-
+          key: ember-rust-xcode-27-${{ hashFiles('project-ember/src-tauri/Cargo.lock') }}
+          restore-keys: ember-rust-xcode-27-
 
       # The Rust side only: its tests build in dev mode, which loads the frontend from `devUrl` rather than embedding `dist/`, so they need no npm modules,
       # and `--no-deps` keeps project-ember's automatic npm sync from installing them. The frontend's tests and type-check run on Linux (test-ember-unit).
@@ -120,7 +124,11 @@ jobs:
   e2e-ember:
     needs: changes
     if: needs.changes.outputs.ember == 'true'
-    runs-on: macos-15
+    # Ember's jobs share Sapphire's image: GitHub's macos-15 pool often had no runner to give at busy hours.
+    runs-on: xcode-27
+    env:
+      # The image's default Xcode moves with patch releases; build with the one Sapphire does.
+      DEVELOPER_DIR: /Applications/Xcode_27.1.app/Contents/Developer
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v6
@@ -133,8 +141,8 @@ jobs:
         uses: actions/cache@v5
         with:
           path: project-ember/src-tauri/target
-          key: ember-rust-${{ runner.os }}-${{ hashFiles('project-ember/src-tauri/Cargo.lock') }}
-          restore-keys: ember-rust-${{ runner.os }}-
+          key: ember-rust-xcode-27-${{ hashFiles('project-ember/src-tauri/Cargo.lock') }}
+          restore-keys: ember-rust-xcode-27-
 
       - name: Cache npm modules
         id: cache-npm-bdd
@@ -143,8 +151,8 @@ jobs:
           path: |
             project-ember/node_modules
             web-renderer/node_modules
-          key: ember-npm-${{ runner.os }}-${{ hashFiles('project-ember/package-lock.json', 'project-ember/scripts/patch-xterm.ts', 'web-renderer/package-lock.json') }}
-          restore-keys: ember-npm-${{ runner.os }}-
+          key: ember-npm-xcode-27-${{ hashFiles('project-ember/package-lock.json', 'project-ember/scripts/patch-xterm.ts', 'web-renderer/package-lock.json') }}
+          restore-keys: ember-npm-xcode-27-
 
       - name: Install npm dependencies
         if: steps.cache-npm-bdd.outputs.cache-hit != 'true'

@@ -36,5 +36,5 @@ For each test that failed, it prints its failures out of the runs where it ran, 
 A failure that passed when the job was re-run (an earlier attempt failed, the last passed, same commit) is flagged: it's the clearest sign of a flake.
 Read the two columns differently: a failure on a pull request can be that pull request's own bug, in work not merged yet, while a failure on master, or one that passed on re-run, is the stronger sign of a flake.
 `--test` narrows it to the tests whose suite and name match, and lists them all, failed or not.
-Jobs GitHub cancelled before a runner took them are listed apart, as "not run": that's runner capacity, not a test result.
+Jobs GitHub cancelled before a runner took them are listed apart, as "not run", by GitHub's annotation on each (`flake-report-not-run.jq`): those it found no runner for, by job and runner label (a pool short of capacity, not a test result), apart from those a newer run of the same branch replaced (the workflow's own concurrency rule).
 `flake-report.jq` is the report itself, and `flake-report.test.sh` checks it on made-up outcomes.

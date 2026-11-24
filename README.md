@@ -4,7 +4,7 @@ Its goal is to leverage and compose existing tools to create a powerful and effi
 
 ## Supported platform
 
-Only macOS (Apple Silicon) is currently supported, but there are plans to add Linux support in the future.
+Only macOS (Apple Silicon) is currently supported: macOS 26 or newer for Devora Ember, macOS 27 or newer for Devora Sapphire. There are plans to add Linux support in the future.
 
 ## Prerequisites
 

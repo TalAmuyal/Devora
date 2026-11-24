@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Checks flake-report.jq on made-up outcomes: master and pull-request counts kept apart, a failure that passed on
-# re-run flagged, skipped tests not counted as runs, tests that never failed left out, and the --test filter.
+# re-run flagged, skipped tests not counted as runs, tests that never failed left out, the --test filter, and jobs not run
+# told apart by why.
 set -uo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 failures=0
@@ -47,6 +48,23 @@ expect "the --test filter" "$(printf '%s\n' \
 	'All matching tests:' \
 	'  test-ember-unit: app.test.ts / always passes: failed 0/1 master, 0/0 PR; median 0.3s, slowest 0.3s' \
 	'  test-ember-unit: app.test.ts / always skipped: failed 0/0 master, 0/0 PR; median -, slowest -')" "$(report "app.test")"
+
+not_run() { printf '{"run":"%s","job":"%s","label":"%s","url":"https://ci/%s","reason":"%s"}\n' "$@"; }
+expect "jobs not run, by why" "$(printf '%s\n' \
+	'Jobs GitHub found no runner for (capacity, not tests):' \
+	'  e2e-ember on macos-15: 1 time(s), last https://ci/1' \
+	'  test-ember on macos-15: 2 time(s), last https://ci/3' \
+	'Jobs a newer run of the same branch replaced before they started: 1' \
+	'Jobs cancelled before they started, for another reason:' \
+	'  sapphire on xcode-27: (no annotation) https://ci/4')" "$(
+	{
+		not_run 3 test-ember macos-15 3 'The job was not acquired by Runner of type hosted even after multiple attempts'
+		not_run 1 test-ember macos-15 1 'The job was not acquired by Runner of type hosted even after multiple attempts'
+		not_run 1 e2e-ember macos-15 1 'The job was not acquired by Runner of type hosted even after multiple attempts'
+		not_run 2 test-ember macos-15 2 'Canceling since a higher priority waiting request for CI-refs/pull/1/merge exists'
+		not_run 4 sapphire xcode-27 4 ''
+	} | jq -r -s -f "$here/flake-report-not-run.jq"
+)"
 
 if [ "$failures" -gt 0 ]; then
 	echo "$failures check(s) failed" >&2

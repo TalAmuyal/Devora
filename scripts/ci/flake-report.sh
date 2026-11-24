@@ -2,7 +2,8 @@
 # Reports each test's failures over the last CI runs, from the test-outcomes artifacts each job uploads
 # (scripts/ci/test-outcomes/README.md): failures out of runs, on master and on pull requests apart, the last failure with
 # its run, the median and slowest durations, and failures that passed when the job was re-run, the clearest flakes.
-# Jobs GitHub cancelled before they started (no runner was acquired) are counted apart, as "not run": they aren't test failures.
+# Jobs GitHub cancelled before they started are counted apart, as "not run": they aren't test failures. By GitHub's annotation on
+# each, those it found no runner for (capacity, per runner label) are kept apart from those a newer run of the branch replaced.
 # Usage: flake-report.sh [--runs N] [--test <regex>]   (mise run flake-report; uses gh's login)
 set -euo pipefail
 runs=30 filter=""
@@ -39,15 +40,21 @@ jq -r '.[] | "\(.databaseId) \(.attempt)"' <<<"$listed" | while read -r run atte
 		touch "$dir/.complete"
 	fi
 	find "$dir" -name 'outcomes.jsonl' -exec cat {} + >>"$outcomes" 2>/dev/null || true
-	# Cancelled before a runner took it: no runner name, no steps.
+	# Cancelled before a runner took it: no runner name, no steps. GitHub's annotation says why.
 	cat "$dir"/jobs-*.jsonl 2>/dev/null |
-		jq -c --arg run "$run" 'select(.conclusion == "cancelled" and (.runner_name // "") == "" and ((.steps // []) | length) == 0) | {run: $run, job: .name, attempt: .run_attempt, url: .html_url}' >>"$not_run" || true
+		jq -c --arg run "$run" 'select(.conclusion == "cancelled" and (.runner_name // "") == "" and ((.steps // []) | length) == 0) | {run: $run, id: .id, job: .name, label: ((.labels // [])[0] // ""), attempt: .run_attempt, url: .html_url}' |
+		while read -r job; do
+			id=$(jq -r .id <<<"$job")
+			if [ ! -e "$dir/annotations-$id.json" ]; then
+				gh api "repos/$repo/check-runs/$id/annotations" >"$dir/annotations-$id.json" 2>/dev/null || echo '[]' >"$dir/annotations-$id.json"
+			fi
+			jq -c --slurpfile notes "$dir/annotations-$id.json" '. + {reason: ([$notes[0][]? | select(.annotation_level == "failure") | .message][0] // "")}' <<<"$job"
+		done >>"$not_run" || true
 done
 
 jq -r -s --argjson listed "$listed" --arg filter "$filter" -f "$(dirname "$0")/flake-report.jq" "$outcomes"
 
 if [ -s "$not_run" ]; then
 	echo
-	echo "Jobs not run, cancelled before a runner took them (capacity, not tests):"
-	jq -r -s 'group_by(.job)[] | sort_by(.run | tonumber) | "  \(.[0].job): \(length) time(s), last \(last.url)"' "$not_run"
+	jq -r -s -f "$(dirname "$0")/flake-report-not-run.jq" "$not_run"
 fi
