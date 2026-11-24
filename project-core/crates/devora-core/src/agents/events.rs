@@ -68,6 +68,7 @@ pub(super) fn effort(
         .and_then(|list| list.effort_levels(model))
         .map(<[String]>::to_vec);
     ChatEffort {
+        model_unknown: list.is_some() && levels.is_none(),
         runs_as: set_to
             .as_deref()
             .zip(levels.as_deref())
@@ -382,6 +383,19 @@ mod tests {
         );
         let unknown = effort(None, "opus", Some("high"), None);
         assert_eq!(unknown.levels, None, "no list, no levels claimed");
+    }
+
+    #[test]
+    fn a_model_the_list_doesnt_know_claims_no_levels_and_says_so() {
+        let list = list("claude-opus-5-5");
+        let unlisted = effort(None, "claude-made-up-9", Some("high"), Some(&list));
+        assert_eq!((unlisted.levels, unlisted.model_unknown), (None, true));
+        let waiting = effort(None, "claude-made-up-9", Some("high"), None);
+        assert_eq!(
+            (waiting.levels, waiting.model_unknown),
+            (None, false),
+            "no list yet: unknown for now, not unknown for good"
+        );
     }
 
     #[test]

@@ -8,9 +8,11 @@ struct AgentEffortTests {
 	let all = ["low", "medium", "high", "xhigh", "max"]
 
 	func effort(
-		_ setTo: String?, levels: [String]?, runsAs: String? = nil, pending: Bool = false, notTaken: String? = nil
+		_ setTo: String?, levels: [String]?, modelUnknown: Bool = false, runsAs: String? = nil, pending: Bool = false,
+		notTaken: String? = nil
 	) -> ChatEffort {
-		ChatEffort(setTo: setTo, levels: levels, runsAs: runsAs, pending: pending, notTaken: notTaken)
+		ChatEffort(
+			setTo: setTo, levels: levels, modelUnknown: modelUnknown, runsAs: runsAs, pending: pending, notTaken: notTaken)
 	}
 
 	func shown(
@@ -56,6 +58,14 @@ struct AgentEffortTests {
 		let paused = shown(effort("high", levels: all), phase: .paused)
 		#expect(paused.enabled && paused.grayed, "a paused agent's pick is stored for its next launch")
 		#expect(paused.note == "Paused: the level you pick applies when the agent resumes.")
+	}
+
+	@Test func aModelTheListDoesntKnowSaysSoAndOffersOnlyClaudeCodesDefault() {
+		let unknown = shown(effort("high", levels: nil, modelUnknown: true))
+		#expect(unknown.label == "high" && !unknown.enabled && unknown.defaultEnabled)
+		#expect(unknown.note == "Claude Code doesn't list this model, so its effort levels aren't known.")
+		let waiting = shown(effort("high", levels: nil))
+		#expect(!waiting.defaultEnabled, "nothing can be picked while the list is coming")
 	}
 
 	@Test func aRefusedLevelIsMarkedAndSaysWhy() {

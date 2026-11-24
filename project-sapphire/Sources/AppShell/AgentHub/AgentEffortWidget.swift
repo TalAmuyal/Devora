@@ -19,8 +19,10 @@ struct AgentEffortPresentation: Equatable {
 	let levels: [String]
 	/// The menu's first, disabled line: why nothing can be picked, or what's different from what was set.
 	let note: String?
-	/// Whether a pick can be made now.
+	/// Whether a level can be picked now.
 	let enabled: Bool
+	/// Whether "Claude Code default" can be picked now: also for a model the list doesn't know, since it sets no level.
+	let defaultEnabled: Bool
 	let tooltip: String
 	let accessibilityValue: String
 
@@ -47,9 +49,12 @@ struct AgentEffortPresentation: Equatable {
 		grayed = takesNone || paused
 		marked = !takesNone && (effort?.pending == true || runsAs != nil || effort?.notTaken != nil)
 		enabled = unavailable == nil && levels != nil && !takesNone
+		defaultEnabled = unavailable == nil && (levels != nil || effort?.modelUnknown == true)
 		let set = setTo ?? "Claude Code default"
 		if let unavailable {
 			note = unavailable
+		} else if effort?.modelUnknown == true {
+			note = "Claude Code doesn't list this model, so its effort levels aren't known."
 		} else if levels == nil {
 			note = "Waiting for the levels Claude Code offers"
 		} else if takesNone {
@@ -86,20 +91,15 @@ struct AgentEffortWidget: View {
 				Text(note)
 				Divider()
 			}
-			Button {
-				onPick(nil)
-			} label: {
-				item("Claude Code default", checked: presentation.setTo == nil)
-			}
-			.disabled(!presentation.enabled)
+			// Kept on one condition: picking it makes Claude Code use its own default for the model, which the pinned-CLI
+			// test `pinned_cli_changes_the_effort_between_turns_and_runs_an_unsupported_level_at_the_one_below` asserts.
+			// Should that stop holding, this entry goes with it.
+			choice("Claude Code default", checked: presentation.setTo == nil) { onPick(nil) }
+				.disabled(!presentation.defaultEnabled)
 			Divider()
 			ForEach(presentation.levels, id: \.self) { level in
-				Button {
-					onPick(level)
-				} label: {
-					item(level, checked: presentation.setTo == level)
-				}
-				.disabled(!presentation.enabled)
+				choice(level, checked: presentation.setTo == level) { onPick(level) }
+					.disabled(!presentation.enabled)
 				.accessibilityIdentifier("agent-effort-\(level)")
 			}
 		} label: {
@@ -124,8 +124,9 @@ struct AgentEffortWidget: View {
 		.accessibilityIdentifier("agent-effort")
 	}
 
-	@ViewBuilder
-	private func item(_ title: String, checked: Bool) -> some View {
-		if checked { Label(title, systemImage: "checkmark") } else { Text(title) }
+	/// A menu entry with the menu's own checkmark when it's the level stored (a toggle draws one; a button with a
+	/// checkmark image doesn't): choosing it picks the level, whatever its state.
+	private func choice(_ title: String, checked: Bool, pick: @escaping () -> Void) -> some View {
+		Toggle(title, isOn: Binding(get: { checked }, set: { _ in pick() }))
 	}
 }

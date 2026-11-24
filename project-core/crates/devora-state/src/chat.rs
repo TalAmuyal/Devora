@@ -67,6 +67,9 @@ pub struct ChatEffort {
     /// The levels its current model takes, lowest first, as Claude Code lists them; empty when it takes none, none when
     /// the list isn't known.
     pub levels: Option<Vec<String>>,
+    /// The list is known, but its model isn't in it (an agent can be set to any name): which levels it takes is unknown,
+    /// so `levels` is none and nothing is claimed about it.
+    pub model_unknown: bool,
     /// What Claude Code runs instead of `set_to` when the model doesn't take it: the nearest level below that it takes
     /// (the pinned-CLI suite asserts the rule). None when it takes the level set, or there's no level below to name.
     pub runs_as: Option<String>,
