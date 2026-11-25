@@ -1,0 +1,73 @@
+{
+  "devices": [
+    {
+      "architecture": "arm64",
+      "deviceId": "00006001-0012482A36F8801E",
+      "deviceName": "My Mac",
+      "modelName": "MacBook Pro",
+      "osBuildNumber": "26A434",
+      "osVersion": "27.0.1",
+      "platform": "macOS"
+    }
+  ],
+  "testNodes": [
+    {
+      "children": [
+        {
+          "children": [
+            {
+              "children": [
+                {
+                  "children": [
+                    {
+                      "duration": "0,11s",
+                      "durationInSeconds": 0.10732603073120117,
+                      "name": "Repetition 1",
+                      "nodeIdentifier": "1",
+                      "nodeIdentifierURL": "test://com.apple.xcode/DevoraSapphire/DevoraSapphireUITests/ScratchRetryShapeTests/testAttachesARetry",
+                      "nodeType": "Repetition",
+                      "result": "Passed"
+                    },
+                    {
+                      "duration": "0,4s",
+                      "durationInSeconds": 0.3978400230407715,
+                      "name": "Repetition 2",
+                      "nodeIdentifier": "2",
+                      "nodeIdentifierURL": "test://com.apple.xcode/DevoraSapphire/DevoraSapphireUITests/ScratchRetryShapeTests/testAttachesARetry",
+                      "nodeType": "Repetition",
+                      "result": "Passed"
+                    }
+                  ],
+                  "duration": "0,25s",
+                  "durationInSeconds": 0.25258302688598633,
+                  "name": "testAttachesARetry()",
+                  "nodeIdentifier": "ScratchRetryShapeTests/testAttachesARetry()",
+                  "nodeIdentifierURL": "test://com.apple.xcode/DevoraSapphire/DevoraSapphireUITests/ScratchRetryShapeTests/testAttachesARetry",
+                  "nodeType": "Test Case",
+                  "result": "Passed"
+                }
+              ],
+              "name": "ScratchRetryShapeTests",
+              "nodeIdentifierURL": "test://com.apple.xcode/DevoraSapphire/DevoraSapphireUITests/ScratchRetryShapeTests",
+              "nodeType": "Test Suite",
+              "result": "Passed"
+            }
+          ],
+          "name": "DevoraSapphireUITests",
+          "nodeIdentifierURL": "test://com.apple.xcode/DevoraSapphire/DevoraSapphireUITests",
+          "nodeType": "UI test bundle",
+          "result": "Passed"
+        }
+      ],
+      "name": "DevoraSapphire",
+      "nodeType": "Test Plan",
+      "result": "Passed"
+    }
+  ],
+  "testPlanConfigurations": [
+    {
+      "configurationId": "1",
+      "configurationName": "Test Scheme Action"
+    }
+  ]
+}

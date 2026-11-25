@@ -11,6 +11,7 @@ Each CI job that runs tests records every test's outcome and duration, so a flak
 | `suite`, `name` | The test's identity (below) |
 | `outcome` | `passed`, `failed` or `skipped` |
 | `duration` | Seconds, or `null` where the runner doesn't report it |
+| `retries` | XCUITests only: how many times the test retried a step itself, its attachments named `<Something> retry: …` (`xcresult.sh`; the convention is in `project-sapphire/UITests/CLAUDE.md`). Other formats have no such field |
 | `run_id`, `run_attempt`, `sha`, `event`, `ref` | The run, from GitHub's environment |
 
 The job then uploads the file as the artifact `test-outcomes-<job>-attempt-<n>`, kept 90 days, on every run, pass or fail. Nothing else stores it.
@@ -34,6 +35,8 @@ Renaming a test starts a new history, under the new name. `test.sh` checks that 
 `mise run flake-report [--runs N] [--test <regex>]` (`scripts/ci/flake-report.sh`, with gh's login) downloads the outcomes of the last N completed CI runs (30 by default), keeping each run's in `~/.cache/devora-flake-report/`, since an artifact never changes.
 For each test that failed, it prints its failures out of the runs where it ran, on master and on pull requests apart, the last failure with its run, and its median and slowest durations.
 A failure that passed when the job was re-run (an earlier attempt failed, the last passed, same commit) is flagged: it's the clearest sign of a flake.
+Tests that needed their own retry are listed apart, passing or not, with the runs that needed one out of the runs, on master and on pull requests: a retry that lets a test pass would otherwise hide the flake it works around.
+The result bundle is uploaded only when a job fails, so the retries are counted on the runner, while recording, on every run.
 Read the two columns differently: a failure on a pull request can be that pull request's own bug, in work not merged yet, while a failure on master, or one that passed on re-run, is the stronger sign of a flake.
 `--test` narrows it to the tests whose suite and name match, and lists them all, failed or not.
 Jobs GitHub cancelled before a runner took them are listed apart, as "not run", by GitHub's annotation on each (`flake-report-not-run.jq`): those it found no runner for, by job and runner label (a pool short of capacity, not a test result), apart from those a newer run of the same branch replaced (the workflow's own concurrency rule).

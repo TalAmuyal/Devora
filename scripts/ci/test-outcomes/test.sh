@@ -45,6 +45,12 @@ expect "xcresult outcomes" "$(printf '%s\n' \
 	"$("$here/xcresult.sh" --json "$fixtures/xcresult-outcomes.json" | summary)"
 expect "xcresult iterations" "10 ErrorBannerUITests | testClickingTheCrossDismissesTheBanner() | passed" \
 	"$("$here/xcresult.sh" --json "$fixtures/xcresult-iterations.json" | summary | uniq -c | sed 's/^ *//')"
+expect "xcresult retries, per iteration, by the attachment name's convention" "$(printf '%s\n' \
+	'ScratchRetryShapeTests | testAttachesARetry() | 1' \
+	'ScratchRetryShapeTests | testAttachesARetry() | 0')" \
+	"$("$here/xcresult.sh" --json "$fixtures/xcresult-retries-tests.json" "$fixtures/xcresult-retries-activities.jsonl" | jq -r '"\(.suite) | \(.name) | \(.retries)"')"
+expect "xcresult without activities has no retries" "false" \
+	"$("$here/xcresult.sh" --json "$fixtures/xcresult-iterations.json" | jq -s 'any(has("retries"))')"
 
 # cucumber: a scenario, an outline's rows, and failed and skipped scenarios.
 expect "cucumber scenario" "File preview pane | Refreshing an existing path preserves its stacked siblings | passed" \
