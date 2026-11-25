@@ -82,7 +82,8 @@ public final class AgentChat {
 
 	public var canSend: Bool {
 		!globallyPaused &&
-		chat?.phase == .running && chat?.pauseRequested == false && chat?.turnRunning == false && !sending
+		chat?.phase == .running && chat?.pauseRequested == false && (chat?.turnRunning == false || chat?.agentTurn == true)
+			&& !sending
 			&& !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
 	}
 
@@ -102,12 +103,14 @@ public final class AgentChat {
 			case .generation(let next):
 				value.generation = next
 				value.questions = []
-			case .turn(let running): value.turnRunning = running
+			case .turn(let running, let byAgent):
+				foldTurn(running: &value.turnRunning, agentTurn: &value.agentTurn, started: running, byAgent: byAgent)
 			case .phase(let phase):
 				value.phase = phase
 				if phase != .running {
 					value.questions = []
 					value.turnRunning = false
+					value.agentTurn = false
 				}
 				if phase == .paused || phase == .failed { value.pauseRequested = false }
 			case .ready(let session):
@@ -115,12 +118,14 @@ public final class AgentChat {
 				value.sessionId = session
 				value.error = nil
 				value.turnRunning = false
+				value.agentTurn = false
 				value.questions = []
 			case .failure(let message):
 				value.phase = .failed
 				value.error = message
 				value.questions = []
 				value.turnRunning = false
+				value.agentTurn = false
 				value.pauseRequested = false
 			case .restore(let restored): items = restored
 			case .transcript(let change): apply(change)

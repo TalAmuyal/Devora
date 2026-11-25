@@ -44,12 +44,42 @@ pub(super) fn publish(state: &Store, tab: u64, generation: u64, event: SpaceEven
         ),
         // The registry presents it, with the model list its launch was offered (`model`).
         SpaceEvent::Model(_) | SpaceEvent::ChosenModel(_) | SpaceEvent::ChosenEffort(_) => {}
-        SpaceEvent::TurnStarted => {
-            update(state, tab, generation, ChatUpdate::Turn { running: true })
-        }
-        SpaceEvent::TurnEnded => {
-            update(state, tab, generation, ChatUpdate::Turn { running: false })
-        }
+        SpaceEvent::TurnStarted => update(
+            state,
+            tab,
+            generation,
+            ChatUpdate::Turn {
+                running: true,
+                by_agent: false,
+            },
+        ),
+        SpaceEvent::TurnEnded => update(
+            state,
+            tab,
+            generation,
+            ChatUpdate::Turn {
+                running: false,
+                by_agent: false,
+            },
+        ),
+        SpaceEvent::AgentTurnStarted => update(
+            state,
+            tab,
+            generation,
+            ChatUpdate::Turn {
+                running: true,
+                by_agent: true,
+            },
+        ),
+        SpaceEvent::AgentTurnEnded => update(
+            state,
+            tab,
+            generation,
+            ChatUpdate::Turn {
+                running: false,
+                by_agent: true,
+            },
+        ),
     }
 }
 

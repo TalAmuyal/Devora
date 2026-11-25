@@ -160,7 +160,12 @@ pub struct Chat {
     pub tab: u64,
     pub generation: u64,
     pub phase: ChatPhase,
+    /// A turn is running: one the user sent (or Devora: a compaction step, the restart notice), or one the agent's CLI
+    /// started itself (`agent_turn`).
     pub turn_running: bool,
+    /// The running turn is one the agent's CLI started itself, as when a background task reports. The user can still
+    /// send: a prompt joins that turn, which is then theirs.
+    pub agent_turn: bool,
     pub pause_requested: bool,
     pub globally_held: bool,
     pub keep_paused: bool,
@@ -216,8 +221,17 @@ pub enum ChatUpdate {
     PauseRequested {
         requested: bool,
     },
+    /// A turn started or ended: one the agent's CLI started itself when `by_agent`. A start of the agent's own turn
+    /// doesn't replace one already shown (a prompt sent just before it began joined it), and an end ends only a turn
+    /// of its own kind, so a late end of the agent's turn never ends the user's.
+    ///
+    /// The known limit: a prompt sent during the agent's turn makes the turn the user's, so if that send fails, its end
+    /// leaves no turn shown, and the agent's own turn's end, if it comes, is then ignored. A send fails only when the
+    /// CLI can't take it (restarting, or gone), which most likely ended the agent's turn too; showing no turn beats a
+    /// spinner left on.
     Turn {
         running: bool,
+        by_agent: bool,
     },
     Generation {
         generation: u64,
@@ -327,6 +341,7 @@ pub(crate) fn apply(
                 generation,
                 phase: ChatPhase::Opening,
                 turn_running: false,
+                agent_turn: false,
                 pause_requested: false,
                 globally_held: false,
                 keep_paused: false,
@@ -361,7 +376,31 @@ pub(crate) fn apply(
                 ChatUpdate::GlobalHold { held } => chat.globally_held = *held,
                 ChatUpdate::KeepPaused { keep_paused } => chat.keep_paused = *keep_paused,
                 ChatUpdate::PauseRequested { requested } => chat.pause_requested = *requested,
-                ChatUpdate::Turn { running } => chat.turn_running = *running,
+                ChatUpdate::Turn {
+                    running: true,
+                    by_agent: true,
+                } => {
+                    if !chat.turn_running {
+                        chat.turn_running = true;
+                        chat.agent_turn = true;
+                    }
+                }
+                ChatUpdate::Turn {
+                    running: true,
+                    by_agent: false,
+                } => {
+                    chat.turn_running = true;
+                    chat.agent_turn = false;
+                }
+                ChatUpdate::Turn {
+                    running: false,
+                    by_agent,
+                } => {
+                    if chat.agent_turn == *by_agent {
+                        chat.turn_running = false;
+                        chat.agent_turn = false;
+                    }
+                }
                 ChatUpdate::Generation { generation } => {
                     chat.generation = *generation;
                     chat.questions.clear();
@@ -374,12 +413,14 @@ pub(crate) fn apply(
                     if *phase != ChatPhase::Running {
                         chat.questions.clear();
                         chat.turn_running = false;
+                        chat.agent_turn = false;
                     }
                 }
                 ChatUpdate::Ready { session_id } => {
                     chat.phase = ChatPhase::Running;
                     chat.error = None;
                     chat.turn_running = false;
+                    chat.agent_turn = false;
                     chat.session_id = Some(session_id.clone());
                     chat.questions.clear();
                 }
@@ -392,13 +433,10 @@ pub(crate) fn apply(
                     chat.pause_requested = false;
                     chat.phase = ChatPhase::Failed;
                     chat.turn_running = false;
+                    chat.agent_turn = false;
                     chat.questions.clear();
                 }
                 ChatUpdate::Transcript { change } => {
-                    if matches!(change, TranscriptChange::Upsert { item } if matches!(item.content, crate::TranscriptContent::System { kind:crate::SystemKind::Result, .. }))
-                    {
-                        chat.turn_running = false;
-                    }
                     let sequence = match change {
                         TranscriptChange::Upsert { item } => item.sequence,
                         TranscriptChange::AppendText { sequence, .. }
@@ -580,7 +618,13 @@ mod tests {
     fn a_turns_step_follows_its_latest_item_and_keeps_its_start_while_it_stays_the_same() {
         let mut chat = Fixture::new();
         assert_eq!(
-            chat.update(ChatUpdate::Turn { running: true }, 100),
+            chat.update(
+                ChatUpdate::Turn {
+                    running: true,
+                    by_agent: false
+                },
+                100
+            ),
             Some(step(StepActivity::Working, 100))
         );
         let thought = TranscriptContent::Thinking {
@@ -632,17 +676,80 @@ mod tests {
             text: "Turn completed".into(),
             detail_json: "{}".into(),
         };
+        chat.item(5, ItemState::Complete, result, 800);
         assert_eq!(
-            chat.item(5, ItemState::Complete, result, 800),
+            chat.update(
+                ChatUpdate::Turn {
+                    running: false,
+                    by_agent: false
+                },
+                900
+            ),
             Some(None),
             "the turn's end ends its step"
         );
     }
 
+    /// Which turn the chat shows running, and whether the user can send, as starts and ends of either kind arrive in
+    /// the orders the registry and the space actor can publish them in.
+    #[test]
+    fn a_turn_ends_only_by_its_own_kind_and_the_agents_never_replaces_the_users() {
+        let ours = |running| ChatUpdate::Turn {
+            running,
+            by_agent: false,
+        };
+        let agents = |running| ChatUpdate::Turn {
+            running,
+            by_agent: true,
+        };
+        let shown = |chat: &Fixture| (chat.chats[0].turn_running, chat.chats[0].agent_turn);
+
+        let mut chat = Fixture::new();
+        chat.update(agents(true), 100);
+        assert_eq!(shown(&chat), (true, true), "the agent's own turn");
+        chat.update(agents(false), 200);
+        assert_eq!(shown(&chat), (false, false));
+
+        // A prompt sent during the agent's turn joins it: the turn is the user's, and the agent's end doesn't end it.
+        chat.update(agents(true), 300);
+        chat.update(ours(true), 400);
+        assert_eq!(shown(&chat), (true, false));
+        chat.update(agents(false), 500);
+        assert_eq!(
+            shown(&chat),
+            (true, false),
+            "a late end of the agent's turn"
+        );
+        chat.update(ours(false), 600);
+        assert_eq!(shown(&chat), (false, false), "one end for the user's turn");
+
+        // The agent's turn starting just after the user sent: the user's stays.
+        chat.update(ours(true), 700);
+        chat.update(agents(true), 800);
+        assert_eq!(shown(&chat), (true, false));
+        chat.update(ours(false), 900);
+        assert_eq!(shown(&chat), (false, false), "no spinner is left on");
+
+        // The known limit: a send that fails during the agent's turn ends the shown turn, and the agent's own end,
+        // if it comes, then changes nothing; nothing is left on.
+        chat.update(agents(true), 1000);
+        chat.update(ours(true), 1100);
+        chat.update(ours(false), 1200);
+        assert_eq!(shown(&chat), (false, false), "the failed send's end");
+        chat.update(agents(false), 1300);
+        assert_eq!(shown(&chat), (false, false));
+    }
+
     #[test]
     fn a_subagents_latest_item_is_the_step_and_says_whose_it_is() {
         let mut chat = Fixture::new();
-        chat.update(ChatUpdate::Turn { running: true }, 100);
+        chat.update(
+            ChatUpdate::Turn {
+                running: true,
+                by_agent: false,
+            },
+            100,
+        );
         chat.item(1, ItemState::Complete, bash("task", None), 200);
         let thought = TranscriptContent::Thinking {
             text: "Hm".into(),
@@ -681,7 +788,13 @@ mod tests {
     #[test]
     fn a_permission_question_is_the_step_until_it_is_answered() {
         let mut chat = Fixture::new();
-        chat.update(ChatUpdate::Turn { running: true }, 100);
+        chat.update(
+            ChatUpdate::Turn {
+                running: true,
+                by_agent: false,
+            },
+            100,
+        );
         chat.item(1, ItemState::Complete, bash("t1", None), 200);
         let question = PermissionQuestion {
             request_id: "q1".into(),
@@ -715,7 +828,13 @@ mod tests {
     #[test]
     fn a_chat_that_stops_has_no_step() {
         let mut chat = Fixture::new();
-        chat.update(ChatUpdate::Turn { running: true }, 100);
+        chat.update(
+            ChatUpdate::Turn {
+                running: true,
+                by_agent: false,
+            },
+            100,
+        );
         assert_eq!(
             chat.update(
                 ChatUpdate::Phase {

@@ -37,6 +37,8 @@ export interface AgentChatState {
     topSequence: string | null;
   };
   running: boolean;
+  agentTurn: boolean;
+  actions: { stop: boolean; send: boolean; canSend: boolean };
   /** The items the chat holds, shown or not: a turn's plain end isn't a row. */
   items: number;
   /** Whether the chat shows its system messages (the Widget Bar's toggle). */

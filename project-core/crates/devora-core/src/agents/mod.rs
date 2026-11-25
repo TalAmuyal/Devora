@@ -977,14 +977,18 @@ impl Agents {
                 .into_iter()
                 .find(|c| c.tab == tab)
                 .ok_or("agent chat is missing")?;
-            if chat.phase != ChatPhase::Running || chat.turn_running {
+            // A prompt sent during a turn the agent started itself joins it (`ActiveTurn`), which is then the user's.
+            if chat.phase != ChatPhase::Running || (chat.turn_running && !chat.agent_turn) {
                 return Err("agent is not ready for a new turn".into());
             }
             events::update(
                 &self.state,
                 tab,
                 generation,
-                ChatUpdate::Turn { running: true },
+                ChatUpdate::Turn {
+                    running: true,
+                    by_agent: false,
+                },
             );
             (handle, key.clone())
         };
@@ -994,7 +998,15 @@ impl Agents {
         self.runtime.spawn(async move {
             let result = handle.send_turn(text.clone()).await;
             if result.is_err() {
-                events::update(&state, tab, generation, ChatUpdate::Turn { running: false });
+                events::update(
+                    &state,
+                    tab,
+                    generation,
+                    ChatUpdate::Turn {
+                        running: false,
+                        by_agent: false,
+                    },
+                );
             }
 
             // Clear only the submitted draft, independently of the caller's

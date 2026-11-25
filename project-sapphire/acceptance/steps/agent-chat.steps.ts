@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import { Given, When, Then } from '@cucumber/cucumber';
 import { SapphireWorld } from '../support/world';
 import { closeWindowSurfaces } from './workspace-hub.steps';
@@ -217,4 +219,28 @@ Then('the agent transcript says once {string}', async function (this: SapphireWo
   const chat = await this.bridge.waitFor(`transcript containing ${text}`, () => this.bridge.agentChat(),
     s => s.dom.text.includes(text) && !s.running);
   assert.equal(chat.dom.text.split(text).length - 1, 1, `exactly one "${text}"`);
+});
+
+/** Cues the fake CLI (`fake_cli.py`'s `own_turns`) to start a turn of its own, as a background task reporting does. */
+function cueOwnTurn(world: SapphireWorld, cue: 'start' | 'end') {
+  const cues = path.join(path.dirname(world.testConfigPath), 'fake-own-turns');
+  fs.mkdirSync(cues, { recursive: true });
+  fs.writeFileSync(path.join(cues, cue), '');
+}
+When('the agent starts a turn of its own', async function (this: SapphireWorld) {
+  cueOwnTurn(this, 'start');
+  await this.bridge.waitFor("the agent's own turn running", () => this.bridge.agentChat(), s => s.running && s.agentTurn);
+});
+When("the agent's own turn ends", function (this: SapphireWorld) { cueOwnTurn(this, 'end'); });
+Then('the agent chat offers {string}', async function (this: SapphireWorld, offered: string) {
+  const expected = { 'Stop and Send': { stop: true, send: true }, 'only Stop': { stop: true, send: false }, 'only Send': { stop: false, send: true } }[offered];
+  assert.ok(expected, `unknown offer "${offered}"`);
+  await this.bridge.waitFor(`the bar offering ${offered}`, () => this.bridge.agentChat(),
+    s => s.actions.stop === expected.stop && s.actions.send === expected.send);
+});
+Then('the agent chat can send', async function (this: SapphireWorld) {
+  await this.bridge.waitFor('sending allowed', () => this.bridge.agentChat(), s => s.actions.canSend);
+});
+Then('the agent chat cannot send', async function (this: SapphireWorld) {
+  await this.bridge.waitFor('sending unavailable', () => this.bridge.agentChat(), s => !s.actions.canSend);
 });

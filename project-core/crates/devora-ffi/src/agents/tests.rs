@@ -74,6 +74,11 @@ impl Fixture {
                         .to_string_lossy()
                         .into_owned(),
                 ),
+                // Where a test cues the fake's own turns (`OWN_TURNS`).
+                (
+                    "DEVORA_FAKE_OWN_TURNS".into(),
+                    self.own_turns().to_string_lossy().into_owned(),
+                ),
                 (
                     "DEVORA_FAKE_REPORT".into(),
                     self.profile
@@ -85,6 +90,17 @@ impl Fixture {
                 ),
             ]),
         }
+    }
+
+    fn own_turns(&self) -> std::path::PathBuf {
+        let cues = self.profile.root.path().join("own-turns");
+        fs::create_dir_all(&cues).unwrap();
+        cues
+    }
+
+    /// Cues the fake CLI to start a turn of its own (`start`) or end it (`end`).
+    fn cue(&self, name: &str) {
+        fs::write(self.own_turns().join(name), "").unwrap();
     }
 
     fn create(&self, name: &str) {
@@ -489,6 +505,38 @@ fn permissions_interrupt_recovery_and_owning_profile_are_projected() {
             .to_string_lossy()
             .as_ref()
     );
+    block_on(f.core.shutdown_agents()).unwrap();
+}
+
+#[test]
+fn a_prompt_joins_the_agents_own_turn_and_waits_for_the_users() {
+    let f = Fixture::new(false);
+    f.create("Own");
+    let tab = f.open("Own");
+    let events = f.core.subscribe_agent_chats().unwrap();
+    let chat = f.wait(&events, |c| c.phase == ChatPhase::Running);
+    f.cue("start");
+    f.wait(&events, |c| c.turn_running && c.agent_turn);
+    block_on(
+        f.core
+            .send_agent_turn(tab, chat.generation, "stream".into()),
+    )
+    .unwrap();
+    let joined = f.wait(&events, |c| has_message(c, "fake_stream_ready"));
+    assert!(
+        joined.turn_running && !joined.agent_turn,
+        "the turn is the user's now"
+    );
+    assert!(
+        block_on(
+            f.core
+                .send_agent_turn(tab, chat.generation, "another".into())
+        )
+        .is_err(),
+        "a turn the user sent takes no second prompt"
+    );
+    block_on(f.core.interrupt_agent(tab, chat.generation)).unwrap();
+    f.wait(&events, |c| !c.turn_running);
     block_on(f.core.shutdown_agents()).unwrap();
 }
 

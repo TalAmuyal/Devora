@@ -33,7 +33,7 @@ struct AgentChatTests {
 		let tab = try #require(core.snapshot().window.tabs.first)
 		let model = try AgentChat(store: store, core: core, tab: tab, name: "Delta")
 		let chat = Chat(
-			tab: tab.id, generation: 7, phase: .running, turnRunning: false, pauseRequested: false, globallyHeld: false, keepPaused: false,
+			tab: tab.id, generation: 7, phase: .running, turnRunning: false, agentTurn: false, pauseRequested: false, globallyHeld: false, keepPaused: false,
 			sessionId: "cli", items: [], error: nil, questions: [], usageJson: nil, context: nil, model: nil, effort: nil, step: nil)
 		model.apply(.started(chat: chat))
 		let item = TranscriptItem(
@@ -58,5 +58,42 @@ struct AgentChatTests {
 		model.apply(.updated(tab: tab.id, generation: 7, update: .failure(message: "failed")))
 		#expect(model.chat?.phase == .failed)
 		#expect(model.chat?.pauseRequested == false)
+	}
+
+	/// The chat folds turns by the core's rule: the agent's own turn keeps Send, a prompt sent into it makes the turn the
+	/// user's, and a late end of the agent's turn never ends the user's, so no spinner is left on.
+	@Test func theAgentsOwnTurnKeepsSendAndNeverEndsTheUsers() throws {
+		let fixture = try Fixture()
+		let store = Store(configPath: fixture.configPath, state: .inMemory, log: try fixture.log())
+		let core = try #require(store.core)
+		_ = try core.dispatch(command: .openSession(title: "Delta", kind: .shell, profilePath: "/profile"))
+		let tab = try #require(core.snapshot().window.tabs.first)
+		let model = try AgentChat(store: store, core: core, tab: tab, name: "Delta")
+		model.apply(.started(chat: Chat(
+			tab: tab.id, generation: 1, phase: .running, turnRunning: false, agentTurn: false, pauseRequested: false,
+			globallyHeld: false, keepPaused: false, sessionId: "cli", items: [], error: nil, questions: [], usageJson: nil,
+			context: nil, model: nil, effort: nil, step: nil)))
+		let turn = { (running: Bool, byAgent: Bool) in
+			model.apply(.updated(tab: tab.id, generation: 1, update: .turn(running: running, byAgent: byAgent)))
+		}
+		let shown = { (model.chat?.turnRunning, model.chat?.agentTurn) }
+		model.draft = "a prompt"
+
+		turn(true, true)
+		#expect(shown() == (true, true))
+		#expect(model.canSend, "a prompt joins the agent's own turn")
+		turn(true, false)
+		#expect(shown() == (true, false))
+		#expect(!model.canSend, "the user's turn takes no second prompt")
+		turn(false, true)
+		#expect(shown() == (true, false), "a late end of the agent's turn")
+		turn(false, false)
+		#expect(shown() == (false, false))
+
+		turn(true, false)
+		turn(true, true)
+		#expect(shown() == (true, false), "the agent's turn starting just after the user sent")
+		turn(false, false)
+		#expect(shown() == (false, false), "no spinner is left on")
 	}
 }

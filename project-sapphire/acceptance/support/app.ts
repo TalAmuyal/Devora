@@ -45,6 +45,8 @@ export async function launch(configPath: string, stateDir: string | undefined, o
       DEVORA_TEST_CLAUDE_PROGRAM: FAKE_CLAUDE,
       DEVORA_FAKE_FIXTURES: FAKE_CLAUDE_FIXTURES,
       DEVORA_FAKE_REPORT: path.join(path.dirname(configPath), 'fake-claude.jsonl'),
+      // Where a step cues the fake CLI to start a turn of its own, or end it (`fake_cli.py`'s `own_turns`).
+      DEVORA_FAKE_OWN_TURNS: path.join(path.dirname(configPath), 'fake-own-turns'),
       ...options.environment,
       DEVORA_TEST_MODE: '1', DEVORA_TEST_HEALTH_FIXTURE: path.join(path.dirname(configPath), 'health-report.json'), DEVORA_CONFIG_PATH: configPath, ...(stateDir ? { DEVORA_STATE_DIR: stateDir } : {}) },
     stdio: ['ignore', 'ignore', 'pipe'],

@@ -2782,3 +2782,40 @@ async fn a_chosen_effort_is_stored_at_once_and_told_to_the_cli_only_between_turn
         Some("low")
     );
 }
+
+// The chat learns of a turn the CLI started itself from the space: `AgentTurnStarted` and `AgentTurnEnded` bracket it.
+// A prompt sent during it joins it, so that turn ends as the prompt's, with one `TurnEnded` and no `AgentTurnEnded`.
+#[tokio::test]
+async fn the_space_publishes_a_turn_the_cli_started_itself_and_its_end() {
+    let space = OwnTurns::new();
+    let mut running = space.start().await;
+    space.cue("start");
+    until(&mut running, |update| {
+        matches!(update, SpaceEvent::AgentTurnStarted)
+    })
+    .await;
+    space.cue("end");
+    until(&mut running, |update| {
+        matches!(update, SpaceEvent::AgentTurnEnded)
+    })
+    .await;
+
+    space.cue("start");
+    until(&mut running, |update| {
+        matches!(update, SpaceEvent::AgentTurnStarted)
+    })
+    .await;
+    running.handle().send_turn("drift".into()).await.unwrap();
+    let mut ends = vec![];
+    until(&mut running, |update| {
+        match update {
+            SpaceEvent::TurnEnded => ends.push("ours"),
+            SpaceEvent::AgentTurnEnded => ends.push("the agent's"),
+            _ => {}
+        }
+        matches!(update, SpaceEvent::TurnEnded)
+    })
+    .await;
+    assert_eq!(ends, ["ours"]);
+    running.pause().await.unwrap();
+}

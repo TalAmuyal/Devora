@@ -157,6 +157,10 @@ final class TestBridge {
 				observation["globallyPaused"] = panel.chat.globallyPaused
 				observation["globallyHeld"] = panel.chat.chat?.globallyHeld ?? false
 				observation["running"] = panel.chat.chat?.turnRunning ?? false
+				observation["agentTurn"] = panel.chat.chat?.agentTurn ?? false
+				let actions = AgentWidgetBar.actions(
+					turnRunning: panel.chat.chat?.turnRunning ?? false, agentTurn: panel.chat.chat?.agentTurn ?? false)
+				observation["actions"] = ["stop": actions.stop, "send": actions.send, "canSend": panel.chat.canSend]
 				// The spinner's line under the transcript: the step's name and its start, or none without a turn.
 				observation["turnStatus"] = panel.chat.chat?.step.map {
 					["step": AgentTurnStatus.label($0.activity), "sinceMs": String($0.sinceMs)] as [String: Any]
