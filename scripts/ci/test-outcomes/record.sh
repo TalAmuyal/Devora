@@ -21,7 +21,7 @@ for input in "$@"; do
 	jq -c --arg job "$job" --arg format "$format" \
 		--arg run_id "${GITHUB_RUN_ID:-}" --arg run_attempt "${GITHUB_RUN_ATTEMPT:-}" --arg sha "${GITHUB_SHA:-}" \
 		--arg event "${GITHUB_EVENT_NAME:-}" --arg ref "${GITHUB_REF:-}" \
-		'{job: $job, format: $format, suite, name, outcome, duration, run_id: $run_id, run_attempt: ($run_attempt | tonumber? // null), sha: $sha, event: $event, ref: $ref}' \
+		'{job: $job, format: $format, suite, name, outcome, duration, run_id: $run_id, run_attempt: ($run_attempt | tonumber? // null), sha: $sha, event: $event, ref: $ref} + (if has("retries") then {retries} else {} end)' \
 		<<<"$outcomes" >>"$out"
 	echo "test-outcomes: $format at $path: $(jq -r .outcome <<<"$outcomes" | sort | uniq -c | awk '{printf "%s%s %s", sep, $1, $2; sep=", "}')"
 done
