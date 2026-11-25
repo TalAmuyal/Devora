@@ -20,7 +20,7 @@ struct TranscriptVisibilityTests {
 	@Test func theConversationAndWhatNeedsTheUserAlwaysShowTheAgentsWorkingIsSystemAndAPlainTurnEndNever() {
 		let tool = TranscriptContent.tool(toolUseId: "t1", name: "Bash", inputJson: "{}", verdict: nil, result: nil)
 		let cases: [(TranscriptItem, TranscriptVisibility)] = [
-			(item(1, .user(text: "Hi", error: nil)), .always),
+			(item(1, .user(text: "Hi", error: nil, delivery: nil)), .always),
 			(item(2, .assistant(text: "Hello", model: nil)), .always),
 			(item(3, system(.modelChanged)), .always),
 			(item(4, system(.unfinishedFirstPrompt)), .always),
@@ -54,8 +54,8 @@ struct TranscriptVisibilityTests {
 		window.contentView!.addSubview(view)
 		window.layoutIfNeeded()
 		view.apply([
-			item(1, .user(text: "Hi", error: nil)), item(2, .assistant(text: "Hello", model: nil)), item(3, turnCompleted),
-			item(4, .user(text: "Again", error: nil)), item(5, turnFailed),
+			item(1, .user(text: "Hi", error: nil, delivery: nil)), item(2, .assistant(text: "Hello", model: nil)), item(3, turnCompleted),
+			item(4, .user(text: "Again", error: nil, delivery: nil)), item(5, turnFailed),
 		])
 		var steps = 0
 		while !view.isSettled && steps < 1000 {
@@ -76,7 +76,7 @@ struct SystemMessagesToggleTests {
 		(0..<UInt64(count)).flatMap { turn -> [TranscriptItem] in
 			let first = turn * 3 + 1
 			return [
-				item(first, .user(text: "Question \(turn)", error: nil)),
+				item(first, .user(text: "Question \(turn)", error: nil, delivery: nil)),
 				item(first + 1, .tool(toolUseId: "t\(turn)", name: "Bash", inputJson: "{}", verdict: nil, result: nil)),
 				item(first + 2, .assistant(text: String(repeating: "A reply that wraps. ", count: 20), model: nil)),
 			]

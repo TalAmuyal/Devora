@@ -42,7 +42,7 @@ public struct TranscriptRowModel: Equatable {
 	/// The Markdown a row renders: a user's prompt, a reply or a thought. None for the rest.
 	static func markdown(of content: TranscriptContent) -> String? {
 		switch content {
-		case .user(let text, _), .assistant(let text, _), .thinking(let text, _): text
+		case .user(let text, _, _), .assistant(let text, _), .thinking(let text, _): text
 		case .tool, .system, .unknown: nil
 		}
 	}
@@ -50,7 +50,8 @@ public struct TranscriptRowModel: Equatable {
 	/// The text a row has (and the test bridge reads), collapsed or not, as the web transcript's row text.
 	var plainText: String {
 		switch item.content {
-		case .user(let text, let error): text + (error.map { "\n\n\($0)" } ?? "")
+		case .user(let text, let error, let delivery):
+			text + (delivery.map { "\n\($0.note)" } ?? "") + (error.map { "\n\n\($0)" } ?? "")
 		case .assistant(let text, _): text
 		case .thinking(let text, _): "Thinking\n\(text)"
 		case .tool(_, let name, let input, let verdict, let result):
@@ -64,13 +65,14 @@ public struct TranscriptRowModel: Equatable {
 	/// What Copy puts on the pasteboard: the item as written, its Markdown included, rather than as drawn.
 	var source: String {
 		switch item.content {
-		case .user(let text, _), .assistant(let text, _), .thinking(let text, _): text
+		case .user(let text, _, _), .assistant(let text, _), .thinking(let text, _): text
 		case .tool(_, let name, let input, _, let result): [name, prettyJSON(input), result?.text].compactMap { $0 }.joined(separator: "\n\n")
 		case .system, .unknown: plainText
 		}
 	}
 
-	/// What VoiceOver says first: the row's kind, its time, and its state where it has one ("You, 10:41").
+	/// What VoiceOver says first: the row's kind, its time (or where a prompt the agent doesn't have is), and its state
+	/// where it has one ("You, 10:41").
 	var accessibilityLabel: String {
 		var parts: [String]
 		switch item.content {
@@ -80,7 +82,12 @@ public struct TranscriptRowModel: Equatable {
 		case .tool(_, let name, _, let verdict, _): parts = ["Tool \(name)"] + (verdict.map { ["Judgess \($0.kind)"] } ?? [])
 		case .system, .unknown: parts = ["System"]
 		}
-		if let time { parts.append(time.shown) }
+		// A prompt the agent doesn't have shows where it is in place of its time.
+		if case .user(_, _, let delivery?) = item.content {
+			parts.append(delivery.note)
+		} else if let time {
+			parts.append(time.shown)
+		}
 		if collapsible { parts.append(expanded ? "expanded" : "collapsed") }
 		if item.state == .interrupted { parts.append("interrupted") }
 		if item.state == .failed { parts.append("failed") }
@@ -152,17 +159,21 @@ struct TranscriptRow: View {
 	/// and the rest (the agent's working, the session's notes, errors) in a grey bubble on the left.
 	@ViewBuilder private var placed: some View {
 		switch model.item.content {
-		case .user(let text, let error):
+		case .user(let text, let error, let delivery):
 			VStack(alignment: .trailing, spacing: 4) {
 				UserBubbleLayout {
-					VStack(alignment: .trailing, spacing: 2) {
-						markdown(text)
-							.environment(\.transcriptTheme, .onBubble)
-						timeLabel.opacity(0.75)
-					}
-					.foregroundStyle(.white)
-					.padding(.horizontal, 12).padding(.vertical, 8)
+					if let delivery {
+						undelivered(text, delivery)
+					} else {
+						VStack(alignment: .trailing, spacing: 2) {
+							markdown(text)
+								.environment(\.transcriptTheme, .onBubble)
+							timeLabel.opacity(0.75)
+						}
+						.foregroundStyle(.white)
+						.padding(.horizontal, 12).padding(.vertical, 8)
 						.background(Color(nsColor: .systemBlue), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+					}
 				}
 				if let error { Text(error).font(.callout).foregroundStyle(theme.error) }
 			}
@@ -190,6 +201,22 @@ struct TranscriptRow: View {
 			.frame(maxWidth: .infinity, alignment: .leading)
 			.padding(.trailing, Self.replyTrailing)
 		}
+	}
+
+	/// A prompt the agent doesn't have: the bubble's outline only, dashed, with where it is in place of its time; blue
+	/// while it waits, red once it can't arrive.
+	private func undelivered(_ text: String, _ delivery: Delivery) -> some View {
+		let tint = Color(nsColor: delivery == .waiting ? .systemBlue : .systemRed)
+		let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
+		return VStack(alignment: .trailing, spacing: 2) {
+			markdown(text)
+			Label(delivery.note, systemImage: delivery == .waiting ? "clock" : "exclamationmark.triangle")
+				.font(.caption2.weight(.semibold))
+				.opacity(delivery == .waiting ? 0.75 : 1)
+		}
+		.foregroundStyle(tint)
+		.padding(.horizontal, 12).padding(.vertical, 8)
+		.overlay(shape.inset(by: 0.75).stroke(tint, style: StrokeStyle(lineWidth: 1.5, dash: [5, 3])))
 	}
 
 	/// A grey bubble's fill: tinted red for an error, which shows whatever the system messages' toggle says.

@@ -113,7 +113,8 @@ def own_turns(directory):
     """Turns the CLI starts itself, as when a background task reports, on the test's cues in `directory`: `start` opens
     one, then `end` ends it with a result naming no user message, `crash` kills the CLI during it, or `step` gives the
     agent the prompt held in it (`held`), which then ends the turn as that prompt's. `race`, read with the next prompt,
-    opens one just before that prompt is read."""
+    opens one just before that prompt is read; `hold`, read with the next prompt joining one, holds that prompt as
+    DEVORA_FAKE_FOLDED_WAITS holds every such prompt."""
     global notification_turn, held, sent_turn
     def cue(*names):
         while True:
@@ -244,7 +245,10 @@ for line in sys.stdin:
         # prompt, and opens no turn of its own (probed on the pinned CLI).
         with output:
             folded = notification_turn
-            waits = folded and bool(os.environ.get("DEVORA_FAKE_FOLDED_WAITS"))
+            hold = cues and (pathlib.Path(cues) / "hold").exists()
+            if folded and hold:
+                (pathlib.Path(cues) / "hold").unlink()
+            waits = folded and bool(os.environ.get("DEVORA_FAKE_FOLDED_WAITS") or hold)
             notification_turn = notification_turn and waits
             lifecycle(message.get("uuid"), "queued")
             if waits:

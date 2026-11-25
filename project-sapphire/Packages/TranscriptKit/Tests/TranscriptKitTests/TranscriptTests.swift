@@ -19,7 +19,7 @@ private func transcript(_ count: Int, from first: UInt64 = 1) -> [TranscriptItem
 	(0..<count).map { index in
 		let sequence = first + UInt64(index)
 		switch index % 3 {
-		case 0: return item(sequence, .user(text: "Question \(sequence)", error: nil))
+		case 0: return item(sequence, .user(text: "Question \(sequence)", error: nil, delivery: nil))
 		case 1: return reply(sequence, String(repeating: "A longer reply that wraps over several lines. ", count: 12))
 		default: return reply(sequence, "Short \(sequence).")
 		}
@@ -79,7 +79,7 @@ struct RowHeightsTests {
 		let other = reply(2, String(repeating: "word ", count: 40))
 		#expect(heights.estimate(other, width: 400) == guess * 2)
 		// Only that kind's estimates.
-		let user = item(3, .user(text: "Hi", error: nil))
+		let user = item(3, .user(text: "Hi", error: nil, delivery: nil))
 		#expect(heights.estimate(user, width: 400) == RowHeights.guess(user, width: 400))
 	}
 
@@ -132,7 +132,7 @@ struct TranscriptScrollViewTests {
 		let calendar = Calendar.autoupdatingCurrent
 		let evening = calendar.date(bySettingHour: 23, minute: 59, second: 0, of: Date())!
 		var now = evening.addingTimeInterval(30)
-		var prompt = item(1, .user(text: "Late question", error: nil))
+		var prompt = item(1, .user(text: "Late question", error: nil, delivery: nil))
 		prompt.createdAt = evening
 		let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 400), styleMask: [.titled], backing: .buffered, defer: false)
 		window.isReleasedWhenClosed = false
@@ -323,7 +323,7 @@ struct TranscriptScrollViewTests {
 	/// The batches of one long turn past the chat's 200-row tail: the prompt, then replies, then more replies that push
 	/// the oldest rows out of the tail.
 	private func longTurn(_ view: TranscriptScrollView) {
-		let prompt = item(1, .user(text: "history:240", error: nil))
+		let prompt = item(1, .user(text: "history:240", error: nil, delivery: nil))
 		let replies = (0..<241).map { reply(UInt64($0 + 2), "History turn \($0)") }
 		view.apply([prompt])
 		view.apply([prompt] + replies.prefix(120))
@@ -742,7 +742,7 @@ struct TranscriptExpansionTests {
 	}
 
 	@Test func theBridgeSeesKindsExpansionAndTheVerdict() throws {
-		let (window, view) = shown([item(1, .user(text: "Hi", error: nil)), thought(2), tool(3)])
+		let (window, view) = shown([item(1, .user(text: "Hi", error: nil, delivery: nil)), thought(2), tool(3)])
 		defer { window.close() }
 		view.toggleFirst(.thinking)
 		let observation = view.observation()
@@ -809,12 +809,24 @@ struct ModelRowTests {
 		#expect(yesterday.shown.contains("22 Nov 2026") && yesterday.shown.contains("23:59"))
 		#expect(yesterday.full.contains("Sunday"))
 
-		var prompt = item(1, .user(text: "Hi", error: nil))
+		var prompt = item(1, .user(text: "Hi", error: nil, delivery: nil))
 		prompt.createdAt = at(23, 10, 41)
 		#expect(TranscriptRowModel(prompt, document: nil, now: now, calendar: calendar).accessibilityLabel == "You, 10:41")
-		let old = TranscriptRowModel(item(2, .user(text: "Hi", error: nil)), document: nil, now: now, calendar: calendar)
+		let old = TranscriptRowModel(item(2, .user(text: "Hi", error: nil, delivery: nil)), document: nil, now: now, calendar: calendar)
 		#expect(old.time == nil)
 		#expect(old.accessibilityLabel == "You")
+	}
+
+	@Test func aPromptTheAgentDoesntHaveSaysWhereItIsInPlaceOfItsTime() {
+		let now = Date()
+		for (delivery, note) in [(Delivery.waiting, "Not yet received"), (.notDelivered, "Not delivered: send it again")] {
+			var prompt = item(1, .user(text: "Hi", error: nil, delivery: delivery))
+			prompt.createdAt = now
+			let row = TranscriptRowModel(prompt, document: nil, now: now, calendar: .current)
+			#expect(row.accessibilityLabel == "You, \(note)")
+			#expect(row.plainText == "Hi\n\(note)")
+			#expect(row.source == "Hi")
+		}
 	}
 
 	@Test func aModelChangeRowIsSpokenInTheWordsItsDetailGives() {
