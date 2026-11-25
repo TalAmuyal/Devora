@@ -113,15 +113,22 @@ struct AgentEffortWidget: View {
 							presentation.marked
 								? AnyShapeStyle(.orange) : AnyShapeStyle(presentation.grayed ? .secondary : .primary))
 				}
+				Image(systemName: "chevron.down").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
 			}
 			.font(.callout)
+			.contentShape(.rect)
+			// On the label, which the button style keeps as one element; on the menu it would reach its inner button too.
+			.accessibilityElement(children: .combine)
+			.accessibilityLabel("Agent effort")
+			.accessibilityValue(presentation.accessibilityValue)
+			.accessibilityIdentifier("agent-effort")
 		}
-		.menuStyle(.borderlessButton)
+		// A plain button draws the label as written; the borderless menu style redraws it, dropping its colors.
+		.menuStyle(.button)
+		.buttonStyle(.plain)
+		.menuIndicator(.hidden)
 		.fixedSize()
 		.help(presentation.tooltip)
-		.accessibilityLabel("Agent effort")
-		.accessibilityValue(presentation.accessibilityValue)
-		.accessibilityIdentifier("agent-effort")
 	}
 
 	/// A menu entry with the menu's own checkmark when it's the level stored (a toggle draws one; a button with a
