@@ -1,4 +1,3 @@
-import CoreGraphics
 import XCTest
 
 /// Real key events through the key router: Sapphire's own chords act on the app, and every other key reaches the shell unchanged.
@@ -73,33 +72,12 @@ final class KeyRoutingUITests: XCTestCase {
 	@MainActor
 	func testShiftShiftOpensAndReopensThePaletteWithRealModifierEvents() throws {
 		try launch()
-		func tapShift() {
-			XCUIElement.perform(withKeyModifiers: .shift) {}
-		}
 		let field = app.descendants(matching: .any)["command-palette-search"].firstMatch
-		tapShift(); tapShift()
-		app.typeText("q")
-		assertShiftShiftOpened(field)
+		shiftShift(in: app, typing: "q", opens: field, inputTrace: inputTrace, failure: "Shift-Shift must open the command palette")
 		XCTAssertEqual(field.value as? String, "q")
 		app.typeKey(.escape, modifierFlags: [])
 		XCTAssertTrue(field.waitForNonExistence(timeout: 5))
-		tapShift(); tapShift()
-		assertShiftShiftOpened(field)
-	}
-
-	/// Fails unless the palette's field appears. On failure, it attaches what the app made of the taps: whether they arrived, for which window, and how the double tap read them.
-	/// Beside that is whether the system still has Shift down. If it does, XCUITest never posted the last release, which it has done right after a relaunch.
-	/// If not, the release was posted, or an earlier one is the one missing.
-	@MainActor
-	private func assertShiftShiftOpened(_ field: XCUIElement, file: StaticString = #filePath, line: UInt = #line) {
-		if field.waitForExistence(timeout: 5) { return }
-		let appTrace = (try? String(contentsOf: inputTrace, encoding: .utf8)) ?? "(no input trace)"
-		let shiftDown = CGEventSource.flagsState(.combinedSessionState).contains(.maskShift)
-		let trace = XCTAttachment(string: "\(appTrace)system now: Shift down \(shiftDown)\n")
-		trace.name = "The app's shortcut decisions"
-		trace.lifetime = .keepAlways
-		add(trace)
-		XCTFail("Shift-Shift must open the command palette\n\(app.debugDescription)", file: file, line: line)
+		shiftShift(in: app, typing: "", opens: field, inputTrace: inputTrace, failure: "Shift-Shift must reopen the command palette after Escape closed it")
 	}
 
 	/// Types a command and Return, then waits for the file it writes in `UITEST_OUT` and returns its contents.
