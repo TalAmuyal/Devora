@@ -51,7 +51,8 @@ extension TranscriptKit.ItemState {
 extension TranscriptKit.TranscriptContent {
 	init(_ content: CoreBindings.TranscriptContent) {
 		switch content {
-		case .user(let text, let error): self = .user(text: text, error: error)
+		// Whether the agent has the message yet (`delivery`) isn't drawn yet.
+		case .user(let text, let error, _): self = .user(text: text, error: error)
 		case .assistant(let text, let model): self = .assistant(text: text, model: model)
 		case .thinking(let text, let signature): self = .thinking(text: text, signature: signature)
 		case .tool(let toolUseId, let name, let inputJson, let verdict, let result):

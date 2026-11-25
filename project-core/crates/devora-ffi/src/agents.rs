@@ -6,9 +6,9 @@ use devora_core::agents::{
 };
 use devora_core::state::{
     AgentActivity, Chat, ChatContext, ChatEffort, ChatEvent, ChatModel, ChatPhase, ChatStep,
-    ChatUpdate, CompactionProgress, ItemState, PermissionQuestion, RunningAgent, RunningAgents,
-    StepActivity, Subscription, SystemKind, ToolResult, ToolVerdict, TranscriptChange,
-    TranscriptContent, TranscriptItem,
+    ChatUpdate, CompactionProgress, Delivery, ItemState, PermissionQuestion, RunningAgent,
+    RunningAgents, StepActivity, Subscription, SystemKind, ToolResult, ToolVerdict,
+    TranscriptChange, TranscriptContent, TranscriptItem,
 };
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -267,10 +267,16 @@ pub struct ToolResult {
     pub is_error: bool,
 }
 #[uniffi::remote(Enum)]
+pub enum Delivery {
+    Waiting,
+    NotDelivered,
+}
+#[uniffi::remote(Enum)]
 pub enum TranscriptContent {
     User {
         text: String,
         error: Option<String>,
+        delivery: Option<Delivery>,
     },
     Assistant {
         text: String,

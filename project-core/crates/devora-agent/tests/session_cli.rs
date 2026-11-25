@@ -1974,3 +1974,149 @@ async fn pinned_cli_changes_the_effort_between_turns_and_runs_an_unsupported_lev
     );
     backend.stop().await;
 }
+
+// Where a prompt is (the space marks a prompt the agent hasn't got yet on its row): the CLI reports it by the ID it was
+// sent with. Sent while idle, "queued" then "started" come at once, before the turn's `init`. Sent into a turn the CLI
+// started itself, it's "queued" at once and "started" only at the agent's next step, once the tool call in progress has
+// its result. And Stop while it waits keeps it ("still_queued"), then starts it as a turn of its own.
+#[tokio::test]
+#[ignore]
+async fn pinned_cli_reports_when_the_agent_gets_a_prompt() {
+    use devora_agent::protocol::{CommandState, System};
+    check_pin().await;
+    #[derive(Debug, PartialEq)]
+    enum Seen {
+        Lifecycle(String, CommandState),
+        Init,
+        ToolResult,
+        Result(Vec<String>),
+    }
+    async fn next(session: &mut Session) -> Seen {
+        tokio::time::timeout(Duration::from_secs(45), async {
+            while let Some(event) = session.next_event().await {
+                match event {
+                    SessionEvent::Message(Message::Known(KnownMessage::CommandLifecycle {
+                        command_uuid,
+                        state,
+                        ..
+                    })) => return Seen::Lifecycle(command_uuid, state),
+                    SessionEvent::Message(Message::Known(KnownMessage::System(System::Init {
+                        ..
+                    }))) => return Seen::Init,
+                    SessionEvent::Message(Message::Known(KnownMessage::User {
+                        message, ..
+                    })) if serde_json::to_string(&message)
+                        .unwrap()
+                        .contains("tool_result") =>
+                    {
+                        return Seen::ToolResult
+                    }
+                    SessionEvent::Message(Message::Known(KnownMessage::Result(result))) => {
+                        let answers = result
+                            .extra
+                            .get("user_message_uuids")
+                            .and_then(Value::as_array)
+                            .map(|ids| {
+                                ids.iter()
+                                    .filter_map(|id| id.as_str().map(str::to_owned))
+                                    .collect()
+                            })
+                            .unwrap_or_default();
+                        return Seen::Result(answers);
+                    }
+                    SessionEvent::Failed(error) => panic!("{error}"),
+                    _ => {}
+                }
+            }
+            panic!("CLI ended")
+        })
+        .await
+        .expect("offline CLI deadline")
+    }
+    async fn until(session: &mut Session, wanted: &Seen) -> Vec<Seen> {
+        let mut seen = vec![];
+        loop {
+            let next = next(session).await;
+            let done = &next == wanted;
+            seen.push(next);
+            if done {
+                return seen;
+            }
+        }
+    }
+    for case in ["idle", "joined", "stopped while waiting"] {
+        let fixture = Fixture::new();
+        let mut backend = Backend::start(fixture.root.path()).await;
+        let reacted = fixture.root.path().join("reacted");
+        // The CLI's own turn holds its tool call's reply for 3 s: the joined prompt waits that long.
+        backend
+            .command(json!({"action":"configure","toolCommand":"sleep 2","toolBackground":true,
+                "notificationTool": {"command": format!("touch {}", reacted.display()), "delayMs": 3000}}))
+            .await;
+        let mut options = fixture.options(backend.port, Instructions::Append("Lifecycle".into()));
+        options.permission_mode = "default".into();
+        options.settings["permissions"] = json!({"allow":["Bash"]});
+        let mut session = Session::start(options, fixture.log()).await.unwrap();
+        let handle = session.handle();
+        let first = turn_id();
+        handle
+            .send_turn(first.clone(), "Start the shell.".into())
+            .await
+            .unwrap();
+        let seen = until(&mut session, &Seen::Init).await;
+        assert_eq!(
+            seen,
+            [
+                Seen::Lifecycle(first.clone(), CommandState::Queued),
+                Seen::Lifecycle(first.clone(), CommandState::Started),
+                Seen::Init
+            ],
+            "sent while idle, the agent gets it at once"
+        );
+        until(&mut session, &Seen::Result(vec![first.clone()])).await;
+        if case == "idle" {
+            backend.stop().await;
+            continue;
+        }
+        // The shell finishes, and the CLI opens a turn of its own.
+        until(&mut session, &Seen::Init).await;
+        let joined = turn_id();
+        handle
+            .send_turn(joined.clone(), "Into its turn.".into())
+            .await
+            .unwrap();
+        assert_eq!(
+            next(&mut session).await,
+            Seen::Lifecycle(joined.clone(), CommandState::Queued),
+            "{case}"
+        );
+        if case == "joined" {
+            let seen = until(
+                &mut session,
+                &Seen::Lifecycle(joined.clone(), CommandState::Started),
+            )
+            .await;
+            assert_eq!(
+                seen.first(),
+                Some(&Seen::ToolResult),
+                "{case}: started once the tool call has its result: {seen:?}"
+            );
+        } else {
+            let answer = handle.interrupt().await.unwrap();
+            assert_eq!(answer["still_queued"], json!([joined.clone()]), "{case}");
+            let seen = until(
+                &mut session,
+                &Seen::Lifecycle(joined.clone(), CommandState::Started),
+            )
+            .await;
+            assert!(
+                matches!(seen.first(), Some(Seen::Result(_))),
+                "{case}: the CLI's own turn ends first: {seen:?}"
+            );
+        }
+        until(&mut session, &Seen::Result(vec![joined.clone()])).await;
+        let _ = handle.pause().await;
+        while session.next_event().await.is_some() {}
+        backend.stop().await;
+    }
+}
