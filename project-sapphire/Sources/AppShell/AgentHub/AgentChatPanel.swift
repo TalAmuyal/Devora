@@ -30,6 +30,12 @@ final class AgentPanelModel {
 		AgentModelPresentation(model: chat.chat?.model, paused: chat.chat?.phase == .paused)
 	}
 
+	var effortPresentation: AgentEffortPresentation {
+		AgentEffortPresentation(
+			effort: chat.chat?.effort, phase: chat.chat?.phase, turnRunning: chat.chat?.turnRunning == true,
+			globallyPaused: chat.globallyPaused)
+	}
+
 	var modelPicker: AgentModelPickerPresentation {
 		AgentModelPickerPresentation(
 			model: chat.chat?.model, phase: chat.chat?.phase, globallyPaused: chat.globallyPaused,
@@ -112,6 +118,8 @@ struct AgentChatPanel: View {
 				modelPicker: model.modelPicker,
 				onModelOpen: { Task { await model.chat.loadModelSuggestions() } },
 				onModel: { picked in Task { await model.chat.setModel(picked) } },
+				effort: model.effortPresentation,
+				onEffort: { picked in Task { await model.chat.setEffort(picked) } },
 				enterSends: model.chat.enterSends,
 				showsSystem: model.chat.showsSystem, onShowsSystem: { model.chat.setShowsSystem($0) },
 				pause: model.pausePresentation,
@@ -211,6 +219,8 @@ struct AgentWidgetBar: View {
 	let modelPicker: AgentModelPickerPresentation
 	let onModelOpen: () -> Void
 	let onModel: (String) -> Void
+	let effort: AgentEffortPresentation
+	let onEffort: (String?) -> Void
 	let enterSends: Bool
 	let showsSystem: Bool
 	let onShowsSystem: (Bool) -> Void
@@ -245,6 +255,7 @@ struct AgentWidgetBar: View {
 				.popover(compaction, onThreshold: onThreshold, onCompactNow: onCompactNow)
 			AgentModelWidget(presentation: model, names: modelNames)
 				.popover(modelPicker, onOpen: onModelOpen, onPick: onModel)
+			AgentEffortWidget(presentation: effort, onPick: onEffort)
 			AgentSystemMessagesToggle(shows: showsSystem, onChange: onShowsSystem)
 			AgentPauseWidget(presentation: pause, onPause: onPause, onResume: onResume, onKeepPaused: onKeepPaused)
 			Spacer(minLength: 12)

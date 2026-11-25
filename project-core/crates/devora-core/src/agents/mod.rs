@@ -859,7 +859,9 @@ impl Agents {
             }
         };
         if let Some(level) = &effort {
-            let levels = offered.effort_levels(&model).unwrap_or_default();
+            let levels = offered.effort_levels(&model).ok_or_else(|| {
+                format!("Claude Code doesn't list the model {model}, so which effort levels it takes isn't known.")
+            })?;
             if !levels.contains(level) {
                 return Err(if levels.is_empty() {
                     format!("The model {model} takes no effort level.")

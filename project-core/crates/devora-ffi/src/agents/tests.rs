@@ -1831,11 +1831,13 @@ fn an_agents_effort_is_one_its_model_takes_shown_with_those_levels_and_a_paused_
     let chat = f.wait(&events, |c| {
         c.tab == tab
             && c.phase == ChatPhase::Running
-            && c.effort.as_ref().is_some_and(|e| !e.levels.is_empty())
+            && c.effort
+                .as_ref()
+                .is_some_and(|e| e.levels.as_ref().is_some_and(|l| !l.is_empty()))
     });
     assert_eq!(
-        chat.effort.as_ref().unwrap().levels,
-        ["low", "medium", "high", "xhigh", "max"],
+        chat.effort.as_ref().unwrap().levels.as_deref(),
+        Some(&["low", "medium", "high", "xhigh", "max"].map(String::from)[..]),
         "the levels its model takes, as Claude Code lists them"
     );
     assert_eq!(
@@ -1869,9 +1871,10 @@ fn an_agents_effort_is_one_its_model_takes_shown_with_those_levels_and_a_paused_
     // Still paused after a restart, never launched in this run: its chat shows what it will launch with.
     f.wait(&events, |c| {
         c.tab == tab
-            && c.effort
-                .as_ref()
-                .is_some_and(|e| e.set_to.as_deref() == Some("xhigh") && e.levels.len() == 5)
+            && c.effort.as_ref().is_some_and(|e| {
+                e.set_to.as_deref() == Some("xhigh")
+                    && e.levels.as_ref().is_some_and(|l| l.len() == 5)
+            })
     });
     // Checked against the models its next launch would be offered, and shown at once.
     block_on(
@@ -1891,7 +1894,10 @@ fn an_agents_effort_is_one_its_model_takes_shown_with_those_levels_and_a_paused_
     )
     .unwrap();
     f.wait(&events, |c| {
-        c.tab == tab && c.effort.as_ref().is_some_and(|e| e.levels.is_empty())
+        c.tab == tab
+            && c.effort
+                .as_ref()
+                .is_some_and(|e| e.levels.as_ref().is_some_and(Vec::is_empty))
     });
     assert_eq!(
         block_on(
