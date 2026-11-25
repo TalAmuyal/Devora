@@ -240,18 +240,25 @@ pub struct ModelSections {
 }
 
 impl ModelSections {
+    /// The row storing exactly what's `typed` into a model field, ignoring case and surrounding spaces: what the field
+    /// holds rather than searches for. A picker highlights it, since [`Self::narrowed`] then shows every row.
+    pub fn exact(&self, typed: &str) -> Option<&ModelRow> {
+        let typed = typed.trim().to_lowercase();
+        self.aliases
+            .iter()
+            .chain(&self.model_ids)
+            .find(|row| row.value.to_lowercase() == typed)
+    }
+
     /// The rows that match what's `typed` into a model field, so every field narrows alike: a tier by its own name ("son"
     /// finds Sonnet, not "Haiku (currently Sonnet 5.5)"), a model by its name or ID, ignoring case. A field holding exactly
     /// a value one row stores (as the New Agent field opens with `opus`) has typed nothing yet, so every row shows.
     pub fn narrowed(&self, typed: &str) -> ModelSections {
+        if self.exact(typed).is_some() {
+            return self.clone();
+        }
         let typed = typed.trim().to_lowercase();
-        if typed.is_empty()
-            || self
-                .aliases
-                .iter()
-                .chain(&self.model_ids)
-                .any(|row| row.value.to_lowercase() == typed)
-        {
+        if typed.is_empty() {
             return self.clone();
         }
         let has = |text: &str| text.to_lowercase().contains(&typed);
@@ -783,6 +790,16 @@ mod tests {
             "a picked value shows every row"
         );
         assert!(values(sections.narrowed("nothing-like-it")).is_empty());
+        let exact = |typed: &str| sections.exact(typed).map(|row| row.value.as_str());
+        assert_eq!(exact("claude-sonnet-5-5"), Some("claude-sonnet-5-5"));
+        assert_eq!(
+            exact(" Claude-Sonnet-5-5 "),
+            Some("claude-sonnet-5-5"),
+            "ignoring case and surrounding spaces, as narrowing does"
+        );
+        assert_eq!(exact("HAIKU"), Some("haiku"));
+        assert_eq!(exact("son"), None, "a search, not a value");
+        assert_eq!(exact(""), None);
     }
 
     #[test]

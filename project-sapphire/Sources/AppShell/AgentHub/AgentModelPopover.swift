@@ -51,12 +51,11 @@ struct AgentModelPickerPresentation {
 		(rows.first { $0.completion == current } ?? rows.first)?.completion
 	}
 
-	/// Where the highlight goes once `typed` changes: on the row it names exactly, else on the first.
-	/// A full value typed exactly shows every row, as a model field shows them for the value it holds, so the first row
+	/// Where the highlight goes once `typed` changes: on the row it names exactly, by the core's comparison, else on the
+	/// first. A value typed exactly shows every row, as a model field shows them for the value it holds, so the first row
 	/// would be another model.
 	func highlight(afterTyping typed: String) -> String? {
-		let rows = rows(typed: typed)
-		return (rows.first { $0.completion == typed } ?? rows.first)?.completion
+		suggestions?.exact(for: .agentModel, typed: typed) ?? rows(typed: typed).first?.completion
 	}
 
 	func rows(typed: String) -> [ModelSuggestions.Row] {

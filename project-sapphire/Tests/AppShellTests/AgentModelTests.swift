@@ -172,6 +172,10 @@ struct AgentModelTests {
 		#expect(shown.rows(typed: "claude-opus-5-5").count == 2, "an exact value shows every row")
 		#expect(shown.highlight(afterTyping: "claude-opus-5-5") == "claude-opus-5-5")
 		#expect(shown.highlight(afterTyping: "opus") == "opus")
+		#expect(
+			shown.highlight(afterTyping: " Claude-Opus-5-5 ") == "claude-opus-5-5",
+			"as the core compares, case and spaces aside; Return sends the row's own value, not the text as typed")
+		#expect(shown.highlight(afterTyping: "OPUS") == "opus")
 		#expect(shown.highlight(afterTyping: "op") == "opus", "else the first match")
 	}
 
