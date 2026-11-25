@@ -220,7 +220,7 @@ public final class Store {
 			app.apply(event)
 			if case .agentDraftCleared(let profile, let name, let text) = event {
 				for reference in agentModels.values {
-					if let model = reference.value, model.profile == profile, model.name == name { model.acceptedDraft(text) }
+					if let model = reference.value, model.profile == profile, model.name == name { model.draftCleared(text) }
 				}
 			}
 		}

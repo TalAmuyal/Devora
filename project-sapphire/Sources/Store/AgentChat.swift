@@ -34,6 +34,8 @@ public final class AgentChat {
 	@ObservationIgnored private var draftSave: Task<Void, Never>?
 	@ObservationIgnored private var initializing = true
 	@ObservationIgnored private var acceptingDraft = false
+	/// The text this chat's own send cleared, whose echo from the app state (`draftCleared`) is still to come.
+	@ObservationIgnored private var ownClear: String?
 	/// How many items the chat keeps while the reader follows the bottom: its 200-item tail, grown by the older pages the
 	/// transcript asked for there to fill its view (with system messages hidden a page can show little), so that trimming
 	/// doesn't take them back. The history bounds it.
@@ -248,7 +250,24 @@ public final class AgentChat {
 		}
 	}
 
-	func acceptedDraft(_ text: String) {
+	/// A send of `text` succeeded: the draft it came from is cleared, and the app state's word of that clear, which folds
+	/// on a later frame, is this send's echo.
+	func accepted(sent text: String) {
+		ownClear = text
+		acceptedDraft(text)
+	}
+
+	/// The app state cleared a sent draft of `text`: the echo of this chat's own send, when it is one, which leaves alone
+	/// what the user typed since (the same text again, say); else a send from elsewhere, whose text the draft loses.
+	func draftCleared(_ text: String) {
+		if ownClear == text {
+			ownClear = nil
+			return
+		}
+		acceptedDraft(text)
+	}
+
+	private func acceptedDraft(_ text: String) {
 		guard draft == text else { return }
 		draftSave?.cancel()
 		acceptingDraft = true
@@ -263,7 +282,7 @@ public final class AgentChat {
 		defer { sending = false }
 		do {
 			try await core.sendAgentTurn(tab: tab, generation: generation, text: text)
-			acceptedDraft(text)
+			accepted(sent: text)
 		} catch { fail(error) }
 	}
 
