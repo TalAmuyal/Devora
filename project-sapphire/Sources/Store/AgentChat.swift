@@ -34,8 +34,11 @@ public final class AgentChat {
 	@ObservationIgnored private var draftSave: Task<Void, Never>?
 	@ObservationIgnored private var initializing = true
 	@ObservationIgnored private var acceptingDraft = false
-	/// The text this chat's own send cleared, whose echo from the app state (`draftCleared`) is still to come.
-	@ObservationIgnored private var ownClear: String?
+	/// The texts this chat's own sends cleared, counted, whose echoes from the app state (`draftCleared`) are still to
+	/// come: two sends of the same text into the agent's own turn give two echoes. The core echoes a clear only when the
+	/// stored draft still held that text, so a count can outlive an echo that never comes; that is safe, since the only
+	/// clear from elsewhere is a send that finished after its tab closed, and a reopened tab's chat remembers nothing.
+	@ObservationIgnored private var ownClears: [String: Int] = [:]
 	/// How many items the chat keeps while the reader follows the bottom: its 200-item tail, grown by the older pages the
 	/// transcript asked for there to fill its view (with system messages hidden a page can show little), so that trimming
 	/// doesn't take them back. The history bounds it.
@@ -253,15 +256,15 @@ public final class AgentChat {
 	/// A send of `text` succeeded: the draft it came from is cleared, and the app state's word of that clear, which folds
 	/// on a later frame, is this send's echo.
 	func accepted(sent text: String) {
-		ownClear = text
+		ownClears[text, default: 0] += 1
 		acceptedDraft(text)
 	}
 
 	/// The app state cleared a sent draft of `text`: the echo of this chat's own send, when it is one, which leaves alone
 	/// what the user typed since (the same text again, say); else a send from elsewhere, whose text the draft loses.
 	func draftCleared(_ text: String) {
-		if ownClear == text {
-			ownClear = nil
+		if let count = ownClears[text] {
+			ownClears[text] = count > 1 ? count - 1 : nil
 			return
 		}
 		acceptedDraft(text)

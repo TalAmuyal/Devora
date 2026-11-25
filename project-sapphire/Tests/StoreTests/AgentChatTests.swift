@@ -125,7 +125,23 @@ struct AgentChatTests {
 		}
 		#expect(model.draft == "continue", "the text typed again stays")
 
+		// Two sends of the same text (into the agent's own turn, Send stays) give two echoes, and both are this chat's.
+		for _ in 0..<2 {
+			model.draft = "yes"
+			#expect(model.flushDraft())
+			_ = try core.dispatch(command: .clearAgentDraft(profilePath: model.profile, name: model.name, text: "yes"))
+			model.accepted(sent: "yes")
+		}
+		model.draft = "yes"
+		#expect(model.flushDraft())
+		try await eventually {
+			store.app.agentViews.first { $0.profilePath == model.profile && $0.name == model.name }?.draft == "yes"
+		}
+		#expect(model.draft == "yes", "the text typed after both sends stays")
+
 		// A clear this chat didn't send (another view of the agent sent it) still empties a draft of that text.
+		model.draft = "continue"
+		#expect(model.flushDraft())
 		_ = try core.dispatch(command: .clearAgentDraft(profilePath: model.profile, name: model.name, text: "continue"))
 		try await eventually { model.draft == "" }
 	}
