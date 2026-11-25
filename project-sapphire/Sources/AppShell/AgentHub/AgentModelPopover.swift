@@ -51,6 +51,14 @@ struct AgentModelPickerPresentation {
 		(rows.first { $0.completion == current } ?? rows.first)?.completion
 	}
 
+	/// Where the highlight goes once `typed` changes: on the row it names exactly, else on the first.
+	/// A full value typed exactly shows every row, as a model field shows them for the value it holds, so the first row
+	/// would be another model.
+	func highlight(afterTyping typed: String) -> String? {
+		let rows = rows(typed: typed)
+		return (rows.first { $0.completion == typed } ?? rows.first)?.completion
+	}
+
 	func rows(typed: String) -> [ModelSuggestions.Row] {
 		suggestions?.rows(for: .agentModel, typed: typed) ?? []
 	}
@@ -64,7 +72,7 @@ struct AgentModelPopover: View {
 	let presentation: AgentModelPickerPresentation
 	let onPick: (String) -> Void
 	@State private var typed: String
-	/// The row Return picks: what the agent is set to when the popover opens, then the first match of what's typed.
+	/// The row Return picks: what the agent is set to when the popover opens, then the match of what's typed.
 	@State private var highlighted: String?
 	@FocusState private var searching: Bool
 
@@ -133,7 +141,7 @@ struct AgentModelPopover: View {
 		.padding(12)
 		.frame(width: Self.width)
 		.onAppear { searching = true }
-		.onChange(of: typed) { highlighted = rows.first?.completion }
+		.onChange(of: typed) { highlighted = presentation.highlight(afterTyping: typed) }
 		.onChange(of: presentation.suggestions) {
 			// The list arrived while the popover was open.
 			if highlighted == nil { highlighted = presentation.startingHighlight(in: rows) }

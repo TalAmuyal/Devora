@@ -119,6 +119,7 @@ Types of changes:
 
 ### Fixed
 
+- Devora Sapphire's Model popover picks the model whose full ID you typed when you press Return, instead of the first model in the list
 - Devora Sapphire no longer cuts an agent off when it is paused, or changes its model, while the agent works on a turn it started itself (a background task reporting): the pause and the model change wait for that turn's end, as they do for a turn you sent
 - Quitting Devora no longer leaves a Claude Code process behind when it was still asking Claude Code which models it offers, and asking again while one such lookup runs shares it instead of starting another
 - Devora Sapphire's agent transcript no longer shows Claude Code's retries after an overloaded model as rows of raw JSON, nor logs them as protocol drift; a reply Claude Code makes up after failing a turn changes no model

@@ -36,14 +36,15 @@ final class AgentModelUITests: XCTestCase {
 		XCTAssertTrue(popover.waitForNonExistence(timeout: 10), "Return must pick the highlighted model and close the popover")
 
 		let report = scratch.appending(path: "fake-report.jsonl")
-		waitFor("The pick must reach the CLI, the agent being idle") {
-			let told = (try? String(contentsOf: report, encoding: .utf8))?
+		/// The models the fake CLI was told to switch to, in order.
+		func told() -> [String]? {
+			(try? String(contentsOf: report, encoding: .utf8))?
 				.split(separator: "\n")
 				.compactMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any] }
 				.filter { $0["kind"] as? String == "set_model" }
 				.compactMap { $0["model"] as? String }
-			return told == ["claude-sonnet-5-5"]
 		}
+		waitFor("The pick must reach the CLI, the agent being idle") { told() == ["claude-sonnet-5-5"] }
 		waitFor("The widget names the pick, marked until it answers") {
 			(widget.value as? String) == "Sonnet 5.5, no reply from it yet"
 		}
@@ -52,6 +53,18 @@ final class AgentModelUITests: XCTestCase {
 		XCTAssertTrue(popover.waitForExistence(timeout: 10), "The popover opens again")
 		app.typeKey(.escape, modifierFlags: [])
 		XCTAssertTrue(popover.waitForNonExistence(timeout: 10), "Escape must close the popover")
+
+		// A model's full ID typed exactly shows every row (as a model field does for the value it holds): Return picks the typed model, not the first row.
+		widget.click()
+		XCTAssertTrue(popover.waitForExistence(timeout: 10), "The popover opens again")
+		waitFor("The search field has the focus when the popover opens") {
+			NSPredicate(format: "hasKeyboardFocus == true").evaluate(with: search)
+		}
+		app.typeText("claude-sonnet-4-6")
+		app.typeKey(.return, modifierFlags: [])
+		XCTAssertTrue(popover.waitForNonExistence(timeout: 10), "Return must pick the typed model and close the popover")
+		waitFor("A second pick must reach the CLI") { told()?.count == 2 }
+		XCTAssertEqual(told(), ["claude-sonnet-5-5", "claude-sonnet-4-6"], "Return must pick the model whose ID was typed")
 	}
 
 	private func waitFor(_ description: String, _ condition: @escaping () -> Bool) {

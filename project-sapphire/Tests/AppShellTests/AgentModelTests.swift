@@ -167,6 +167,14 @@ struct AgentModelTests {
 			suggestions: listed ? ModelSuggestions(list) : nil, lookupFailed: failed)
 	}
 
+	@Test func typingAModelsFullIDHighlightsThatModelThoughEveryRowShows() {
+		let shown = picker(model("claude-sonnet-5-5", label: "Sonnet 5.5"))
+		#expect(shown.rows(typed: "claude-opus-5-5").count == 2, "an exact value shows every row")
+		#expect(shown.highlight(afterTyping: "claude-opus-5-5") == "claude-opus-5-5")
+		#expect(shown.highlight(afterTyping: "opus") == "opus")
+		#expect(shown.highlight(afterTyping: "op") == "opus", "else the first match")
+	}
+
 	@Test func thePopoverSaysWhenAPickTakesEffectOrWhyNoneCanBeMade() {
 		let opus = model("claude-opus-5-5", label: "Opus 5.5")
 		#expect(picker(opus).note == nil && picker(opus).unavailableReason == nil, "idle: it applies at once")
