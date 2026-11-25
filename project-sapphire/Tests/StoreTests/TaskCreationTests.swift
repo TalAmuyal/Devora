@@ -1,8 +1,9 @@
 import CoreBindings
 import Foundation
-import Store
 import Testing
 import TestSupport
+
+@testable import Store
 
 extension Fixture {
 	/// A selected profile `work` whose one repo, `repo`, has a bare origin with a commit on `main`, as a creation needs; `prepare` is its prepare-command.
@@ -93,11 +94,20 @@ struct TaskCreationTests {
 		let shell = try onlyTab(of: store)
 		let taskTab = max(shell.id, shell.terminalID) + 1
 
+		// The task's tab opens and, the cancel applying at once, closes within milliseconds: the store may fold both
+		// before a look sees two tabs. The core's own events keep both, so they're what the test reads.
+		let events = Batches(try #require(store.core).subscribe())
 		store.dispatch(.cancelCreation(tab: taskTab))
 		await store.dispatch(.createTask(title: "Too late", repoPaths: [repo], sourceWorkspacePath: nil)).value
 
-		try await eventually { store.app.window.tabs.count == 2 }
-		#expect(store.app.window.tabs.last?.id == taskTab)
+		var opened = false
+		eventsLoop: for try await batch in events {
+			for event in batch {
+				if case .sessionOpened(let tab, _) = event, tab.id == taskTab { opened = true }
+				if case .sessionClosed(let tab) = event, tab == taskTab { break eventsLoop }
+			}
+		}
+		#expect(opened, "the task's tab opened before the cancel closed it")
 		try await eventually { store.app.window.tabs.count == 1 }
 		#expect(!FileManager.default.fileExists(atPath: "\(profile)/workspaces/ws-1"))
 		#expect(store.scrapeErrors() == [])
