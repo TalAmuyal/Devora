@@ -94,15 +94,6 @@ pub struct AgentModelList {
 /// a value one of them stores.
 #[uniffi::export]
 pub fn narrow_models(list: AgentModelList, typed: String) -> Result<AgentModelList, CoreError> {
-    let core = |rows: Vec<ModelRow>| -> Vec<devora_core::agents::ModelRow> {
-        rows.into_iter()
-            .map(|row| devora_core::agents::ModelRow {
-                value: row.value,
-                label: row.label,
-                model_id: row.model_id,
-            })
-            .collect()
-    };
     let back = |rows: Vec<devora_core::agents::ModelRow>| -> Vec<ModelRow> {
         rows.into_iter()
             .map(|row| ModelRow {
@@ -112,16 +103,40 @@ pub fn narrow_models(list: AgentModelList, typed: String) -> Result<AgentModelLi
             })
             .collect()
     };
-    let narrowed = devora_core::agents::ModelSections {
-        aliases: core(list.aliases),
-        model_ids: core(list.model_ids),
-    }
-    .narrowed(&typed);
+    let narrowed = sections(list.aliases, list.model_ids).narrowed(&typed);
     Ok(AgentModelList {
         cli_version: list.cli_version,
         aliases: back(narrowed.aliases),
         model_ids: back(narrowed.model_ids),
     })
+}
+
+/// The value of the row in `list` that stores exactly what's `typed` into a model field, by the same comparison that makes
+/// `narrow_models` show every row (`ModelSections::exact`), so a picker highlights that row. None when it names no row.
+#[uniffi::export]
+pub fn exact_model(list: AgentModelList, typed: String) -> Result<Option<String>, CoreError> {
+    Ok(sections(list.aliases, list.model_ids)
+        .exact(&typed)
+        .map(|row| row.value.clone()))
+}
+
+fn sections(
+    aliases: Vec<ModelRow>,
+    model_ids: Vec<ModelRow>,
+) -> devora_core::agents::ModelSections {
+    let core = |rows: Vec<ModelRow>| -> Vec<devora_core::agents::ModelRow> {
+        rows.into_iter()
+            .map(|row| devora_core::agents::ModelRow {
+                value: row.value,
+                label: row.label,
+                model_id: row.model_id,
+            })
+            .collect()
+    };
+    devora_core::agents::ModelSections {
+        aliases: core(aliases),
+        model_ids: core(model_ids),
+    }
 }
 
 /// The name of the model `id` among `models` (a list's `model_ids`, each model once), by the core's rule for model IDs:

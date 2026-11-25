@@ -44,10 +44,20 @@ public struct ModelSuggestions: Equatable, Sendable {
 	/// The rows for `use`, in the core's order, narrowed to what's `typed` by the core's rule for every model field (a tier by
 	/// its own name, a model by its name or ID; every row while the field holds exactly a value one of them stores).
 	public func rows(for use: Use, typed: String = "") -> [Row] {
-		let offered = AgentModelList(cliVersion: cliVersion, aliases: use == .agentModel ? aliases : [], modelIds: modelIDs)
+		let offered = offered(for: use)
 		let shown = (try? narrowModels(list: offered, typed: typed)) ?? offered
 		return shown.aliases.map { Row(section: .aliases, completion: $0.value, name: $0.label, modelID: $0.modelId) }
 			+ shown.modelIds.map { Row(section: .modelIDs, completion: $0.value, name: $0.label, modelID: $0.modelId) }
+	}
+
+	/// The value of the row for `use` that what's `typed` names exactly, by the core's comparison (which then shows every
+	/// row), or nil when it names none.
+	public func exact(for use: Use, typed: String) -> String? {
+		(try? exactModel(list: offered(for: use), typed: typed)) ?? nil
+	}
+
+	private func offered(for use: Use) -> AgentModelList {
+		AgentModelList(cliVersion: cliVersion, aliases: use == .agentModel ? aliases : [], modelIds: modelIDs)
 	}
 
 	/// What the note under an agent's model field says about `value`: that one is required when it's empty, never that a
