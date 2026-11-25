@@ -1,6 +1,7 @@
 import CoreBindings
 import Foundation
 import Testing
+import TestSupport
 
 @testable import Store
 
@@ -95,5 +96,53 @@ struct AgentChatTests {
 		#expect(shown() == (true, false), "the agent's turn starting just after the user sent")
 		turn(false, false)
 		#expect(shown() == (false, false), "no spinner is left on")
+	}
+
+	/// The core's word that a sent draft was cleared can fold after the user has typed the same text again (it comes
+	/// through the app state, which folds on a later frame than the chat); that echo of the chat's own send must not empty
+	/// the new draft.
+	@Test func theEchoOfASendLeavesTheSameTextTypedAgainAfterIt() async throws {
+		let fixture = try Fixture()
+		let store = Store(configPath: fixture.configPath, state: .inMemory, log: try fixture.log())
+		let core = try #require(store.core)
+		_ = try core.dispatch(command: .openSession(title: "Delta", kind: .shell, profilePath: "/profile"))
+		store.foldPending()
+		let tab = try #require(core.snapshot().window.tabs.first)
+		let model = try AgentChat(store: store, core: core, tab: tab, name: "Delta")
+		store.agentModels[tab.id] = WeakAgentChat(model)
+		model.draft = "continue"
+		#expect(model.flushDraft())
+		// What a successful send does: the core clears the stored draft (its event waits for the next fold), and the chat
+		// clears its own.
+		_ = try core.dispatch(command: .clearAgentDraft(profilePath: model.profile, name: model.name, text: "continue"))
+		model.accepted(sent: "continue")
+		#expect(model.draft == "")
+		model.draft = "continue"
+		#expect(model.flushDraft())
+		// The stored draft's change comes after the clear on the same stream: once it's folded, so is the clear's echo.
+		try await eventually {
+			store.app.agentViews.first { $0.profilePath == model.profile && $0.name == model.name }?.draft == "continue"
+		}
+		#expect(model.draft == "continue", "the text typed again stays")
+
+		// Two sends of the same text (into the agent's own turn, Send stays) give two echoes, and both are this chat's.
+		for _ in 0..<2 {
+			model.draft = "yes"
+			#expect(model.flushDraft())
+			_ = try core.dispatch(command: .clearAgentDraft(profilePath: model.profile, name: model.name, text: "yes"))
+			model.accepted(sent: "yes")
+		}
+		model.draft = "yes"
+		#expect(model.flushDraft())
+		try await eventually {
+			store.app.agentViews.first { $0.profilePath == model.profile && $0.name == model.name }?.draft == "yes"
+		}
+		#expect(model.draft == "yes", "the text typed after both sends stays")
+
+		// A clear this chat didn't send (another view of the agent sent it) still empties a draft of that text.
+		model.draft = "continue"
+		#expect(model.flushDraft())
+		_ = try core.dispatch(command: .clearAgentDraft(profilePath: model.profile, name: model.name, text: "continue"))
+		try await eventually { model.draft == "" }
 	}
 }
