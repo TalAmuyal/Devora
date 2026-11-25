@@ -61,17 +61,39 @@ pub(super) fn effort(
     launch_effort: Option<&str>,
     list: Option<&ModelList>,
 ) -> ChatEffort {
+    let set_to = chosen.map_or(launch_effort.map(str::to_owned), |chosen| {
+        chosen.set_to.clone()
+    });
+    let levels = list
+        .and_then(|list| list.effort_levels(model))
+        .map(<[String]>::to_vec);
     ChatEffort {
-        set_to: chosen.map_or(launch_effort.map(str::to_owned), |chosen| {
-            chosen.set_to.clone()
-        }),
-        levels: list
-            .and_then(|list| list.effort_levels(model))
-            .map(<[String]>::to_vec)
-            .unwrap_or_default(),
+        model_unknown: list.is_some() && levels.is_none(),
+        runs_as: set_to
+            .as_deref()
+            .zip(levels.as_deref())
+            .and_then(|(set, levels)| runs_as(set, levels)),
+        set_to,
+        levels,
         pending: chosen.is_some_and(|chosen| chosen.pending),
         not_taken: chosen.and_then(|chosen| chosen.not_taken.clone()),
     }
+}
+
+/// The level Claude Code runs for `set` on a model that takes `levels` but not `set`: the nearest one below it on Claude
+/// Code's scale, as the pinned-CLI suite asserts. None when the model takes `set`, takes no level at all, or takes none
+/// below it.
+fn runs_as(set: &str, levels: &[String]) -> Option<String> {
+    let scale = devora_config::config::CLAUDE_EFFORT_LEVELS;
+    let at = scale.iter().position(|level| *level == set)?;
+    if levels.is_empty() || levels.iter().any(|level| level == set) {
+        return None;
+    }
+    scale[..at]
+        .iter()
+        .rev()
+        .find(|level| levels.iter().any(|taken| taken == *level))
+        .map(|level| (*level).to_owned())
 }
 
 /// The model widget's view of `active` for an agent set to `set_to`, named and checked against `list`, the models its
@@ -344,7 +366,7 @@ mod tests {
             ),
             (
                 Some("high"),
-                vec!["low".to_owned(), "high".to_owned()],
+                Some(vec!["low".to_owned(), "high".to_owned()]),
                 false
             )
         );
@@ -360,6 +382,42 @@ mod tests {
             "Claude Code default, set during a turn"
         );
         let unknown = effort(None, "opus", Some("high"), None);
-        assert!(unknown.levels.is_empty(), "no list, no levels claimed");
+        assert_eq!(unknown.levels, None, "no list, no levels claimed");
+    }
+
+    #[test]
+    fn a_model_the_list_doesnt_know_claims_no_levels_and_says_so() {
+        let list = list("claude-opus-5-5");
+        let unlisted = effort(None, "claude-made-up-9", Some("high"), Some(&list));
+        assert_eq!((unlisted.levels, unlisted.model_unknown), (None, true));
+        let waiting = effort(None, "claude-made-up-9", Some("high"), None);
+        assert_eq!(
+            (waiting.levels, waiting.model_unknown),
+            (None, false),
+            "no list yet: unknown for now, not unknown for good"
+        );
+    }
+
+    #[test]
+    fn a_level_the_model_lacks_runs_as_the_nearest_one_below_it_takes() {
+        let levels = |levels: &[&str]| levels.iter().map(|l| l.to_string()).collect::<Vec<_>>();
+        let sonnet_4_6 = levels(&["low", "medium", "high", "max"]);
+        assert_eq!(runs_as("xhigh", &sonnet_4_6).as_deref(), Some("high"));
+        assert_eq!(runs_as("high", &sonnet_4_6), None, "it takes it");
+        assert_eq!(
+            runs_as("high", &[]),
+            None,
+            "a model that takes no level runs none"
+        );
+        assert_eq!(
+            runs_as("low", &levels(&["high", "max"])),
+            None,
+            "nothing below it to name"
+        );
+        assert_eq!(
+            runs_as("turbo", &sonnet_4_6),
+            None,
+            "not a level on the scale"
+        );
     }
 }

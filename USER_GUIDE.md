@@ -201,6 +201,14 @@ A pick is kept with the agent at once: an idle agent switches now, a running tur
 Until a reply comes from the new model, the widget shows it in orange.
 If Claude Code refuses it, the widget and the popover say so; the agent keeps its current model for now and tries the pick again at its next launch.
 
+## Agent effort (Sapphire)
+
+The Effort widget beside Model shows the effort level the agent runs at, in Claude Code's words ("high", "xhigh"), or "default" for Claude Code's own default.
+Click it to pick another: the menu lists only the levels the agent's model takes.
+A pick is kept with the agent at once: an idle agent uses it from its next turn, a running turn finishes on its level first (the new one shows in orange until then), and a paused agent uses it when it resumes.
+If you change to a model that doesn't take the agent's level, the level is kept for when you switch back, and the widget shows in orange the level the model runs instead.
+A model that takes no effort level shows "—".
+
 ## Global Pause (Sapphire)
 
 Use the title-bar Pause Devora button or the Pause Devora command in the palette to hold background work.

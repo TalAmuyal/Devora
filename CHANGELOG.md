@@ -20,6 +20,7 @@ Types of changes:
 
 ### Added
 
+- Devora Sapphire's agent chat has an Effort widget beside Model: it shows the agent's effort level and opens a menu of the levels its model takes; a pick applies from the next turn without restarting the agent (during a turn it shows in orange until the turn ends), and a paused agent uses it when it resumes
 - Devora Sapphire's Model widget changes an agent's model: a click opens a searchable list of what Claude Code offers (its aliases, then every model ID), driven by the keyboard too; a running turn finishes on its model first, a paused agent uses the pick when it resumes, and the widget shows the pick in orange until the agent answers on it
 - Devora Sapphire's agent chat shows when each message was sent: the time for today's, the date and time for older ones, and the full date and time on hover; messages from before this change show none
 - Devora Sapphire shows which model an agent is actually using: a Model widget beside Context names the model its latest reply came from ("Pending" until one is known), marks a reply from a model the agent isn't set to with an orange glyph that explains it on hover, and the transcript adds one row where the replying model changes, with each reply's model in its hover title

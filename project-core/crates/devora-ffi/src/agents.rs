@@ -378,7 +378,9 @@ pub struct ChatContext {
 #[uniffi::remote(Record)]
 pub struct ChatEffort {
     pub set_to: Option<String>,
-    pub levels: Vec<String>,
+    pub levels: Option<Vec<String>>,
+    pub model_unknown: bool,
+    pub runs_as: Option<String>,
     pub pending: bool,
     pub not_taken: Option<String>,
 }
