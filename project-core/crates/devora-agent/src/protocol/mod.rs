@@ -76,7 +76,8 @@ pub enum KnownMessage {
     },
     /// Where a prompt Devora sent is, by the ID it was sent with (`command_uuid`): taken in, given to the agent, or
     /// done. A prompt sent into a turn the agent's CLI started itself waits between "queued" and "started" until the
-    /// agent's next step (probed on the pinned CLI).
+    /// agent's next step (probed on the pinned CLI). The CLI sends none for a command without an ID (its schema), so
+    /// `command_uuid` is always there.
     CommandLifecycle {
         command_uuid: String,
         state: CommandState,

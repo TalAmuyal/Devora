@@ -814,6 +814,9 @@ async fn pump(
     // The prompts sent into a turn the agent's CLI started itself that the agent hasn't got yet: their turn's ID, and
     // their row. Only those are marked; one sent otherwise reaches the agent at once (within milliseconds, probed).
     let mut waiting: std::collections::HashMap<String, u64> = Default::default();
+    // A prompt sent while no turn was seen running, until the agent has it: the CLI may have started a turn of its own
+    // just before (its `init` not read yet), which the prompt then joins and waits in like any other.
+    let mut unstarted: Option<(String, u64)> = None;
     let (stop_sent, mut stops) = mpsc::unbounded_channel::<Result<Value, String>>();
     loop {
         if turn_running.is_none() && !stopping && (pause_after_turn.is_some() || globally_paused())
@@ -920,6 +923,7 @@ async fn pump(
                 if let Some(completion) = completion {
                     // A send the CLI never took leaves no waiting row: its row says why it failed.
                     if completion.failed_turn {
+                        unstarted.take_if(|(_, sequence)| *sequence == completion.sequence);
                         if let Some(id) = waiting.iter().find(|(_, sequence)| **sequence == completion.sequence).map(|(id, _)| id.clone()) {
                             waiting.remove(&id);
                             deliver(space,transcript,events,completion.sequence,None)?;
@@ -964,6 +968,7 @@ async fn pump(
                 // crash: the resumed session never gets it, probed), never will be.
                 match &event {
                     SessionEvent::Message(Message::Known(KnownMessage::CommandLifecycle { command_uuid, state, .. })) => {
+                        unstarted.take_if(|(id, _)| id == command_uuid);
                         let delivery = match state {
                             CommandState::Started | CommandState::Completed => Some(None),
                             CommandState::Cancelled => Some(Some(Delivery::NotDelivered)),
@@ -975,7 +980,16 @@ async fn pump(
                             }
                         }
                     }
+                    // The agent's own turn started before the prompt sent into it was read: an idle CLI starts the
+                    // prompt's turn ("started") before its `init`.
+                    SessionEvent::Message(Message::Known(KnownMessage::System(System::Init { .. }))) => {
+                        if let Some((id, sequence)) = unstarted.take() {
+                            waiting.insert(id, sequence);
+                            deliver(space,transcript,events,sequence,Some(Delivery::Waiting))?;
+                        }
+                    }
                     SessionEvent::Exited { .. } | SessionEvent::Stopped(_) | SessionEvent::Failed(_) => {
+                        unstarted = None;
                         for (_, sequence) in std::mem::take(&mut waiting) {
                             deliver(space,transcript,events,sequence,Some(Delivery::NotDelivered))?;
                         }
@@ -1115,9 +1129,8 @@ async fn pump(
                         let _ = command.reply.send(Err("a turn is already running".into()));
                     }
                     Some(command) => {
-                        let joins = matches!(turn_running, Some(ActiveTurn::Agents))
-                            .then(|| match &command.action { Action::Turn { id, .. } => Some(id.clone()), _ => None })
-                            .flatten();
+                        let prompt = match &command.action { Action::Turn { id, .. } => Some(id.clone()), _ => None };
+                        let joins = prompt.is_some() && matches!(turn_running, Some(ActiveTurn::Agents));
                         match &command.action {
                             Action::Turn { id, .. } => turn_running = Some(ActiveTurn::Ours(id.clone())),
                             Action::RestartNotice { id, .. } => {
@@ -1127,8 +1140,12 @@ async fn pump(
                             _ => {}
                         }
                         let notice = matches!(command.action, Action::RestartNotice { .. });
-                        let sequence = begin(space,transcript,command,joins.is_some(),session.handle(),completed.clone(),events)?;
-                        if let Some(id) = joins { waiting.insert(id, sequence); }
+                        let sequence = begin(space,transcript,command,joins,session.handle(),completed.clone(),events)?;
+                        match prompt {
+                            Some(id) if joins => { waiting.insert(id, sequence); }
+                            Some(id) => unstarted = Some((id, sequence)),
+                            None => {}
+                        }
                         pending += 1;
                         if notice { let _ = events.send(SpaceEvent::TurnStarted); }
                     }

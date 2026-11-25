@@ -99,7 +99,8 @@ def start_notification_turn():
 def own_turns(directory):
     """Turns the CLI starts itself, as when a background task reports, on the test's cues in `directory`: `start` opens
     one, then `end` ends it with a result naming no user message, `crash` kills the CLI during it, or `step` gives the
-    agent the prompt held in it (`held`), which then ends the turn as that prompt's."""
+    agent the prompt held in it (`held`), which then ends the turn as that prompt's. `race`, read with the next prompt,
+    opens one just before that prompt is read."""
     global notification_turn, held, sent_turn
     def cue(*names):
         while True:
@@ -219,6 +220,13 @@ for line in sys.stdin:
         result()
     elif kind == "user":
         report({"kind":"user","message":message["message"],"uuid":message.get("uuid")})
+        # The `race` cue: the CLI starts a turn of its own just before it reads the prompt, which then joins it.
+        cues = os.environ.get("DEVORA_FAKE_OWN_TURNS")
+        if cues and (pathlib.Path(cues) / "race").exists():
+            (pathlib.Path(cues) / "race").unlink()
+            (pathlib.Path(cues) / "start").touch()
+            while not notification_turn:
+                time.sleep(0.01)
         # As the CLI does, a prompt sent during a turn it started itself joins that turn, whose one result answers the
         # prompt, and opens no turn of its own (probed on the pinned CLI).
         with output:

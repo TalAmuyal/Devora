@@ -2895,6 +2895,36 @@ async fn a_prompt_sent_into_the_agents_turn_waits_until_the_agent_has_it() {
     running.pause().await.unwrap();
 }
 
+// A prompt sent just as the agent starts a turn of its own, before Devora has read that turn's start, joins it and waits
+// like one sent into it.
+#[tokio::test]
+async fn a_prompt_sent_as_the_agent_starts_its_own_turn_waits_until_the_agent_has_it() {
+    use devora_agent::transcript::Delivery;
+    let space = OwnTurns::new();
+    let mut running = space.start_waiting().await;
+    space.cue("race");
+    running
+        .handle()
+        .send_turn("Just in time".into())
+        .await
+        .unwrap();
+    until(&mut running, |update| {
+        user_row(update, "Just in time") == Some(Some(Delivery::Waiting))
+    })
+    .await;
+    assert_eq!(
+        stored_delivery(&space.fixture, "Just in time"),
+        Some(Delivery::Waiting)
+    );
+    space.cue("step");
+    until(&mut running, |update| {
+        user_row(update, "Just in time") == Some(None)
+    })
+    .await;
+    assert_eq!(stored_delivery(&space.fixture, "Just in time"), None);
+    running.pause().await.unwrap();
+}
+
 // A prompt sent while the agent is idle reaches it at once: its row is never marked.
 #[tokio::test]
 async fn a_prompt_sent_while_the_agent_is_idle_is_never_marked() {
