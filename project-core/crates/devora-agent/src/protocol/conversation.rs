@@ -157,6 +157,14 @@ impl TurnResult {
             .and_then(Value::as_array)
             .is_some_and(|ids| ids.iter().any(|value| value.as_str() == Some(id)))
     }
+
+    /// Whether the API refused the turn's request as longer than the model's
+    /// context window: an error result with `terminal_reason: "prompt_too_long"`,
+    /// as the pinned-CLI suite asserts.
+    pub fn prompt_too_long(&self) -> bool {
+        self.is_error
+            && self.extra.get("terminal_reason").and_then(Value::as_str) == Some("prompt_too_long")
+    }
 }
 
 /// Token accounting shared by completed messages and streaming message updates.

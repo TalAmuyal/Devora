@@ -47,6 +47,19 @@ def lifecycle(command, state):
     # Where a prompt is, by the ID it was sent with: queued, started (the agent has it), completed (its turn ended).
     emit({"type":"command_lifecycle","command_uuid":command,"state":state,"session_id":session_id,"uuid":str(time.time())})
 
+# With DEVORA_FAKE_TOO_LONG (prompt prefixes, "|"-separated), the API refuses those prompts as longer than the
+# context window: the pinned CLI's synthetic reply and its error result (session_cli.rs asserts terminal_reason).
+def prompt_too_long():
+    assistant = recorded("assistant")
+    assistant["message"].update(model="<synthetic>", content=[{"type":"text","text":"Prompt is too long"}])
+    emit(assistant)
+    value = recorded("result")
+    value.update(subtype="success", is_error=True, result="Prompt is too long", terminal_reason="prompt_too_long",
+        api_error_status=400, api_error_type="invalid_request_error")
+    value["user_message_uuids"] = [sent_turn]
+    emit(value)
+    lifecycle(sent_turn, "completed")
+
 sent_turn = None
 def result(interrupted=False):
     value = recorded("result")
@@ -255,7 +268,10 @@ for line in sys.stdin:
         # As the CLI does, `init` opens each turn, and nothing else sends one (the recordings).
         if not folded:
             emit(recorded("system"))
-        if text == "permission":
+        too_long = os.environ.get("DEVORA_FAKE_TOO_LONG")
+        if too_long and any(text.startswith(prefix) for prefix in too_long.split("|")):
+            prompt_too_long()
+        elif text == "permission":
             question()
         elif text == "permission-then-reply":
             question()
