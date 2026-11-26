@@ -94,7 +94,7 @@ public final class TerminalRuntime {
 		var argv: [UnsafeMutablePointer<CChar>?] = [strdup(CommandLine.arguments.first ?? "sapphire"), nil]
 		guard ghostty_init(1, &argv) == GHOSTTY_SUCCESS else { fatalError("ghostty_init failed") }
 
-		try? themes.write(palettes.dark)
+		Self.write(palettes.dark, to: themes)
 		let config = Self.makeConfig(themes: themes, fontSize: Self.defaultFontSize)
 		NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { _ in
 			MainActor.assumeIsolated { TerminalRuntime.shared.themes.remove() }
@@ -161,12 +161,16 @@ public final class TerminalRuntime {
 	/// In this order, since setting a surface's scheme replays its config, which reads the theme files then: the files,
 	/// the config, then the scheme of each terminal.
 	private func reconfigure() {
-		do { try themes.write(palette) } catch { Self.logWarning("couldn't write the terminal colors: \(error)") }
+		Self.write(palette, to: themes)
 		let config = Self.makeConfig(themes: themes, fontSize: fontSize)
 		ghostty_app_update_config(app, config)
 		if let old = self.config { ghostty_config_free(old) }
 		self.config = config
 		for view in views.allObjects { tellScheme(view) }
+	}
+
+	private static func write(_ palette: TerminalPalette, to themes: ThemeFiles) {
+		do { try themes.write(palette) } catch { Self.logWarning("couldn't write the terminal colors: \(error)") }
 	}
 
 	/// Starts telling a newly made terminal the scheme.
