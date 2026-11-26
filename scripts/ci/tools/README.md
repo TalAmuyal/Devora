@@ -1,8 +1,7 @@
 # CI tools
 
-`package.json` pins the tools CI installs, so that a new release can't change CI under an unchanged tree, and so that Dependabot can see the pins (it can't read a version inside a workflow).
+`package.json` pins the tools CI installs, so that a new release can't change CI under an unchanged tree, and so that every reader takes the version from one place.
 Today that's the Claude Code CLI (`@anthropic-ai/claude-code`), exact, which the real-Claude acceptance scenarios and the agent CLI tests run.
-It lives here, not under `.github/`: GitHub refuses Dependabot changes to files under `.github/` for every ecosystem but github-actions (its pull request is rejected as "invalid or unauthorized changes").
 
 Every reader takes the version from here:
 
@@ -12,7 +11,7 @@ Every reader takes the version from here:
 
 ## Bumps
 
-Dependabot (`.github/dependabot.yml`) checks weekly and opens at most one PR, for this directory only, labelled `skip-changelog`.
+Nothing bumps a pin automatically: a bump is made by hand, by changing the version here (and `package-lock.json`, with `npm install --package-lock-only` in this directory), in a PR labelled `skip-changelog`.
 Each bump is a PR of its own, never batched with other work, so its CI is about the new version alone.
 Its manifest is a build manifest, which the module map (`scripts/ci/modules.toml`) treats as affecting every app, so the bump runs both apps' CI, about 47 macOS minutes.
 
@@ -23,4 +22,4 @@ When it's red, the PR becomes an item, rather than sitting open:
 1. Tell a break from a flake. Run `mise run flake-report --test '<the failing test>'`: a test that fails on master too is a flake with its own item, and a re-run of the failed jobs shows whether the failure repeats. A failure that repeats, on a test that's green on master, is the new version.
 2. For a break, fix what the new version needs on the bump's branch, or report it upstream and keep the old pin.
    The agent CLI tests replay recordings of one CLI version (`project-core/crates/devora-agent/tests/fixtures/claude-<version>/`); when the new version changes the protocol, re-record them as that directory's README describes.
-3. Close a bump that can't land yet, saying why on its item, so the next week's bump isn't hidden behind it.
+3. Close a bump that can't land yet, saying why on its item, so that it doesn't sit open.

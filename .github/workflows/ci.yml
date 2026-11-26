@@ -160,7 +160,7 @@ jobs:
           mise exec -C project-ember -- npm ci --prefix ../web-renderer
           mise exec -C project-ember -- npm ci
 
-      # The version is pinned in scripts/ci/tools/package.json, which Dependabot bumps (its README.md).
+      # The version is pinned in scripts/ci/tools/package.json, see its README.md.
       - name: Install Claude Code CLI
         run: |
           version=$(node -p "require(process.env.GITHUB_WORKSPACE + '/scripts/ci/tools/package.json').dependencies['@anthropic-ai/claude-code']")
@@ -285,7 +285,7 @@ jobs:
       - name: Build the app
         run: mise run -C project-sapphire build
 
-      # The version is pinned in scripts/ci/tools/package.json, which Dependabot bumps (its README.md).
+      # The version is pinned in scripts/ci/tools/package.json, see its README.md.
       - name: Install Claude Code CLI
         run: |
           version=$(mise exec -C project-sapphire -- node -p "require(process.env.GITHUB_WORKSPACE + '/scripts/ci/tools/package.json').dependencies['@anthropic-ai/claude-code']")

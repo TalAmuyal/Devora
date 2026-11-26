@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
 const sapphire = fileURLToPath(new URL('..', import.meta.url));
-// CI's pin, which Dependabot bumps (scripts/ci/tools/README.md).
+// CI's pin (scripts/ci/tools/README.md).
 const manifest = JSON.parse(readFileSync(path.join(sapphire, '../scripts/ci/tools/package.json'), 'utf8'));
 const pin: string | undefined = manifest.dependencies?.['@anthropic-ai/claude-code'];
 if (!pin || !/^[\d.]+$/.test(pin)) throw new Error('scripts/ci/tools/package.json must pin an exact @anthropic-ai/claude-code version');
