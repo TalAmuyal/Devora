@@ -80,7 +80,10 @@ private struct MarkdownBlockView: View {
 			}
 			if !intent.isEmpty { part.inlinePresentationIntent = intent }
 			if run.style.contains(.strikethrough) { part.strikethroughStyle = .single }
-			if let link = run.link { part.link = link }
+			if let link = run.link {
+				part.link = link
+				if theme.underlinesLinks { part.underlineStyle = .single }
+			}
 			result += part
 		}
 		return result
