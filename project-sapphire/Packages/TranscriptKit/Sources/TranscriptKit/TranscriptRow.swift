@@ -210,6 +210,7 @@ struct TranscriptRow: View {
 		let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
 		return VStack(alignment: .trailing, spacing: 2) {
 			markdown(text)
+				.environment(\.transcriptTheme, .outlined(tint))
 			Label(delivery.note, systemImage: delivery == .waiting ? "clock" : "exclamationmark.triangle")
 				.font(.caption2.weight(.semibold))
 				.opacity(delivery == .waiting ? 0.75 : 1)

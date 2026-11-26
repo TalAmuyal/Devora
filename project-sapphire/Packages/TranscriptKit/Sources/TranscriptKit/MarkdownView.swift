@@ -3,6 +3,7 @@ import SwiftUI
 /// Draws a `MarkdownDocument`'s blocks, one SwiftUI view per block.
 struct MarkdownView: View {
 	let blocks: [MarkdownBlock]
+	@Environment(\.transcriptTheme) private var theme
 
 	var body: some View {
 		VStack(alignment: .leading, spacing: 6) {
@@ -10,6 +11,8 @@ struct MarkdownView: View {
 				MarkdownBlockView(block: blocks[index])
 			}
 		}
+		// A link takes the tint, which the row sets from the page's theme: a bubble's own theme sets it again.
+		.tint(theme.link)
 	}
 }
 

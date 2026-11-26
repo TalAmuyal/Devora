@@ -21,6 +21,12 @@ extension TranscriptTheme {
 	static let onBubble = TranscriptTheme(
 		text: .white, secondary: .white.opacity(0.8), heading: .white, link: .white, inlineCode: .white.opacity(0.2),
 		codeBlock: .black.opacity(0.18), quoteEdge: .white, border: .white.opacity(0.35), error: .white)
+
+	/// In an outline-only bubble (a prompt the agent doesn't have): its text, headings, links and quotes in the
+	/// outline's `tint`, on the page's own code fills.
+	static func outlined(_ tint: Color) -> TranscriptTheme {
+		TranscriptTheme(text: tint, secondary: tint.opacity(0.8), heading: tint, link: tint, quoteEdge: tint, error: tint)
+	}
 }
 
 extension EnvironmentValues {
