@@ -2652,7 +2652,15 @@ impl OwnTurns {
     }
 
     async fn start(&self) -> RunningSpace {
-        let mut context = self.fixture.context();
+        self.launch(self.fixture.context()).await
+    }
+
+    /// As `start`, with every turn taking the context over the threshold (`compacting_after_any_turn`).
+    async fn start_compacting(&self) -> RunningSpace {
+        self.launch(compacting_after_any_turn(&self.fixture)).await
+    }
+
+    async fn launch(&self, mut context: LaunchContext) -> RunningSpace {
         context.environment.insert(
             "DEVORA_FAKE_OWN_TURNS".into(),
             self.cues.display().to_string(),
@@ -2799,6 +2807,77 @@ async fn a_compaction_asked_for_during_a_turn_the_cli_started_itself_starts_at_i
         position(&reported, "own_turn_ended") < position(&reported, "user "),
         "{reported:?}"
     );
+    running.pause().await.unwrap();
+}
+
+const SAVE_MEMORY: &str = "user Devora: your context is nearly full";
+
+// An agent that works from its background tasks is compacted too: a turn the CLI started itself that ends over the
+// threshold starts the save-memory turn, as a turn Devora sent does.
+#[tokio::test]
+async fn a_turn_the_cli_started_itself_that_ends_over_the_threshold_starts_the_compaction() {
+    let space = OwnTurns::new();
+    let mut running = space.start_compacting().await;
+    space.begin(&mut running).await;
+    space.cue("end");
+    let reported = space.reported_with(SAVE_MEMORY).await;
+    assert!(
+        position(&reported, "own_turn_ended") < position(&reported, SAVE_MEMORY),
+        "{reported:?}"
+    );
+    running.pause().await.unwrap();
+}
+
+// A pause asked for during the agent's own turn wins over the compaction that turn's end would start, as it does after
+// a turn Devora sent: the agent pauses at that end, and no save-memory turn is sent.
+#[tokio::test]
+async fn a_pause_during_the_agents_own_turn_wins_over_the_compaction_its_end_would_start() {
+    let space = OwnTurns::new();
+    let mut running = space.start_compacting().await;
+    space.begin(&mut running).await;
+    let pausing = tokio::spawn(running.handle().pause_after_turn());
+    // Commands are handled in order: once this one is answered, the actor has seen the pause.
+    running.handle().set_compact_threshold(None).await.unwrap();
+    space.cue("end");
+    tokio::time::timeout(Duration::from_secs(10), pausing)
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    let reported = space.reported();
+    assert!(
+        position(&reported, "own_turn_ended") < position(&reported, "eof"),
+        "{reported:?}"
+    );
+    assert!(
+        !reported.iter().any(|entry| entry.starts_with(SAVE_MEMORY)),
+        "{reported:?}"
+    );
+}
+
+// A prompt that joined the agent's own turn makes it Devora's: the compaction waits for that turn's end, and starts once.
+#[tokio::test]
+async fn a_compaction_waits_for_a_prompt_that_joined_the_agents_own_turn() {
+    let space = OwnTurns::new();
+    let mut running = space.start_compacting().await;
+    space.begin(&mut running).await;
+    running.handle().send_turn("drift".into()).await.unwrap();
+    assert!(!space
+        .reported()
+        .iter()
+        .any(|entry| entry.starts_with(SAVE_MEMORY)));
+    space.cue("end");
+    let reported = space.reported_with(SAVE_MEMORY).await;
+    assert!(
+        position(&reported, "user drift") < position(&reported, SAVE_MEMORY),
+        "{reported:?}"
+    );
+    let reported = space.reported_with("user /compact").await;
+    let saves = reported
+        .iter()
+        .filter(|entry| entry.starts_with(SAVE_MEMORY))
+        .count();
+    assert_eq!(saves, 1, "{reported:?}");
     running.pause().await.unwrap();
 }
 
@@ -3050,18 +3129,10 @@ impl OwnTurns {
     /// As `start`, with a prompt sent into the CLI's own turn waiting for the agent's next step (the `step` cue).
     async fn start_waiting(&self) -> RunningSpace {
         let mut context = self.fixture.context();
-        context.environment.insert(
-            "DEVORA_FAKE_OWN_TURNS".into(),
-            self.cues.display().to_string(),
-        );
         context
             .environment
             .insert("DEVORA_FAKE_FOLDED_WAITS".into(), "1".into());
-        Space::open(&self.fixture.profile, "Delta")
-            .unwrap()
-            .start(&context, self.log.clone(), &self.fixture.run)
-            .await
-            .unwrap()
+        self.launch(context).await
     }
 }
 
