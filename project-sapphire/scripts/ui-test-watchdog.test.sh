@@ -152,7 +152,7 @@ kill -0 "$run" 2>/dev/null && fail "a run that ignores SIGINT should be killed a
 
 # 6–8. Whether the runner's WindowServer froze. Stand-ins on PATH: `sample` (the app's main thread waiting on SkyLight in
 # every sample, or not), `screencapture` (answers, or hangs past the deadline) and `log` (GPU fence timeouts, or none),
-# each noting its call; the app is `sleep`, run from this case's DerivedData as the build's app would be.
+# each noting its call; the app is a script waiting on `sleep`, run from this case's DerivedData as the build's app would be.
 stubs="$scratch/stubs"
 mkdir -p "$stubs"
 cat >"$stubs/sample" <<'STUB'
@@ -194,11 +194,17 @@ frozen() {
 	results=$(bundle "$case")
 	local app="$scratch/$case/DerivedData/Build/Products/Release/Devora Sapphire.app/Contents/MacOS/Devora Sapphire"
 	mkdir -p "$(dirname "$app")"
-	ln -s "$(command -v sleep)" "$app"
+	cat >"$app" <<'APP'
+#!/usr/bin/env bash
+trap 'kill $!; exit' TERM
+sleep "$1" &
+wait
+APP
+	chmod +x "$app"
 	"$app" 60 &
 	app_pid=$!
 	disown "$app_pid"
-	started=$(date -v-60S +%H:%M:%S)
+	started=$(perl -MPOSIX -e 'print strftime("%H:%M:%S", localtime(time - 60))')
 	[ -n "${FAKE_NO_START:-}" ] ||
 		printf '%s.000 DevoraSapphireUITests-Runner[1:2] -[XCTRunnerIDESession(_XCTestObservationInternal) testCaseWillStart:] DevoraSapphireUITests.WorkspaceHubUITests testTypingInTheFilterNarrowsTheListAndEscapeLeavesItBeforeClosing\n' \
 			"$started" >>"$(session_log "$results")"

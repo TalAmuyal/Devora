@@ -116,11 +116,14 @@ if [ -n "$hung" ]; then
 	# shellcheck disable=SC2086
 	began=$(find $watched -name 'Session-*.log' -exec grep -h "testCaseWillStart:\] [A-Za-z0-9_]*\.${hung%%/*} ${hung##*/}$" {} + 2>/dev/null |
 		tail -1 | cut -d' ' -f1 | cut -d. -f1)
-	if [ -n "$began" ] && start=$(date -j -f "%Y-%m-%d %H:%M:%S" "$(date +%Y-%m-%d) $began" +%s 2>/dev/null); then
-		since=$(($(date +%s) - start))
+	if [[ "$began" =~ ^([0-9]{2}):([0-9]{2}):([0-9]{2})$ ]]; then
+		# Seconds since then, by the time of day (both on this clock), so no date parsing is needed.
+		of_day() { echo $((10#$1 * 3600 + 10#$2 * 60 + 10#$3)); }
+		start=$(of_day "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" "${BASH_REMATCH[3]}")
+		IFS=: read -r hour minute second <<<"$(date +%H:%M:%S)"
+		# A test that started before midnight wraps around.
+		since=$((($(of_day "$hour" "$minute" "$second") - start + 86400) % 86400))
 		searched="since the test started at $began"
-		# A test that started before midnight.
-		[ "$since" -ge 0 ] || since=$((since + 86400))
 	fi
 fi
 first_fence=""
