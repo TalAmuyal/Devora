@@ -1,8 +1,28 @@
 Feature: Terminals follow the appearance
   The terminals draw in the palette chosen in User Defaults, its light or dark variant after the app's effective
-  appearance, both live.
+  appearance, both live; a program that asks for the color scheme is told it, and of each switch if it asked to be
+  (mode 2031), and reads the new background when it asks (OSC 11).
 
-  # A program running in a terminal isn't told of a switch (mode 2031); its scenario returns with that follow-up.
+  Scenario Outline: A program in a terminal made in <first> is told the scheme, and of each switch
+    Given a profile "Work" with 1 active workspaces
+    And the global config sets Appearance to "<first>"
+    When Sapphire is quit and relaunched
+    And the user opens the profile's first workspace
+    And a program listening for color-scheme changes runs in the terminal
+    Then the program should last have been told "<first>", with a "<first>" background
+    When the Workspace Hub is open
+    And the user presses "P"
+    Then the Settings Hub should be visible
+    When the user opens the "User Defaults" settings detail
+    And the user switches "appearance" to "<Second>"
+    Then the program should last have been told "<second>", with a "<second>" background
+    When the user switches "appearance" to "<First>"
+    Then the program should last have been told "<first>", with a "<first>" background
+
+    Examples:
+      | first | First | second | Second |
+      | dark  | Dark  | light  | Light  |
+      | light | Light | dark   | Dark   |
 
   Scenario: The terminal colors are chosen in User Defaults and apply at once
     Given a profile "Work" with 1 active workspaces
