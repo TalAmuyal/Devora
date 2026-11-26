@@ -97,6 +97,8 @@ output = threading.Lock()
 background = []
 # A stopped subagent's notification turn, running until it's interrupted.
 notification_turn = False
+# Set once a prompt read with the `race` cue has opened a turn of the CLI's own, which `own_turns` then runs.
+raced = threading.Event()
 
 def background_changed():
     emit({"type":"system","subtype":"background_tasks_changed","session_id":session_id,"tasks":list(background)})
@@ -118,18 +120,29 @@ def own_turns(directory):
     global notification_turn, held, sent_turn
     def cue(*names):
         while True:
+            if "start" in names and raced.is_set():
+                raced.clear()
+                return "raced"
             for name in names:
                 if (directory / name).exists():
                     (directory / name).unlink()
                     return name
             time.sleep(0.01)
     while True:
-        cue("start")
-        start_notification_turn()
+        if cue("start") == "start":
+            start_notification_turn()
         name = cue("end", "crash", "step")
         if name == "crash":
             os._exit(70)
         if name == "step":
+            # The prompt to give may still be on its way in: the agent gets it, never nothing. None held within 5 s
+            # (well inside a test's own wait) means the test cued `step` without one, which the report names.
+            deadline = time.monotonic() + 5
+            while held is None:
+                if time.monotonic() > deadline:
+                    report({"kind":"step_without_held"})
+                    os._exit(71)
+                time.sleep(0.01)
             with output:
                 notification_turn = False
                 sent_turn, held = held, None
@@ -238,9 +251,8 @@ for line in sys.stdin:
         cues = os.environ.get("DEVORA_FAKE_OWN_TURNS")
         if cues and (pathlib.Path(cues) / "race").exists():
             (pathlib.Path(cues) / "race").unlink()
-            (pathlib.Path(cues) / "start").touch()
-            while not notification_turn:
-                time.sleep(0.01)
+            start_notification_turn()
+            raced.set()
         # As the CLI does, a prompt sent during a turn it started itself joins that turn, whose one result answers the
         # prompt, and opens no turn of its own (probed on the pinned CLI).
         with output:
