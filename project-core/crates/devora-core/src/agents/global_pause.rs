@@ -127,3 +127,41 @@ pub(super) fn changed(
         }
     });
 }
+
+/// Why an agent released from a hold is paused as it launches again. A hold that landed after the release decided to
+/// relaunch it, and was given Keep paused, is a stored pause it hasn't launched since; the next check holds it with
+/// that choice.
+pub(super) fn relaunched(pause: &AgentPause) -> AgentPause {
+    match pause {
+        AgentPause::Held {
+            keep_paused: true, ..
+        } => AgentPause::PausedAtOpen,
+        _ => AgentPause::None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_relaunch_keeps_a_keep_paused_choice_made_since_the_release() {
+        for released in [false, true] {
+            assert_eq!(
+                relaunched(&AgentPause::Held {
+                    keep_paused: true,
+                    released
+                }),
+                AgentPause::PausedAtOpen
+            );
+            assert_eq!(
+                relaunched(&AgentPause::Held {
+                    keep_paused: false,
+                    released
+                }),
+                AgentPause::None
+            );
+        }
+        assert_eq!(relaunched(&AgentPause::None), AgentPause::None);
+    }
+}

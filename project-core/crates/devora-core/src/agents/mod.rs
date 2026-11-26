@@ -1209,8 +1209,7 @@ async fn run(
         let next = inner.generation;
         let owner = inner.owners.get_mut(&key).expect("checked owner");
         owner.generation = next;
-        // Released: its new chat starts unpaused.
-        owner.paused = AgentPause::None;
+        owner.paused = global_pause::relaunched(&owner.paused);
         if let Some(tab) = owner.tab {
             let _ = state.dispatch_chat(ChatCommand::Start {
                 tab,
