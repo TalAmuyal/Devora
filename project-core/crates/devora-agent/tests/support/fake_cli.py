@@ -135,8 +135,13 @@ def own_turns(directory):
         if name == "crash":
             os._exit(70)
         if name == "step":
-            # The prompt to give may still be on its way in: the agent gets it, never nothing.
+            # The prompt to give may still be on its way in: the agent gets it, never nothing. None held within 5 s
+            # (well inside a test's own wait) means the test cued `step` without one, which the report names.
+            deadline = time.monotonic() + 5
             while held is None:
+                if time.monotonic() > deadline:
+                    report({"kind":"step_without_held"})
+                    os._exit(71)
                 time.sleep(0.01)
             with output:
                 notification_turn = False

@@ -2623,7 +2623,7 @@ impl OwnTurns {
     /// Starts a turn of the CLI's own, and returns once the actor has seen it start.
     async fn begin(&self, running: &mut RunningSpace) {
         self.cue("start");
-        until(running, |update| {
+        until(running, "the agent's own turn to start", |update| {
             matches!(
                 update,
                 SpaceEvent::Session(SessionEvent::Message(Message::Known(KnownMessage::System(
@@ -2672,18 +2672,18 @@ impl OwnTurns {
     }
 }
 
-/// Waits for an update `done` accepts.
-async fn until(running: &mut RunningSpace, mut done: impl FnMut(&SpaceEvent) -> bool) {
+/// Waits for an update `done` accepts; `what` names it in a failure, so a timeout says which wait it was.
+async fn until(running: &mut RunningSpace, what: &str, mut done: impl FnMut(&SpaceEvent) -> bool) {
     tokio::time::timeout(Duration::from_secs(10), async {
         while let Some(update) = running.next_update().await {
             if done(&update) {
                 return;
             }
         }
-        panic!("the space ended");
+        panic!("the space ended waiting for {what}");
     })
     .await
-    .expect("the update came")
+    .unwrap_or_else(|_| panic!("timed out waiting for {what}"))
 }
 
 fn position(reported: &[String], prefix: &str) -> usize {
@@ -2762,7 +2762,7 @@ async fn a_prompt_sent_during_a_turn_the_cli_started_itself_joins_it() {
     let mut running = space.start().await;
     space.begin(&mut running).await;
     running.handle().send_turn("drift".into()).await.unwrap();
-    until(&mut running, |update| {
+    until(&mut running, "our turn to end", |update| {
         matches!(update, SpaceEvent::TurnEnded)
     })
     .await;
@@ -2787,21 +2787,27 @@ async fn a_turn_the_cli_started_itself_never_outlives_its_end() {
             }
             _ => space.cue("crash"),
         }
-        until(&mut running, |update| match ending {
-            "crash" => matches!(update, SpaceEvent::Session(SessionEvent::Exited { .. })),
-            _ => matches!(
-                update,
-                SpaceEvent::Session(SessionEvent::Message(Message::Known(KnownMessage::Result(
-                    _
-                ))))
-            ),
-        })
+        until(
+            &mut running,
+            "the agent's own turn to end",
+            |update| match ending {
+                "crash" => matches!(update, SpaceEvent::Session(SessionEvent::Exited { .. })),
+                _ => matches!(
+                    update,
+                    SpaceEvent::Session(SessionEvent::Message(Message::Known(
+                        KnownMessage::Result(_)
+                    )))
+                ),
+            },
+        )
         .await;
         if ending == "crash" {
             // The worker restarts the CLI after a crash; the agent is idle again once it's back.
-            until(&mut running, |update| {
-                matches!(update, SpaceEvent::Session(SessionEvent::Ready { .. }))
-            })
+            until(
+                &mut running,
+                "the restarted session to be ready",
+                |update| matches!(update, SpaceEvent::Session(SessionEvent::Ready { .. })),
+            )
             .await;
         }
         tokio::time::timeout(Duration::from_secs(10), running.handle().pause_after_turn())
@@ -2932,24 +2938,24 @@ async fn the_space_publishes_a_turn_the_cli_started_itself_and_its_end() {
     let space = OwnTurns::new();
     let mut running = space.start().await;
     space.cue("start");
-    until(&mut running, |update| {
+    until(&mut running, "the agent's own turn to start", |update| {
         matches!(update, SpaceEvent::AgentTurnStarted)
     })
     .await;
     space.cue("end");
-    until(&mut running, |update| {
+    until(&mut running, "the agent's own turn to end", |update| {
         matches!(update, SpaceEvent::AgentTurnEnded)
     })
     .await;
 
     space.cue("start");
-    until(&mut running, |update| {
+    until(&mut running, "the agent's own turn to start", |update| {
         matches!(update, SpaceEvent::AgentTurnStarted)
     })
     .await;
     running.handle().send_turn("drift".into()).await.unwrap();
     let mut ends = vec![];
-    until(&mut running, |update| {
+    until(&mut running, "our turn to end", |update| {
         match update {
             SpaceEvent::TurnEnded => ends.push("ours"),
             SpaceEvent::AgentTurnEnded => ends.push("the agent's"),
@@ -3020,7 +3026,7 @@ async fn a_prompt_sent_into_the_agents_turn_waits_until_the_agent_has_it() {
     let mut running = space.start_waiting().await;
     space.begin(&mut running).await;
     running.handle().send_turn("Joins it".into()).await.unwrap();
-    until(&mut running, |update| {
+    until(&mut running, "the row to wait", |update| {
         user_row(update, "Joins it") == Some(Some(Delivery::Waiting))
     })
     .await;
@@ -3029,7 +3035,7 @@ async fn a_prompt_sent_into_the_agents_turn_waits_until_the_agent_has_it() {
         Some(Delivery::Waiting)
     );
     space.cue("step");
-    until(&mut running, |update| {
+    until(&mut running, "the row to clear", |update| {
         user_row(update, "Joins it") == Some(None)
     })
     .await;
@@ -3050,7 +3056,7 @@ async fn a_prompt_sent_as_the_agent_starts_its_own_turn_waits_until_the_agent_ha
         .send_turn("Just in time".into())
         .await
         .unwrap();
-    until(&mut running, |update| {
+    until(&mut running, "the row to wait", |update| {
         user_row(update, "Just in time") == Some(Some(Delivery::Waiting))
     })
     .await;
@@ -3059,7 +3065,7 @@ async fn a_prompt_sent_as_the_agent_starts_its_own_turn_waits_until_the_agent_ha
         Some(Delivery::Waiting)
     );
     space.cue("step");
-    until(&mut running, |update| {
+    until(&mut running, "the row to clear", |update| {
         user_row(update, "Just in time") == Some(None)
     })
     .await;
@@ -3074,7 +3080,7 @@ async fn a_prompt_sent_while_the_agent_is_idle_is_never_marked() {
     let mut running = space.start_waiting().await;
     running.handle().send_turn("drift".into()).await.unwrap();
     let mut marks = vec![];
-    until(&mut running, |update| {
+    until(&mut running, "our turn to end", |update| {
         if let Some(delivery) = user_row(update, "drift") {
             marks.push(delivery);
         }
@@ -3101,14 +3107,16 @@ async fn a_prompt_whose_session_ends_before_the_agent_has_it_was_not_delivered()
         .send_turn("Lost in a crash".into())
         .await
         .unwrap();
-    until(&mut running, |update| {
+    until(&mut running, "the row to wait", |update| {
         user_row(update, "Lost in a crash") == Some(Some(Delivery::Waiting))
     })
     .await;
     space.cue("crash");
-    until(&mut running, |update| {
-        user_row(update, "Lost in a crash") == Some(Some(Delivery::NotDelivered))
-    })
+    until(
+        &mut running,
+        "the row to say it wasn't delivered",
+        |update| user_row(update, "Lost in a crash") == Some(Some(Delivery::NotDelivered)),
+    )
     .await;
     assert_eq!(
         stored_delivery(&space.fixture, "Lost in a crash"),
@@ -3146,7 +3154,7 @@ async fn a_send_during_a_crash_restart_leaves_no_waiting_row() {
     let mut running = space.start_waiting().await;
     space.begin(&mut running).await;
     space.cue("crash");
-    until(&mut running, |update| {
+    until(&mut running, "the CLI to exit", |update| {
         matches!(update, SpaceEvent::Session(SessionEvent::Exited { .. }))
     })
     .await;
