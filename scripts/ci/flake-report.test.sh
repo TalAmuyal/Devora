@@ -80,7 +80,8 @@ expect "runs the watchdog stopped" "$(printf '%s\n' \
 	'' \
 	'Runs the UI test watchdog stopped at a test ("runner": the runner'"'"'s WindowServer had frozen, so the test'"'"'s failure there isn'"'"'t counted above):' \
 	'1 runner, 1 test  sapphire: Settings / multiline save' \
-	'    last: 2026-11-03T00:00:00Z https://ci/3')" \
+	'    runner: 2026-11-01T00:00:00Z https://ci/1' \
+	'    test: 2026-11-03T00:00:00Z https://ci/3')" \
 	"$(jq -r -s --argjson listed "$listed" --arg filter "" -f "$here/flake-report.jq" <<<"$watched")"
 
 expect "jobs not run, by why" "$(printf '%s\n' \

@@ -31,7 +31,7 @@ def secs: if . == null then "-" elif . < 10 then (. * 10 | round / 10 | tostring
 		retries: ($per_run | map(.retries) | add),
 		last_retry: ($per_run | map(select(.retries > 0)) | map($runs[.run] // {databaseId: .run}) | sort_by(.createdAt) | last),
 		stops: [($per_run | map(select(.froze)) | length), ($per_run | map(select(.hung)) | length)],
-		last_stop: ($per_run | map(select(.froze or .hung)) | map($runs[.run] // {databaseId: .run}) | sort_by(.createdAt) | last),
+		stopped_in: ($per_run | map(select(.froze or .hung)) | map(($runs[.run] // {databaseId: .run}) + {verdict: (if .froze then "runner" else "test" end)}) | sort_by(.createdAt)),
 		last_failure: ($per_run | map(select(.failed)) | map($runs[.run] // {databaseId: .run}) | sort_by(.createdAt) | last),
 		median: ($all | map(select(.outcome == "passed") | .duration // empty) | median),
 		slowest: ($all | map(.duration // empty) | max)
@@ -56,7 +56,7 @@ end),
 (if ($stopped | length) == 0 then empty else
 	"\nRuns the UI test watchdog stopped at a test (\"runner\": the runner's WindowServer had frozen, so the test's failure there isn't counted above):",
 	($stopped[] |
-		"\(.stops[0]) runner, \(.stops[1]) test  \(.job): \(.suite) / \(.name)\n"
-		+ "    last: \(.last_stop.createdAt // "?") \(.last_stop.url // .last_stop.databaseId)")
+		"\(.stops[0]) runner, \(.stops[1]) test  \(.job): \(.suite) / \(.name)"
+		+ (.stopped_in | map("\n    \(.verdict): \(.createdAt // "?") \(.url // .databaseId)") | add))
 end),
 (if $filter != "" then "\nAll matching tests:", (.[] | "  \(.job): \(.suite) / \(.name): failed \(.master[0])/\(.master[1]) master, \(.pr[0])/\(.pr[1]) PR; median \(.median | secs), slowest \(.slowest | secs)") else empty end)

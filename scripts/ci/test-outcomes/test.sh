@@ -108,6 +108,12 @@ expect "xcresult: a test the run's cancellation cut short is skipped" "$(printf 
 	'AgentSettingsUITests | testMultilineSaveAndTemplateFilePicker() | failed' \
 	'GlobalPauseUITests | testToolbarHoldSurvivesRelaunchAndTheToolbarResumesIt() | skipped')" \
 	"$("$here/xcresult.sh" --json "$fixtures/xcresult-watchdog-tests.json" | summary)"
+# Only when the cancellation is its sole failure: a real failure before the cancel stays a failure.
+jq '(.. | objects | select(.nodeType? == "Test Case" and (.name | startswith("testToolbarHold"))) | .children) += [{"name": "XCTAssertTrue failed - The toolbar must resume", "nodeType": "Failure Message"}]' \
+	"$fixtures/xcresult-watchdog-tests.json" >"$scratch/canceled-after-failing.json"
+expect "xcresult: a test that failed before the run's cancellation stays failed" \
+	"GlobalPauseUITests | testToolbarHoldSurvivesRelaunchAndTheToolbarResumesIt() | failed" \
+	"$("$here/xcresult.sh" --json "$scratch/canceled-after-failing.json" | summary | grep GlobalPause)"
 echo '{"test":"AgentSettingsUITests/testMultilineSaveAndTemplateFilePicker","verdict":"runner","reason":"exceeded its execution time allowance","fences_from":"15:40:19","windowserver_unanswered":"the screenshot got no answer within 10s"}' >"$scratch/verdict.json"
 expect "watchdog: the stopped test, by the bundle's identity, with the verdict" \
 	'{"suite":"AgentSettingsUITests","name":"testMultilineSaveAndTemplateFilePicker()","outcome":"stopped","duration":null,"watchdog":"runner"}' \
