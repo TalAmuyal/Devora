@@ -112,4 +112,33 @@ struct AgentPauseTests {
 		#expect(!released.keepPaused)
 		#expect(released.tooltip == "Resume this agent")
 	}
+
+	/// The rows where the core's one pause state gives the widget other inputs than the three chat updates did
+	/// (devora-state's `the_pause_widget_reads_what_the_three_updates_gave`): the widget shows the same either way.
+	@Test func whereThePauseStateGivesOtherInputsTheWidgetShowsTheSame() {
+		func shown(_ state: AgentPausePresentation) -> [String] {
+			[state.label, "\(state.action)", "\(state.keepPaused)", "\(state.keptPaused)", state.icon,
+			 state.accessibilityLabel, state.accessibilityValue, state.tooltip]
+		}
+		for globallyPaused in [false, true] {
+			for held in [false, true] {
+				for keep in [false, true] {
+					// The immediate pause (deleting a running agent) never said a pause was requested; it shows Pausing.
+					#expect(shown(AgentPausePresentation(
+						phase: .pausing, pauseRequested: false, globallyPaused: globallyPaused, globallyHeld: held,
+						keepPausedSelected: keep))
+						== shown(AgentPausePresentation(
+							phase: .pausing, pauseRequested: true, globallyPaused: globallyPaused, globallyHeld: held,
+							keepPausedSelected: keep)))
+				}
+			}
+			// A kept-paused agent after the release: the old chat still said Keep paused.
+			#expect(shown(AgentPausePresentation(
+				phase: .paused, pauseRequested: false, globallyPaused: globallyPaused, globallyHeld: false,
+				keepPausedSelected: true))
+				== shown(AgentPausePresentation(
+					phase: .paused, pauseRequested: false, globallyPaused: globallyPaused, globallyHeld: false,
+					keepPausedSelected: false)))
+		}
+	}
 }

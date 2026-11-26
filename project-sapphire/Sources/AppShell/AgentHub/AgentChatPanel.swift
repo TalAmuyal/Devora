@@ -21,9 +21,9 @@ final class AgentPanelModel {
 
 	var pausePresentation: AgentPausePresentation {
 		AgentPausePresentation(
-			phase: chat.chat?.phase, pauseRequested: chat.chat?.pauseRequested == true,
-			globallyPaused: chat.globallyPaused, globallyHeld: chat.chat?.globallyHeld == true,
-			keepPausedSelected: chat.chat?.keepPaused == true)
+			phase: chat.chat?.phase, pauseRequested: chat.pauseState?.pauseRequested == true,
+			globallyPaused: chat.globallyPaused, globallyHeld: chat.pauseState?.globallyHeld == true,
+			keepPausedSelected: chat.pauseState?.keepPaused == true)
 	}
 
 	var modelPresentation: AgentModelPresentation {
@@ -45,7 +45,7 @@ final class AgentPanelModel {
 
 	var contextPresentation: AgentContextPresentation {
 		AgentContextPresentation(
-			context: chat.chat?.context, phase: chat.chat?.phase, pauseRequested: chat.chat?.pauseRequested == true,
+			context: chat.chat?.context, phase: chat.chat?.phase, pauseRequested: chat.pauseState?.pauseRequested == true,
 			globallyPaused: chat.globallyPaused, turnRunning: chat.chat?.turnRunning == true)
 	}
 

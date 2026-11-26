@@ -5,7 +5,7 @@ The Agent Spaces of the selected profile (ADR-012, `Sources/AppShell/AgentHub/`)
 - `Ctrl+S` (`Surfaces.hubShortcut`) opens it when no other window surface is open; inside either hub it switches to the other, as the Agents | Workspaces toggle in both headers does (`HubSwitcher`), except while the Workspace Hub shows the first-run welcome.
 	The Command Palette's "Agent Hub" opens it too.
 - `AgentHubModel` loads the profiles, then lists the spaces (`Store.listAgentSpaces`); invalid ones (an interrupted creation, an unreadable database) show their error and can only be deleted.
-	Its keys: `j`/`k` and the arrows move, Enter opens, `n` creates, `d` deletes (with a confirmation; an open agent is paused and its tab closed first, since the core deletes only a stopped one), `R` lists again.
+	Its keys: `j`/`k` and the arrows move, Enter opens, `n` creates, `d` deletes (with a confirmation; the core pauses an open agent at once and closes its tab first, its draft kept), `R` lists again.
 - The New Agent dialog (`NewAgentDialogModel`) is a modal over the hub: the name, with the space's path under it, the template's fields (`agent_creation_fields`: the ones only the form fills, then the pre-filled ones with their source, then the derived ones, read-only, listed again as the name and repos change), the initial repos, the model and the effort.
 	Fields show user-facing labels (`AgentFieldLabel`) with their `{{placeholder}}` and source beneath; `agent.name` and `space.path` aren't listed, as the Name field and the path under it show them.
 	Editing a pre-filled field changes only this agent; its Save button writes the value to its source (`save_agent_field`: the global config for a global value, otherwise the profile).

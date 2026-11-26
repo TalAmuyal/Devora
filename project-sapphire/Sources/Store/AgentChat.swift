@@ -85,9 +85,12 @@ public final class AgentChat {
 
 	public var globallyPaused: Bool { store?.app.globalPaused == true }
 
+	/// What the pause widget reads: why the agent is paused, as of its phase (the core's `pause_view`).
+	public var pauseState: PauseView? { chat.map { pauseView(pause: $0.pause, phase: $0.phase) } }
+
 	public var canSend: Bool {
 		!globallyPaused &&
-		chat?.phase == .running && chat?.pauseRequested == false && (chat?.turnRunning == false || chat?.agentTurn == true)
+		chat?.phase == .running && pauseState?.pauseRequested == false && (chat?.turnRunning == false || chat?.agentTurn == true)
 			&& !sending
 			&& !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
 	}
@@ -102,9 +105,7 @@ public final class AgentChat {
 		case .updated(let id, let generation, let update) where id == tab:
 			guard var value = chat, value.generation == generation else { return false }
 			switch update {
-			case .pauseRequested(let requested): value.pauseRequested = requested
-			case .globalHold(let held): value.globallyHeld = held
-			case .keepPaused(let keep): value.keepPaused = keep
+			case .pause(let pause): value.pause = pause
 			case .generation(let next):
 				value.generation = next
 				value.questions = []
@@ -117,7 +118,6 @@ public final class AgentChat {
 					value.turnRunning = false
 					value.agentTurn = false
 				}
-				if phase == .paused || phase == .failed { value.pauseRequested = false }
 			case .ready(let session):
 				value.phase = .running
 				value.sessionId = session
@@ -131,7 +131,6 @@ public final class AgentChat {
 				value.questions = []
 				value.turnRunning = false
 				value.agentTurn = false
-				value.pauseRequested = false
 			case .restore(let restored): items = restored
 			case .transcript(let change): apply(change)
 			case .permissionRequested(let question):

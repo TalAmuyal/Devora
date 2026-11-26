@@ -6,6 +6,27 @@ use std::fs;
 use std::sync::mpsc;
 use std::time::Duration;
 
+/// Held by the Global Pause, as the chat shows it.
+fn is_held(chat: &Chat) -> bool {
+    matches!(chat.pause, AgentPause::Held { .. })
+}
+
+/// Held, with Keep paused chosen.
+fn is_kept(chat: &Chat) -> bool {
+    matches!(
+        chat.pause,
+        AgentPause::Held {
+            keep_paused: true,
+            ..
+        }
+    )
+}
+
+/// Whether the pause widget shows a pause on its way.
+fn requested(chat: &Chat) -> bool {
+    pause_view(chat.pause.clone(), chat.phase.clone()).pause_requested
+}
+
 struct Fixture {
     profile: Profile,
     core: Arc<DevoraCore>,
@@ -425,12 +446,10 @@ fn live_facade_owns_session_without_subscribers_and_closes_before_pause_finishes
     f.wait(&events, |c| {
         c.questions.is_empty() && has_message(c, "result")
     });
-    block_on(f.core.pause_agent_space(next_tab)).unwrap();
-    block_on(f.core.pause_agent_space(next_tab)).unwrap();
-    assert_eq!(
-        f.core.agent_chat_snapshot().unwrap()[0].phase,
-        ChatPhase::Paused
-    );
+    f.core
+        .pause_agent_after_turn(next_tab, next.generation)
+        .unwrap();
+    f.wait(&events, |c| c.phase == ChatPhase::Paused);
     let resumed_tab = f.open("Delta");
     let resumed = f.wait(&events, |c| {
         c.tab == resumed_tab && c.phase == ChatPhase::Running
@@ -713,7 +732,7 @@ fn deferred_pause_finishes_the_turn_keeps_permissions_and_rejects_new_sends() {
     // Repeated clicks must not replace the actor's pending completion sender.
     f.core.pause_agent_after_turn(tab, chat.generation).unwrap();
     let pending = f.core.agent_chat_snapshot().unwrap().remove(0);
-    assert!(pending.pause_requested && pending.turn_running);
+    assert!(pending.pause == AgentPause::ByUser && pending.turn_running);
     assert_eq!(pending.questions.len(), 1);
     assert!(block_on(f.core.send_agent_turn(tab, chat.generation, "later".into())).is_err());
     block_on(f.core.answer_agent_permission(
@@ -725,7 +744,7 @@ fn deferred_pause_finishes_the_turn_keeps_permissions_and_rejects_new_sends() {
     .unwrap();
     let paused = f.wait(&events, |c| c.phase == ChatPhase::Paused);
     assert!(has_message(&paused, "result"));
-    assert!(!paused.pause_requested);
+    assert!(!requested(&paused));
     assert_eq!(paused.context.unwrap().threshold_percent, 10);
     assert!(!paused.items.iter().any(|item| matches!(
         item.content,
@@ -835,7 +854,7 @@ fn global_pause_keep_choice_is_reversible_and_release_during_a_turn_honors_it() 
         f.core
             .dispatch(Command::SetGlobalPaused { paused: true })
             .unwrap();
-        f.wait(&events, |c| c.tab == tab && c.globally_held);
+        f.wait(&events, |c| c.tab == tab && is_held(c));
         for choice in [true, false, true, keep, keep] {
             block_on(f.core.set_agent_keep_paused(tab, generation, choice)).unwrap();
             let chat = f
@@ -845,8 +864,8 @@ fn global_pause_keep_choice_is_reversible_and_release_during_a_turn_honors_it() 
                 .into_iter()
                 .find(|c| c.tab == tab)
                 .unwrap();
-            assert!(chat.globally_held);
-            assert_eq!(chat.keep_paused, choice);
+            assert!(is_held(&chat));
+            assert_eq!(is_kept(&chat), choice);
             assert_eq!(chat.phase, ChatPhase::Running);
         }
         assert!(block_on(f.core.set_agent_keep_paused(tab, generation + 1, !keep)).is_err());
@@ -915,7 +934,7 @@ fn global_pause_keep_choice_can_change_after_drain_and_before_any_launch() {
     f.create("Held");
     let tab = f.open("Held");
     let chat = f.wait(&events, |c| {
-        c.tab == tab && c.globally_held && c.phase == ChatPhase::Paused
+        c.tab == tab && is_held(c) && c.phase == ChatPhase::Paused
     });
     for keep in [true, false, true, false] {
         block_on(f.core.set_agent_keep_paused(tab, chat.generation, keep)).unwrap();
@@ -929,7 +948,7 @@ fn global_pause_keep_choice_can_change_after_drain_and_before_any_launch() {
         .dispatch(Command::SetGlobalPaused { paused: true })
         .unwrap();
     let held = f.wait(&events, |c| {
-        c.tab == tab && c.globally_held && c.phase == ChatPhase::Paused
+        c.tab == tab && is_held(c) && c.phase == ChatPhase::Paused
     });
     for keep in [true, false, true] {
         block_on(f.core.set_agent_keep_paused(tab, held.generation, keep)).unwrap();
@@ -948,7 +967,7 @@ fn global_pause_keep_choice_restores_before_launch_and_close_wins_over_changes()
     f.create("RestoreChoice");
     let tab = f.open("RestoreChoice");
     let held = f.wait(&events, |c| {
-        c.tab == tab && c.globally_held && c.phase == ChatPhase::Paused
+        c.tab == tab && is_held(c) && c.phase == ChatPhase::Paused
     });
     block_on(f.core.set_agent_keep_paused(tab, held.generation, true)).unwrap();
     block_on(f.core.shutdown_agents()).unwrap();
@@ -974,7 +993,7 @@ fn global_pause_keep_choice_restores_before_launch_and_close_wins_over_changes()
     block_on(f.core.restore_agent_spaces(f.launch())).unwrap();
     let events = f.core.subscribe_agent_chats().unwrap();
     let restored = f.wait(&events, |c| {
-        c.tab == tab && c.globally_held && c.keep_paused && c.phase == ChatPhase::Paused
+        c.tab == tab && is_held(c) && is_kept(c) && c.phase == ChatPhase::Paused
     });
     assert!(!f.profile.root.path().join("report.jsonl").exists());
     block_on(
@@ -990,7 +1009,7 @@ fn global_pause_keep_choice_restores_before_launch_and_close_wins_over_changes()
         .dispatch(Command::SetGlobalPaused { paused: true })
         .unwrap();
     let held = f.wait(&events, |c| {
-        c.tab == tab && c.globally_held && c.phase == ChatPhase::Paused
+        c.tab == tab && is_held(c) && c.phase == ChatPhase::Paused
     });
     block_on(f.core.set_agent_keep_paused(tab, held.generation, true)).unwrap();
     f.core.close_agent_space(tab).unwrap();
@@ -1038,11 +1057,9 @@ fn global_pause_drains_active_and_idle_agents_and_preserves_individual_pause() {
     f.core
         .dispatch(Command::SetGlobalPaused { paused: true })
         .unwrap();
+    f.wait(&events, |c| c.tab == active && is_held(c) && requested(c));
     f.wait(&events, |c| {
-        c.tab == active && c.globally_held && c.pause_requested
-    });
-    f.wait(&events, |c| {
-        c.tab == tabs[1].0 && c.phase == ChatPhase::Paused && c.globally_held
+        c.tab == tabs[1].0 && c.phase == ChatPhase::Paused && is_held(c)
     });
     assert_eq!(f.open("Individual"), tabs[2].0);
     let refused = block_on(
@@ -1126,7 +1143,7 @@ fn global_pause_survives_relaunch_and_restore_keeps_history_without_launching() 
     let events = f.core.subscribe_agent_chats().unwrap();
     // Its stored pause comes back as the hold's Keep paused choice, which the user can still change.
     let held = f.wait(&events, |c| {
-        c.tab == tab && c.phase == ChatPhase::Paused && c.globally_held && c.keep_paused
+        c.tab == tab && c.phase == ChatPhase::Paused && is_held(c) && is_kept(c)
     });
     assert!(has_message(&held, "assistant"));
     assert_eq!(
@@ -1136,13 +1153,13 @@ fn global_pause_survives_relaunch_and_restore_keeps_history_without_launching() 
     f.create("OpenedHeld");
     let opened = f.open("OpenedHeld");
     let held = f.wait(&events, |c| {
-        c.tab == opened && c.phase == ChatPhase::Paused && c.globally_held
+        c.tab == opened && c.phase == ChatPhase::Paused && is_held(c)
     });
     f.core
         .pause_agent_after_turn(opened, held.generation)
         .unwrap();
     f.wait(&events, |c| {
-        c.tab == opened && !c.globally_held && c.phase == ChatPhase::Paused
+        c.tab == opened && !is_held(c) && c.phase == ChatPhase::Paused
     });
     f.core
         .dispatch(Command::SetGlobalPaused { paused: false })
@@ -1179,13 +1196,11 @@ fn global_release_cancels_the_pending_hold_and_close_keeps_ownership_serialized(
     f.core
         .dispatch(Command::SetGlobalPaused { paused: true })
         .unwrap();
-    f.wait(&events, |c| {
-        c.tab == tab && c.globally_held && c.pause_requested
-    });
+    f.wait(&events, |c| c.tab == tab && is_held(c) && requested(c));
     f.core
         .dispatch(Command::SetGlobalPaused { paused: false })
         .unwrap();
-    f.wait(&events, |c| c.tab == tab && !c.pause_requested);
+    f.wait(&events, |c| c.tab == tab && !requested(c));
     block_on(f.core.answer_agent_permission(
         tab,
         chat.generation,
@@ -1202,7 +1217,7 @@ fn global_release_cancels_the_pending_hold_and_close_keeps_ownership_serialized(
         .dispatch(Command::SetGlobalPaused { paused: true })
         .unwrap();
     f.wait(&events, |c| {
-        c.tab == tab && c.phase == ChatPhase::Paused && c.globally_held
+        c.tab == tab && c.phase == ChatPhase::Paused && is_held(c)
     });
     f.core
         .dispatch(Command::SetGlobalPaused { paused: false })
@@ -1347,7 +1362,7 @@ fn shutdown_reports_a_terminated_agent_during_a_global_hold_too() {
     f.core
         .dispatch(Command::SetGlobalPaused { paused: true })
         .unwrap();
-    f.wait(&events, |c| c.tab == tab && c.globally_held);
+    f.wait(&events, |c| c.tab == tab && is_held(c));
 
     let error = block_on(f.core.shutdown_agents()).unwrap_err();
     assert_eq!(
@@ -1398,13 +1413,13 @@ fn across_a_held_restart_only_the_plainly_held_agent_launches_on_release() {
         .unwrap();
     let keep = tabs["Keep"].0;
     let held = f.wait(&events, |c| {
-        c.tab == keep && c.globally_held && c.phase == ChatPhase::Paused
+        c.tab == keep && is_held(c) && c.phase == ChatPhase::Paused
     });
     block_on(f.core.set_agent_keep_paused(keep, held.generation, true)).unwrap();
-    f.wait(&events, |c| c.tab == keep && c.keep_paused);
+    f.wait(&events, |c| c.tab == keep && is_kept(c));
     let held_tab = tabs["Held"].0;
     f.wait(&events, |c| {
-        c.tab == held_tab && c.globally_held && c.phase == ChatPhase::Paused
+        c.tab == held_tab && is_held(c) && c.phase == ChatPhase::Paused
     });
     block_on(f.core.shutdown_agents()).unwrap();
     events.close().unwrap();
@@ -1488,7 +1503,7 @@ fn unticking_keep_paused_on_an_agent_paused_before_the_hold_resumes_it_with_the_
     block_on(f.core.set_agent_keep_paused(tab, paused.generation, false)).unwrap();
     // Reopened, held: it waits for the release rather than launching now.
     f.wait(&events, |c| {
-        c.tab == tab && c.globally_held && !c.keep_paused && c.phase == ChatPhase::Paused
+        c.tab == tab && is_held(c) && !is_kept(c) && c.phase == ChatPhase::Paused
     });
     assert!(f
         .core
@@ -1554,13 +1569,13 @@ fn across_a_held_restart_each_agent_gets_one_notice_when_it_launches_and_keeps_i
         .unwrap();
     let keep = tabs["Keep"];
     let held = f.wait(&events, |c| {
-        c.tab == keep && c.globally_held && c.phase == ChatPhase::Paused
+        c.tab == keep && is_held(c) && c.phase == ChatPhase::Paused
     });
     block_on(f.core.set_agent_keep_paused(keep, held.generation, true)).unwrap();
-    f.wait(&events, |c| c.tab == keep && c.keep_paused);
+    f.wait(&events, |c| c.tab == keep && is_kept(c));
     let held_tab = tabs["Held"];
     f.wait(&events, |c| {
-        c.tab == held_tab && c.globally_held && c.phase == ChatPhase::Paused
+        c.tab == held_tab && is_held(c) && c.phase == ChatPhase::Paused
     });
     block_on(f.core.shutdown_agents()).unwrap();
     events.close().unwrap();
@@ -1949,5 +1964,148 @@ fn an_agents_effort_is_one_its_model_takes_shown_with_those_levels_and_a_paused_
         args[args.iter().position(|v| v == "--effort").unwrap() + 1],
         "high"
     );
+    block_on(f.core.shutdown_agents()).unwrap();
+}
+
+// Delete pauses an open agent at once, its turn interrupted (here one that ignores the interrupt, so its stop is forced
+// after the grace period), closes its tab, and deletes it: the steps the UI used to take itself.
+#[test]
+fn deleting_an_open_agent_pauses_it_closes_its_tab_and_deletes_it() {
+    let f = Fixture::new(false);
+    let events = f.core.subscribe_agent_chats().unwrap();
+    f.create("Busy");
+    let tab = f.open("Busy");
+    let chat = f.wait(&events, |c| c.tab == tab && c.phase == ChatPhase::Running);
+    block_on(
+        f.core
+            .send_agent_turn(tab, chat.generation, "ignore-interrupt".into()),
+    )
+    .unwrap();
+    f.wait_running(&events, |r| {
+        activities(r) == [("Busy".into(), AgentActivity::Turn)]
+    });
+    block_on(
+        f.core
+            .delete_agent_space(f.profile.path_string(), "Busy".into()),
+    )
+    .unwrap();
+    assert!(f.core.snapshot().unwrap().window.tabs.is_empty());
+    assert!(f.core.agent_chat_snapshot().unwrap().is_empty());
+    assert!(f
+        .core
+        .list_agent_spaces(f.profile.path_string())
+        .unwrap()
+        .is_empty());
+}
+
+// An agent whose run failed has already stopped: delete closes its tab and deletes it.
+#[test]
+fn deleting_an_agent_whose_run_failed_closes_its_tab_and_deletes_it() {
+    let f = Fixture::new(false);
+    let events = f.core.subscribe_agent_chats().unwrap();
+    f.create("Broken");
+    let mut launch = f.launch();
+    launch.program = f
+        .profile
+        .root
+        .path()
+        .join("no-such-claude")
+        .to_string_lossy()
+        .into_owned();
+    let tab = block_on(
+        f.core
+            .open_agent_space(f.profile.path_string(), "Broken".into(), launch),
+    )
+    .unwrap();
+    f.wait(&events, |c| c.tab == tab && c.phase == ChatPhase::Failed);
+    block_on(
+        f.core
+            .delete_agent_space(f.profile.path_string(), "Broken".into()),
+    )
+    .unwrap();
+    assert!(f.core.snapshot().unwrap().window.tabs.is_empty());
+    assert!(f
+        .core
+        .list_agent_spaces(f.profile.path_string())
+        .unwrap()
+        .is_empty());
+}
+
+// A delete that fails once the agent has stopped leaves what the UI's own steps left: the agent paused, stored so, with
+// its tab closed, and still listed.
+#[test]
+fn a_failed_delete_leaves_the_agent_paused_with_its_tab_closed() {
+    use std::os::unix::fs::PermissionsExt;
+    let f = Fixture::new(false);
+    let events = f.core.subscribe_agent_chats().unwrap();
+    f.create("Kept");
+    let tab = f.open("Kept");
+    f.wait(&events, |c| c.tab == tab && c.phase == ChatPhase::Running);
+    // Its directory can't be removed from a catalogue that can't be written.
+    let catalogue = fs::canonicalize(f.profile.path.join("agent-spaces")).unwrap();
+    let writable = fs::metadata(&catalogue).unwrap().permissions();
+    fs::set_permissions(&catalogue, fs::Permissions::from_mode(0o555)).unwrap();
+    let deleted = block_on(
+        f.core
+            .delete_agent_space(f.profile.path_string(), "Kept".into()),
+    );
+    fs::set_permissions(&catalogue, writable).unwrap();
+    assert!(deleted.is_err());
+    assert!(f.core.snapshot().unwrap().window.tabs.is_empty());
+    let view = f
+        .core
+        .snapshot()
+        .unwrap()
+        .agent_views
+        .into_iter()
+        .find(|view| view.name == "Kept")
+        .unwrap();
+    assert!(view.paused);
+    assert_eq!(
+        f.core
+            .list_agent_spaces(f.profile.path_string())
+            .unwrap()
+            .len(),
+        1
+    );
+}
+
+// Pause asked for during a hold, once the hold has stopped the agent, is the user's: the release doesn't launch it.
+#[test]
+fn a_pause_asked_for_during_a_hold_outlasts_the_release() {
+    let f = Fixture::new(false);
+    let events = f.core.subscribe_agent_chats().unwrap();
+    f.create("Resting");
+    let tab = f.open("Resting");
+    f.wait(&events, |c| c.tab == tab && c.phase == ChatPhase::Running);
+    f.core
+        .dispatch(Command::SetGlobalPaused { paused: true })
+        .unwrap();
+    let held = f.wait(&events, |c| {
+        c.tab == tab && is_held(c) && c.phase == ChatPhase::Paused
+    });
+    let launches = f.launches();
+    f.core.pause_agent_after_turn(tab, held.generation).unwrap();
+    let paused = f.wait(&events, |c| c.tab == tab && c.pause == AgentPause::ByUser);
+    assert_eq!(paused.phase, ChatPhase::Paused);
+    f.core
+        .dispatch(Command::SetGlobalPaused { paused: false })
+        .unwrap();
+    // Another agent opened after the release launches; this one stays as it was.
+    f.create("Awake");
+    let awake = f.open("Awake");
+    f.wait(&events, |c| c.tab == awake && c.phase == ChatPhase::Running);
+    let chat = f
+        .core
+        .agent_chat_snapshot()
+        .unwrap()
+        .into_iter()
+        .find(|c| c.tab == tab)
+        .unwrap();
+    assert_eq!(
+        (chat.phase, chat.pause),
+        (ChatPhase::Paused, AgentPause::ByUser)
+    );
+    assert_eq!(f.launches(), launches + 1, "only Awake launched");
     block_on(f.core.shutdown_agents()).unwrap();
 }
