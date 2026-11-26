@@ -11,8 +11,8 @@
 # and stops that process: SIGINT, then SIGKILL past the grace. It signals only the process it found, by pid and start
 # time, and it ends with that process, or with its parent.
 # UI_TEST_WATCHDOG_INTERVAL (seconds between looks, default 5), UI_TEST_WATCHDOG_GRACE (seconds before SIGKILL, default
-# 60), UI_TEST_WATCHDOG_CAPTURE=0 (no screenshot or samples) and UI_TEST_WATCHDOG_SCREENSHOT_DEADLINE (seconds, default
-# 10) are for its test.
+# 60), UI_TEST_WATCHDOG_CAPTURE=0 (no screenshot, samples or log query), UI_TEST_WATCHDOG_SCREENSHOT_DEADLINE and
+# UI_TEST_WATCHDOG_LOG_DEADLINE (seconds, default 10 and 20) are for its test.
 set -uo pipefail
 results=$1
 evidence=$2
@@ -22,6 +22,7 @@ interval=${UI_TEST_WATCHDOG_INTERVAL:-5}
 grace=${UI_TEST_WATCHDOG_GRACE:-60}
 capture=${UI_TEST_WATCHDOG_CAPTURE:-1}
 screenshot_deadline=${UI_TEST_WATCHDOG_SCREENSHOT_DEADLINE:-10}
+log_deadline=${UI_TEST_WATCHDOG_LOG_DEADLINE:-20}
 screenshot_timed_out=""
 
 started() { ps -o lstart= -p "$1" 2>/dev/null; }
@@ -41,6 +42,23 @@ identity=$(started "$target")
 diagnostics() { find "$results/Staging" -mindepth 2 -maxdepth 2 -type d -name Diagnostics 2>/dev/null; }
 # The test a line names, as Class/test.
 test_of() { sed -E -n "s/.*Test Case '-\\[[A-Za-z0-9_]+\\.([A-Za-z0-9_]+) ([A-Za-z0-9_]+)\\]'.*/\\1\\/\\2/p" | tail -1; }
+# Runs a command as this script's own child for at most <seconds>, then stops that child, and only it: nothing between
+# the watchdog firing and it stopping the run may wait unbounded. Fails when the command didn't finish in time.
+bounded() {
+	local limit=$1 waited=0 child
+	shift
+	"$@" &
+	child=$!
+	# Not reported as a job when stopped.
+	disown "$child"
+	while kill -0 "$child" 2>/dev/null && [ "$waited" -lt "$limit" ]; do
+		sleep 1
+		waited=$((waited + 1))
+	done
+	kill -0 "$child" 2>/dev/null || return 0
+	kill -KILL "$child" 2>/dev/null
+	return 1
+}
 
 reason=""
 hung=""
@@ -78,18 +96,8 @@ if [ "$capture" = 1 ]; then
 			sample "$pid" 3 -file "$evidence/sample-${process// /-}-$pid.txt" >/dev/null 2>>"$evidence/capture.log"
 		done
 	done
-	# A screenshot waits for WindowServer, so it gets a deadline; past it, only the screencapture started here is stopped.
-	screencapture -x "$evidence/screen.png" 2>>"$evidence/capture.log" &
-	shot=$!
-	# Not reported as a job when stopped; whether it worked is whether it wrote the screenshot.
-	disown "$shot"
-	waited=0
-	while kill -0 "$shot" 2>/dev/null && [ "$waited" -lt "$screenshot_deadline" ]; do
-		sleep 1
-		waited=$((waited + 1))
-	done
-	if kill -0 "$shot" 2>/dev/null; then
-		kill -KILL "$shot" 2>/dev/null
+	# A screenshot waits for WindowServer.
+	if ! bounded "$screenshot_deadline" screencapture -x "$evidence/screen.png" 2>>"$evidence/capture.log"; then
 		screenshot_timed_out=1
 		echo "no screenshot: WindowServer didn't answer within ${screenshot_deadline}s" >>"$evidence/capture.log"
 	elif [ ! -s "$evidence/screen.png" ]; then
@@ -103,24 +111,33 @@ fi
 # are the runner's problem, not the test's; either alone is kept for a reader to judge, and the hang stays the test's.
 # The test's start, from its session log line (`… testCaseWillStart:] DevoraSapphireUITests.Class test`), on this clock.
 since=""
+searched="in the last 10 minutes (the test's start wasn't found)"
 if [ -n "$hung" ]; then
 	# shellcheck disable=SC2086
 	began=$(find $watched -name 'Session-*.log' -exec grep -h "testCaseWillStart:\] [A-Za-z0-9_]*\.${hung%%/*} ${hung##*/}$" {} + 2>/dev/null |
 		tail -1 | cut -d' ' -f1 | cut -d. -f1)
-	if [ -n "$began" ] && began=$(date -j -f "%Y-%m-%d %H:%M:%S" "$(date +%Y-%m-%d) $began" +%s 2>/dev/null); then
-		since=$(($(date +%s) - began))
+	if [ -n "$began" ] && start=$(date -j -f "%Y-%m-%d %H:%M:%S" "$(date +%Y-%m-%d) $began" +%s 2>/dev/null); then
+		since=$(($(date +%s) - start))
+		searched="since the test started at $began"
 		# A test that started before midnight.
 		[ "$since" -ge 0 ] || since=$((since + 86400))
 	fi
 fi
 first_fence=""
+no_fence_data=""
 app_waiting=""
 if [ "$capture" = 1 ]; then
-	log show --style compact --last "${since:-600}s" \
-		--predicate 'process == "WindowServer" AND eventMessage CONTAINS "timed out fence"' 2>/dev/null |
-		grep "timed out fence" >"$evidence/windowserver-fences.txt"
-	first_fence=$(head -1 "$evidence/windowserver-fences.txt" | awk '{print $2}' | cut -d. -f1)
-	[ -s "$evidence/windowserver-fences.txt" ] || rm -f "$evidence/windowserver-fences.txt"
+	# The log is history, but a loaded runner can take long to query it.
+	if bounded "$log_deadline" log show --style compact --last "${since:-600}s" \
+		--predicate 'process == "WindowServer" AND eventMessage CONTAINS "timed out fence"' \
+		>"$evidence/windowserver-log.txt" 2>/dev/null; then
+		grep "timed out fence" "$evidence/windowserver-log.txt" >"$evidence/windowserver-fences.txt"
+		first_fence=$(head -1 "$evidence/windowserver-fences.txt" | awk '{print $2}' | cut -d. -f1)
+		[ -s "$evidence/windowserver-fences.txt" ] || rm -f "$evidence/windowserver-fences.txt"
+	else
+		no_fence_data="no fence data: the log query didn't finish within ${log_deadline}s"
+	fi
+	rm -f "$evidence/windowserver-log.txt"
 	for file in "$evidence"/sample-Devora-Sapphire-*.txt; do
 		[ -f "$file" ] || continue
 		# The main thread's sample count, then a SkyLight frame on its stack with that count: in every one of its samples.
@@ -136,7 +153,7 @@ unanswered=""
 [ -n "$screenshot_timed_out" ] && unanswered="the screenshot got no answer within ${screenshot_deadline}s"
 [ -n "$app_waiting" ] && unanswered="${unanswered:+$unanswered, and }the app's main thread was waiting on it in every sample"
 fences=""
-[ -n "$first_fence" ] && fences="GPU fence timeouts from $first_fence"
+[ -n "$first_fence" ] && fences="GPU fence timeouts from $first_fence, $searched"
 
 if [ -n "$fences" ] && [ -n "$unanswered" ]; then
 	verdict="runner"
@@ -145,13 +162,21 @@ else
 	verdict="test"
 	message="UI test watchdog: ${hung:-a test} $reason; stopped the run, evidence in $evidence"
 	[ -n "$fences" ] && message="$message. WindowServer logged $fences, but answered when the watchdog fired"
-	[ -n "$unanswered" ] && message="$message. WindowServer didn't answer ($unanswered), but logged no GPU fence timeouts"
+	if [ -n "$unanswered" ]; then
+		if [ -n "$no_fence_data" ]; then
+			message="$message. WindowServer didn't answer ($unanswered), and there's $no_fence_data"
+		else
+			message="$message. WindowServer didn't answer ($unanswered), but logged no GPU fence timeouts $searched"
+		fi
+	elif [ -n "$no_fence_data" ]; then
+		message="$message. There's $no_fence_data"
+	fi
 fi
 printf '%s\n' "$message" >"$evidence/reason.txt"
 # For the test outcomes (scripts/ci/test-outcomes/watchdog.sh), so that the flake report counts runner freezes apart.
 jq -n --arg test "$hung" --arg verdict "$verdict" --arg reason "$reason" --arg fences "$first_fence" \
-	--arg unanswered "$unanswered" \
-	'{test: $test, verdict: $verdict, reason: $reason, fences_from: (if $fences == "" then null else $fences end), windowserver_unanswered: (if $unanswered == "" then null else $unanswered end)}' \
+	--arg searched "${no_fence_data:-$searched}" --arg unanswered "$unanswered" \
+	'{test: $test, verdict: $verdict, reason: $reason, fences_from: (if $fences == "" then null else $fences end), fences_searched: $searched, windowserver_unanswered: (if $unanswered == "" then null else $unanswered end)}' \
 	>"$evidence/verdict.json"
 for dir in $watched; do
 	cp -R "$dir" "$evidence/Diagnostics-$(basename "$(dirname "$dir")")" 2>/dev/null

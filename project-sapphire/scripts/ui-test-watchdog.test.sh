@@ -181,6 +181,7 @@ STUB
 cat >"$stubs/log" <<'STUB'
 #!/usr/bin/env bash
 echo "log $*" >>"$FAKE_CALLS"
+[ -n "${FAKE_LOG_HANGS:-}" ] && exec sleep 30
 echo "Timestamp               Ty Process[PID:TID]"
 [ -n "${FAKE_FENCES:-}" ] && echo "2026-11-25 15:40:19.606 E  WindowServer[163:3dd] [com.apple.coreanimation:Render] timed out fence 700079675426"
 exit 0
@@ -197,11 +198,13 @@ frozen() {
 	"$app" 60 &
 	app_pid=$!
 	disown "$app_pid"
-	printf '%s DevoraSapphireUITests-Runner[1:2] -[XCTRunnerIDESession(_XCTestObservationInternal) testCaseWillStart:] DevoraSapphireUITests.WorkspaceHubUITests testTypingInTheFilterNarrowsTheListAndEscapeLeavesItBeforeClosing\n' \
-		"$(date -v-60S +%H:%M:%S.000)" >>"$(session_log "$results")"
+	started=$(date -v-60S +%H:%M:%S)
+	[ -n "${FAKE_NO_START:-}" ] ||
+		printf '%s.000 DevoraSapphireUITests-Runner[1:2] -[XCTRunnerIDESession(_XCTestObservationInternal) testCaseWillStart:] DevoraSapphireUITests.WorkspaceHubUITests testTypingInTheFilterNarrowsTheListAndEscapeLeavesItBeforeClosing\n' \
+			"$started" >>"$(session_log "$results")"
 	export FAKE_CALLS="$scratch/$case/calls" FAKE_SHOT_PID="$scratch/$case/shot.pid"
 	stand_in 60
-	PATH="$stubs:$PATH" UI_TEST_WATCHDOG_CAPTURE=1 UI_TEST_WATCHDOG_SCREENSHOT_DEADLINE=1 \
+	PATH="$stubs:$PATH" UI_TEST_WATCHDOG_CAPTURE=1 UI_TEST_WATCHDOG_SCREENSHOT_DEADLINE=1 UI_TEST_WATCHDOG_LOG_DEADLINE=1 \
 		"$watchdog" "$results" "$scratch/$case/hang" "$$" sleep &
 	dog=$!
 	printf '%s\n%s\n' "$hung_start" "$allowance" >>"$(runner_output "$results")"
@@ -213,7 +216,7 @@ verdict() { jq -r .verdict "$scratch/$1/hang/verdict.json" 2>/dev/null; }
 
 # 6. Fences since the test started, and no answer (the screenshot hangs, the app waits on SkyLight): the runner's problem.
 FAKE_FENCES=1 FAKE_SHOT_HANGS=1 FAKE_APP_WAITING=1 frozen runner
-grep -q "^UI test watchdog: Runner problem, not the test: WindowServer stopped answering (GPU fence timeouts from 15:40:19; the screenshot got no answer within 1s, and the app's main thread was waiting on it in every sample) while WorkspaceHubUITests/testTypingInTheFilterNarrowsTheListAndEscapeLeavesItBeforeClosing exceeded its execution time allowance" \
+grep -q "^UI test watchdog: Runner problem, not the test: WindowServer stopped answering (GPU fence timeouts from 15:40:19, since the test started at $started; the screenshot got no answer within 1s, and the app's main thread was waiting on it in every sample) while WorkspaceHubUITests/testTypingInTheFilterNarrowsTheListAndEscapeLeavesItBeforeClosing exceeded its execution time allowance" \
 	"$scratch/runner/hang/reason.txt" 2>/dev/null || fail "a frozen WindowServer should be the runner's problem: $(cat "$scratch/runner/hang/reason.txt" 2>/dev/null)"
 [ "$(verdict runner)" = runner ] || fail "the verdict should be the runner's: $(cat "$scratch/runner/hang/verdict.json" 2>/dev/null)"
 [ "$(jq -r .test "$scratch/runner/hang/verdict.json" 2>/dev/null)" = "WorkspaceHubUITests/testTypingInTheFilterNarrowsTheListAndEscapeLeavesItBeforeClosing" ] ||
@@ -233,15 +236,27 @@ since=$(sed -n 's/.*--last \([0-9]*\)s.*/\1/p' "$scratch/runner/calls")
 # 7. Fences, but WindowServer answered (the screenshot came, the app wasn't waiting): the test's, with the fact kept.
 FAKE_FENCES=1 frozen answered
 [ "$(verdict answered)" = test ] || fail "with WindowServer answering, the hang should be the test's: $(cat "$scratch/answered/hang/reason.txt" 2>/dev/null)"
-grep -q "exceeded its execution time allowance; stopped the run, evidence in $scratch/answered/hang. WindowServer logged GPU fence timeouts from 15:40:19, but answered when the watchdog fired$" \
+grep -q "exceeded its execution time allowance; stopped the run, evidence in $scratch/answered/hang. WindowServer logged GPU fence timeouts from 15:40:19, since the test started at $started, but answered when the watchdog fired$" \
 	"$scratch/answered/hang/reason.txt" 2>/dev/null || fail "the reason should keep the fences: $(cat "$scratch/answered/hang/reason.txt" 2>/dev/null)"
 
 # 8. No answer, but no fences: the test's, with the fact kept.
 FAKE_SHOT_HANGS=1 frozen unanswered
 [ "$(verdict unanswered)" = test ] || fail "without fence timeouts, the hang should be the test's: $(cat "$scratch/unanswered/hang/reason.txt" 2>/dev/null)"
-grep -q "WindowServer didn't answer (the screenshot got no answer within 1s), but logged no GPU fence timeouts$" \
+grep -q "WindowServer didn't answer (the screenshot got no answer within 1s), but logged no GPU fence timeouts since the test started at $started$" \
 	"$scratch/unanswered/hang/reason.txt" 2>/dev/null || fail "the reason should keep the unanswered screenshot: $(cat "$scratch/unanswered/hang/reason.txt" 2>/dev/null)"
 [ ! -e "$scratch/unanswered/hang/windowserver-fences.txt" ] || fail "no fences, no fence file"
+
+# 9. A log query that never finishes: the run is still stopped, and without fence data the hang stays the test's.
+FAKE_LOG_HANGS=1 FAKE_SHOT_HANGS=1 frozen stalled
+[ "$(verdict stalled)" = test ] || fail "without fence data, the hang should be the test's: $(cat "$scratch/stalled/hang/reason.txt" 2>/dev/null)"
+grep -q "WindowServer didn't answer (the screenshot got no answer within 1s), and there's no fence data: the log query didn't finish within 1s$" \
+	"$scratch/stalled/hang/reason.txt" 2>/dev/null || fail "the reason should say the log query didn't finish: $(cat "$scratch/stalled/hang/reason.txt" 2>/dev/null)"
+
+# 10. The test's start not found: the reason says what was searched instead.
+FAKE_SHOT_HANGS=1 FAKE_NO_START=1 frozen unstarted
+grep -q "but logged no GPU fence timeouts in the last 10 minutes (the test's start wasn't found)$" "$scratch/unstarted/hang/reason.txt" 2>/dev/null ||
+	fail "the reason should say what was searched: $(cat "$scratch/unstarted/hang/reason.txt" 2>/dev/null)"
+grep -q -- "--last 600s" "$scratch/unstarted/calls" || fail "without the test's start, the last 10 minutes should be searched"
 
 if [ "$failures" -gt 0 ]; then
 	echo "ui-test-watchdog: $failures check(s) failed" >&2

@@ -4,7 +4,7 @@
 # It "needed a retry" if any attempt recorded one (`retries`, an XCUITest's own measured retry): a test that passes that way
 # is listed apart, so a retry hides no flake.
 # A run the UI test watchdog stopped at the test (`watchdog`, its verdict) is listed apart too: when it found the runner's
-# WindowServer frozen ("runner"), the test's failure in that run isn't counted as the test's.
+# WindowServer frozen ("runner"), the test's failure in that attempt isn't counted as the test's; another attempt's is.
 def median: sort | if length == 0 then null else .[length / 2 | floor] end;
 def secs: if . == null then "-" elif . < 10 then (. * 10 | round / 10 | tostring) + "s" else (round | tostring) + "s" end;
 ($listed | map({key: (.databaseId | tostring), value: .}) | from_entries) as $runs
@@ -14,9 +14,13 @@ def secs: if . == null then "-" elif . < 10 then (. * 10 | round / 10 | tostring
 	. as $all
 	| (group_by(.run_id) | map(
 		sort_by(.run_attempt)
-		| {run: .[0].run_id, event: .[0].event,
+		# Each attempt decided by itself: its failure counts unless that same attempt found the runner frozen.
+		| (group_by(.run_attempt) | map({
 			failed: (any(.[]; .outcome == "failed") and (any(.[]; .watchdog == "runner") | not)),
-			passed_on_rerun: (any(.[]; .outcome == "failed") and (any(.[]; .watchdog == "runner") | not) and (last.outcome == "passed")),
+			passed: (all(.[]; .outcome == "passed" or .outcome == "skipped") and any(.[]; .outcome == "passed"))})) as $attempts
+		| {run: .[0].run_id, event: .[0].event,
+			failed: any($attempts[]; .failed),
+			passed_on_rerun: (any($attempts[]; .failed) and ($attempts | last | .passed)),
 			froze: any(.[]; .watchdog == "runner"),
 			hung: any(.[]; .watchdog == "test"),
 			retries: (map(.retries // 0) | add),

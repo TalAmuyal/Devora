@@ -84,6 +84,15 @@ expect "runs the watchdog stopped" "$(printf '%s\n' \
 	'    test: 2026-11-03T00:00:00Z https://ci/3')" \
 	"$(jq -r -s --argjson listed "$listed" --arg filter "" -f "$here/flake-report.jq" <<<"$watched")"
 
+# A runner freeze in one attempt hides no failure of the test's own in the re-run.
+rerun_failed=$(
+	outcome sapphire Settings "multiline save" failed 300 1 1 push
+	stopped 1 push runner
+	printf '{"job":"sapphire","suite":"Settings","name":"multiline save","outcome":"failed","duration":40,"run_id":"1","run_attempt":2,"event":"push"}\n'
+)
+expect "a re-run's own failure after a runner freeze counts" "1/1 master, 0/0 PR  sapphire: Settings / multiline save" \
+	"$(jq -r -s --argjson listed "$listed" --arg filter "" -f "$here/flake-report.jq" <<<"$rerun_failed" | sed -n 3p)"
+
 expect "jobs not run, by why" "$(printf '%s\n' \
 	'Jobs GitHub found no runner for (capacity, not tests):' \
 	'  e2e-ember on macos-15: 1 time(s), last https://ci/1' \
