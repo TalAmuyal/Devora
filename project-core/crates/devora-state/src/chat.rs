@@ -690,6 +690,42 @@ mod tests {
         );
     }
 
+    /// A row's later update (a message the agent got at last, or never will) for a row the chat no longer holds (it
+    /// keeps the latest 200) doesn't bring the row back: the chat keeps its tail.
+    #[test]
+    fn an_update_to_a_row_past_the_chats_tail_leaves_the_tail_as_it_is() {
+        let mut chat = Fixture::new();
+        let user = |delivery| TranscriptContent::User {
+            text: "Lost".into(),
+            error: None,
+            delivery,
+        };
+        chat.item(
+            1,
+            ItemState::Complete,
+            user(Some(crate::Delivery::Waiting)),
+            0,
+        );
+        for sequence in 2..=201 {
+            chat.item(sequence, ItemState::Complete, user(None), 0);
+        }
+        let tail = |chat: &Fixture| {
+            chat.chats[0]
+                .items
+                .iter()
+                .map(|item| item.sequence)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(tail(&chat), (2..=201).collect::<Vec<_>>());
+        chat.item(
+            1,
+            ItemState::Complete,
+            user(Some(crate::Delivery::NotDelivered)),
+            0,
+        );
+        assert_eq!(tail(&chat), (2..=201).collect::<Vec<_>>());
+    }
+
     /// Which turn the chat shows running, and whether the user can send, as starts and ends of either kind arrive in
     /// the orders the registry and the space actor can publish them in.
     #[test]

@@ -2819,3 +2819,219 @@ async fn the_space_publishes_a_turn_the_cli_started_itself_and_its_end() {
     assert_eq!(ends, ["ours"]);
     running.pause().await.unwrap();
 }
+
+/// The user row with `text`, as `update` carries it, if it does.
+fn user_row(update: &SpaceEvent, text: &str) -> Option<Option<devora_agent::transcript::Delivery>> {
+    match update {
+        SpaceEvent::Transcript(TranscriptChange::Upsert { item }) => match &item.content {
+            TranscriptContent::User {
+                text: sent,
+                delivery,
+                ..
+            } if sent == text => Some(*delivery),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+fn stored_delivery(fixture: &Fixture, text: &str) -> Option<devora_agent::transcript::Delivery> {
+    Space::read_history(&fixture.profile, "Delta", 0, 500)
+        .unwrap()
+        .into_iter()
+        .find_map(|item| match item.content {
+            TranscriptContent::User {
+                text: sent,
+                delivery,
+                ..
+            } if sent == text => Some(delivery),
+            _ => None,
+        })
+        .expect("the row is stored")
+}
+
+impl OwnTurns {
+    /// As `start`, with a prompt sent into the CLI's own turn waiting for the agent's next step (the `step` cue).
+    async fn start_waiting(&self) -> RunningSpace {
+        let mut context = self.fixture.context();
+        context.environment.insert(
+            "DEVORA_FAKE_OWN_TURNS".into(),
+            self.cues.display().to_string(),
+        );
+        context
+            .environment
+            .insert("DEVORA_FAKE_FOLDED_WAITS".into(), "1".into());
+        Space::open(&self.fixture.profile, "Delta")
+            .unwrap()
+            .start(&context, self.log.clone(), &self.fixture.run)
+            .await
+            .unwrap()
+    }
+}
+
+// A prompt sent into a turn the agent started itself waits for the agent's next step, and its row says so until the
+// CLI reports the agent has it ("started"); stored, as every row is.
+#[tokio::test]
+async fn a_prompt_sent_into_the_agents_turn_waits_until_the_agent_has_it() {
+    use devora_agent::transcript::Delivery;
+    let space = OwnTurns::new();
+    let mut running = space.start_waiting().await;
+    space.begin(&mut running).await;
+    running.handle().send_turn("Joins it".into()).await.unwrap();
+    until(&mut running, |update| {
+        user_row(update, "Joins it") == Some(Some(Delivery::Waiting))
+    })
+    .await;
+    assert_eq!(
+        stored_delivery(&space.fixture, "Joins it"),
+        Some(Delivery::Waiting)
+    );
+    space.cue("step");
+    until(&mut running, |update| {
+        user_row(update, "Joins it") == Some(None)
+    })
+    .await;
+    assert_eq!(stored_delivery(&space.fixture, "Joins it"), None);
+    running.pause().await.unwrap();
+}
+
+// A prompt sent just as the agent starts a turn of its own, before Devora has read that turn's start, joins it and waits
+// like one sent into it.
+#[tokio::test]
+async fn a_prompt_sent_as_the_agent_starts_its_own_turn_waits_until_the_agent_has_it() {
+    use devora_agent::transcript::Delivery;
+    let space = OwnTurns::new();
+    let mut running = space.start_waiting().await;
+    space.cue("race");
+    running
+        .handle()
+        .send_turn("Just in time".into())
+        .await
+        .unwrap();
+    until(&mut running, |update| {
+        user_row(update, "Just in time") == Some(Some(Delivery::Waiting))
+    })
+    .await;
+    assert_eq!(
+        stored_delivery(&space.fixture, "Just in time"),
+        Some(Delivery::Waiting)
+    );
+    space.cue("step");
+    until(&mut running, |update| {
+        user_row(update, "Just in time") == Some(None)
+    })
+    .await;
+    assert_eq!(stored_delivery(&space.fixture, "Just in time"), None);
+    running.pause().await.unwrap();
+}
+
+// A prompt sent while the agent is idle reaches it at once: its row is never marked.
+#[tokio::test]
+async fn a_prompt_sent_while_the_agent_is_idle_is_never_marked() {
+    let space = OwnTurns::new();
+    let mut running = space.start_waiting().await;
+    running.handle().send_turn("drift".into()).await.unwrap();
+    let mut marks = vec![];
+    until(&mut running, |update| {
+        if let Some(delivery) = user_row(update, "drift") {
+            marks.push(delivery);
+        }
+        matches!(update, SpaceEvent::TurnEnded)
+    })
+    .await;
+    assert!(
+        !marks.is_empty() && marks.iter().all(Option::is_none),
+        "{marks:?}"
+    );
+    running.pause().await.unwrap();
+}
+
+// A crash while a prompt waits loses it (the resumed session never gets it, probed on the pinned CLI): its row says it
+// wasn't delivered. So does a row a dead Devora left waiting, at the next launch.
+#[tokio::test]
+async fn a_prompt_whose_session_ends_before_the_agent_has_it_was_not_delivered() {
+    use devora_agent::transcript::Delivery;
+    let space = OwnTurns::new();
+    let mut running = space.start_waiting().await;
+    space.begin(&mut running).await;
+    running
+        .handle()
+        .send_turn("Lost in a crash".into())
+        .await
+        .unwrap();
+    until(&mut running, |update| {
+        user_row(update, "Lost in a crash") == Some(Some(Delivery::Waiting))
+    })
+    .await;
+    space.cue("crash");
+    until(&mut running, |update| {
+        user_row(update, "Lost in a crash") == Some(Some(Delivery::NotDelivered))
+    })
+    .await;
+    assert_eq!(
+        stored_delivery(&space.fixture, "Lost in a crash"),
+        Some(Delivery::NotDelivered)
+    );
+    running.pause().await.unwrap();
+
+    // Devora dying leaves the row waiting: the next launch knows the message never reached the agent.
+    let database = space
+        .fixture
+        .profile
+        .join("agent-spaces/Delta/.agent-space.db");
+    rusqlite::Connection::open(&database)
+        .unwrap()
+        .execute(
+            "UPDATE events SET payload=json_set(payload,'$.content.User.delivery','Waiting') WHERE kind='user'",
+            [],
+        )
+        .unwrap();
+    let mut relaunched = space.start().await;
+    let Some(SpaceEvent::Restored(restored)) = relaunched.next_update().await else {
+        panic!("expected the restored tail")
+    };
+    assert!(restored.iter().any(|item| matches!(&item.content,
+        TranscriptContent::User { text, delivery: Some(Delivery::NotDelivered), .. } if text == "Lost in a crash")));
+    relaunched.pause().await.unwrap();
+}
+
+// A send while the CLI restarts after a crash isn't one that joined a turn: whether the worker refuses it or takes it,
+// its row never waits.
+#[tokio::test]
+async fn a_send_during_a_crash_restart_leaves_no_waiting_row() {
+    use devora_agent::transcript::Delivery;
+    let space = OwnTurns::new();
+    let mut running = space.start_waiting().await;
+    space.begin(&mut running).await;
+    space.cue("crash");
+    until(&mut running, |update| {
+        matches!(update, SpaceEvent::Session(SessionEvent::Exited { .. }))
+    })
+    .await;
+    let _ = running
+        .handle()
+        .send_turn("During the restart".into())
+        .await;
+    let mut marks = vec![];
+    tokio::time::timeout(Duration::from_secs(10), async {
+        while let Some(update) = running.next_update().await {
+            if let Some(delivery) = user_row(&update, "During the restart") {
+                marks.push(delivery);
+            }
+            if matches!(update, SpaceEvent::TurnEnded)
+                || matches!(update, SpaceEvent::Session(SessionEvent::Ready { .. }))
+                    && !marks.is_empty()
+            {
+                break;
+            }
+        }
+    })
+    .await
+    .ok();
+    assert!(!marks.contains(&Some(Delivery::Waiting)), "{marks:?}");
+    assert_ne!(
+        stored_delivery(&space.fixture, "During the restart"),
+        Some(Delivery::Waiting)
+    );
+    running.pause().await.unwrap();
+}

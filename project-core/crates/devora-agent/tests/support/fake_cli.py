@@ -43,6 +43,10 @@ def unrequested_interrupted_result():
     value.pop("user_message_uuids", None)
     emit(value)
 
+def lifecycle(command, state):
+    # Where a prompt is, by the ID it was sent with: queued, started (the agent has it), completed (its turn ended).
+    emit({"type":"command_lifecycle","command_uuid":command,"state":state,"session_id":session_id,"uuid":str(time.time())})
+
 sent_turn = None
 def result(interrupted=False):
     value = recorded("result")
@@ -50,6 +54,12 @@ def result(interrupted=False):
         value.update(subtype="error_during_execution", is_error=True, terminal_reason="aborted_streaming")
     value["user_message_uuids"] = [sent_turn]
     emit(value)
+    if sent_turn:
+        lifecycle(sent_turn, "completed")
+
+# With DEVORA_FAKE_FOLDED_WAITS, a prompt sent into a turn of the CLI's own waits, queued, until the agent's next step
+# (the test's `step` cue), as the CLI's does until the tool call in progress ends.
+held = None
 
 def unrequested_result():
     # What the CLI emits for a turn it starts itself (background work finishing),
@@ -88,8 +98,10 @@ def start_notification_turn():
 
 def own_turns(directory):
     """Turns the CLI starts itself, as when a background task reports, on the test's cues in `directory`: `start` opens
-    one, then `end` ends it with a result naming no user message, or `crash` kills the CLI during it."""
-    global notification_turn
+    one, then `end` ends it with a result naming no user message, `crash` kills the CLI during it, or `step` gives the
+    agent the prompt held in it (`held`), which then ends the turn as that prompt's. `race`, read with the next prompt,
+    opens one just before that prompt is read."""
+    global notification_turn, held, sent_turn
     def cue(*names):
         while True:
             for name in names:
@@ -100,8 +112,17 @@ def own_turns(directory):
     while True:
         cue("start")
         start_notification_turn()
-        if cue("end", "crash") == "crash":
+        name = cue("end", "crash", "step")
+        if name == "crash":
             os._exit(70)
+        if name == "step":
+            with output:
+                notification_turn = False
+                sent_turn, held = held, None
+                lifecycle(sent_turn, "started")
+                emit(recorded("assistant"))
+                result()
+            continue
         with output:
             # A prompt sent during the turn was folded into it and already answered it.
             if notification_turn:
@@ -199,11 +220,27 @@ for line in sys.stdin:
         result()
     elif kind == "user":
         report({"kind":"user","message":message["message"],"uuid":message.get("uuid")})
+        # The `race` cue: the CLI starts a turn of its own just before it reads the prompt, which then joins it.
+        cues = os.environ.get("DEVORA_FAKE_OWN_TURNS")
+        if cues and (pathlib.Path(cues) / "race").exists():
+            (pathlib.Path(cues) / "race").unlink()
+            (pathlib.Path(cues) / "start").touch()
+            while not notification_turn:
+                time.sleep(0.01)
         # As the CLI does, a prompt sent during a turn it started itself joins that turn, whose one result answers the
         # prompt, and opens no turn of its own (probed on the pinned CLI).
         with output:
             folded = notification_turn
-            notification_turn = False
+            waits = folded and bool(os.environ.get("DEVORA_FAKE_FOLDED_WAITS"))
+            notification_turn = notification_turn and waits
+            lifecycle(message.get("uuid"), "queued")
+            if waits:
+                held = message.get("uuid")
+                report({"kind":"held","uuid":held})
+            else:
+                lifecycle(message.get("uuid"), "started")
+        if waits:
+            continue
         sent_turn = message.get("uuid")
         text = message["message"]["content"]
         # Dies once on Devora's restart notice, before or after saving it, as a crash mid-delivery would.

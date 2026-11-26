@@ -76,6 +76,6 @@ impl State {
 }
 
 pub use devora_agent::transcript::{
-    ItemState, SystemKind, ToolResult, ToolVerdict, TranscriptChange, TranscriptContent,
+    Delivery, ItemState, SystemKind, ToolResult, ToolVerdict, TranscriptChange, TranscriptContent,
     TranscriptItem,
 };

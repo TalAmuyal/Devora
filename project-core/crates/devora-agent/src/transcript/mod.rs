@@ -48,11 +48,25 @@ pub struct ToolResult {
     pub is_error: bool,
 }
 
+/// A user message the agent doesn't have (yet): `TranscriptContent::User::delivery`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Delivery {
+    /// Sent into a turn the agent is running; the agent gets it at its next step.
+    Waiting,
+    /// The agent never got it: its session ended first (a crash, or Devora itself ending), or the CLI withdrew it.
+    NotDelivered,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TranscriptContent {
     User {
         text: String,
         error: Option<String>,
+        /// Whether the agent has it yet, for a prompt sent into a turn the agent's CLI started itself (where it waits
+        /// for the agent's next step); none for one it has, or that never waited. Stored, so a relaunch still says a
+        /// message the agent never got wasn't delivered.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        delivery: Option<Delivery>,
     },
     Assistant {
         text: String,

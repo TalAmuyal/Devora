@@ -220,10 +220,32 @@ impl Transcript {
     pub fn submit(&mut self, text: String) -> TranscriptChange {
         self.pending_commands.insert(self.next_sequence);
         self.insert(
-            TranscriptContent::User { text, error: None },
+            TranscriptContent::User {
+                text,
+                error: None,
+                delivery: None,
+            },
             ItemState::Pending,
             None,
         )
+    }
+
+    /// Sets a user row's delivery while the fold still holds it (until its send settles), so the row it upserts then
+    /// keeps it; none once it's released, when the stored row is the one to change.
+    pub fn set_delivery(
+        &mut self,
+        sequence: u64,
+        value: Option<Delivery>,
+    ) -> Option<TranscriptChange> {
+        let item = self
+            .items
+            .iter_mut()
+            .find(|item| item.sequence == sequence)?;
+        let TranscriptContent::User { delivery, .. } = &mut item.content else {
+            return None;
+        };
+        *delivery = value;
+        Some(TranscriptChange::upsert(item.clone()))
     }
 
     pub fn intention(&mut self, kind: SystemKind, text: String, detail: Value) -> TranscriptChange {
@@ -443,7 +465,9 @@ impl Transcript {
             Message::Known(KnownMessage::System(_))
             | Message::Known(KnownMessage::ControlRequest { .. })
             | Message::Known(KnownMessage::ControlResponse { .. })
-            | Message::Known(KnownMessage::ControlCancelRequest { .. }) => vec![],
+            | Message::Known(KnownMessage::ControlCancelRequest { .. })
+            // Where a prompt is is the space's to follow, on the prompt's own row (`Delivery`); not a row of its own.
+            | Message::Known(KnownMessage::CommandLifecycle { .. }) => vec![],
             _ => vec![self.unknown(json!(message), None)],
         }
     }
@@ -507,6 +531,7 @@ impl Transcript {
                 TranscriptContent::User {
                     text: text.clone(),
                     error: None,
+                    delivery: None,
                 },
                 ItemState::Complete,
                 parent,
@@ -554,6 +579,7 @@ impl Transcript {
                                 TranscriptContent::User {
                                     text: text.clone(),
                                     error: None,
+                                    delivery: None,
                                 },
                                 ItemState::Complete,
                                 parent.clone(),

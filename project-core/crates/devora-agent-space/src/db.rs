@@ -1,7 +1,7 @@
 use crate::restart_notice::RestartNotice;
 use crate::{CreationForm, Identity};
 use devora_agent::session::{CliProcess, Resume};
-use devora_agent::transcript::{TranscriptChange, TranscriptContent, TranscriptItem};
+use devora_agent::transcript::{Delivery, TranscriptChange, TranscriptContent, TranscriptItem};
 use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
 use std::path::Path;
 use std::time::Duration;
@@ -399,6 +399,45 @@ impl Db {
             )
             .map_err(storage)?;
         Ok(())
+    }
+
+    /// Sets a stored user row's delivery, and returns the row as stored now; none for a row that isn't stored, or
+    /// isn't a user's.
+    pub fn set_delivery(
+        &mut self,
+        sequence: u64,
+        value: Option<Delivery>,
+    ) -> Result<Option<TranscriptItem>, String> {
+        let Some(mut item) = self
+            .history(sequence.saturating_sub(1), 1)?
+            .into_iter()
+            .find(|item| item.sequence == sequence)
+        else {
+            return Ok(None);
+        };
+        let TranscriptContent::User { delivery, .. } = &mut item.content else {
+            return Ok(None);
+        };
+        *delivery = value;
+        let tx = self.conn.transaction().map_err(storage)?;
+        save_items(&tx, &mut [&mut item])?;
+        tx.commit().map_err(storage)?;
+        Ok(Some(item))
+    }
+
+    /// The user rows still waiting for the agent, by sequence.
+    pub fn waiting(&self) -> Result<Vec<u64>, String> {
+        let mut query = self
+            .conn
+            .prepare(
+                "SELECT sequence FROM events WHERE kind='user'
+                 AND json_extract(payload,'$.content.User.delivery')='Waiting' ORDER BY sequence",
+            )
+            .map_err(storage)?;
+        let rows = query
+            .query_map([], |row| row.get::<_, u64>(0))
+            .map_err(storage)?;
+        rows.map(|row| row.map_err(storage)).collect()
     }
 
     pub fn history(&self, after: u64, limit: u32) -> Result<Vec<TranscriptItem>, String> {

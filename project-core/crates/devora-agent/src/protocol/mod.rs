@@ -74,6 +74,33 @@ pub enum KnownMessage {
         #[serde(flatten)]
         extra: Map<String, Value>,
     },
+    /// Where a prompt Devora sent is, by the ID it was sent with (`command_uuid`): taken in, given to the agent, or
+    /// done. A prompt sent into a turn the agent's CLI started itself waits between "queued" and "started" until the
+    /// agent's next step (probed on the pinned CLI). The CLI sends none for a command without an ID (its schema), so
+    /// `command_uuid` is always there.
+    CommandLifecycle {
+        command_uuid: String,
+        state: CommandState,
+        #[serde(flatten)]
+        extra: Map<String, Value>,
+    },
+}
+
+/// A prompt's state in `KnownMessage::CommandLifecycle`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CommandState {
+    /// The CLI took it in.
+    Queued,
+    /// The agent got it: the model request carrying it is about to go.
+    Started,
+    /// The turn that carried it ended.
+    Completed,
+    /// It was withdrawn before the agent got it.
+    Cancelled,
+    /// A state this version doesn't know.
+    #[serde(other)]
+    Other,
 }
 
 /// Whether a reply's `model` names the model that wrote it. Claude Code also reports some things as replies it makes up

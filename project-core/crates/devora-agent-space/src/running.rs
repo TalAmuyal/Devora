@@ -1,13 +1,15 @@
 use crate::compaction::{Compaction, Context};
 use crate::restart_notice::{AppRun, RestartNotice, StoppedTask};
 use crate::Space;
-use devora_agent::protocol::{BackgroundTask, KnownMessage, Message, System};
+use devora_agent::protocol::{BackgroundTask, CommandState, KnownMessage, Message, System};
 use devora_agent::session::stop_tree;
 use devora_agent::session::{
     saved_model, saved_turn, PermissionAnswer, Resume, Session, SessionEvent, SessionHandle,
     SessionOptions, StopInfo, UsageSource,
 };
-use devora_agent::transcript::{SystemKind, Transcript, TranscriptChange, TranscriptItem};
+use devora_agent::transcript::{
+    Delivery, SystemKind, Transcript, TranscriptChange, TranscriptItem,
+};
 use devora_app::log::{Level, Log};
 use devora_platform::processes::SystemProcessTable;
 use serde_json::{json, Value};
@@ -357,6 +359,13 @@ pub(crate) async fn start(
         let mut interrupted = transcript.interrupt(!space.resume.has_conversation);
         space.db.save_changes(None, &mut interrupted)?;
         transcript.release_completed();
+        // A prompt still waiting when the last session ended without a word (Devora itself died) never reached the
+        // agent: the CLI left behind is stopped below, and the resumed session doesn't get it.
+        for sequence in space.db.waiting()? {
+            space
+                .db
+                .set_delivery(sequence, Some(Delivery::NotDelivered))?;
+        }
         let history = space.history()?;
         // A CLI an earlier Devora left running (it died without stopping it) would
         // write the same session as the one resumed now, forking it.
@@ -543,16 +552,27 @@ fn persist(
     Ok(())
 }
 
+/// Sends `command`'s turn or intention, its row committed first, and returns the row's sequence. A prompt that `joins`
+/// a turn the agent's CLI started itself waits for the agent's next step, so its row says so from the start.
 fn begin(
     space: &mut Space,
     transcript: &mut Transcript,
     command: Command,
+    joins: bool,
     runtime: SessionHandle,
     completions: mpsc::UnboundedSender<Completion>,
     events: &mpsc::UnboundedSender<SpaceEvent>,
-) -> Result<(), String> {
+) -> Result<u64, String> {
     let mut change = match &command.action {
-        Action::Turn { text, .. } => transcript.submit(text.clone()),
+        Action::Turn { text, .. } => {
+            let submitted = transcript.submit(text.clone());
+            match &submitted {
+                TranscriptChange::Upsert { item } if joins => transcript
+                    .set_delivery(item.sequence, Some(Delivery::Waiting))
+                    .unwrap_or(submitted),
+                _ => submitted,
+            }
+        }
         Action::RestartNotice { id, notice } => transcript.intention(
             SystemKind::RestartNotice,
             notice.row(),
@@ -641,6 +661,31 @@ fn begin(
             reply: command.reply,
         });
     });
+    Ok(sequence)
+}
+
+/// Sets a user row's delivery and publishes the row: the fold's copy while the fold still holds it (so the row it
+/// upserts when the send settles keeps it), else the stored row.
+fn deliver(
+    space: &mut Space,
+    transcript: &mut Transcript,
+    events: &mpsc::UnboundedSender<SpaceEvent>,
+    sequence: u64,
+    delivery: Option<Delivery>,
+) -> Result<(), String> {
+    let change = match transcript.set_delivery(sequence, delivery) {
+        Some(mut change) => {
+            space
+                .db
+                .save_changes(None, std::slice::from_mut(&mut change))?;
+            change
+        }
+        None => match space.db.set_delivery(sequence, delivery)? {
+            Some(item) => TranscriptChange::upsert(item),
+            None => return Ok(()),
+        },
+    };
+    let _ = events.send(SpaceEvent::Transcript(change));
     Ok(())
 }
 
@@ -766,6 +811,12 @@ async fn pump(
     // The agent's background work, as the CLI last listed it.
     let mut background: Vec<BackgroundTask> = vec![];
     let mut preparing: Option<Preparing> = None;
+    // The prompts sent into a turn the agent's CLI started itself that the agent hasn't got yet: their turn's ID, and
+    // their row. Only those are marked; one sent otherwise reaches the agent at once (within milliseconds, probed).
+    let mut waiting: std::collections::HashMap<String, u64> = Default::default();
+    // A prompt sent while no turn was seen running, until the agent has it: the CLI may have started a turn of its own
+    // just before (its `init` not read yet), which the prompt then joins and waits in like any other.
+    let mut unstarted: Option<(String, u64)> = None;
     let (stop_sent, mut stops) = mpsc::unbounded_channel::<Result<Value, String>>();
     loop {
         if turn_running.is_none() && !stopping && (pause_after_turn.is_some() || globally_paused())
@@ -870,6 +921,14 @@ async fn pump(
             }
             completion = completions.recv(), if pending > 0 => {
                 if let Some(completion) = completion {
+                    // A send the CLI never took leaves no waiting row: its row says why it failed.
+                    if completion.failed_turn {
+                        unstarted.take_if(|(_, sequence)| *sequence == completion.sequence);
+                        if let Some(id) = waiting.iter().find(|(_, sequence)| **sequence == completion.sequence).map(|(id, _)| id.clone()) {
+                            waiting.remove(&id);
+                            deliver(space,transcript,events,completion.sequence,None)?;
+                        }
+                    }
                     if completion.failed_turn && ActiveTurn::is_ours(&turn_running) {
                         turn_running = None;
                         // No result will end it: the restart notice and a compaction step have no other end, and the
@@ -904,6 +963,38 @@ async fn pump(
                         }
                         _ => {}
                     }
+                }
+                // A waiting prompt the agent got is delivered; one the CLI withdrew, or one whose session ended first (a
+                // crash: the resumed session never gets it, probed), never will be.
+                match &event {
+                    SessionEvent::Message(Message::Known(KnownMessage::CommandLifecycle { command_uuid, state, .. })) => {
+                        unstarted.take_if(|(id, _)| id == command_uuid);
+                        let delivery = match state {
+                            CommandState::Started | CommandState::Completed => Some(None),
+                            CommandState::Cancelled => Some(Some(Delivery::NotDelivered)),
+                            CommandState::Queued | CommandState::Other => None,
+                        };
+                        if let Some(delivery) = delivery {
+                            if let Some(sequence) = waiting.remove(command_uuid) {
+                                deliver(space,transcript,events,sequence,delivery)?;
+                            }
+                        }
+                    }
+                    // The agent's own turn started before the prompt sent into it was read: an idle CLI starts the
+                    // prompt's turn ("started") before its `init`.
+                    SessionEvent::Message(Message::Known(KnownMessage::System(System::Init { .. }))) => {
+                        if let Some((id, sequence)) = unstarted.take() {
+                            waiting.insert(id, sequence);
+                            deliver(space,transcript,events,sequence,Some(Delivery::Waiting))?;
+                        }
+                    }
+                    SessionEvent::Exited { .. } | SessionEvent::Stopped(_) | SessionEvent::Failed(_) => {
+                        unstarted = None;
+                        for (_, sequence) in std::mem::take(&mut waiting) {
+                            deliver(space,transcript,events,sequence,Some(Delivery::NotDelivered))?;
+                        }
+                    }
+                    _ => {}
                 }
                 let terminal = matches!(event,SessionEvent::Stopped(_) | SessionEvent::Failed(_));
                 let stop = match &event { SessionEvent::Stopped(info) => Some(info.clone()), _ => None };
@@ -1038,6 +1129,8 @@ async fn pump(
                         let _ = command.reply.send(Err("a turn is already running".into()));
                     }
                     Some(command) => {
+                        let prompt = match &command.action { Action::Turn { id, .. } => Some(id.clone()), _ => None };
+                        let joins = prompt.is_some() && matches!(turn_running, Some(ActiveTurn::Agents));
                         match &command.action {
                             Action::Turn { id, .. } => turn_running = Some(ActiveTurn::Ours(id.clone())),
                             Action::RestartNotice { id, .. } => {
@@ -1047,7 +1140,12 @@ async fn pump(
                             _ => {}
                         }
                         let notice = matches!(command.action, Action::RestartNotice { .. });
-                        begin(space,transcript,command,session.handle(),completed.clone(),events)?;
+                        let sequence = begin(space,transcript,command,joins,session.handle(),completed.clone(),events)?;
+                        match prompt {
+                            Some(id) if joins => { waiting.insert(id, sequence); }
+                            Some(id) => unstarted = Some((id, sequence)),
+                            None => {}
+                        }
                         pending += 1;
                         if notice { let _ = events.send(SpaceEvent::TurnStarted); }
                     }
@@ -1092,6 +1190,7 @@ fn send_step(
             },
             reply,
         },
+        false,
         runtime,
         completions,
         events,
