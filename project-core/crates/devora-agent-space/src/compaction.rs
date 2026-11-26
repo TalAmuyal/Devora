@@ -119,7 +119,7 @@ impl Step {
                     .into()
             }
             Self::RefreshMemory(Refresh::NotSavedFirst) => {
-                "The conversation was compacted before the agent could save its memory: Devora asks the agent to refresh it."
+                "The conversation was compacted before the agent could save its memory: the agent is asked to refresh it."
                     .into()
             }
         }

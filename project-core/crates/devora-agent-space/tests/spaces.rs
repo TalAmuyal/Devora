@@ -2291,7 +2291,7 @@ async fn a_save_refused_as_too_long_compacts_without_it_and_a_failed_compact_say
             expected.extend([
                 "compaction: Conversation compacted",
                 "result: Turn completed",
-                "compaction: The conversation was compacted before the agent could save its memory: Devora asks the agent to refresh it.",
+                "compaction: The conversation was compacted before the agent could save its memory: the agent is asked to refresh it.",
                 "assistant: (a reply)",
                 "result: Turn completed",
             ]);
