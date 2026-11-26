@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Checks flake-report.jq on made-up outcomes: master and pull-request counts kept apart, a failure that passed on
 # re-run flagged, skipped tests not counted as runs, tests that never failed left out, tests that needed their own retry
-# listed apart whether they passed or not, the --test filter, and jobs not run told apart by why.
+# listed apart whether they passed or not, runs the UI test watchdog stopped listed apart by its verdict, the --test filter,
+# and jobs not run told apart by why.
 set -uo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 failures=0
@@ -59,6 +60,29 @@ expect "the --test filter" "$(printf '%s\n' \
 	'  test-ember-unit: app.test.ts / always skipped: failed 0/0 master, 0/0 PR; median -, slowest -')" "$(report "app.test")"
 
 not_run() { printf '{"run":"%s","job":"%s","label":"%s","url":"https://ci/%s","reason":"%s"}\n' "$@"; }
+# A run the watchdog stopped: a runner freeze's failure isn't the test's; a hang of the test's own still is. The test the
+# stop cancelled is skipped (xcresult.sh), so not a run.
+stopped() { printf '{"job":"sapphire","suite":"Settings","name":"multiline save","outcome":"stopped","duration":null,"run_id":"%s","run_attempt":1,"event":"%s","watchdog":"%s"}\n' "$@"; }
+watched=$(
+	outcome sapphire Settings "multiline save" failed 300 1 1 push
+	stopped 1 push runner
+	outcome sapphire GlobalPause "toolbar hold" skipped null 1 1 push
+	outcome sapphire Settings "multiline save" passed 50 2 1 push
+	outcome sapphire Settings "multiline save" failed 300 3 1 pull_request
+	stopped 3 pull_request test
+)
+expect "runs the watchdog stopped" "$(printf '%s\n' \
+	'Over the last 4 CI runs (2 on master, 2 on pull requests), 2 tests recorded:' \
+	'' \
+	'0/2 master, 1/1 PR  sapphire: Settings / multiline save' \
+	'    last failed: 2026-11-03T00:00:00Z https://ci/3' \
+	'    duration: median 50s, slowest 300s' \
+	'' \
+	'Runs the UI test watchdog stopped at a test ("runner": the runner'"'"'s WindowServer had frozen, so the test'"'"'s failure there isn'"'"'t counted above):' \
+	'1 runner, 1 test  sapphire: Settings / multiline save' \
+	'    last: 2026-11-03T00:00:00Z https://ci/3')" \
+	"$(jq -r -s --argjson listed "$listed" --arg filter "" -f "$here/flake-report.jq" <<<"$watched")"
+
 expect "jobs not run, by why" "$(printf '%s\n' \
 	'Jobs GitHub found no runner for (capacity, not tests):' \
 	'  e2e-ember on macos-15: 1 time(s), last https://ci/1' \

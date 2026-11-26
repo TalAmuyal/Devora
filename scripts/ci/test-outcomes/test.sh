@@ -102,18 +102,35 @@ expect "vitest identity is the same in another checkout" \
 	"$("$here/vitest.sh" "$fixtures/vitest.json" /home/runner/work/Devora/Devora | summary)" \
 	"$("$here/vitest.sh" "$scratch/moved.json" /Users/someone/Devora | summary)"
 
+# A run the UI test watchdog stopped (CI run 45641939224, trimmed): the hung test failed, and the test the stop cancelled
+# never finished, so it's skipped; the watchdog's verdict names the hung test.
+expect "xcresult: a test the run's cancellation cut short is skipped" "$(printf '%s\n' \
+	'AgentSettingsUITests | testMultilineSaveAndTemplateFilePicker() | failed' \
+	'GlobalPauseUITests | testToolbarHoldSurvivesRelaunchAndTheToolbarResumesIt() | skipped')" \
+	"$("$here/xcresult.sh" --json "$fixtures/xcresult-watchdog-tests.json" | summary)"
+echo '{"test":"AgentSettingsUITests/testMultilineSaveAndTemplateFilePicker","verdict":"runner","reason":"exceeded its execution time allowance","fences_from":"15:40:19","windowserver_unanswered":"the screenshot got no answer within 10s"}' >"$scratch/verdict.json"
+expect "watchdog: the stopped test, by the bundle's identity, with the verdict" \
+	'{"suite":"AgentSettingsUITests","name":"testMultilineSaveAndTemplateFilePicker()","outcome":"stopped","duration":null,"watchdog":"runner"}' \
+	"$("$here/watchdog.sh" "$scratch/verdict.json")"
+echo '{"test":"","verdict":"test","reason":"launched the app, which never got a process"}' >"$scratch/unnamed.json"
+expect "watchdog: a stop it couldn't name a test for records nothing" "" "$("$here/watchdog.sh" "$scratch/unnamed.json")"
+
 # record.sh: the run's identity on every outcome, and a missing or unreadable result logged, never failing.
 echo 'not json' >"$scratch/broken.json"
 log=$(GITHUB_RUN_ID=42 GITHUB_RUN_ATTEMPT=2 GITHUB_SHA=abc GITHUB_EVENT_NAME=pull_request GITHUB_REF=refs/pull/7/merge \
 	"$here/record.sh" sapphire "$scratch/out/outcomes.jsonl" \
-	"cucumber=$fixtures/cucumber.json" "cucumber=$scratch/missing.json" "cucumber=$scratch/broken.json" 2>&1)
+	"cucumber=$fixtures/cucumber.json" "cucumber=$scratch/missing.json" "cucumber=$scratch/broken.json" \
+	"watchdog=$scratch/no-stop.json" 2>&1)
 expect "record.sh exits 0" "0" "$?"
 expect "record.sh adds the run" '{"job":"sapphire","format":"cucumber","suite":"File preview pane","name":"Refreshing an existing path preserves its stacked siblings","outcome":"passed","run_id":"42","run_attempt":2,"sha":"abc","event":"pull_request","ref":"refs/pull/7/merge"}' \
 	"$(jq -c 'del(.duration)' "$scratch/out/outcomes.jsonl")"
+"$here/record.sh" sapphire "$scratch/out/watchdog.jsonl" "watchdog=$scratch/verdict.json" >/dev/null
+expect "record.sh keeps the watchdog's verdict" "runner" "$(jq -r .watchdog "$scratch/out/watchdog.jsonl")"
 expect "record.sh says what it recorded and what it couldn't" "$(printf '%s\n' \
 	"test-outcomes: cucumber at $fixtures/cucumber.json: 1 passed" \
 	"test-outcomes: no cucumber results at $scratch/missing.json (its tests didn't run)" \
-	"test-outcomes: couldn't read the cucumber results at $scratch/broken.json")" \
+	"test-outcomes: couldn't read the cucumber results at $scratch/broken.json" \
+	"test-outcomes: no watchdog verdict at $scratch/no-stop.json (it didn't stop the run)")" \
 	"$(grep '^test-outcomes' <<<"$log")"
 
 if [ "$failures" -gt 0 ]; then

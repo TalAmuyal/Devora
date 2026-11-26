@@ -317,6 +317,7 @@ jobs:
             swift-testing=project-sapphire/build/test-outcomes/transcript.jsonl
             cucumber=project-sapphire/build/test-outcomes/acceptance.json
             xcresult=project-sapphire/build/ui-tests.xcresult
+            watchdog=project-sapphire/build/ui-test-hang/verdict.json
             cucumber=project-sapphire/build/test-outcomes/bundle.json
             rust=${{ runner.temp }}/sapphire-tests.log
             rust=${{ runner.temp }}/core-tests.log

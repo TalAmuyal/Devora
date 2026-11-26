@@ -21,6 +21,9 @@ fi
 retry='^Added attachment named .[^\x27]* retry: '
 jq -c --arg retry "$retry" --slurpfile activities <(printf '%s' "$activities") '
 	def outcome: {"Passed": "passed", "Failed": "failed", "Skipped": "skipped", "Expected Failure": "passed"}[.] // "failed";
+	# A test whose only failure is the run being cancelled (the UI test watchdog stopping a run, which cancels the test
+	# running then) never finished: skipped, not failed.
+	def canceled: [.children[]? | select(.nodeType == "Failure Message") | .name] | length > 0 and all(. == "Testing was canceled");
 	($activities | map({key: .testIdentifier, value: [.testRuns[] | [.. | objects | select(.title? | type == "string" and test($retry))] | length]}) | from_entries) as $retries
 	| .. | objects | select(.nodeType? == "Test Case") | . as $case
 	| (.nodeIdentifier | capture("^(?<suite>[^/]+)/(?<name>.+)$")) as $id
@@ -29,7 +32,7 @@ jq -c --arg retry "$retry" --slurpfile activities <(printf '%s' "$activities") '
 	| {
 		suite: $id.suite,
 		name: $id.name,
-		outcome: (($repetition // $case).result | outcome),
+		outcome: (($repetition // $case) | if .result == "Failed" and canceled then "skipped" else .result | outcome end),
 		duration: (($repetition // $case).durationInSeconds // null)
 	}
 	+ (($retries[$test] // [])[$run] | if . == null then {} else {retries: .} end)
