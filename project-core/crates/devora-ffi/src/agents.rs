@@ -5,9 +5,9 @@ use devora_core::agents::{
     self, CreationForm, Field, LaunchContext, ModelChoice, PermissionAnswer, Scope, Source,
 };
 use devora_core::state::{
-    AgentActivity, Chat, ChatContext, ChatEffort, ChatEvent, ChatModel, ChatPhase, ChatStep,
-    ChatUpdate, CompactionProgress, Delivery, ItemState, PermissionQuestion, RunningAgent,
-    RunningAgents, StepActivity, Subscription, SystemKind, ToolResult, ToolVerdict,
+    AgentActivity, AgentPause, Chat, ChatContext, ChatEffort, ChatEvent, ChatModel, ChatPhase,
+    ChatStep, ChatUpdate, CompactionProgress, Delivery, ItemState, PauseView, PermissionQuestion,
+    RunningAgent, RunningAgents, StepActivity, Subscription, SystemKind, ToolResult, ToolVerdict,
     TranscriptChange, TranscriptContent, TranscriptItem,
 };
 use std::collections::HashMap;
@@ -368,9 +368,7 @@ pub struct Chat {
     pub phase: ChatPhase,
     pub turn_running: bool,
     pub agent_turn: bool,
-    pub pause_requested: bool,
-    pub globally_held: bool,
-    pub keep_paused: bool,
+    pub pause: AgentPause,
     pub session_id: Option<String>,
     pub items: Vec<TranscriptItem>,
     pub error: Option<String>,
@@ -380,6 +378,24 @@ pub struct Chat {
     pub model: Option<ChatModel>,
     pub effort: Option<ChatEffort>,
     pub step: Option<ChatStep>,
+}
+#[uniffi::remote(Enum)]
+pub enum AgentPause {
+    None,
+    ByUser,
+    PausedAtOpen,
+    Held { keep_paused: bool, released: bool },
+}
+#[uniffi::remote(Record)]
+pub struct PauseView {
+    pub pause_requested: bool,
+    pub globally_held: bool,
+    pub keep_paused: bool,
+}
+/// The pause widget's view of an agent's pause (`devora_state::pause_view`).
+#[uniffi::export]
+pub fn pause_view(pause: AgentPause, phase: ChatPhase) -> PauseView {
+    devora_core::state::pause_view(&pause, &phase)
 }
 #[uniffi::remote(Record)]
 pub struct ChatStep {
@@ -442,9 +458,7 @@ pub enum CompactionProgress {
 }
 #[uniffi::remote(Enum)]
 pub enum ChatUpdate {
-    GlobalHold { held: bool },
-    KeepPaused { keep_paused: bool },
-    PauseRequested { requested: bool },
+    Pause { pause: AgentPause },
     Turn { running: bool, by_agent: bool },
     Generation { generation: u64 },
     Phase { phase: ChatPhase },
@@ -680,10 +694,6 @@ impl DevoraCore {
         self.agents
             .set_keep_paused(tab, generation, keep_paused)
             .await?;
-        Ok(())
-    }
-    pub async fn pause_agent_space(&self, tab: u64) -> Result<(), CoreError> {
-        self.agents.pause(tab).await?;
         Ok(())
     }
     pub fn close_agent_space(&self, tab: u64) -> Result<(), CoreError> {

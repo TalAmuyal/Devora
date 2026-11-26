@@ -20,7 +20,9 @@ pub use devora_agent_space::{
 };
 use devora_app::log::Log;
 pub use devora_config::agent::Scope;
-use devora_state::{ChatCommand, ChatPhase, ChatUpdate, Command, Event, SessionKind, Store};
+use devora_state::{
+    AgentPause, ChatCommand, ChatPhase, ChatUpdate, Command, Event, SessionKind, Store,
+};
 pub use models::{ModelOptions, MODEL_LOOKUP_GRACE};
 pub use operations::{Creation, CreationEvent};
 use serde_json::Value;
@@ -52,10 +54,9 @@ struct Owner {
     tab: Option<u64>,
     generation: u64,
     handle: Option<SpaceHandle>,
+    /// Stops its actor now: a pause, a closed tab, shutting down. Why it is paused is `paused`.
     pause: watch::Sender<bool>,
-    pause_requested: bool,
-    globally_held: bool,
-    keep_paused: bool,
+    paused: AgentPause,
     done: watch::Sender<bool>,
     /// From launching its runtime until the runtime has stopped.
     live: bool,
@@ -215,7 +216,16 @@ impl Agents {
                 }
                 let waiting = inner.owners.get(&key).filter(|owner| !*owner.done.borrow());
                 if let Some(owner) = waiting {
-                    if !*owner.pause.borrow() && !owner.pause_requested && !owner.keep_paused {
+                    if !*owner.pause.borrow()
+                        && matches!(
+                            owner.paused,
+                            AgentPause::None
+                                | AgentPause::Held {
+                                    keep_paused: false,
+                                    ..
+                                }
+                        )
+                    {
                         let tab = owner.tab.ok_or("agent has no tab")?;
                         self.state
                             .dispatch(Command::ActivateTab { tab })
@@ -240,10 +250,12 @@ impl Agents {
                             generation,
                             handle: None,
                             pause,
-                            pause_requested: false,
-                            globally_held: false,
                             // During a hold, a stored pause is the Keep paused choice; without one, it keeps the agent from launching.
-                            keep_paused: view.as_ref().is_some_and(|view| view.paused),
+                            paused: if view.as_ref().is_some_and(|view| view.paused) {
+                                AgentPause::PausedAtOpen
+                            } else {
+                                AgentPause::None
+                            },
                             done,
                             live: false,
                             launch_settings: None,
@@ -403,19 +415,24 @@ impl Agents {
                 set_paused(&self.state, key, false)?;
                 Some((key.clone(), launch.ok_or("the agent's launch is unknown")?))
             } else {
-                if !owner.globally_held || owner.pause_requested {
+                let AgentPause::Held {
+                    keep_paused: kept,
+                    released,
+                } = owner.paused
+                else {
                     return Err("agent is not globally held".into());
-                }
-                if owner.keep_paused == keep_paused {
+                };
+                if kept == keep_paused {
                     return Ok(());
                 }
                 set_paused(&self.state, key, keep_paused)?;
-                owner.keep_paused = keep_paused;
-                events::update(
+                set_pause(
                     &self.state,
-                    tab,
-                    generation,
-                    ChatUpdate::KeepPaused { keep_paused },
+                    owner,
+                    AgentPause::Held {
+                        keep_paused,
+                        released,
+                    },
                 );
                 None
             }
@@ -426,7 +443,8 @@ impl Agents {
         Ok(())
     }
 
-    pub async fn pause(&self, tab: u64) -> Result<(), String> {
+    /// Pauses at once, interrupting a running turn, and returns once the agent has stopped: only `delete` does this.
+    async fn pause_now(&self, tab: u64) -> Result<(), String> {
         let mut done = {
             let mut inner = lock(&self.inner);
             let (key, owner) = inner
@@ -435,14 +453,7 @@ impl Agents {
                 .find(|(_, o)| o.tab == Some(tab))
                 .ok_or("agent is not open")?;
             set_paused(&self.state, key, true)?;
-            owner.globally_held = false;
-            owner.pause_requested = true;
-            events::update(
-                &self.state,
-                tab,
-                owner.generation,
-                ChatUpdate::GlobalHold { held: false },
-            );
+            set_pause(&self.state, owner, AgentPause::ByUser);
             if *owner.done.borrow() {
                 return Ok(());
             }
@@ -471,22 +482,15 @@ impl Agents {
         if owner.generation != generation || *owner.pause.borrow() || *owner.done.borrow() {
             return Err("agent generation is stale or pausing".into());
         }
-        if owner.pause_requested {
+        if owner.paused == AgentPause::ByUser {
             return Ok(());
         }
         // Committed when requested, not at the turn's boundary: an app killed mid-turn brings the agent back
         // paused, as the user asked, rather than running.
         set_paused(&self.state, key, true)?;
         let key = key.clone();
-        if owner.globally_held && owner.handle.is_none() {
-            owner.globally_held = false;
-            owner.pause_requested = true;
-            events::update(
-                &self.state,
-                tab,
-                generation,
-                ChatUpdate::GlobalHold { held: false },
-            );
+        if matches!(owner.paused, AgentPause::Held { .. }) && owner.handle.is_none() {
+            set_pause(&self.state, owner, AgentPause::ByUser);
             owner.pause.send_replace(true);
             return Ok(());
         }
@@ -495,21 +499,8 @@ impl Agents {
             .as_ref()
             .ok_or("agent is not ready")?
             .pause_after_turn();
-        owner.globally_held = false;
-        events::update(
-            &self.state,
-            tab,
-            generation,
-            ChatUpdate::GlobalHold { held: false },
-        );
-        owner.pause_requested = true;
+        set_pause(&self.state, owner, AgentPause::ByUser);
         let run_id = owner.run_id;
-        events::update(
-            &self.state,
-            tab,
-            generation,
-            ChatUpdate::PauseRequested { requested: true },
-        );
         drop(inner);
 
         let inner = self.inner.clone();
@@ -525,14 +516,8 @@ impl Agents {
                             && !*o.done.borrow()
                             && !*o.pause.borrow()
                     }) {
-                        owner.pause_requested = false;
                         let _ = set_paused(&state, &key, false);
-                        events::update(
-                            &state,
-                            tab,
-                            owner.generation,
-                            ChatUpdate::PauseRequested { requested: false },
-                        );
+                        set_pause(&state, owner, AgentPause::None);
                         true
                     } else {
                         false
@@ -655,8 +640,19 @@ impl Agents {
         devora_config::agent::write(&file, key, value)
     }
 
+    /// Deletes an agent's space. An open agent is paused at once and its tab closed first, as separate steps that each
+    /// stay done if a later one fails: a failed delete leaves it paused, its tab closed. One whose tab is already closed
+    /// but which is still stopping is refused.
     pub async fn delete(&self, profile: &Path, name: &str) -> Result<(), String> {
         let key = Key::new(profile, name)?;
+        let open = lock(&self.inner)
+            .owners
+            .get(&key)
+            .and_then(|owner| owner.tab);
+        if let Some(tab) = open {
+            self.pause_now(tab).await?;
+            self.close_tab(tab)?;
+        }
         let (done, _) = watch::channel(false);
         {
             let mut inner = lock(&self.inner);
@@ -966,7 +962,7 @@ impl Agents {
                 .ok_or("agent is not open")?;
             if inner.closing
                 || owner.generation != generation
-                || (*owner.pause.borrow() || owner.pause_requested)
+                || (*owner.pause.borrow() || owner.paused == AgentPause::ByUser)
             {
                 return Err("agent generation is stale or pausing".into());
             }
@@ -1197,7 +1193,10 @@ async fn run(
         }
         let mut inner = lock(&inner);
         let eligible = inner.owners.get(&key).is_some_and(|o| {
-            o.run_id == generation && o.tab.is_some() && !o.pause_requested && !*o.pause.borrow()
+            o.run_id == generation
+                && o.tab.is_some()
+                && o.paused != AgentPause::ByUser
+                && !*o.pause.borrow()
         });
         if !eligible || inner.closing {
             if let Some(owner) = inner.owners.get(&key).filter(|o| o.run_id == generation) {
@@ -1210,7 +1209,8 @@ async fn run(
         let next = inner.generation;
         let owner = inner.owners.get_mut(&key).expect("checked owner");
         owner.generation = next;
-        owner.globally_held = false;
+        // Released: its new chat starts unpaused.
+        owner.paused = AgentPause::None;
         if let Some(tab) = owner.tab {
             let _ = state.dispatch_chat(ChatCommand::Start {
                 tab,
@@ -1266,25 +1266,22 @@ async fn run_session(
         return Ok(());
     }
     // Paused until the user resumes it: shown Paused, never launched.
-    if lock(inner)
-        .owners
-        .get(key)
-        .is_some_and(|owner| owner.keep_paused)
-    {
+    if lock(inner).owners.get(key).is_some_and(|owner| {
+        matches!(
+            owner.paused,
+            AgentPause::PausedAtOpen
+                | AgentPause::Held {
+                    keep_paused: true,
+                    ..
+                }
+        )
+    }) {
         return Ok(());
     }
     if let Some(owner) = lock(inner).owners.get_mut(key) {
-        owner.globally_held = false;
         owner.live = true;
         phase(state, owner, ChatPhase::Opening);
-        if let Some(tab) = owner.tab {
-            events::update(
-                state,
-                tab,
-                owner.generation,
-                ChatUpdate::GlobalHold { held: false },
-            );
-        }
+        set_pause(state, owner, AgentPause::None);
     }
     let run = lock(inner).run.clone();
     let mut running = match space
@@ -1437,6 +1434,14 @@ async fn present_stored_effort(
 }
 
 /// Commits whether the user has the agent individually paused, so that a restore keeps it paused.
+/// Sets why `owner` is paused, and shows it in its chat.
+fn set_pause(state: &Store, owner: &mut Owner, pause: AgentPause) {
+    owner.paused = pause.clone();
+    if let Some(tab) = owner.tab {
+        events::update(state, tab, owner.generation, ChatUpdate::Pause { pause });
+    }
+}
+
 fn set_paused(state: &Store, key: &Key, paused: bool) -> Result<(), String> {
     state
         .dispatch(Command::SetAgentPaused {

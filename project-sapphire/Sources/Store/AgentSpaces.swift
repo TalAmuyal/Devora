@@ -147,7 +147,7 @@ extension Store {
 		try? call("cancel_agent_creation") { try core.cancelAgentCreation(id: id) }
 	}
 
-	/// Deletes an agent's space; an open agent is paused and its tab closed first, since the core deletes only a stopped one.
+	/// Deletes an agent's space, its draft kept first; the core pauses an open agent at once and closes its tab before deleting.
 	public func deleteAgentSpace(_ name: String) async -> Bool {
 		guard let core, let profile = selectedProfilePath else { return false }
 		do {
@@ -157,8 +157,6 @@ extension Store {
 				$0.session.kind == .agentSpace(name: name) && $0.session.profilePath.map(canonical) == canonical(profile)
 			}) {
 				guard agentModels[tab.id]?.value?.flushDraft() != false else { return false }
-				try await core.pauseAgentSpace(tab: tab.id)
-				try core.closeAgentSpace(tab: tab.id)
 			}
 			try await core.deleteAgentSpace(profilePath: profile, name: name)
 		} catch {
@@ -234,7 +232,7 @@ extension Store {
 	/// Folds the chats' lifecycle into `agentStatuses` off the main actor, hopping to it only when a status changes, since the chats also carry every streamed token.
 	func pullAgentStatuses(from subscription: ChatSubscription) -> Task<Void, Never> {
 		Task.detached { [weak self] in
-			var chats: [UInt64: (phase: ChatPhase, turn: Bool, agentTurn: Bool, questions: Set<String>, pause: Bool)] = [:]
+			var chats: [UInt64: (phase: ChatPhase, turn: Bool, agentTurn: Bool, questions: Set<String>, pause: AgentPause)] = [:]
 			var published: [UInt64: AgentStatus] = [:]
 			var running: RunningAgents?
 			do {
@@ -243,13 +241,13 @@ extension Store {
 						switch event {
 						case .snapshot(let all, let agents):
 							chats = Dictionary(uniqueKeysWithValues: all.map {
-								($0.tab, ($0.phase, $0.turnRunning, $0.agentTurn, Set($0.questions.map(\.requestId)), $0.pauseRequested))
+								($0.tab, ($0.phase, $0.turnRunning, $0.agentTurn, Set($0.questions.map(\.requestId)), $0.pause))
 							})
 							running = agents
 						case .running(let agents):
 							running = agents
 						case .started(let chat):
-							chats[chat.tab] = (chat.phase, chat.turnRunning, chat.agentTurn, [], chat.pauseRequested)
+							chats[chat.tab] = (chat.phase, chat.turnRunning, chat.agentTurn, [], chat.pause)
 						case .closed(let tab):
 							chats[tab] = nil
 						case .updated(let tab, _, let update):
@@ -257,11 +255,10 @@ extension Store {
 							switch update {
 							case .turn(let running, let byAgent):
 								foldTurn(running: &chat.turn, agentTurn: &chat.agentTurn, started: running, byAgent: byAgent)
-							case .pauseRequested(let requested): chat.pause = requested
+							case .pause(let pause): chat.pause = pause
 							case .generation: chat.questions = []
 							case .phase(let phase):
 								chat.phase = phase
-								if phase == .paused || phase == .failed { chat.pause = false }
 								if phase != .running { chat.questions = []; chat.turn = false; chat.agentTurn = false }
 							case .ready:
 								chat.phase = .running
@@ -271,10 +268,9 @@ extension Store {
 							case .permissionRemoved(let id): chat.questions.remove(id)
 							case .failure:
 								chat.phase = .failed
-								chat.pause = false
 								chat.turn = false; chat.agentTurn = false
 								chat.questions = []
-							case .restore, .transcript, .usage, .context, .model, .effort, .step, .globalHold, .keepPaused: continue
+							case .restore, .transcript, .usage, .context, .model, .effort, .step: continue
 							}
 							chats[tab] = chat
 						}
@@ -285,7 +281,7 @@ extension Store {
 							if self?.runningAgents != agents { self?.runningAgents = agents }
 						}
 					}
-					let statuses = chats.mapValues { $0.pause ? .pausing : AgentStatus(phase: $0.phase, turnRunning: $0.turn, questions: $0.questions.count) }
+					let statuses = chats.mapValues { pauseView(pause: $0.pause, phase: $0.phase).pauseRequested ? .pausing : AgentStatus(phase: $0.phase, turnRunning: $0.turn, questions: $0.questions.count) }
 					guard statuses != published else { continue }
 					published = statuses
 					await MainActor.run { [weak self] in self?.agentStatuses = statuses }

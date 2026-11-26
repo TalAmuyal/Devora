@@ -34,7 +34,7 @@ struct AgentChatTests {
 		let tab = try #require(core.snapshot().window.tabs.first)
 		let model = try AgentChat(store: store, core: core, tab: tab, name: "Delta")
 		let chat = Chat(
-			tab: tab.id, generation: 7, phase: .running, turnRunning: false, agentTurn: false, pauseRequested: false, globallyHeld: false, keepPaused: false,
+			tab: tab.id, generation: 7, phase: .running, turnRunning: false, agentTurn: false, pause: .none,
 			sessionId: "cli", items: [], error: nil, questions: [], usageJson: nil, context: nil, model: nil, effort: nil, step: nil)
 		model.apply(.started(chat: chat))
 		let item = TranscriptItem(
@@ -54,11 +54,11 @@ struct AgentChatTests {
 		#expect(model.chat?.context == context)
 		model.draft = "new turn"
 		#expect(model.canSend)
-		model.apply(.updated(tab: tab.id, generation: 7, update: .pauseRequested(requested: true)))
+		model.apply(.updated(tab: tab.id, generation: 7, update: .pause(pause: .byUser)))
 		#expect(!model.canSend)
 		model.apply(.updated(tab: tab.id, generation: 7, update: .failure(message: "failed")))
 		#expect(model.chat?.phase == .failed)
-		#expect(model.chat?.pauseRequested == false)
+		#expect(model.pauseState?.pauseRequested == false)
 	}
 
 	/// The chat folds turns by the core's rule: the agent's own turn keeps Send, a prompt sent into it makes the turn the
@@ -71,8 +71,8 @@ struct AgentChatTests {
 		let tab = try #require(core.snapshot().window.tabs.first)
 		let model = try AgentChat(store: store, core: core, tab: tab, name: "Delta")
 		model.apply(.started(chat: Chat(
-			tab: tab.id, generation: 1, phase: .running, turnRunning: false, agentTurn: false, pauseRequested: false,
-			globallyHeld: false, keepPaused: false, sessionId: "cli", items: [], error: nil, questions: [], usageJson: nil,
+			tab: tab.id, generation: 1, phase: .running, turnRunning: false, agentTurn: false, pause: .none,
+			sessionId: "cli", items: [], error: nil, questions: [], usageJson: nil,
 			context: nil, model: nil, effort: nil, step: nil)))
 		let turn = { (running: Bool, byAgent: Bool) in
 			model.apply(.updated(tab: tab.id, generation: 1, update: .turn(running: running, byAgent: byAgent)))

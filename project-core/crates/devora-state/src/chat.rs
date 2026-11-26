@@ -166,9 +166,8 @@ pub struct Chat {
     /// The running turn is one the agent's CLI started itself, as when a background task reports. The user can still
     /// send: a prompt joins that turn, which is then theirs.
     pub agent_turn: bool,
-    pub pause_requested: bool,
-    pub globally_held: bool,
-    pub keep_paused: bool,
+    /// Why the agent is paused or pausing, as the registry holds it.
+    pub pause: AgentPause,
     pub session_id: Option<String>,
     pub items: Vec<TranscriptItem>,
     pub error: Option<String>,
@@ -178,6 +177,56 @@ pub struct Chat {
     pub model: Option<ChatModel>,
     pub effort: Option<ChatEffort>,
     pub step: Option<ChatStep>,
+}
+
+/// Why an agent is paused or pausing: the registry's one state for it (devora-core's `Agents`), which the chat shows.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum AgentPause {
+    /// Not paused for any reason the registry holds.
+    None,
+    /// The user paused it (after its turn), or it was kept paused through a release; stored with the agent.
+    ByUser,
+    /// Opened with the pause stored before this run, and not launched since. Unlike a pause made in this run, a hold
+    /// that reaches it reads that pause as the user's Keep paused choice.
+    PausedAtOpen,
+    /// Held by the Global Pause; `keep_paused` is the user's choice to stay paused when it's released, stored.
+    /// `released` once the hold is lifted while the agent was still stopping for it: it launches again once stopped,
+    /// or, kept paused, stays paused at its boundary.
+    Held { keep_paused: bool, released: bool },
+}
+
+/// What the pause widget reads, from the agent's pause and its chat's phase (`pause_view`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PauseView {
+    /// A pause is on its way: the user's, a hold's until it's released, or Keep paused's. Never once the agent is
+    /// Paused or Failed.
+    pub pause_requested: bool,
+    pub globally_held: bool,
+    pub keep_paused: bool,
+}
+
+/// The pause widget's view of `pause`: a held agent is asked to pause by the hold itself until it's released, and
+/// after that only if kept paused.
+pub fn pause_view(pause: &AgentPause, phase: &ChatPhase) -> PauseView {
+    let on_its_way = match pause {
+        AgentPause::None | AgentPause::PausedAtOpen => false,
+        AgentPause::ByUser => true,
+        AgentPause::Held {
+            keep_paused,
+            released,
+        } => *keep_paused || !*released,
+    };
+    PauseView {
+        pause_requested: on_its_way && !matches!(phase, ChatPhase::Paused | ChatPhase::Failed),
+        globally_held: matches!(pause, AgentPause::Held { .. }),
+        keep_paused: matches!(
+            pause,
+            AgentPause::Held {
+                keep_paused: true,
+                ..
+            }
+        ),
+    }
 }
 
 /// What an agent with a live runtime is doing, for knowing when everyone has stopped.
@@ -212,14 +261,8 @@ pub struct RunningAgents {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ChatUpdate {
-    GlobalHold {
-        held: bool,
-    },
-    KeepPaused {
-        keep_paused: bool,
-    },
-    PauseRequested {
-        requested: bool,
+    Pause {
+        pause: AgentPause,
     },
     /// A turn started or ended: one the agent's CLI started itself when `by_agent`. A start of the agent's own turn
     /// doesn't replace one already shown (a prompt sent just before it began joined it), and an end ends only a turn
@@ -342,9 +385,7 @@ pub(crate) fn apply(
                 phase: ChatPhase::Opening,
                 turn_running: false,
                 agent_turn: false,
-                pause_requested: false,
-                globally_held: false,
-                keep_paused: false,
+                pause: AgentPause::None,
                 session_id: None,
                 items: vec![],
                 error: None,
@@ -373,9 +414,7 @@ pub(crate) fn apply(
                 .find(|c| c.tab == tab && c.generation == generation)
                 .ok_or(StateError::UnknownTab { tab })?;
             match &update {
-                ChatUpdate::GlobalHold { held } => chat.globally_held = *held,
-                ChatUpdate::KeepPaused { keep_paused } => chat.keep_paused = *keep_paused,
-                ChatUpdate::PauseRequested { requested } => chat.pause_requested = *requested,
+                ChatUpdate::Pause { pause } => chat.pause = pause.clone(),
                 ChatUpdate::Turn {
                     running: true,
                     by_agent: true,
@@ -407,9 +446,6 @@ pub(crate) fn apply(
                 }
                 ChatUpdate::Phase { phase } => {
                     chat.phase = phase.clone();
-                    if matches!(phase, ChatPhase::Paused | ChatPhase::Failed) {
-                        chat.pause_requested = false;
-                    }
                     if *phase != ChatPhase::Running {
                         chat.questions.clear();
                         chat.turn_running = false;
@@ -430,7 +466,6 @@ pub(crate) fn apply(
                 }
                 ChatUpdate::Failure { message } => {
                     chat.error = Some(message.clone());
-                    chat.pause_requested = false;
                     chat.phase = ChatPhase::Failed;
                     chat.turn_running = false;
                     chat.agent_turn = false;
@@ -881,5 +916,160 @@ mod tests {
             Some(None)
         );
         assert_eq!(chat.step(), None);
+    }
+
+    /// The pause widget's inputs from one pause state are what the three chat updates it replaces gave, along every
+    /// path the registry takes. Each step is a registry transition as it was published before (the old updates, in
+    /// their order, from devora-core's `agents`) and as it is now (one `AgentPause`), or a phase change both share.
+    /// Where the two differ, the row says why the widget can't tell.
+    #[test]
+    fn the_pause_widget_reads_what_the_three_updates_gave() {
+        #[derive(Clone, Copy)]
+        enum Old {
+            Hold(bool),
+            Requested(bool),
+            Keep(bool),
+        }
+        #[derive(Clone)]
+        enum Step {
+            /// A registry transition: what was sent, and what is sent now.
+            Pause(&'static str, &'static [Old], AgentPause),
+            Phase(ChatPhase),
+            Failure,
+            /// A new run: its chat starts afresh.
+            Start,
+        }
+        use AgentPause::*;
+        use Old::*;
+        let held = |keep_paused, released| Held {
+            keep_paused,
+            released,
+        };
+        let check = |keep| {
+            Step::Pause(
+                "the hold reaches it",
+                if keep {
+                    &[Hold(true), Requested(true), Keep(true)]
+                } else {
+                    &[Hold(true), Requested(true), Keep(false)]
+                },
+                held(keep, false),
+            )
+        };
+        let launch = Step::Pause("launch", &[Hold(false)], None);
+        let user_pause = Step::Pause(
+            "Pause after the turn",
+            &[Hold(false), Requested(true)],
+            ByUser,
+        );
+        let running = [
+            Step::Start,
+            Step::Phase(ChatPhase::Opening),
+            launch.clone(),
+            Step::Phase(ChatPhase::Running),
+        ];
+        const STALE_KEEP: &str = "the old chat kept keep_paused after a kept-paused release; the widget reads it only while Devora is paused, and then a Paused agent reads as kept paused either way (keptPaused: !globallyHeld && phase == .paused)";
+        let then =
+            |head: &[Step], tail: Vec<Step>| head.iter().cloned().chain(tail).collect::<Vec<_>>();
+        // (path, steps, the step from which the two are expected to differ, and why the widget can't tell)
+        /// A path's name, its steps, and the step from which the two are expected to differ, with why.
+        type Path = (&'static str, Vec<Step>, Option<(usize, &'static str)>);
+        let paths: Vec<Path> = vec![
+            ("the user pauses", then(&running, vec![user_pause.clone(), Step::Phase(ChatPhase::Paused)]), Option::None),
+            ("the user's pause fails", then(&running, vec![user_pause.clone(), Step::Pause("the pause failed", &[Requested(false)], None)]), Option::None),
+            ("held at the boundary, released once stopped, launched again", then(&running, vec![
+                check(false), Step::Phase(ChatPhase::Paused),
+                Step::Start, Step::Phase(ChatPhase::Opening), launch.clone(), Step::Phase(ChatPhase::Running),
+            ]), Option::None),
+            ("released before the boundary", then(&running, vec![
+                check(false), Step::Pause("released, not stopping", &[Requested(false), Hold(false)], None),
+            ]), Option::None),
+            ("released while stopping, then launched again", then(&running, vec![
+                check(false), Step::Pause("released while stopping", &[Requested(false), Hold(true)], held(false, true)),
+                Step::Pause("held again while stopping", &[], held(false, true)),
+                Step::Phase(ChatPhase::Paused),
+                Step::Start, Step::Phase(ChatPhase::Opening), launch.clone(), Step::Phase(ChatPhase::Running),
+            ]), Option::None),
+            ("kept paused, stopped before the release", then(&running, vec![
+                check(false), Step::Pause("Keep paused ticked", &[Keep(true)], held(true, false)),
+                Step::Phase(ChatPhase::Paused),
+                Step::Pause("kept paused at the release", &[Hold(false)], ByUser),
+            ]), Some((7, STALE_KEEP))),
+            ("kept paused, released mid-turn", then(&running, vec![
+                check(false), Step::Pause("Keep paused ticked", &[Keep(true)], held(true, false)),
+                Step::Pause("released, kept paused", &[Requested(true), Hold(true)], held(true, true)),
+                Step::Phase(ChatPhase::Paused),
+                Step::Pause("kept paused at its boundary", &[Hold(false)], ByUser),
+            ]), Some((8, STALE_KEEP))),
+            ("Keep paused unticked", then(&running, vec![
+                check(false), Step::Pause("Keep paused ticked", &[Keep(true)], held(true, false)),
+                Step::Pause("Keep paused unticked", &[Keep(false)], held(false, false)),
+            ]), Option::None),
+            ("opened with a stored pause", vec![Step::Start, Step::Phase(ChatPhase::Paused)], Option::None),
+            ("opened with a stored pause during a hold, unticked, released", vec![
+                Step::Start, check(true), Step::Phase(ChatPhase::Paused),
+                Step::Pause("Keep paused unticked", &[Keep(false)], held(false, false)),
+                Step::Start, Step::Phase(ChatPhase::Opening), launch.clone(), Step::Phase(ChatPhase::Running),
+            ], Option::None),
+            ("paused by the user while held, before launching", vec![
+                Step::Start, check(false), Step::Phase(ChatPhase::Paused),
+                Step::Pause("Pause while held, not launched", &[Hold(false)], ByUser),
+            ], Option::None),
+            ("paused by the user while held, running", then(&running, vec![check(false), user_pause.clone(), Step::Phase(ChatPhase::Paused)]), Option::None),
+            ("fails while held", then(&running, vec![check(false), Step::Failure]), Option::None),
+            ("deleted while running", then(&running, vec![
+                Step::Pause("the immediate pause", &[Hold(false)], ByUser),
+                Step::Phase(ChatPhase::Pausing),
+            ]), Some((4, "the immediate pause never sent PauseRequested; the widget shows Pausing either way (isPausing is pauseRequested || phase == .pausing) and nothing reads pauseRequested outside .running, and the tab closes"))),
+        ];
+        for (path, steps, expected) in paths {
+            let (mut old, mut pause, mut phase) = ((false, false, false), None, ChatPhase::Opening);
+            for (index, step) in steps.iter().enumerate() {
+                match step {
+                    Step::Pause(_, updates, next) => {
+                        for update in updates.iter() {
+                            match update {
+                                Hold(held) => old.1 = *held,
+                                Requested(requested) => old.0 = *requested,
+                                Keep(keep) => old.2 = *keep,
+                            }
+                        }
+                        pause = next.clone();
+                    }
+                    Step::Phase(next) => {
+                        phase = next.clone();
+                        if matches!(next, ChatPhase::Paused | ChatPhase::Failed) {
+                            old.0 = false;
+                        }
+                    }
+                    Step::Failure => {
+                        phase = ChatPhase::Failed;
+                        old.0 = false;
+                    }
+                    Step::Start => {
+                        old = (false, false, false);
+                        pause = None;
+                        phase = ChatPhase::Opening;
+                    }
+                }
+                let view = pause_view(&pause, &phase);
+                let same = (view.pause_requested, view.globally_held, view.keep_paused) == old;
+                let label = match step {
+                    Step::Pause(name, ..) => name.to_string(),
+                    other => format!(
+                        "{:?}",
+                        match other {
+                            Step::Phase(phase) => format!("{phase:?}"),
+                            Step::Failure => "Failure".into(),
+                            _ => "Start".into(),
+                        }
+                    ),
+                };
+                match expected {
+                    Some((from, _)) if index >= from => assert!(!same, "{path}, step {index} ({label}): expected to differ"),
+                    _ => assert!(same, "{path}, step {index} ({label}): old {old:?}, new {view:?} from {pause:?} in {phase:?}"),
+                }
+            }
+        }
     }
 }

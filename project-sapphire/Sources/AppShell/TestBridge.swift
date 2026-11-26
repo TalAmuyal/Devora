@@ -155,7 +155,7 @@ final class TestBridge {
 				] as [String: Any]
 				observation["enterSends"] = panel.chat.enterSends
 				observation["globallyPaused"] = panel.chat.globallyPaused
-				observation["globallyHeld"] = panel.chat.chat?.globallyHeld ?? false
+				observation["globallyHeld"] = panel.chat.pauseState?.globallyHeld ?? false
 				observation["running"] = panel.chat.chat?.turnRunning ?? false
 				observation["agentTurn"] = panel.chat.chat?.agentTurn ?? false
 				let actions = AgentWidgetBar.actions(
