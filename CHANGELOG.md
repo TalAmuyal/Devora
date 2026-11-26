@@ -119,6 +119,7 @@ Types of changes:
 
 ### Fixed
 
+- Devora Sapphire's Compact Now, and the compaction at an agent's threshold, now work when the context is too full for the agent to save its memory first: Devora compacts anyway, says so in the transcript, and asks the agent to refresh its memory afterwards; if the compaction itself fails, the transcript says so and what to try
 - Devora Sapphire's Model popover picks the model whose full ID you typed when you press Return, instead of the first model in the list
 - Devora Sapphire's agent chat no longer empties a message you type right after sending the same text ("continue" twice, say): the app's word that the sent draft was cleared could arrive after you had typed it again
 - Devora Sapphire's agent chat no longer adds three unknown rows for each message you send (Claude Code's reports of where the message is), which showed with the system messages

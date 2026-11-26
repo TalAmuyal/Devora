@@ -270,6 +270,11 @@ impl Transcript {
         self.stop_requested = true;
     }
 
+    /// Whether the next error result is a stop Devora asked for (`expect_stop`), which that result spends.
+    pub fn stop_expected(&self) -> bool {
+        self.stop_requested
+    }
+
     pub fn settle(&mut self, sequence: u64, error: Option<String>) -> Option<TranscriptChange> {
         self.pending_commands.remove(&sequence);
         let item = self.item_mut(sequence)?;

@@ -2159,6 +2159,148 @@ async fn compact_now_saves_the_memory_then_compacts_under_the_threshold_once_at_
     );
 }
 
+// Once the context is too full for any ordinary turn, the save-memory turn is refused, while `/compact` still works:
+// Devora compacts without the save, and the agent refreshes its memory afterwards. Should `/compact` fail too, the
+// transcript says so. Either way, Claude Code's error comes first, then what Devora does about it.
+#[tokio::test]
+async fn a_save_refused_as_too_long_compacts_without_it_and_a_failed_compact_says_so() {
+    let save = "Devora: the user asked to compact";
+    for compact_fails in [false, true] {
+        let fixture = Fixture::new();
+        let mut context = fixture.context();
+        let too_long = if compact_fails {
+            format!("{save}|/compact")
+        } else {
+            save.to_owned()
+        };
+        context
+            .environment
+            .insert("DEVORA_FAKE_TOO_LONG".into(), too_long);
+        let space = fixture.create(fixture.form("Delta")).unwrap();
+        let log = Arc::new(Log::open(&fixture.root.path().join("log")).unwrap());
+        let mut running = space.start(&context, log, &fixture.run).await.unwrap();
+        running
+            .handle()
+            .send_turn("first turn".into())
+            .await
+            .unwrap();
+        turn_end(&mut running, &mut BTreeMap::new()).await;
+
+        running.handle().compact_now().await.unwrap();
+        // Every row from the compaction on, in transcript order.
+        let mut rows = BTreeMap::new();
+        let mut progress = None;
+        let turns = if compact_fails { 2 } else { 3 };
+        let mut ended = 0;
+        tokio::time::timeout(Duration::from_secs(10), async {
+            while let Some(update) = running.next_update().await {
+                match update {
+                    SpaceEvent::Context(context) => progress = Some(context.progress),
+                    SpaceEvent::Transcript(TranscriptChange::Upsert { item }) => {
+                        let row = match item.content {
+                            TranscriptContent::Assistant { text, .. } => {
+                                format!("assistant: {text}")
+                            }
+                            TranscriptContent::System {
+                                kind: SystemKind::Compaction,
+                                text,
+                                ..
+                            } => {
+                                format!("compaction: {text}")
+                            }
+                            TranscriptContent::System {
+                                kind: SystemKind::Warning,
+                                text,
+                                ..
+                            } => {
+                                format!("warning: {text}")
+                            }
+                            TranscriptContent::System {
+                                kind: SystemKind::Failure,
+                                text,
+                                ..
+                            } => {
+                                format!("failure: {text}")
+                            }
+                            TranscriptContent::System {
+                                kind: SystemKind::Result,
+                                text,
+                                ..
+                            } => {
+                                format!("result: {text}")
+                            }
+                            _ => continue,
+                        };
+                        rows.insert(item.sequence, row);
+                    }
+                    SpaceEvent::TurnEnded => ended += 1,
+                    SpaceEvent::Session(SessionEvent::Failed(error)) => panic!("{error}"),
+                    _ => {}
+                }
+                // A failure's row follows its turn's end.
+                let failure_shown = rows.values().any(|row| row.starts_with("failure: "));
+                if ended == turns && failure_shown == compact_fails {
+                    break;
+                }
+            }
+        })
+        .await
+        .unwrap();
+        running.pause().await.unwrap();
+
+        let report = std::fs::read_to_string(fixture.root.path().join("report.jsonl")).unwrap();
+        let prompts: Vec<String> = report
+            .lines()
+            .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
+            .filter(|entry| entry["kind"] == "user")
+            .map(|entry| entry["message"]["content"].as_str().unwrap().to_owned())
+            .collect();
+        let rows: Vec<&str> = rows
+            .values()
+            .map(|row| match row.as_str() {
+                "assistant: Prompt is too long" => row.as_str(),
+                row if row.starts_with("assistant: ") => "assistant: (a reply)",
+                row => row,
+            })
+            .collect();
+        assert!(prompts[1].starts_with(save), "{prompts:?}");
+        assert_eq!(prompts[2], "/compact");
+        let mut expected = vec![
+            "compaction: Compaction requested at 1% full: Devora asks the agent to save its memory, then compacts.",
+            "assistant: Prompt is too long",
+            "result: Turn ended with an error",
+            "warning: The context is too full for the agent to save its memory first: Devora compacts the conversation now, and asks the agent to refresh its memory afterwards.",
+        ];
+        if compact_fails {
+            assert_eq!(
+                prompts.len(),
+                3,
+                "no refresh after a failed compaction: {prompts:?}"
+            );
+            expected.extend([
+                "assistant: Prompt is too long",
+                "result: Turn ended with an error",
+                "failure: Devora couldn't compact the conversation. Press Compact Now to try again, or send /compact as a prompt.",
+            ]);
+        } else {
+            assert_eq!(prompts.len(), 4, "{prompts:?}");
+            assert!(
+                prompts[3].starts_with("Devora: the conversation was just compacted"),
+                "{prompts:?}"
+            );
+            expected.extend([
+                "compaction: Conversation compacted",
+                "result: Turn completed",
+                "compaction: The conversation was compacted before the agent could save its memory: Devora asks the agent to refresh it.",
+                "assistant: (a reply)",
+                "result: Turn completed",
+            ]);
+        }
+        assert_eq!(rows, expected);
+        assert_eq!(progress, Some(devora_agent_space::CompactionProgress::Idle));
+    }
+}
+
 // A quit asks every agent to pause, including one whose own pause after its
 // turn (a hold's, say) has already stopped it. That isn't a problem: it gets
 // the stop the actor recorded, graceful or forced, and only that one stop, so

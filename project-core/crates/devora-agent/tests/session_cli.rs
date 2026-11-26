@@ -346,6 +346,11 @@ async fn pinned_cli_exposes_usage_and_suppresses_reactive_automatic_compaction()
         blocked["is_error"], true,
         "the disabled CLI must surface prompt-too-long to its owner"
     );
+    let blocked: devora_agent::protocol::TurnResult = serde_json::from_value(blocked).unwrap();
+    assert!(
+        blocked.prompt_too_long(),
+        "compaction falls back on terminal_reason: {blocked:?}"
+    );
     session.pause().await.unwrap();
     let snapshot = backend.command(json!({"action":"snapshot"})).await;
     let requests = snapshot["requests"].as_array().unwrap();

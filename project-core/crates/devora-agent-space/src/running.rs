@@ -1,4 +1,4 @@
-use crate::compaction::{Compaction, Context};
+use crate::compaction::{Compaction, Context, Next, COMPACTION_FAILED};
 use crate::restart_notice::{AppRun, RestartNotice, StoppedTask};
 use crate::Space;
 use devora_agent::protocol::{BackgroundTask, CommandState, KnownMessage, Message, System};
@@ -941,6 +941,8 @@ async fn pump(
             }
             event = session.next_event() => {
                 let Some(event) = event else { return Ok(None); };
+                // Read before `persist`, whose result row spends it.
+                let stopped = transcript.stop_expected();
                 persist(space,transcript,&event,events)?;
                 if chosen.awaiting_reply && untold.is_none() && is_reply(&event) {
                     chosen.awaiting_reply = false;
@@ -1005,7 +1007,9 @@ async fn pump(
                     turn_running = Some(ActiveTurn::Agents);
                 }
                 let ended = matches!(finished, Some(ActiveTurn::Ours(_)));
-                let mut step = compact(compaction,&event,finished.as_ref(),events);
+                let next = compact(compaction,&event,finished.as_ref(),stopped,events);
+                let failed = matches!(next, Some(Next::CompactionFailed));
+                let mut step = match next { Some(Next::Send(step)) => Some(step), _ => None };
                 if ended {
                     // Only its own result delivers the notice; a crash leaves the attempt for the next launch to check.
                     if let SessionEvent::Message(Message::Known(KnownMessage::Result(result))) = &event {
@@ -1030,6 +1034,9 @@ async fn pump(
                     step = None;
                     compaction.reset();
                     let _ = events.send(SpaceEvent::Context(compaction.context()));
+                }
+                if failed {
+                    announce(space,transcript,SystemKind::Failure,COMPACTION_FAILED.into(),events)?;
                 }
                 if let Some(step) = step {
                     turn_running = Some(ActiveTurn::Ours(send_step(space,transcript,compaction,&step,session.handle(),completed.clone(),events)?));
@@ -1167,15 +1174,13 @@ fn send_step(
     completions: mpsc::UnboundedSender<Completion>,
     events: &mpsc::UnboundedSender<SpaceEvent>,
 ) -> Result<String, String> {
-    let mut announcement = transcript.system(
-        SystemKind::Compaction,
+    announce(
+        space,
+        transcript,
+        step.row_kind(),
         step.announcement(&compaction.context()),
-        json!({}),
-    );
-    space
-        .db
-        .save_changes(None, std::slice::from_mut(&mut announcement))?;
-    let _ = events.send(SpaceEvent::Transcript(announcement));
+        events,
+    )?;
     let _ = events.send(SpaceEvent::Context(compaction.context()));
     // Nobody waits for the outcome; it is recorded like any turn's.
     let (reply, _) = oneshot::channel();
@@ -1199,6 +1204,22 @@ fn send_step(
     Ok(id)
 }
 
+/// Says in the transcript what Devora does about the context.
+fn announce(
+    space: &mut Space,
+    transcript: &mut Transcript,
+    kind: SystemKind,
+    text: String,
+    events: &mpsc::UnboundedSender<SpaceEvent>,
+) -> Result<(), String> {
+    let mut announcement = transcript.system(kind, text, json!({}));
+    space
+        .db
+        .save_changes(None, std::slice::from_mut(&mut announcement))?;
+    let _ = events.send(SpaceEvent::Transcript(announcement));
+    Ok(())
+}
+
 /// Pauses without waiting in the pump, which goes on draining the session's
 /// events until it stops; the caller hears once it has.
 fn pause(runtime: SessionHandle, reply: oneshot::Sender<Result<Value, String>>) {
@@ -1207,14 +1228,15 @@ fn pause(runtime: SessionHandle, reply: oneshot::Sender<Result<Value, String>>) 
     });
 }
 
-/// Feeds compaction the session's usage, the results ending turns (`ended`, of either kind) and compaction
-/// boundaries, publishing the context as it changes; returns the step compaction asks for, if any.
+/// Feeds compaction the session's usage, the results ending turns (`ended`, of either kind; `stopped` when Devora
+/// interrupted it) and compaction boundaries, publishing the context as it changes; returns what compaction asks for.
 fn compact(
     compaction: &mut Compaction,
     event: &SessionEvent,
     ended: Option<&ActiveTurn>,
+    stopped: bool,
     events: &mpsc::UnboundedSender<SpaceEvent>,
-) -> Option<crate::compaction::Step> {
+) -> Option<Next> {
     let before = compaction.context();
     let step = match event {
         SessionEvent::Usage {
@@ -1225,11 +1247,11 @@ fn compact(
             None
         }
         SessionEvent::Message(Message::Known(KnownMessage::Result(result))) => match ended {
-            Some(ActiveTurn::Ours(_)) => compaction.result(result),
+            Some(ActiveTurn::Ours(_)) => compaction.result(result, stopped),
             // A turn the agent started itself only starts a compaction the user asked for during it. The point where a
             // threshold check for such turns belongs: without one, an agent that works from its background tasks
             // never reaches a point where Devora compacts it.
-            Some(ActiveTurn::Agents) => compaction.agents_turn_ended(result),
+            Some(ActiveTurn::Agents) => compaction.agents_turn_ended(result).map(Next::Send),
             None => None,
         },
         SessionEvent::Compacted(metadata) => {

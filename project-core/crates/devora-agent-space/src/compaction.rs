@@ -1,10 +1,13 @@
 //! Devora owns compaction (ADR-012): near the threshold, the agent saves what
 //! matters to `memory/`, then Devora compacts with `/compact`. The CLI's own
 //! auto-compaction is off; if it compacts anyway, the agent refreshes `memory/`.
+//! When the context is already too full for the save-memory turn, Devora
+//! compacts without it, and the agent refreshes `memory/` afterwards.
 //!
 //! A pure state machine over the session's usage, results and compaction
 //! boundaries; the space actor sends the turns it asks for.
 use devora_agent::protocol::{CompactMetadata, TurnResult};
+use devora_agent::transcript::SystemKind;
 use serde_json::Value;
 
 pub use devora_config::agent::DEFAULT_COMPACT_THRESHOLD as DEFAULT_THRESHOLD;
@@ -41,21 +44,60 @@ pub enum Trigger {
     Requested,
 }
 
+/// Whether the agent saved its memory before Devora compacts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Memory {
+    Saved,
+    /// The save-memory turn was refused: the context was too full for it.
+    TooFullToSave,
+}
+
+/// Why the agent refreshes its memory after a compaction.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Refresh {
+    /// Claude Code compacted the conversation itself.
+    ClaudeCompacted,
+    /// Devora compacted it before the agent could save its memory.
+    NotSavedFirst,
+}
+
 /// A turn Devora sends on the agent's behalf.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Step {
     SaveMemory(Trigger),
-    Compact,
-    RefreshMemory,
+    Compact(Memory),
+    RefreshMemory(Refresh),
 }
+
+/// What the end of a turn asks of the space.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Next {
+    Send(Step),
+    /// Devora's `/compact` failed: the transcript says so, and what to try, in a
+    /// failure row, which the chat always shows.
+    CompactionFailed,
+}
+
+/// What the transcript says when Devora's `/compact` failed.
+pub const COMPACTION_FAILED: &str = "Devora couldn't compact the conversation. Press Compact Now to try again, or send /compact as a prompt.";
 
 impl Step {
     pub fn prompt(&self) -> String {
         match self {
             Self::SaveMemory(Trigger::Threshold) => SAVE_MEMORY.into(),
             Self::SaveMemory(Trigger::Requested) => SAVE_MEMORY_REQUESTED.into(),
-            Self::RefreshMemory => REFRESH_MEMORY.into(),
-            Self::Compact => "/compact".into(),
+            Self::RefreshMemory(_) => REFRESH_MEMORY.into(),
+            Self::Compact(_) => "/compact".into(),
+        }
+    }
+
+    /// The kind of row its announcement is: a system message, except that compacting
+    /// without the save is a warning, which the chat shows whether or not it shows
+    /// system messages, right after the error that caused it.
+    pub fn row_kind(&self) -> SystemKind {
+        match self {
+            Self::Compact(Memory::TooFullToSave) => SystemKind::Warning,
+            _ => SystemKind::Compaction,
         }
     }
 
@@ -70,9 +112,14 @@ impl Step {
                 "Compaction requested at {}% full: Devora asks the agent to save its memory, then compacts.",
                 context.percent()
             ),
-            Self::Compact => "Devora compacts the conversation.".into(),
-            Self::RefreshMemory => {
+            Self::Compact(Memory::Saved) => "Devora compacts the conversation.".into(),
+            Self::Compact(Memory::TooFullToSave) => "The context is too full for the agent to save its memory first: Devora compacts the conversation now, and asks the agent to refresh its memory afterwards.".into(),
+            Self::RefreshMemory(Refresh::ClaudeCompacted) => {
                 "Claude compacted the conversation itself: Devora asks the agent to refresh its memory."
+                    .into()
+            }
+            Self::RefreshMemory(Refresh::NotSavedFirst) => {
+                "The conversation was compacted before the agent could save its memory: Devora asks the agent to refresh it."
                     .into()
             }
         }
@@ -91,7 +138,7 @@ impl Context {
 enum Stage {
     Idle,
     SavingMemory,
-    Compacting,
+    Compacting(Memory),
     /// The CLI compacted on its own; the refresh goes after the current turn.
     NeedsRefresh,
     RefreshingMemory,
@@ -177,20 +224,30 @@ impl Compaction {
         true
     }
 
-    /// The end of a turn: learns the context window, and moves the compaction on.
-    /// Returns the turn to send next, if any.
-    pub fn result(&mut self, result: &TurnResult) -> Option<Step> {
+    /// The end of a turn Devora sent: learns the context window, and moves the
+    /// compaction on. `stopped` says Devora interrupted the turn itself (the user's
+    /// Stop), so its error is no failure to report.
+    pub fn result(&mut self, result: &TurnResult, stopped: bool) -> Option<Next> {
         if let Some(window) = context_window(result) {
             self.context.window_tokens = window;
         }
         if result.is_error {
-            // An interrupted or failed turn abandons the compaction, and a
-            // request with it; the next result over the threshold starts it again.
-            self.stage = Stage::Idle;
+            let stage = std::mem::replace(&mut self.stage, Stage::Idle);
             self.requested = false;
-            return None;
+            return match stage {
+                // The context is too full for any ordinary turn, while `/compact`
+                // still works: compact without the save.
+                Stage::SavingMemory if result.prompt_too_long() => {
+                    self.stage = Stage::Compacting(Memory::TooFullToSave);
+                    Some(Next::Send(Step::Compact(Memory::TooFullToSave)))
+                }
+                Stage::Compacting(_) if !stopped => Some(Next::CompactionFailed),
+                // Any other interrupted or failed turn abandons the compaction, and
+                // a request with it; the next result over the threshold starts it again.
+                _ => None,
+            };
         }
-        match self.stage {
+        let step = match self.stage {
             Stage::Idle if self.requested => {
                 self.requested = false;
                 self.stage = Stage::SavingMemory;
@@ -201,19 +258,24 @@ impl Compaction {
                 Some(Step::SaveMemory(Trigger::Threshold))
             }
             Stage::SavingMemory => {
-                self.stage = Stage::Compacting;
-                Some(Step::Compact)
+                self.stage = Stage::Compacting(Memory::Saved);
+                Some(Step::Compact(Memory::Saved))
             }
             Stage::NeedsRefresh => {
                 self.stage = Stage::RefreshingMemory;
-                Some(Step::RefreshMemory)
+                Some(Step::RefreshMemory(Refresh::ClaudeCompacted))
             }
-            Stage::Compacting | Stage::RefreshingMemory => {
+            Stage::Compacting(Memory::TooFullToSave) => {
+                self.stage = Stage::RefreshingMemory;
+                Some(Step::RefreshMemory(Refresh::NotSavedFirst))
+            }
+            Stage::Compacting(Memory::Saved) | Stage::RefreshingMemory => {
                 self.stage = Stage::Idle;
                 None
             }
             Stage::Idle => None,
-        }
+        };
+        step.map(Next::Send)
     }
 
     /// The end of a turn the agent's CLI started itself (`ActiveTurn::Agents`): a compaction the user asked for during
@@ -244,7 +306,7 @@ impl Compaction {
             .get("post_tokens")
             .and_then(Value::as_u64)
             .unwrap_or(0);
-        if self.stage != Stage::Compacting {
+        if !matches!(self.stage, Stage::Compacting(_)) {
             self.stage = Stage::NeedsRefresh;
         }
     }
@@ -294,6 +356,19 @@ mod tests {
         .unwrap()
     }
 
+    /// As the pinned CLI ends a turn the API refused as too long (`session_cli.rs`
+    /// asserts `terminal_reason` on it).
+    fn too_long() -> TurnResult {
+        serde_json::from_value(json!({
+            "subtype": "success", "session_id": "s", "is_error": true, "num_turns": 1,
+            "usage": {"input_tokens": 0, "output_tokens": 0},
+            "result": "Prompt is too long", "terminal_reason": "prompt_too_long",
+            "api_error_status": 400, "api_error_type": "invalid_request_error",
+            "modelUsage": {"haiku": {"contextWindow": 1000}},
+        }))
+        .unwrap()
+    }
+
     fn boundary(trigger: &str) -> CompactMetadata {
         serde_json::from_value(json!({"trigger": trigger, "pre_tokens": 900, "post_tokens": 100}))
             .unwrap()
@@ -306,7 +381,7 @@ mod tests {
             &json!({"input_tokens": 10, "cache_read_input_tokens": 700, "output_tokens": 50}),
         );
         assert_eq!(
-            compaction.result(&result(false)),
+            compaction.result(&result(false), false),
             None,
             "760 of 1000 is under 80%"
         );
@@ -316,14 +391,17 @@ mod tests {
             &json!({"input_tokens": 10, "cache_read_input_tokens": 790, "output_tokens": 5}),
         );
         assert!(matches!(
-            compaction.result(&result(false)),
-            Some(Step::SaveMemory(_))
+            compaction.result(&result(false), false),
+            Some(Next::Send(Step::SaveMemory(_)))
         ));
-        assert_eq!(compaction.result(&result(false)), Some(Step::Compact));
+        assert_eq!(
+            compaction.result(&result(false), false),
+            Some(Next::Send(Step::Compact(Memory::Saved)))
+        );
         compaction.compacted(&boundary("manual"));
         assert_eq!(compaction.context().used_tokens, 100);
         assert_eq!(
-            compaction.result(&result(false)),
+            compaction.result(&result(false), false),
             None,
             "Devora's own compaction needs no refresh"
         );
@@ -334,12 +412,15 @@ mod tests {
         let mut compaction = Compaction::new(Some(50), 80);
         compaction.usage(&json!({"input_tokens": 600}));
         assert!(matches!(
-            compaction.result(&result(false)),
-            Some(Step::SaveMemory(_))
+            compaction.result(&result(false), false),
+            Some(Next::Send(Step::SaveMemory(_)))
         ));
-        assert_eq!(compaction.result(&result(true)), None);
+        assert_eq!(compaction.result(&result(true), false), None);
         assert!(
-            matches!(compaction.result(&result(false)), Some(Step::SaveMemory(_))),
+            matches!(
+                compaction.result(&result(false), false),
+                Some(Next::Send(Step::SaveMemory(_)))
+            ),
             "still over the threshold, it starts again"
         );
     }
@@ -349,11 +430,14 @@ mod tests {
         let mut compaction = Compaction::new(None, 80);
         compaction.compacted(&boundary("auto"));
         assert!(
-            matches!(compaction.result(&result(false)), Some(Step::RefreshMemory)),
+            matches!(
+                compaction.result(&result(false), false),
+                Some(Next::Send(Step::RefreshMemory(Refresh::ClaudeCompacted)))
+            ),
             "after the turn it happened in"
         );
         assert_eq!(
-            compaction.result(&result(false)),
+            compaction.result(&result(false), false),
             None,
             "the refresh turn's own result ends it"
         );
@@ -363,7 +447,11 @@ mod tests {
     fn a_request_with_no_turn_running_starts_at_once_and_says_why() {
         let mut compaction = Compaction::new(None, 80);
         compaction.usage(&json!({"input_tokens": 100}));
-        assert_eq!(compaction.result(&result(false)), None, "10% is under 80%");
+        assert_eq!(
+            compaction.result(&result(false), false),
+            None,
+            "10% is under 80%"
+        );
         let step = compaction.begin();
         assert_eq!(step, Some(Step::SaveMemory(Trigger::Requested)));
         let step = step.unwrap();
@@ -374,8 +462,11 @@ mod tests {
         assert_eq!(compaction.context().progress, Progress::Underway);
         assert_eq!(compaction.begin(), None, "one compaction at a time");
         assert!(!compaction.request(), "nor a second one queued behind it");
-        assert_eq!(compaction.result(&result(false)), Some(Step::Compact));
-        assert_eq!(compaction.result(&result(false)), None);
+        assert_eq!(
+            compaction.result(&result(false), false),
+            Some(Next::Send(Step::Compact(Memory::Saved)))
+        );
+        assert_eq!(compaction.result(&result(false), false), None);
         assert_eq!(compaction.context().progress, Progress::Idle);
     }
 
@@ -385,17 +476,17 @@ mod tests {
         assert!(compaction.request());
         assert_eq!(compaction.context().progress, Progress::Requested);
         assert_eq!(
-            compaction.result(&result(false)),
-            Some(Step::SaveMemory(Trigger::Requested)),
+            compaction.result(&result(false), false),
+            Some(Next::Send(Step::SaveMemory(Trigger::Requested))),
             "under the threshold, but asked for"
         );
 
         let mut compaction = Compaction::new(None, 80);
         assert!(compaction.request());
-        assert_eq!(compaction.result(&result(true)), None);
+        assert_eq!(compaction.result(&result(true), false), None);
         assert_eq!(compaction.context().progress, Progress::Idle);
         assert_eq!(
-            compaction.result(&result(false)),
+            compaction.result(&result(false), false),
             None,
             "the interrupted turn took the request with it"
         );
@@ -405,7 +496,11 @@ mod tests {
     fn a_new_threshold_is_checked_when_the_next_turn_ends() {
         let mut compaction = Compaction::new(None, 80);
         compaction.usage(&json!({"input_tokens": 600}));
-        assert_eq!(compaction.result(&result(false)), None, "60% is under 80%");
+        assert_eq!(
+            compaction.result(&result(false), false),
+            None,
+            "60% is under 80%"
+        );
         compaction.set_threshold(Some(50));
         assert_eq!(compaction.context().threshold_percent, 50);
         assert_eq!(compaction.context().default_threshold_percent, 80);
@@ -416,8 +511,8 @@ mod tests {
             "lowering it starts nothing by itself"
         );
         assert_eq!(
-            compaction.result(&result(false)),
-            Some(Step::SaveMemory(Trigger::Threshold))
+            compaction.result(&result(false), false),
+            Some(Next::Send(Step::SaveMemory(Trigger::Threshold)))
         );
     }
 
@@ -435,5 +530,136 @@ mod tests {
         compaction.set_threshold(None);
         assert_eq!(compaction.context().own_threshold_percent, None);
         assert_eq!(compaction.context().threshold_percent, 80);
+    }
+
+    /// From a save-memory turn the API refused: `/compact` without the save, then the refresh.
+    fn falls_back(compaction: &mut Compaction) {
+        assert_eq!(
+            compaction.result(&too_long(), false),
+            Some(Next::Send(Step::Compact(Memory::TooFullToSave)))
+        );
+        assert_eq!(compaction.context().progress, Progress::Underway);
+        compaction.compacted(&boundary("manual"));
+        assert_eq!(
+            compaction.result(&result(false), false),
+            Some(Next::Send(Step::RefreshMemory(Refresh::NotSavedFirst)))
+        );
+    }
+
+    #[test]
+    fn a_save_refused_as_too_long_at_the_threshold_compacts_without_it_then_refreshes() {
+        let mut compaction = Compaction::new(None, 80);
+        compaction.usage(&json!({"input_tokens": 900}));
+        assert_eq!(
+            compaction.result(&result(false), false),
+            Some(Next::Send(Step::SaveMemory(Trigger::Threshold)))
+        );
+        falls_back(&mut compaction);
+        assert_eq!(compaction.result(&result(false), false), None);
+        assert_eq!(compaction.context().progress, Progress::Idle);
+    }
+
+    #[test]
+    fn a_requested_save_refused_as_too_long_compacts_without_it_whichever_turn_it_waited_for() {
+        let mut compaction = Compaction::new(None, 80);
+        assert_eq!(
+            compaction.begin(),
+            Some(Step::SaveMemory(Trigger::Requested))
+        );
+        falls_back(&mut compaction);
+
+        let mut compaction = Compaction::new(None, 80);
+        assert!(
+            compaction.request(),
+            "flagged during a turn the agent's CLI started itself"
+        );
+        assert_eq!(
+            compaction.agents_turn_ended(&result(false)),
+            Some(Step::SaveMemory(Trigger::Requested))
+        );
+        falls_back(&mut compaction);
+    }
+
+    #[test]
+    fn the_fallback_happens_once_a_refresh_refused_as_too_long_ends_it() {
+        let mut compaction = Compaction::new(None, 80);
+        compaction.begin();
+        falls_back(&mut compaction);
+        assert_eq!(compaction.result(&too_long(), false), None);
+        assert_eq!(compaction.context().progress, Progress::Idle);
+    }
+
+    #[test]
+    fn a_compaction_after_a_crashed_fallback_needs_no_refresh() {
+        let mut compaction = Compaction::new(None, 80);
+        compaction.begin();
+        assert!(matches!(
+            compaction.result(&too_long(), false),
+            Some(Next::Send(Step::Compact(Memory::TooFullToSave)))
+        ));
+        compaction.reset();
+        compaction.begin();
+        assert_eq!(
+            compaction.result(&result(false), false),
+            Some(Next::Send(Step::Compact(Memory::Saved)))
+        );
+        compaction.compacted(&boundary("manual"));
+        assert_eq!(
+            compaction.result(&result(false), false),
+            None,
+            "the memory was saved this time"
+        );
+    }
+
+    #[test]
+    fn only_a_save_refused_as_too_long_falls_back() {
+        let mut compaction = Compaction::new(None, 80);
+        compaction.begin();
+        assert_eq!(
+            compaction.result(&result(true), false),
+            None,
+            "another failure abandons the compaction"
+        );
+        assert_eq!(compaction.context().progress, Progress::Idle);
+        assert_eq!(
+            compaction.result(&too_long(), false),
+            None,
+            "an ordinary turn refused as too long starts nothing"
+        );
+    }
+
+    #[test]
+    fn a_failed_compact_is_reported_unless_the_user_stopped_it() {
+        for memory in [Memory::Saved, Memory::TooFullToSave] {
+            let mut compaction = Compaction::new(None, 80);
+            compaction.begin();
+            let save = match memory {
+                Memory::Saved => result(false),
+                Memory::TooFullToSave => too_long(),
+            };
+            assert_eq!(
+                compaction.result(&save, false),
+                Some(Next::Send(Step::Compact(memory)))
+            );
+            assert_eq!(
+                compaction.result(&result(true), false),
+                Some(Next::CompactionFailed)
+            );
+            assert_eq!(compaction.context().progress, Progress::Idle);
+            assert_eq!(
+                compaction.begin(),
+                Some(Step::SaveMemory(Trigger::Requested)),
+                "Compact Now works again"
+            );
+        }
+
+        let mut compaction = Compaction::new(None, 80);
+        compaction.begin();
+        compaction.result(&result(false), false);
+        assert_eq!(
+            compaction.result(&result(true), true),
+            None,
+            "a stop isn't a failure"
+        );
     }
 }
