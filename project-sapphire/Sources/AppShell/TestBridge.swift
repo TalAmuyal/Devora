@@ -782,6 +782,7 @@ final class TestBridge {
 					"input": mode == .set ? agent.input(field.key) : NSNull(),
 					"showsSave": mode == .set && agent.showsSave(field),
 					"hint": agent.entry(field.key).map { agent.hint($0) } ?? NSNull(),
+					"note": field.key == "compact-threshold" ? agent.thresholdNote ?? NSNull() : NSNull(),
 				]
 			}
 			state["fields"] = (state["fields"] as? [[String: Any]] ?? []) + fields

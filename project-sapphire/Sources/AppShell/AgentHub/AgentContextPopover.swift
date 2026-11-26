@@ -5,9 +5,8 @@ import SwiftUI
 /// threshold (this agent's own, or its profile's) and Compact Now. Both need a running agent, since its actor owns the
 /// space's database; otherwise they are disabled with the reason.
 struct AgentContextPresentation {
-	/// The slider's range: below 30% an agent would compact nearly every turn. A lower configured value still applies, and
-	/// shows clamped, with a note.
-	static let thresholds: ClosedRange<Double> = 30...100
+	/// The slider's range, the threshold's (`CompactThreshold`).
+	static let thresholds = Double(CompactThreshold.range.lowerBound)...Double(CompactThreshold.range.upperBound)
 	static let thresholdStep: Double = 5
 
 	let context: ChatContext?
@@ -39,8 +38,9 @@ struct AgentContextPresentation {
 	var sliderValue: Double { min(max(Double(threshold), Self.thresholds.lowerBound), Self.thresholds.upperBound) }
 
 	var thresholdNote: String {
-		if threshold < UInt8(Self.thresholds.lowerBound) {
-			return "Set to \(threshold)% in the config · the slider starts at \(Int(Self.thresholds.lowerBound))%"
+		// This agent's own, stored before the range, which the core uses as its nearest limit.
+		if let own = context?.ownThresholdPercent, !CompactThreshold.range.contains(own) {
+			return CompactThreshold.limitedNote(stored: own, used: threshold)
 		}
 		return overridden ? "This agent only · profile default is \(defaultThreshold)%" : "The profile's default"
 	}

@@ -120,6 +120,23 @@ pub fn exact_model(list: AgentModelList, typed: String) -> Result<Option<String>
         .map(|row| row.value.clone()))
 }
 
+/// The percentages a compaction threshold takes, inclusive (`agent_config::COMPACT_THRESHOLD_RANGE`), for
+/// the controls that set one, so no UI keeps a copy of the range.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Record)]
+pub struct PercentRange {
+    pub min: u8,
+    pub max: u8,
+}
+
+#[uniffi::export]
+pub fn compact_threshold_range() -> Result<PercentRange, CoreError> {
+    let range = devora_core::agent_config::COMPACT_THRESHOLD_RANGE;
+    Ok(PercentRange {
+        min: *range.start(),
+        max: *range.end(),
+    })
+}
+
 fn sections(
     aliases: Vec<ModelRow>,
     model_ids: Vec<ModelRow>,

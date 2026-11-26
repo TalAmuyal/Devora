@@ -7,11 +7,55 @@ import TestSupport
 @MainActor
 @Suite(.timeLimit(.minutes(2)))
 struct AgentSettingsTests {
-	func settings(stored: AgentSettingValue? = nil) -> AgentSettings {
+	func settings(stored: AgentSettingValue? = nil, threshold: (stored: UInt8, used: UInt8)? = nil) -> AgentSettings {
 		AgentSettings(fields: [
 			AgentSettingEntry(key: "role", stored: stored, resolved: .text(value: "Inherited role"), source: .global),
-			AgentSettingEntry(key: "compact-threshold", stored: nil, resolved: .percent(value: 80), source: .default),
+			AgentSettingEntry(
+				key: "compact-threshold", stored: threshold.map { .percent(value: $0.stored) },
+				resolved: .percent(value: threshold?.used ?? 80), source: threshold == nil ? .default : .global),
 		], inputs: [], inputsCleared: false)
+	}
+
+	var thresholdField: AgentSettingsField { AgentSettingsField.all.first { $0.key == "compact-threshold" }! }
+
+	@Test func aThresholdOutsideTheRangeIsNeitherOfferedNorWrittenAndTheFieldSaysTheRange() async {
+		let queue = SettingsWriteQueue()
+		var saved: [(String, String?)] = []
+		let model = AgentSettingsModel(
+			writes: queue, read: { settings() },
+			write: { key, value in saved.append((key, value)); return true },
+			writeInput: { _, _, _ in true }, reloadScope: {})
+		await model.reload()
+		model.select(.set, key: "compact-threshold")
+		for outside in ["95", "9", "0", "abc"] {
+			model.edit("compact-threshold", outside)
+			#expect(!model.showsSave(thresholdField), "\(outside)")
+			#expect(model.thresholdNote == "From 10% to 90%", "\(outside)")
+			model.commit("compact-threshold")
+		}
+		await queue.settled()
+		#expect(saved.isEmpty, "Return doesn't write it either")
+		for limit in [" 10 ", "90"] {
+			model.edit("compact-threshold", limit)
+			#expect(model.showsSave(thresholdField))
+			#expect(model.thresholdNote == nil)
+			model.commit("compact-threshold")
+		}
+		await queue.settled()
+		#expect(saved.map(\.1) == ["10", "90"])
+	}
+
+	@Test func aThresholdStoredBeforeTheRangeShowsAsStoredAndSaysWhatItsUsedAs() async {
+		let model = AgentSettingsModel(
+			writes: SettingsWriteQueue(), read: { settings(threshold: (stored: 100, used: 90)) },
+			write: { _, _ in true }, writeInput: { _, _, _ in true }, reloadScope: {})
+		await model.reload()
+		#expect(model.input("compact-threshold") == "100")
+		#expect(model.thresholdNote == "Set to 100%, used as 90%: the threshold goes from 10% to 90%")
+		#expect(!model.showsSave(thresholdField), "nothing to write until it's edited")
+		model.edit("compact-threshold", "85")
+		#expect(model.thresholdNote == nil)
+		#expect(model.showsSave(thresholdField))
 	}
 
 	@Test func setSeedsTheResolvedValueAndMultilineCommitsVerbatimIncludingEmpty() async {

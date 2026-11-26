@@ -31,9 +31,15 @@ def report(value):
     with open(os.environ["DEVORA_FAKE_REPORT"], "a") as stream:
         stream.write(json.dumps(value) + "\n")
 
+# With DEVORA_FAKE_CONTEXT_WINDOW, results report that window (tokens) for every model, instead of the recording's
+# 1,000,000, which its turns fill about 2% of: at 100000, about 18%, over the compaction threshold's floor of 10%.
 def emit(value):
     if isinstance(value, dict) and "session_id" in value:
         value["session_id"] = session_id
+    window = os.environ.get("DEVORA_FAKE_CONTEXT_WINDOW")
+    if window and isinstance(value, dict) and value.get("type") == "result":
+        for usage in value.get("modelUsage", {}).values():
+            usage["contextWindow"] = int(window)
     print(json.dumps(value), flush=True)
 
 def unrequested_interrupted_result():

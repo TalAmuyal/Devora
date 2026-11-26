@@ -28,7 +28,7 @@ final class AgentContextUITests: XCTestCase {
 		capture(popover, "the context popover")
 		let anchored = popover.frame
 
-		// The middle of 30–100% in steps of 5 is 65%.
+		// The middle of 10–90% in steps of 5 is 50%.
 		slider.adjust(toNormalizedSliderPosition: 0.5)
 		waitFor("Releasing the slider gives this agent its own threshold") {
 			(context.value as? String)?.contains("for this agent (profile: 80%)") == true

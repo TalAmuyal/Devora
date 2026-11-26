@@ -76,8 +76,8 @@ Feature: Agent settings at global and profile scopes
     When the user opens the "User Defaults" settings detail
     And the user sets "agent.compact-threshold" to "65"
     Then the global config should store the Agent percentage 65
-    When the user sets "agent.compact-threshold" to "101"
-    Then the recorded errors should include "whole percentage from 1 to 100"
+    When the user types "91" into "agent.compact-threshold"
+    Then the setting "agent.compact-threshold" should say "From 10% to 90%" and offer no Save
     And the global config should store the Agent percentage 65
     When the user adds Agent input "agent.role" with value "wrong field"
     Then the recorded errors should include "named placeholders have their own Agent settings fields"

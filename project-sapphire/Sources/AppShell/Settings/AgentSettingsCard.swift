@@ -80,7 +80,7 @@ struct AgentSettingsFields: View {
 				.accessibilityIdentifier("agent-input-\(field.key)")
 		} else {
 			HStack {
-				TextField(field.key == "compact-threshold" ? "1–100" : "Template path", text: text)
+				TextField(field.key == "compact-threshold" ? CompactThreshold.placeholder : "Template path", text: text)
 					.textFieldStyle(.roundedBorder).focused($focus, equals: field.key)
 					.onSubmit { model.commit(field.key) }
 					.accessibilityIdentifier("agent-input-\(field.key)")
@@ -93,6 +93,10 @@ struct AgentSettingsFields: View {
 					.accessibilityIdentifier("agent-template-browse")
 				}
 			}
+		}
+		if field.key == "compact-threshold", let note = model.thresholdNote {
+			Text(note).font(.caption).foregroundStyle(.secondary)
+				.accessibilityIdentifier("agent-compact-threshold-note")
 		}
 		if model.showsSave(field) {
 			Button("Save") { model.commit(field.key) }

@@ -237,8 +237,10 @@ impl SpaceHandle {
     /// Sets this agent's compaction threshold, or clears it to follow the
     /// profile's; committed before it applies, and checked when a turn ends.
     pub async fn set_compact_threshold(&self, percent: Option<u8>) -> Result<(), String> {
-        if percent.is_some_and(|percent| !(1..=100).contains(&percent)) {
-            return Err("a compaction threshold is a whole percentage from 1 to 100".into());
+        if percent.is_some_and(|percent| {
+            !devora_config::agent::COMPACT_THRESHOLD_RANGE.contains(&percent)
+        }) {
+            return Err(devora_config::agent::COMPACT_THRESHOLD_REFUSED.into());
         }
         self.call(Action::SetCompactThreshold(percent))
             .await

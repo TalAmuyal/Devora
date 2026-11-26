@@ -89,10 +89,18 @@ struct AgentContextTests {
 		#expect(AgentContextWidget(context: context(own: 80), locale: english).overridden)
 	}
 
-	@Test func aThresholdUnderTheSlidersRangeShowsClampedAndSaysWhy() {
-		let low = presentation(context(own: nil, profile: 10))
-		#expect(low.sliderValue == 30)
-		#expect(low.thresholdNote == "Set to 10% in the config · the slider starts at 30%")
+	@Test func theSliderSpansTheCoresRange() {
+		#expect(AgentContextPresentation.thresholds == 10...90)
+	}
+
+	@Test func anOwnThresholdStoredBeforeTheRangeShowsAtItsLimitAndSaysWhy() {
+		// The core uses a stored 100 as 90, and a stored 3 as 10, and keeps what's stored.
+		let high = presentation(context(own: 100).with(threshold: 90))
+		#expect(high.sliderValue == 90)
+		#expect(high.thresholdNote == "Set to 100%, used as 90%: the threshold goes from 10% to 90%")
+		let low = presentation(context(own: 3).with(threshold: 10))
+		#expect(low.sliderValue == 10)
+		#expect(low.thresholdNote == "Set to 3%, used as 10%: the threshold goes from 10% to 90%")
 	}
 
 	@Test func itSaysWhenTheNextCompactionHappens() {
@@ -138,5 +146,14 @@ struct AgentContextTests {
 		let empty = presentation(context(used: 0))
 		#expect(empty.compactAction == .none)
 		#expect(empty.compactHelp == "Nothing to compact yet")
+	}
+}
+
+extension ChatContext {
+	/// As the core publishes it, with the threshold in force apart from the agent's own as stored.
+	func with(threshold: UInt8) -> ChatContext {
+		var context = self
+		context.thresholdPercent = threshold
+		return context
 	}
 }

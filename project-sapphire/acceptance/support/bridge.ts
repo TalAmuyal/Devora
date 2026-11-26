@@ -149,6 +149,8 @@ export interface SettingState {
   showsSave?: boolean;
   /** The inherited value shown beside Default; null for a setting that doesn't show it. */
   hint: string | null;
+  /** What the Agent card's threshold field says under it (its range, or what a stored value is used as); null otherwise. */
+  note?: string | null;
 }
 
 /** The open Settings Hub; `detail` is the focused profile's, null on the User Defaults and the New Profile rows. */
