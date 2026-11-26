@@ -183,6 +183,28 @@ Feature: Agent chat panel
     Then the agent chat offers "only Send"
     And the agent chat shows no turn status
 
+  # A prompt joining the agent's own turn reaches the agent only at its next step: until then its row says so, and if
+  # the session ends first, that it never arrived, which a relaunch still shows.
+  Scenario: A prompt sent into the agent's own turn says it isn't received until the agent has it
+    When the agent starts a turn of its own
+    And the agent holds the next prompt sent into its turn
+    And the user sends the agent prompt "Also check the logs"
+    Then the agent transcript contains "Not yet received"
+    When the agent takes the prompt waiting in its turn
+    Then the agent transcript stops containing "Not yet received"
+    And the agent transcript contains "Also check the logs"
+
+  Scenario: A prompt the agent never got says so, also after a relaunch
+    When the agent starts a turn of its own
+    And the agent holds the next prompt sent into its turn
+    And the user sends the agent prompt "Lost on the way"
+    Then the agent transcript contains "Not yet received"
+    When the agent's CLI crashes during its own turn
+    Then the agent transcript contains "Not delivered: send it again"
+    When Sapphire is quit and relaunched
+    Then the agent transcript contains "Not delivered: send it again"
+    And the agent transcript does not contain "Not yet received"
+
   Scenario: Stop ends the agent's own turn as a stop, not a failure
     When the user shows the agent's system messages
     And the agent starts a turn of its own

@@ -36,13 +36,30 @@ public enum ItemState: Equatable, Hashable, Sendable {
 }
 
 public enum TranscriptContent: Equatable, Hashable, Sendable {
-	case user(text: String, error: String?)
+	/// `delivery` is where a prompt the agent doesn't have yet is; none once it has it.
+	case user(text: String, error: String?, delivery: Delivery?)
 	/// `model` is the model that wrote it, as the API names it; none for a reply stored before it was kept.
 	case assistant(text: String, model: String?)
 	case thinking(text: String, signature: String)
 	case tool(toolUseId: String, name: String, inputJson: String, verdict: ToolVerdict?, result: ToolResult?)
 	case system(kind: SystemKind, text: String, detailJson: String)
 	case unknown(json: String)
+}
+
+/// A prompt sent into a turn the agent started itself, which the agent doesn't have yet.
+public enum Delivery: Equatable, Hashable, Sendable {
+	/// It waits for the agent's next step.
+	case waiting
+	/// Its session ended first: the agent never got it.
+	case notDelivered
+
+	/// What the row says of it.
+	public var note: String {
+		switch self {
+		case .waiting: "Not yet received"
+		case .notDelivered: "Not delivered: send it again"
+		}
+	}
 }
 
 /// Judgess's verdict on a tool call.

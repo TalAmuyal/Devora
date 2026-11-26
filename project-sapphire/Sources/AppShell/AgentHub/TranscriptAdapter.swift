@@ -51,8 +51,7 @@ extension TranscriptKit.ItemState {
 extension TranscriptKit.TranscriptContent {
 	init(_ content: CoreBindings.TranscriptContent) {
 		switch content {
-		// Whether the agent has the message yet (`delivery`) isn't drawn yet.
-		case .user(let text, let error, _): self = .user(text: text, error: error)
+		case .user(let text, let error, let delivery): self = .user(text: text, error: error, delivery: delivery.map(TranscriptKit.Delivery.init))
 		case .assistant(let text, let model): self = .assistant(text: text, model: model)
 		case .thinking(let text, let signature): self = .thinking(text: text, signature: signature)
 		case .tool(let toolUseId, let name, let inputJson, let verdict, let result):
@@ -62,6 +61,15 @@ extension TranscriptKit.TranscriptContent {
 		case .system(let kind, let text, let detailJson):
 			self = .system(kind: TranscriptKit.SystemKind(kind), text: text, detailJson: detailJson)
 		case .unknown(let json): self = .unknown(json: json)
+		}
+	}
+}
+
+extension TranscriptKit.Delivery {
+	init(_ delivery: CoreBindings.Delivery) {
+		switch delivery {
+		case .waiting: self = .waiting
+		case .notDelivered: self = .notDelivered
 		}
 	}
 }

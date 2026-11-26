@@ -222,7 +222,7 @@ Then('the agent transcript says once {string}', async function (this: SapphireWo
 });
 
 /** Cues the fake CLI (`fake_cli.py`'s `own_turns`) to start a turn of its own, as a background task reporting does. */
-function cueOwnTurn(world: SapphireWorld, cue: 'start' | 'end') {
+function cueOwnTurn(world: SapphireWorld, cue: 'start' | 'end' | 'hold' | 'step' | 'crash') {
   const cues = path.join(path.dirname(world.testConfigPath), 'fake-own-turns');
   fs.mkdirSync(cues, { recursive: true });
   fs.writeFileSync(path.join(cues, cue), '');
@@ -232,6 +232,13 @@ When('the agent starts a turn of its own', async function (this: SapphireWorld) 
   await this.bridge.waitFor("the agent's own turn running", () => this.bridge.agentChat(), s => s.running && s.agentTurn);
 });
 When("the agent's own turn ends", function (this: SapphireWorld) { cueOwnTurn(this, 'end'); });
+// A prompt sent into the agent's own turn waits for the agent's next step, as Claude Code's does while a tool runs.
+When("the agent holds the next prompt sent into its turn", function (this: SapphireWorld) { cueOwnTurn(this, 'hold'); });
+When("the agent takes the prompt waiting in its turn", function (this: SapphireWorld) { cueOwnTurn(this, 'step'); });
+When("the agent's CLI crashes during its own turn", function (this: SapphireWorld) { cueOwnTurn(this, 'crash'); });
+Then('the agent transcript stops containing {string}', async function (this: SapphireWorld, text: string) {
+  await this.bridge.waitFor(`transcript without ${text}`, () => this.bridge.agentChat(), s => !s.dom.text.includes(text));
+});
 Then('the agent chat offers {string}', async function (this: SapphireWorld, offered: string) {
   const expected = { 'Stop and Send': { stop: true, send: true }, 'only Stop': { stop: true, send: false }, 'only Send': { stop: false, send: true } }[offered];
   assert.ok(expected, `unknown offer "${offered}"`);
