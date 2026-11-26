@@ -100,6 +100,16 @@ When('the user sets {string} to {string}', async function (this: SapphireWorld, 
   await this.bridge.settings({ action: 'commit', key });
 });
 
+When('the user types {string} into {string}', async function (this: SapphireWorld, value: string, key: string) {
+  await this.bridge.settings({ action: 'selectSegment', key, label: 'Set' });
+  await waitForSetting(this, key, 'to show its input', (setting) => setting?.input != null);
+  await this.bridge.settings({ action: 'type', key, value });
+});
+
+Then('the setting {string} should say {string} and offer no Save', async function (this: SapphireWorld, key: string, note: string) {
+  await waitForSetting(this, key, `to say "${note}" with no Save`, (setting) => setting?.note === note && setting.showsSave === false);
+});
+
 When('the user switches {string} to {string}', async function (this: SapphireWorld, key: string, label: string) {
   await this.bridge.settings({ action: 'selectSegment', key, label });
   await waitForSetting(this, key, `to select ${label}`, setting => setting?.segment === label);

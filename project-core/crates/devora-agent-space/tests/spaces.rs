@@ -1044,16 +1044,25 @@ async fn each_item_reaches_the_ui_with_the_time_it_was_first_stored() {
     running.pause().await.unwrap();
 }
 
+/// A profile whose agents are over their threshold after any turn: the lowest threshold, 10%, with the fake reporting a
+/// 100,000-token window, which its recorded turn fills about 18% of.
+fn compacting_after_any_turn(fixture: &Fixture) -> LaunchContext {
+    std::fs::write(
+        fixture.profile.join("config.json"),
+        json!({"prepare-command":"true","agent":{"compact-threshold":10}}).to_string(),
+    )
+    .unwrap();
+    let mut context = fixture.context();
+    context
+        .environment
+        .insert("DEVORA_FAKE_CONTEXT_WINDOW".into(), "100000".into());
+    context
+}
+
 #[tokio::test]
 async fn over_the_threshold_the_agent_saves_its_memory_then_devora_compacts() {
     let fixture = Fixture::new();
-    // The recorded turn fills about 2% of its model's 1,000,000-token window.
-    std::fs::write(
-        fixture.profile.join("config.json"),
-        json!({"prepare-command":"true","agent":{"compact-threshold":1}}).to_string(),
-    )
-    .unwrap();
-    let context = fixture.context();
+    let context = compacting_after_any_turn(&fixture);
     let space = fixture.create(fixture.form("Delta")).unwrap();
     let log = Arc::new(Log::open(&fixture.root.path().join("log")).unwrap());
     let mut running = space.start(&context, log, &fixture.run).await.unwrap();
@@ -1113,10 +1122,10 @@ async fn over_the_threshold_the_agent_saves_its_memory_then_devora_compacts() {
     assert!(announcements[0].contains("save its memory"));
     assert!(announcements[1].contains("Devora compacts"));
 
-    assert_eq!(contexts[0].threshold_percent, 1);
+    assert_eq!(contexts[0].threshold_percent, 10);
     assert!(contexts
         .iter()
-        .any(|c| c.window_tokens == 1_000_000 && c.used_tokens > 10_000));
+        .any(|c| c.window_tokens == 100_000 && c.used_tokens > 10_000));
     assert_eq!(
         contexts.last().unwrap().used_tokens,
         2000,
@@ -1124,20 +1133,19 @@ async fn over_the_threshold_the_agent_saves_its_memory_then_devora_compacts() {
     );
 }
 
-/// Sends `prompt` to a new agent with the profile's `threshold`, and returns the contexts the space published and
-/// the prompts the CLI received by the time `results` turns have ended.
+/// Sends `prompt` to a new agent, over its threshold after any turn when `compacting` (else under the default's), and
+/// returns the contexts the space published and the prompts the CLI received by the time `results` turns have ended.
 async fn contexts_and_prompts(
-    threshold: u8,
+    compacting: bool,
     prompt: &str,
     results: usize,
 ) -> (Vec<devora_agent_space::Context>, Vec<String>) {
     let fixture = Fixture::new();
-    std::fs::write(
-        fixture.profile.join("config.json"),
-        json!({"prepare-command":"true","agent":{"compact-threshold":threshold}}).to_string(),
-    )
-    .unwrap();
-    let context = fixture.context();
+    let context = if compacting {
+        compacting_after_any_turn(&fixture)
+    } else {
+        fixture.context()
+    };
     let space = fixture.create(fixture.form("Delta")).unwrap();
     let log = Arc::new(Log::open(&fixture.root.path().join("log")).unwrap());
     let mut running = space.start(&context, log, &fixture.run).await.unwrap();
@@ -1177,7 +1185,7 @@ async fn contexts_and_prompts(
 // The fake's subagent message reports a context of 4 tokens; the agent's own is the recorded turn's, over 10,000.
 #[tokio::test]
 async fn a_subagents_message_mid_turn_leaves_the_agents_context_alone() {
-    let (contexts, _) = contexts_and_prompts(80, "subagent:mid", 1).await;
+    let (contexts, _) = contexts_and_prompts(false, "subagent:mid", 1).await;
     let used: Vec<u64> = contexts.iter().map(|c| c.used_tokens).collect();
     assert!(used.iter().any(|&tokens| tokens > 10_000), "{used:?}");
     assert!(
@@ -1188,8 +1196,8 @@ async fn a_subagents_message_mid_turn_leaves_the_agents_context_alone() {
 
 #[tokio::test]
 async fn the_threshold_decides_on_the_agents_context_when_a_subagents_message_comes_last() {
-    // The recorded turn fills about 2% of its model's window: over 1%, while the subagent's 4 tokens are not.
-    let (_, prompts) = contexts_and_prompts(1, "subagent:last", 2).await;
+    // The recorded turn fills about 18% of the window: over 10%, while the subagent's 4 tokens are not.
+    let (_, prompts) = contexts_and_prompts(true, "subagent:last", 2).await;
     assert_eq!(prompts[0], "subagent:last");
     assert!(
         prompts[1].contains("save to memory/"),
@@ -1200,12 +1208,7 @@ async fn the_threshold_decides_on_the_agents_context_when_a_subagents_message_co
 #[tokio::test]
 async fn pause_after_turn_waits_for_the_turn_and_wins_over_compaction() {
     let fixture = Fixture::new();
-    std::fs::write(
-        fixture.profile.join("config.json"),
-        json!({"prepare-command":"true","agent":{"compact-threshold":1}}).to_string(),
-    )
-    .unwrap();
-    let context = fixture.context();
+    let context = compacting_after_any_turn(&fixture);
     let space = fixture.create(fixture.form("Delta")).unwrap();
     let log = Arc::new(Log::open(&fixture.root.path().join("log")).unwrap());
     let mut running = space
@@ -1329,13 +1332,7 @@ fn the_preview_is_what_creation_renders_and_coding_instructions_can_be_replaced(
 #[tokio::test]
 async fn a_result_nobody_asked_for_leaves_the_sent_turn_running() {
     let fixture = Fixture::new();
-    // Any result of ours would start compaction.
-    std::fs::write(
-        fixture.profile.join("config.json"),
-        json!({"prepare-command":"true","agent":{"compact-threshold":1}}).to_string(),
-    )
-    .unwrap();
-    let context = fixture.context();
+    let context = compacting_after_any_turn(&fixture);
     let space = fixture.create(fixture.form("Delta")).unwrap();
     let log = Arc::new(Log::open(&fixture.root.path().join("log")).unwrap());
     let mut running = space.start(&context, log, &fixture.run).await.unwrap();
@@ -2046,11 +2043,32 @@ async fn an_agents_own_threshold_outlives_a_restart_and_clearing_it_follows_the_
         .await
         .unwrap();
     assert_eq!(next_context(&mut running).await.threshold_percent, 40);
-    assert!(running
+    for outside in [0, 9, 91, 100] {
+        assert_eq!(
+            running
+                .handle()
+                .set_compact_threshold(Some(outside))
+                .await
+                .err()
+                .as_deref(),
+            Some(devora_config::agent::COMPACT_THRESHOLD_REFUSED),
+            "{outside}"
+        );
+    }
+    for limit in [10, 90] {
+        running
+            .handle()
+            .set_compact_threshold(Some(limit))
+            .await
+            .unwrap();
+        assert_eq!(next_context(&mut running).await.threshold_percent, limit);
+    }
+    running
         .handle()
-        .set_compact_threshold(Some(0))
+        .set_compact_threshold(Some(40))
         .await
-        .is_err());
+        .unwrap();
+    assert_eq!(next_context(&mut running).await.threshold_percent, 40);
     running.pause().await.unwrap();
 
     let mut running = start().await;
@@ -2075,6 +2093,36 @@ async fn an_agents_own_threshold_outlives_a_restart_and_clearing_it_follows_the_
     let mut running = start().await;
     assert_eq!(next_context(&mut running).await.threshold_percent, 70);
     running.pause().await.unwrap();
+
+    // Stored before the range (1 to 100 was valid then): used as its nearest limit, kept as stored, not rewritten.
+    let db = Space::open(&fixture.profile, "Delta")
+        .unwrap()
+        .path()
+        .join(".agent-space.db");
+    let stored = || {
+        rusqlite::Connection::open(&db)
+            .unwrap()
+            .query_row(
+                "SELECT compact_threshold FROM space WHERE id=0",
+                [],
+                |row| row.get::<_, Option<u8>>(0),
+            )
+            .unwrap()
+    };
+    for (old, used) in [(100, 90), (3, 10)] {
+        rusqlite::Connection::open(&db)
+            .unwrap()
+            .execute("UPDATE space SET compact_threshold=?1 WHERE id=0", [old])
+            .unwrap();
+        let mut running = start().await;
+        let context = next_context(&mut running).await;
+        assert_eq!(
+            (context.threshold_percent, context.own_threshold_percent),
+            (used, Some(old))
+        );
+        running.pause().await.unwrap();
+        assert_eq!(stored(), Some(old), "reading rewrites nothing");
+    }
 }
 
 #[tokio::test]

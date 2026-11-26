@@ -11,6 +11,8 @@ struct Fixture {
     core: Arc<DevoraCore>,
     program: String,
     config: String,
+    /// The context window the fake reports (`DEVORA_FAKE_CONTEXT_WINDOW`), when a test sets one.
+    context_window: std::sync::Mutex<Option<String>>,
 }
 
 impl Fixture {
@@ -57,10 +59,32 @@ impl Fixture {
             core,
             program: program.to_string_lossy().into_owned(),
             config: config.to_string_lossy().into_owned(),
+            context_window: Default::default(),
         }
     }
 
+    /// Puts the profile's agents over their threshold after any turn: the lowest threshold, 10%, with the fake
+    /// reporting a 100,000-token window, which its recorded turn fills about 18% of.
+    fn compact_after_any_turn(&self) {
+        let config = self.profile.path.join("config.json");
+        let mut profile: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&config).unwrap()).unwrap();
+        profile["agent"] = serde_json::json!({"compact-threshold": 10});
+        fs::write(config, profile.to_string()).unwrap();
+        *self.context_window.lock().unwrap() = Some("100000".into());
+    }
+
     fn launch(&self) -> AgentLaunch {
+        let mut launch = self.base_launch();
+        if let Some(window) = self.context_window.lock().unwrap().clone() {
+            launch
+                .environment
+                .insert("DEVORA_FAKE_CONTEXT_WINDOW".into(), window);
+        }
+        launch
+    }
+
+    fn base_launch(&self) -> AgentLaunch {
         AgentLaunch {
             program: self.program.clone(),
             plugins: vec![],
@@ -665,11 +689,7 @@ fn creation_progress_cancel_failure_and_invalid_listing_use_the_facade() {
 #[test]
 fn deferred_pause_finishes_the_turn_keeps_permissions_and_rejects_new_sends() {
     let f = Fixture::new(false);
-    let config = f.profile.path.join("config.json");
-    let mut profile: serde_json::Value =
-        serde_json::from_str(&fs::read_to_string(&config).unwrap()).unwrap();
-    profile["agent"] = serde_json::json!({"compact-threshold": 1});
-    fs::write(config, profile.to_string()).unwrap();
+    f.compact_after_any_turn();
     f.create("Pause");
     let tab = f.open("Pause");
     let events = f.core.subscribe_agent_chats().unwrap();
@@ -706,7 +726,7 @@ fn deferred_pause_finishes_the_turn_keeps_permissions_and_rejects_new_sends() {
     let paused = f.wait(&events, |c| c.phase == ChatPhase::Paused);
     assert!(has_message(&paused, "result"));
     assert!(!paused.pause_requested);
-    assert_eq!(paused.context.unwrap().threshold_percent, 1);
+    assert_eq!(paused.context.unwrap().threshold_percent, 10);
     assert!(!paused.items.iter().any(|item| matches!(
         item.content,
         TranscriptContent::System {
@@ -981,11 +1001,7 @@ fn global_pause_keep_choice_restores_before_launch_and_close_wins_over_changes()
 #[test]
 fn global_pause_drains_active_and_idle_agents_and_preserves_individual_pause() {
     let f = Fixture::new(false);
-    let config = f.profile.path.join("config.json");
-    let mut profile: serde_json::Value =
-        serde_json::from_str(&fs::read_to_string(&config).unwrap()).unwrap();
-    profile["agent"] = serde_json::json!({"compact-threshold": 1});
-    fs::write(config, profile.to_string()).unwrap();
+    f.compact_after_any_turn();
     let events = f.core.subscribe_agent_chats().unwrap();
     let mut tabs = vec![];
     for name in ["Active", "Idle", "Individual"] {

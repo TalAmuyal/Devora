@@ -73,6 +73,7 @@ Types of changes:
 
 ### Changed
 
+- Devora Sapphire's compaction threshold goes from 10% to 90%, in the Agent card and an agent's Context popover: above 90% there's no room left for the agent to save its memory first; a threshold stored before (1% to 100%) keeps working, used as the nearest limit, and the card and popover say so
 - Devora Ember now declares macOS 26 as its minimum: it installs and runs on macOS 26 or newer, and is built and tested on macOS 27
 - Devora Sapphire's agent chat shows a turn the agent started itself (a background task reporting) as running, with its step and Stop, and keeps Send: a prompt sent then joins that turn
 - The model fields (Devora Sapphire's New Agent dialog, and the Opus, Sonnet and Haiku tiers' Custom fields in both apps) list the models the same way: Claude Code's tiers first, each with the model it currently points to ("Opus (currently 5.5)"), then every model by its version, newest major version first and then by tier; Claude Code's `default` and `opusplan` are no longer offered there

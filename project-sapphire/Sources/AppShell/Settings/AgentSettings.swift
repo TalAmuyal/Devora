@@ -102,13 +102,32 @@ final class AgentSettingsModel {
 	func showsSave(_ field: AgentSettingsField) -> Bool {
 		let text = input(field.key)
 		if !field.multiline && text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return false }
+		if field.key == "compact-threshold" && CompactThreshold.percent(text) == nil { return false }
 		if case .cleared? = entry(field.key)?.stored { return true }
 		return entry(field.key)?.stored == nil || text != Self.text(entry(field.key)?.stored)
 	}
 
 	func commit(_ key: String) {
-		let value = key == "compact-threshold" ? input(key).trimmingCharacters(in: .whitespacesAndNewlines) : input(key)
-		persist(key, value)
+		if key == "compact-threshold" {
+			// The core refuses a value outside the range; the field says so instead (`thresholdNote`), and writes nothing.
+			guard let percent = CompactThreshold.percent(input(key)) else { return }
+			persist(key, String(percent))
+		} else {
+			persist(key, input(key))
+		}
+	}
+
+	/// What the threshold field says under it: that a stored threshold from before the range is used as its nearest
+	/// limit, while the field shows it, or the range, while the field holds a value outside it.
+	var thresholdNote: String? {
+		let text = input("compact-threshold")
+		if case .percent(let stored)? = entry("compact-threshold")?.stored, !CompactThreshold.range.contains(stored),
+			text == Self.text(.percent(value: stored)), case .percent(let used)? = entry("compact-threshold")?.resolved
+		{
+			return CompactThreshold.limitedNote(stored: stored, used: used)
+		}
+		let typed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+		return typed.isEmpty || CompactThreshold.percent(typed) != nil ? nil : CompactThreshold.outsideNote
 	}
 
 	func resetInputs() { persist("inputs", nil) }

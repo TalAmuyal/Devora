@@ -158,7 +158,7 @@ impl Compaction {
             context: Context {
                 used_tokens: 0,
                 window_tokens: 0,
-                threshold_percent: own.unwrap_or(default_threshold_percent),
+                threshold_percent: in_force(own, default_threshold_percent),
                 default_threshold_percent,
                 own_threshold_percent: own,
                 progress: Progress::Idle,
@@ -184,7 +184,7 @@ impl Compaction {
     /// nothing by itself.
     pub fn set_threshold(&mut self, own: Option<u8>) {
         self.context.own_threshold_percent = own;
-        self.context.threshold_percent = own.unwrap_or(self.context.default_threshold_percent);
+        self.context.threshold_percent = in_force(own, self.context.default_threshold_percent);
     }
 
     /// The user asks for a compaction with no turn running: its first step, to
@@ -329,6 +329,13 @@ const SAVE_MEMORY: &str = "Devora: your context is nearly full, and Devora will 
 const SAVE_MEMORY_REQUESTED: &str = "Devora: the user asked to compact the conversation, and Devora will compact it after this turn. Before that, save to memory/ everything you will need afterwards: the current task and its state, decisions and their reasons, open questions, and your next steps. Reply briefly once it is saved.";
 
 const REFRESH_MEMORY: &str = "Devora: the conversation was just compacted. Update memory/ from what you still know, so that nothing important is lost. Reply briefly once it is updated.";
+
+/// The threshold compaction runs at: the agent's own, as stored, limited to the range (one stored before it, 1 to 100,
+/// is used as its nearest limit), else the profile's, which its config already limits.
+fn in_force(own: Option<u8>, profile: u8) -> u8 {
+    own.and_then(|stored| devora_config::agent::limit_compact_threshold(u64::from(stored)).ok())
+        .unwrap_or(profile)
+}
 
 /// The largest window among the models the turn used (`modelUsage`).
 fn context_window(result: &TurnResult) -> Option<u64> {

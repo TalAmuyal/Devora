@@ -13,6 +13,28 @@ pub mod settings;
 
 pub const DEFAULT_COMPACT_THRESHOLD: u8 = 80;
 
+/// The percentages an agent is compacted at: above 90 there's no room left for the save-memory turn before the context
+/// is full, and 10 is the floor Tal set. Every setter refuses a value outside it.
+pub const COMPACT_THRESHOLD_RANGE: std::ops::RangeInclusive<u8> = 10..=90;
+
+/// Why a threshold isn't taken: outside the range, or never a valid percentage.
+pub const COMPACT_THRESHOLD_REFUSED: &str =
+    "agent.compact-threshold must be a whole percentage from 10 to 90";
+
+/// What a stored threshold is used as. Thresholds were 1 to 100 before the range: one of those is used as the nearest
+/// percentage in the range, without rewriting what stores it; any other value was never valid, so it's refused.
+pub fn limit_compact_threshold(stored: u64) -> Result<u8, &'static str> {
+    (1..=100)
+        .contains(&stored)
+        .then(|| {
+            (stored as u8).clamp(
+                *COMPACT_THRESHOLD_RANGE.start(),
+                *COMPACT_THRESHOLD_RANGE.end(),
+            )
+        })
+        .ok_or(COMPACT_THRESHOLD_REFUSED)
+}
+
 /// The shared template-placeholder and free-form input key grammar.
 pub fn valid_placeholder_key(key: &str) -> bool {
     !key.is_empty()
@@ -95,11 +117,8 @@ fn resolve(sections: &[ConfigSection]) -> Result<AgentConfig, String> {
             None => {}
             Some(Value::Null) => config.compact_threshold = None,
             Some(value) => {
-                let percent = value
-                    .as_u64()
-                    .filter(|percent| (1..=100).contains(percent))
-                    .ok_or("agent.compact-threshold must be a whole percentage from 1 to 100")?;
-                config.compact_threshold = Some(percent as u8);
+                let stored = value.as_u64().ok_or(COMPACT_THRESHOLD_REFUSED)?;
+                config.compact_threshold = Some(limit_compact_threshold(stored)?);
             }
         }
         match section.get("template-file") {
@@ -247,13 +266,46 @@ mod tests {
         )
         .unwrap();
         assert_eq!(read(&global, &profile).unwrap().compact_threshold, Some(90));
-        for invalid in [json!(0), json!(101), json!(80.5), json!("80")] {
+        for invalid in [
+            json!(0),
+            json!(-5),
+            json!(101),
+            json!(500),
+            json!(80.5),
+            json!("80"),
+        ] {
             std::fs::write(
                 &profile_config,
                 json!({"agent":{"compact-threshold":invalid}}).to_string(),
             )
             .unwrap();
-            assert!(read(&global, &profile).is_err(), "{invalid}");
+            assert_eq!(
+                read(&global, &profile).err().as_deref(),
+                Some(COMPACT_THRESHOLD_REFUSED),
+                "{invalid} was never a valid threshold"
+            );
+        }
+    }
+
+    #[test]
+    fn a_threshold_stored_before_the_range_is_used_as_its_nearest_limit_without_rewriting_it() {
+        let root = tempfile::tempdir().unwrap();
+        let global = root.path().join("global.json");
+        let profile = root.path().join("profile");
+        std::fs::create_dir(&profile).unwrap();
+        for (stored, used) in [(1, 10), (3, 10), (10, 10), (90, 90), (95, 90), (100, 90)] {
+            let text = json!({"agent":{"compact-threshold":stored}}).to_string();
+            std::fs::write(&global, &text).unwrap();
+            assert_eq!(
+                read(&global, &profile).unwrap().compact_threshold,
+                Some(used),
+                "{stored}"
+            );
+            assert_eq!(
+                std::fs::read_to_string(&global).unwrap(),
+                text,
+                "reading rewrites nothing"
+            );
         }
     }
 }

@@ -1,6 +1,9 @@
 //! Agent settings at one editable scope, resolved by the creation resolver.
 //! Input names are literal map keys, including dots, rather than config paths.
-use super::{resolve, sections, Scope, DEFAULT_COMPACT_THRESHOLD, NAMED};
+use super::{
+    resolve, sections, Scope, COMPACT_THRESHOLD_RANGE, COMPACT_THRESHOLD_REFUSED,
+    DEFAULT_COMPACT_THRESHOLD, NAMED,
+};
 use crate::config::{read_json_file, write_config_setting_in, write_pretty_json};
 use serde_json::{Map, Value};
 use std::collections::BTreeSet;
@@ -176,8 +179,8 @@ pub fn write_setting(
             let percent = raw
                 .parse::<u8>()
                 .ok()
-                .filter(|n| (1..=100).contains(n))
-                .ok_or("agent.compact-threshold must be a whole percentage from 1 to 100")?;
+                .filter(|n| COMPACT_THRESHOLD_RANGE.contains(n))
+                .ok_or(COMPACT_THRESHOLD_REFUSED)?;
             Some(Value::from(percent))
         }
         ("template-file", Some(raw)) => {
@@ -342,6 +345,26 @@ mod tests {
     }
 
     #[test]
+    fn a_threshold_stored_before_the_range_shows_beside_the_one_used() {
+        let tmp = tempfile::tempdir().unwrap();
+        let global = tmp.path().join("global.json");
+        fs::write(
+            &global,
+            json!({"agent":{"compact-threshold":100}}).to_string(),
+        )
+        .unwrap();
+        let settings = read(&global, None).unwrap();
+        assert_eq!(
+            entry(&settings.fields, "compact-threshold").stored,
+            Some(json!(100))
+        );
+        assert_eq!(
+            entry(&settings.fields, "compact-threshold").resolved,
+            Some(json!(90))
+        );
+    }
+
+    #[test]
     fn resolves_each_value_and_source_through_the_creation_fold() {
         let tmp = tempfile::tempdir().unwrap();
         let global = tmp.path().join("global.json");
@@ -436,13 +459,19 @@ mod tests {
             json!({"claude":{"model":"custom"},"agent":{"inputs":{"team":"core"}}}).to_string(),
         )
         .unwrap();
-        for value in ["1", "100"] {
+        for value in ["10", "90"] {
             write_setting(&global, None, "compact-threshold", Some(value)).unwrap();
             assert!(read_json_file(&global).unwrap()["agent"]["compact-threshold"].is_number());
         }
-        for value in ["0", "101", "1.5", "-1", "junk", ""] {
+        for value in ["9", "91", "1", "100", "0", "101", "1.5", "-1", "junk", ""] {
             let before = fs::read(&global).unwrap();
-            assert!(write_setting(&global, None, "compact-threshold", Some(value)).is_err());
+            assert_eq!(
+                write_setting(&global, None, "compact-threshold", Some(value))
+                    .err()
+                    .as_deref(),
+                Some(COMPACT_THRESHOLD_REFUSED),
+                "{value:?}"
+            );
             assert_eq!(fs::read(&global).unwrap(), before);
         }
         for value in ["", "\n role \n"] {
