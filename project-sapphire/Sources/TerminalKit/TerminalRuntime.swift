@@ -85,13 +85,20 @@ public final class TerminalRuntime {
 	/// The font size of every terminal, in points.
 	public private(set) var fontSize = defaultFontSize
 	private var config: ghostty_config_t?
+	private let themes = ThemeFiles.forThisProcess(in: FileManager.default.temporaryDirectory)
+	/// The live terminals, each told the scheme (`ghostty_surface_set_color_scheme`) when it's made and on every switch.
+	private let views = NSHashTable<TerminalView>.weakObjects()
 
 	private init() {
 		// libghostty parses argv for its own CLI actions; give it only the program name so Sapphire's flags stay ours.
 		var argv: [UnsafeMutablePointer<CChar>?] = [strdup(CommandLine.arguments.first ?? "sapphire"), nil]
 		guard ghostty_init(1, &argv) == GHOSTTY_SUCCESS else { fatalError("ghostty_init failed") }
 
-		let config = Self.makeConfig(palette: palettes.dark, fontSize: Self.defaultFontSize)
+		Self.write(palettes.dark, to: themes)
+		let config = Self.makeConfig(themes: themes, fontSize: Self.defaultFontSize)
+		NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { _ in
+			MainActor.assumeIsolated { TerminalRuntime.shared.themes.remove() }
+		}
 		var runtime = Self.runtimeCallbacks()
 		guard let app = ghostty_app_new(&runtime, config) else { fatalError("ghostty_app_new failed") }
 		self.app = app
@@ -135,8 +142,8 @@ public final class TerminalRuntime {
 		ghostty_app_tick(app)
 	}
 
-	/// Applies the palette's variant for the appearance to every terminal at once, through a regenerated config.
-	/// A program already running isn't told of the switch (mode 2031): it keeps what it drew until it redraws.
+	/// Applies the palette's variant for the appearance to every terminal at once, through a regenerated config, and tells
+	/// each terminal's program of the scheme if it asked (mode 2031).
 	public func apply(light: TerminalPalette, dark: TerminalPalette, isDark: Bool) {
 		guard light != palettes.light || dark != palettes.dark || isDark != self.dark else { return }
 		palettes = (light, dark)
@@ -151,11 +158,37 @@ public final class TerminalRuntime {
 		reconfigure()
 	}
 
+	/// In this order, since setting a surface's scheme replays its config, which reads the theme files then: the files,
+	/// the config, then the scheme of each terminal.
 	private func reconfigure() {
-		let config = Self.makeConfig(palette: palette, fontSize: fontSize)
+		Self.write(palette, to: themes)
+		let config = Self.makeConfig(themes: themes, fontSize: fontSize)
 		ghostty_app_update_config(app, config)
 		if let old = self.config { ghostty_config_free(old) }
 		self.config = config
+		for view in views.allObjects { tellScheme(view) }
+	}
+
+	private static func write(_ palette: TerminalPalette, to themes: ThemeFiles) {
+		do { try themes.write(palette) } catch { Self.logWarning("couldn't write the terminal colors: \(error)") }
+	}
+
+	/// Starts telling a newly made terminal the scheme.
+	func register(_ view: TerminalView) {
+		views.add(view)
+		tellScheme(view)
+	}
+
+	private func tellScheme(_ view: TerminalView) {
+		guard let surface = view.surface else { return }
+		ghostty_surface_set_color_scheme(surface, dark ? GHOSTTY_COLOR_SCHEME_DARK : GHOSTTY_COLOR_SCHEME_LIGHT)
+	}
+
+	/// libghostty asks for this (`reload_config`, soft) when a surface's scheme changes, and replays the surface's config
+	/// with the new scheme only once it gets it, as Ghostty's own app does.
+	private func reloadConfig(_ surface: ghostty_surface_t) {
+		guard let config else { return }
+		ghostty_surface_update_config(surface, config)
 	}
 
 	public func setAppFocus(_ focused: Bool) {
@@ -163,10 +196,10 @@ public final class TerminalRuntime {
 	}
 
 	/// libghostty has no setter API: a config is built by loading a file, so write ours to a temporary file.
-	/// The colors are the active variant's, set directly: never a conditional theme, nor a scheme on the app
-	/// (`ghostty_app_set_color_scheme`), since a terminal made while the scheme differs from the config's default gets a
-	/// replayed copy of the config that drops its environment and command (TerminalKit's CLAUDE.md).
-	private static func makeConfig(palette: TerminalPalette, fontSize: Double) -> ghostty_config_t {
+	/// The colors are the theme files', both the active variant; never a scheme on the app (`ghostty_app_set_color_scheme`),
+	/// since a terminal made while the app's scheme differs from the config's default gets a replayed copy of the config
+	/// that drops its environment and command (TerminalKit's CLAUDE.md).
+	private static func makeConfig(themes: ThemeFiles, fontSize: Double) -> ghostty_config_t {
 		let lines = [
 			// Sapphire routes its own chords before the terminal (ADR-003), and binds only copy here.
 			"keybind = clear",
@@ -178,10 +211,8 @@ public final class TerminalRuntime {
 			"shell-integration = none",
 			// Not xterm-ghostty: its terminfo lives in Ghostty's resources dir, which Sapphire doesn't ship yet.
 			"term = xterm-256color",
-			"background = \(palette.background)",
-			"foreground = \(palette.foreground)",
-			"cursor-color = \(palette.cursor)",
-		] + palette.ansi.enumerated().map { "palette = \($0.offset)=\($0.element)" }
+			"theme = light:\(themes.light.path),dark:\(themes.dark.path)",
+		]
 		let url = FileManager.default.temporaryDirectory.appending(path: "sapphire-ghostty-\(UUID().uuidString).conf")
 		try? lines.joined(separator: "\n").write(to: url, atomically: true, encoding: .utf8)
 		defer { try? FileManager.default.removeItem(at: url) }
@@ -202,6 +233,16 @@ public final class TerminalRuntime {
 		      let userdata = ghostty_surface_userdata(surface)
 		else { return false }
 		let view = Unmanaged<TerminalView>.fromOpaque(userdata).takeUnretainedValue()
+		if action.tag == GHOSTTY_ACTION_RELOAD_CONFIG {
+			guard action.action.reload_config.soft else { return false }
+			// It comes from `ghostty_surface_set_color_scheme`, on the main thread, and is answered before that returns.
+			if Thread.isMainThread {
+				MainActor.assumeIsolated { TerminalRuntime.shared.reloadConfig(surface) }
+			} else {
+				DispatchQueue.main.async { MainActor.assumeIsolated { view.surface.map { TerminalRuntime.shared.reloadConfig($0) } } }
+			}
+			return true
+		}
 		let update: (@MainActor @Sendable (TerminalSession) -> Void)?
 		switch action.tag {
 		case GHOSTTY_ACTION_SET_TITLE:

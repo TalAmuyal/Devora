@@ -67,6 +67,7 @@ final class TerminalView: NSView, @preconcurrency NSTextInputClient {
 			session.fail("libghostty couldn't create the terminal")
 			return
 		}
+		TerminalRuntime.shared.register(self)
 		session.startedAt = .now
 		updateSurfaceSize()
 		updateTrackingAreas()
