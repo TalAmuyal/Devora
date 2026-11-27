@@ -13,6 +13,7 @@ The Agent Spaces of the selected profile (ADR-012, `Sources/AppShell/AgentHub/`)
 	Both are stored with the agent and used for every launch.
 	"Include coding instructions" (on by default) appends the instructions to Claude Code's system prompt, keeping its coding instructions; off, they replace it.
 	The Preview beside the form shows the instructions as creation would render them (`agent_creation_preview`), or why it would fail, updated as the form changes.
+	In a short window the form scrolls: a field given the focus (Tab, a click, the dialog's own focus moves) scrolls only as far as it, its label and its note need to be fully in view, the repo filter with its list, which also comes back into view when ↑ or ↓ moves the cursor (`.id` on each block, `scrollTo` with no anchor or animation of ours).
 	Create shows the creation's progress (`Store.createAgentSpace`) in the dialog's place, cancellable; once created, the agent opens in its tab and the hub closes.
 - Opening an agent (`Store.openAgentSpace`) asks the core for the launch (`resolve_agent_launch`, the user's login shell), then `open_agent_space`, which opens its tab or activates the one it has.
 	A launch resumes the agents of restored tabs in the background (`restore_agent_spaces`), and quitting stops every agent first (`AppTermination.pauseAgents`, from `applicationShouldTerminate`), after waiting for those still working (Global Pause, in `../CLAUDE.md`).
