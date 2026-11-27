@@ -13,8 +13,11 @@ import { Worker } from 'node:worker_threads';
  * `hang-watchdog-formatter.ts` reports the run's progress to it; a harness reports what its launched processes print.
  */
 export interface HangWatchdog {
-  /** Something started or finished: the wait starts over, and a hang names the latest. */
-  activity(what: string): void;
+  /**
+   * Something started or finished: the wait starts over, and a hang names the latest. `scenario`, when given, is the
+   * scenario now running (null once it finished), by the flake report's identity, which a hang's verdict records.
+   */
+  activity(what: string, scenario?: { suite: string; name: string } | null): void;
   /** Output of a process the harness launched, such as the app's stderr: the report ends with the end of each. */
   output(label: string, chunk: string): void;
 }
@@ -35,7 +38,7 @@ export function hangWatchdog(): HangWatchdog {
     // It never keeps a run that finished from exiting: one that doesn't exit on its own is what it reports.
     worker.unref();
     watchdog = {
-      activity: (what) => worker.postMessage({ activity: what }),
+      activity: (what, scenario) => worker.postMessage({ activity: what, scenario }),
       output: (label, chunk) => worker.postMessage({ label, chunk }),
     };
   }
