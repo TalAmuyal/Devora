@@ -281,14 +281,25 @@ struct NewAgentDialogView: View {
 				} else {
 					// The preview overlays the space beside the form, so the form alone sets the height, and the form is what narrows in a small window.
 					VStack(alignment: .leading, spacing: 10) {
-						ScrollView {
-							// The inset keeps the fields' focus rings and hover effects clear of the scroll view's clipping.
-							VStack(alignment: .leading, spacing: 10) { form }
-								.padding(.horizontal, 6)
-								.onGeometryChange(for: CGFloat.self, of: \.size.height) { formHeight = $0 }
+						ScrollViewReader { scroller in
+							ScrollView {
+								// The inset keeps the fields' focus rings and hover effects clear of the scroll view's clipping.
+								VStack(alignment: .leading, spacing: 10) { form }
+									.padding(.horizontal, 6)
+									.onGeometryChange(for: CGFloat.self, of: \.size.height) { formHeight = $0 }
+							}
+							.frame(maxHeight: formHeight)
+							.scrollBounceBehavior(.basedOnSize)
+							.accessibilityIdentifier("new-agent-form")
+							// SwiftUI doesn't bring a focused field into view; with no anchor, it scrolls only as far as the field, its label and its note need.
+							.onChange(of: model.focus) { _, focus in
+								if focus.isTextField { scroller.scrollTo(focus) }
+							}
+							// ↑ and ↓ bring the list back too, should the form have been scrolled away from it.
+							.onChange(of: model.activeRepo) { _, _ in
+								if model.focus == .filter { scroller.scrollTo(NewAgentDialogModel.Focus.filter) }
+							}
 						}
-						.frame(maxHeight: formHeight)
-						.scrollBounceBehavior(.basedOnSize)
 						buttons
 					}
 					.frame(minWidth: 260, maxWidth: 330)
@@ -310,22 +321,26 @@ struct NewAgentDialogView: View {
 	}
 
 	@ViewBuilder private var form: some View {
-		label("Name")
-		TextField("e.g. Bravo", text: $model.name)
-			.textFieldStyle(.roundedBorder)
-			.focused($field, equals: .name)
-			.accessibilityIdentifier("new-agent-name")
-		if let spacePath = model.spacePath {
-			Text("Creates \(spacePath)")
-				.font(.caption)
-				.foregroundStyle(.secondary)
-				.lineLimit(1)
-				.truncationMode(.middle)
-				.textSelection(.enabled)
-				.accessibilityIdentifier("new-agent-space-path")
+		VStack(alignment: .leading, spacing: 10) {
+			label("Name")
+			TextField("e.g. Bravo", text: $model.name)
+				.textFieldStyle(.roundedBorder)
+				.focused($field, equals: .name)
+				.accessibilityIdentifier("new-agent-name")
+			if let spacePath = model.spacePath {
+				Text("Creates \(spacePath)")
+					.font(.caption)
+					.foregroundStyle(.secondary)
+					.lineLimit(1)
+					.truncationMode(.middle)
+					.textSelection(.enabled)
+					.accessibilityIdentifier("new-agent-space-path")
+			}
 		}
+		.id(NewAgentDialogModel.Focus.name)
 		ForEach(model.editableFields, id: \.key) { agentField in
 			fieldRow(agentField)
+				.id(NewAgentDialogModel.Focus.field(agentField.key))
 		}
 		ForEach(model.derivedFields, id: \.key) { agentField in
 			HStack(alignment: .firstTextBaseline) {
@@ -337,29 +352,37 @@ struct NewAgentDialogView: View {
 					.textSelection(.enabled)
 			}
 		}
-		label("Initial repositories")
 		if model.repos.isEmpty {
+			label("Initial repositories")
 			Text("No repos in this profile yet.").font(.callout).foregroundStyle(.secondary)
 		} else {
-			TextField("Filter repos…", text: $model.filter)
-				.textFieldStyle(.roundedBorder)
-				.focused($field, equals: .filter)
-				.accessibilityIdentifier("new-agent-filter")
-			RepoListView(
-				repos: model.visibleRepos, filter: model.filter, active: model.activeRepo, mode: .multi,
-				isSelected: { model.selected.contains($0.path) }, click: model.click, activate: model.activate,
-				identifierPrefix: "new-agent-repo-", height: 140)
+			// The list goes with the filter, since ↑ and ↓ move its cursor from there.
+			VStack(alignment: .leading, spacing: 10) {
+				label("Initial repositories")
+				TextField("Filter repos…", text: $model.filter)
+					.textFieldStyle(.roundedBorder)
+					.focused($field, equals: .filter)
+					.accessibilityIdentifier("new-agent-filter")
+				RepoListView(
+					repos: model.visibleRepos, filter: model.filter, active: model.activeRepo, mode: .multi,
+					isSelected: { model.selected.contains($0.path) }, click: model.click, activate: model.activate,
+					identifierPrefix: "new-agent-repo-", height: 140)
+			}
+			.id(NewAgentDialogModel.Focus.filter)
 		}
-		label("Model")
-		TextField("e.g. opus, sonnet or a full model name", text: $model.model)
-			.textFieldStyle(.roundedBorder)
-			.focused($field, equals: .model)
-			// Names only: the menu is as wide as the field, and the form's column is narrow.
-			.modelSuggestions(model.modelSuggestions?.rows(for: .agentModel, typed: model.model) ?? [], showsModelIDs: false)
-			.accessibilityIdentifier("new-agent-model")
-		Text(ModelSuggestions.note(for: model.model, listedBy: model.modelSuggestions))
-			.font(.caption).foregroundStyle(.secondary)
-			.accessibilityIdentifier("new-agent-model-note")
+		VStack(alignment: .leading, spacing: 10) {
+			label("Model")
+			TextField("e.g. opus, sonnet or a full model name", text: $model.model)
+				.textFieldStyle(.roundedBorder)
+				.focused($field, equals: .model)
+				// Names only: the menu is as wide as the field, and the form's column is narrow.
+				.modelSuggestions(model.modelSuggestions?.rows(for: .agentModel, typed: model.model) ?? [], showsModelIDs: false)
+				.accessibilityIdentifier("new-agent-model")
+			Text(ModelSuggestions.note(for: model.model, listedBy: model.modelSuggestions))
+				.font(.caption).foregroundStyle(.secondary)
+				.accessibilityIdentifier("new-agent-model-note")
+		}
+		.id(NewAgentDialogModel.Focus.model)
 		effortSlider
 		Toggle("Include coding instructions", isOn: $model.keepCodingInstructions)
 			.help("On: the instructions are appended to Claude Code's own system prompt, with its coding instructions. Off: they replace it.")
