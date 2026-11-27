@@ -122,6 +122,7 @@ Types of changes:
 
 ### Fixed
 
+- A Devora Sapphire agent that works from its own background tasks (a watcher, a build it waits on) is now compacted when its context passes the threshold; before, only the end of a turn Devora sent was checked, so such an agent's context could fill up unnoticed
 - Devora Sapphire's agent chat draws a link in the user's own message in the bubble's text color, underlined; it was the accent blue, nearly invisible on the blue bubble
 - Devora Sapphire's Compact Now, and the compaction at an agent's threshold, now work when the context is too full for the agent to save its memory first: Devora compacts anyway, says so in the transcript, and asks the agent to refresh its memory afterwards; if the compaction itself fails, the transcript says so and what to try
 - Devora Sapphire's Model popover picks the model whose full ID you typed when you press Return, instead of the first model in the list

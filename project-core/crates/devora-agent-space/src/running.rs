@@ -1250,9 +1250,6 @@ fn compact(
         }
         SessionEvent::Message(Message::Known(KnownMessage::Result(result))) => match ended {
             Some(ActiveTurn::Ours(_)) => compaction.result(result, stopped),
-            // A turn the agent started itself only starts a compaction the user asked for during it. The point where a
-            // threshold check for such turns belongs: without one, an agent that works from its background tasks
-            // never reaches a point where Devora compacts it.
             Some(ActiveTurn::Agents) => compaction.agents_turn_ended(result).map(Next::Send),
             None => None,
         },

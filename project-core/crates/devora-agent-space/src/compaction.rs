@@ -278,9 +278,10 @@ impl Compaction {
         step.map(Next::Send)
     }
 
-    /// The end of a turn the agent's CLI started itself (`ActiveTurn::Agents`): a compaction the user asked for during
-    /// it starts now, and an interrupted or failed one drops the request, as at the end of a turn Devora sent. The
-    /// threshold isn't checked here yet, so such turns alone never start a compaction (`compact` in `running.rs`).
+    /// The end of a turn the agent's CLI started itself (`ActiveTurn::Agents`), as when a background task reports: a
+    /// compaction the user asked for during it, or the threshold reached, starts now, and an interrupted or failed one
+    /// drops the request, as at the end of a turn Devora sent. So an agent that works from its background tasks is
+    /// compacted too. Only from `Idle`: such a turn is no step of a compaction under way.
     pub fn agents_turn_ended(&mut self, result: &TurnResult) -> Option<Step> {
         if let Some(window) = context_window(result) {
             self.context.window_tokens = window;
@@ -289,12 +290,18 @@ impl Compaction {
             self.requested = false;
             return None;
         }
-        if self.stage == Stage::Idle && self.requested {
-            self.requested = false;
-            self.stage = Stage::SavingMemory;
-            return Some(Step::SaveMemory(Trigger::Requested));
+        if self.stage != Stage::Idle {
+            return None;
         }
-        None
+        let trigger = if std::mem::take(&mut self.requested) {
+            Trigger::Requested
+        } else if self.over_threshold() {
+            Trigger::Threshold
+        } else {
+            return None;
+        };
+        self.stage = Stage::SavingMemory;
+        Some(Step::SaveMemory(trigger))
     }
 
     /// A compaction boundary: Devora's own `/compact`, or one the CLI made itself,
@@ -521,6 +528,33 @@ mod tests {
             compaction.result(&result(false), false),
             Some(Next::Send(Step::SaveMemory(Trigger::Threshold)))
         );
+    }
+
+    #[test]
+    fn the_threshold_is_checked_when_a_turn_the_agents_cli_started_ends() {
+        let mut compaction = Compaction::new(None, 80);
+        compaction.usage(&json!({"input_tokens": 600}));
+        assert_eq!(
+            compaction.agents_turn_ended(&result(false)),
+            None,
+            "60% is under 80%"
+        );
+        compaction.usage(&json!({"input_tokens": 900}));
+        assert_eq!(
+            compaction.agents_turn_ended(&result(true)),
+            None,
+            "an interrupted or failed turn starts nothing"
+        );
+        assert_eq!(
+            compaction.agents_turn_ended(&result(false)),
+            Some(Step::SaveMemory(Trigger::Threshold))
+        );
+        assert_eq!(
+            compaction.agents_turn_ended(&result(false)),
+            None,
+            "the compaction under way goes on through Devora's own turns"
+        );
+        assert_eq!(compaction.context().progress, Progress::Underway);
     }
 
     #[test]
