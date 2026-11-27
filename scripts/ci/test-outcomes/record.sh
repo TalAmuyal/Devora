@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Appends a CI job's test outcomes to one JSON-lines file, one object per test (README.md), from what its test runs wrote.
-# Usage: record.sh <job> <out.jsonl> <format>=<path>... with format swift-testing, xcresult, watchdog, cucumber, vitest or rust.
+# Usage: record.sh <job> <out.jsonl> <format>=<path>... with format swift-testing, xcresult, watchdog, cucumber, acceptance-watchdog, vitest or rust.
 # The run's identity comes from GitHub's environment (run id and attempt, commit, event, ref).
 # It never fails the job: a result that's missing (its step didn't run) or unreadable is said in the log, and skipped.
 set -uo pipefail
@@ -11,8 +11,8 @@ mkdir -p "$(dirname "$out")"
 for input in "$@"; do
 	format="${input%%=*}" path="${input#*=}"
 	if [ ! -e "$path" ]; then
-		if [ "$format" = watchdog ]; then
-			echo "test-outcomes: no watchdog verdict at $path (it didn't stop the run)"
+		if [[ "$format" == *watchdog ]]; then
+			echo "test-outcomes: no $format verdict at $path (it didn't stop the run)"
 		else
 			echo "test-outcomes: no $format results at $path (its tests didn't run)"
 		fi

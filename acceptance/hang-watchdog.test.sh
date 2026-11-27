@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Checks the acceptance hang watchdog (hang-watchdog.ts) on real hangs, with a 3-second limit and no app: a step blocked
-# in a synchronous spawn, and a run that doesn't exit after its last scenario, are named and stopped; a run that ends
-# exits as it did without the watchdog.
+# in a synchronous spawn, and a run that doesn't exit after its last scenario, are named and stopped, also when its
+# evidence commands never answer (as during a WindowServer freeze); a run that ends exits as it did without the watchdog.
 # Usage: hang-watchdog.test.sh <project directory>, run with that project's Cucumber and tsx (Ember's and Sapphire's
 # differ, and how tsx loads the watchdog's module is part of what's checked). The fixture is copied into the project's
 # test-results/, where its steps import that project's Cucumber.
@@ -27,15 +27,20 @@ run() {
 	for file in "$@"; do support+=(--import "$file"); done
 	# The group's own stderr only takes bash's notice of a command a signal ended ("Terminated: 15"), which a stopped run is.
 	{
-		ACCEPTANCE_HANG_LIMIT_SECONDS=3 ACCEPTANCE_HANG_REPORT="$scratch/$tag.txt" \
+		PATH="${stand_ins:+$stand_ins:}$PATH" ACCEPTANCE_HANG_LIMIT_SECONDS=3 ACCEPTANCE_HANG_REPORT="$scratch/$tag.txt" \
 			node --import tsx ./node_modules/.bin/cucumber-js "$fixtures/hangs.feature" --tags "@$tag" --import "$fixtures/hangs.steps.ts" ${support[@]+"${support[@]}"} \
 			--format progress --format "../acceptance/hang-watchdog-formatter.ts:$scratch/$tag.progress" >"$scratch/$tag.out" 2>&1
 	} 2>/dev/null
 }
 
+stand_ins=""
 if run blocked; then
 	fail "a blocked step: the run passed"
 fi
+grep -qF 'acceptance: the hang watchdog is watching (it stops the run after 3 s without progress)' "$scratch/blocked.out" ||
+	fail "a blocked step: the watchdog didn't say it was watching"
+jq -e '.suite == "Hangs the watchdog names" and .name == "A step blocked on a child process" and (.verdict | IN("test", "runner"))' "$scratch/blocked.json" >/dev/null ||
+	fail "a blocked step: the verdict doesn't name the scenario: $(cat "$scratch/blocked.json" 2>&1)"
 grep -qF 'acceptance: no progress for 3 s since step "a step waits synchronously for a child process that doesn'\''t end" of scenario "A step blocked on a child process"' "$scratch/blocked.out" ||
 	fail "a blocked step: the message doesn't name the step and its scenario: $(cat "$scratch/blocked.out")"
 grep -qE '^ *[0-9]+ +[0-9]+ +[0-9:]+  sleep 117$' "$scratch/blocked.txt" ||
@@ -49,6 +54,35 @@ if pgrep -qf '^sleep 117$'; then
 fi
 grep -qF 'scenario "A step blocked on a child process"' "$scratch/blocked.progress" ||
 	fail "a blocked step: the progress doesn't show the scenario that started"
+
+# Evidence commands that never answer, as `screencapture` doesn't while WindowServer is frozen, and that ignore SIGTERM:
+# the run is still named and stopped, and the verdict, with GPU fence timeouts logged, is the runner's.
+stand_ins="$scratch/stand-ins"
+mkdir -p "$stand_ins"
+for command in sample screencapture; do
+	printf '#!/bin/sh\ntrap "" TERM\nwhile :; do sleep 1; done\n' >"$stand_ins/$command"
+done
+printf '#!/bin/sh\necho "2026-11-26 21:30:00.000 E  WindowServer[1:2] timed out fence"\n' >"$stand_ins/log"
+chmod +x "$stand_ins"/*
+started=$(date +%s)
+run blocked
+elapsed=$(($(date +%s) - started))
+stand_ins=""
+grep -qF 'acceptance: no progress for 3 s since step "a step waits synchronously' "$scratch/blocked.out" ||
+	fail "stuck evidence: the run wasn't named: $(cat "$scratch/blocked.out")"
+# The limit, then sample's and screencapture's deadlines, then the stop's grace, with room for a busy machine.
+[ "$elapsed" -lt 75 ] || fail "stuck evidence: the run took ${elapsed}s to stop"
+grep -qF "(sample didn't finish within 20 s, and was killed)" "$scratch/blocked.txt" ||
+	fail "stuck evidence: the report doesn't say sample was killed"
+grep -qF "no screenshot: WindowServer didn't answer within 10s" "$scratch/blocked.txt" ||
+	fail "stuck evidence: the report doesn't say WindowServer didn't answer"
+jq -e '.verdict == "runner" and .windowserver_unanswered != null' "$scratch/blocked.json" >/dev/null ||
+	fail "stuck evidence: the verdict isn't the runner's: $(cat "$scratch/blocked.json" 2>&1)"
+
+# An outline's row is named by its position among the rows that ran, as cucumber.sh names it, so the flake report matches it.
+run outline
+jq -e '.suite == "Hangs the watchdog names" and .name == "An outline whose second row blocks #2"' "$scratch/outline.json" >/dev/null ||
+	fail "an outline's row: the verdict doesn't name it as cucumber.sh does: $(cat "$scratch/outline.json" 2>&1)"
 
 if run lingering; then
 	fail "a run that doesn't exit: it passed"

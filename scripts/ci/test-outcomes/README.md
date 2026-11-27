@@ -7,12 +7,12 @@ Each CI job that runs tests records every test's outcome and duration, so a flak
 | Field | |
 |---|---|
 | `job` | The CI job (`sapphire`, …) |
-| `format` | The results it came from: `swift-testing`, `xcresult`, `watchdog`, `cucumber`, `vitest` or `rust` |
+| `format` | The results it came from: `swift-testing`, `xcresult`, `watchdog`, `cucumber`, `acceptance-watchdog`, `vitest` or `rust` |
 | `suite`, `name` | The test's identity (below) |
-| `outcome` | `passed`, `failed` or `skipped`, or `stopped` for the test the UI test watchdog stopped a run at (`watchdog`) |
+| `outcome` | `passed`, `failed` or `skipped`, or `stopped` for the test a hang watchdog stopped a run at (`watchdog`, `acceptance-watchdog`) |
 | `duration` | Seconds, or `null` where the runner doesn't report it |
 | `retries` | XCUITests only: how many times the test retried a step itself, its attachments named `<Something> retry: …` (`xcresult.sh`; the convention is in `project-sapphire/UITests/CLAUDE.md`). Other formats have no such field |
-| `watchdog` | `watchdog` records only: the watchdog's verdict, `runner` when the runner's WindowServer had frozen, else `test` (`watchdog.sh`, from its `verdict.json`; the rule is in `project-sapphire/UITests/CLAUDE.md`) |
+| `watchdog` | `watchdog` and `acceptance-watchdog` records only: the watchdog's verdict, `runner` when the runner's WindowServer had frozen, else `test` (`watchdog.sh`, from the UI test watchdog's `verdict.json`, and `acceptance-watchdog.sh`, from the acceptance hang watchdog's `hang.json`; the rule is in `project-sapphire/UITests/CLAUDE.md`) |
 | `run_id`, `run_attempt`, `sha`, `event`, `ref` | The run, from GitHub's environment |
 
 The job then uploads the file as the artifact `test-outcomes-<job>-attempt-<n>`, kept 90 days, on every run, pass or fail. Nothing else stores it.
@@ -26,6 +26,7 @@ A test's identity (`suite` and `name`) must be the same on every run, or its his
 - **XCUITests** (`xcresult.sh`, from the result bundle): the class and the method (`GlobalPauseUITests`, `testToolbarHoldSurvivesRelaunchAndThePaletteResumesIt()`). A test run with `-test-iterations` has one outcome per iteration. A test whose only failure is "Testing was canceled" is `skipped`: it was running when the run was stopped (the UI test watchdog's stop cancels it), and never finished.
 - **The UI test watchdog** (`watchdog.sh`, from its `verdict.json`): the test it stopped the run at, by the same identity as `xcresult.sh`'s, beside that test's own outcome from the bundle.
 - **cucumber** (`cucumber.sh`, from `--format json:<file>`): the feature's name and the scenario's, not `uri:line`. A Scenario Outline's rows share their name, so each gets its position among them (`… #2`): reordering an outline's rows renames them.
+- **The acceptance hang watchdog** (`acceptance-watchdog.sh`, from its `hang.json`, beside its `hang.txt`): the scenario it stopped the run at, by `cucumber.sh`'s identity (`acceptance/hang-watchdog-formatter.ts` builds it). A stopped run writes no Cucumber results, so this is the scenario's only record; a hang outside any scenario names none and records nothing.
 - **Vitest** (`vitest.sh`, from `--reporter=json --outputFile.json=<file>`): the test file's path from the repository's root, and the test's describe blocks and title (`findAppBundle > returns null when …`).
 - **Rust** (`rust.sh`, from `cargo test`'s output, which the job saves with `tee`): the test binary by package, `<package>` for its unit tests, `<package>/<file>` for an integration test and `<package> (doc)` for its doc-tests, and libtest's name, a doc-test's without its `(line N)`. Stable libtest prints no per-test time, so a Rust test's `duration` is `null`.
 	libtest doesn't name an integration binary's package, so it's taken from the last `Running unittests` line before it: cargo runs each package's targets together, its unit tests first. That holds while every crate keeps its unit-test binary; a crate with `test = false` would file its integration tests under the package before it.
@@ -40,7 +41,7 @@ A failure that passed when the job was re-run (an earlier attempt failed, the la
 Tests that needed their own retry are listed apart, passing or not, with the runs that needed one out of the runs, on master and on pull requests: a retry that lets a test pass would otherwise hide the flake it works around.
 The result bundle is uploaded only when a job fails, so the retries are counted on the runner, while recording, on every run.
 Read the two columns differently: a failure on a pull request can be that pull request's own bug, in work not merged yet, while a failure on master, or one that passed on re-run, is the stronger sign of a flake.
-Runs the UI test watchdog stopped at a test are listed apart, by its verdict: when it found the runner's WindowServer frozen (`runner`), the test's failure in that run isn't counted as the test's, while a hang of the test's own (`test`) is still a failure.
+Runs a hang watchdog (the UI tests' or the acceptance scenarios') stopped at a test are listed apart, by its verdict: when it found the runner's WindowServer frozen (`runner`), the test's failure in that run isn't counted as the test's, while a hang of the test's own (`test`) is still a failure, also when the stop is its only record.
 `--test` narrows it to the tests whose suite and name match, and lists them all, failed or not.
 Jobs GitHub cancelled before a runner took them are listed apart, as "not run", by GitHub's annotation on each (`flake-report-not-run.jq`): those it found no runner for, by job and runner label (a pool short of capacity, not a test result), apart from those a newer run of the same branch replaced (the workflow's own concurrency rule).
 `flake-report.jq` is the report itself, and `flake-report.test.sh` checks it on made-up outcomes.

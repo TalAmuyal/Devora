@@ -3,8 +3,10 @@
 # it failed if any attempt failed, and it "passed on re-run" if an attempt failed and its last attempt passed.
 # It "needed a retry" if any attempt recorded one (`retries`, an XCUITest's own measured retry): a test that passes that way
 # is listed apart, so a retry hides no flake.
-# A run the UI test watchdog stopped at the test (`watchdog`, its verdict) is listed apart too: when it found the runner's
-# WindowServer frozen ("runner"), the test's failure in that attempt isn't counted as the test's; another attempt's is.
+# A run a hang watchdog stopped at the test (`watchdog`, its verdict: the UI tests' or the acceptance scenarios') is listed
+# apart too: when it found the runner's WindowServer frozen ("runner"), the test's failure in that attempt isn't counted as
+# the test's; another attempt's is. A hang of the test's own ("test") is a failure, also where the stop is its only record
+# (a stopped acceptance run writes no Cucumber results).
 def median: sort | if length == 0 then null else .[length / 2 | floor] end;
 def secs: if . == null then "-" elif . < 10 then (. * 10 | round / 10 | tostring) + "s" else (round | tostring) + "s" end;
 ($listed | map({key: (.databaseId | tostring), value: .}) | from_entries) as $runs
@@ -16,7 +18,7 @@ def secs: if . == null then "-" elif . < 10 then (. * 10 | round / 10 | tostring
 		sort_by(.run_attempt)
 		# Each attempt decided by itself: its failure counts unless that same attempt found the runner frozen.
 		| (group_by(.run_attempt) | map({
-			failed: (any(.[]; .outcome == "failed") and (any(.[]; .watchdog == "runner") | not)),
+			failed: (any(.[]; .outcome == "failed" or (.outcome == "stopped" and .watchdog == "test")) and (any(.[]; .watchdog == "runner") | not)),
 			passed: (all(.[]; .outcome == "passed" or .outcome == "skipped") and any(.[]; .outcome == "passed"))})) as $attempts
 		| {run: .[0].run_id, event: .[0].event,
 			failed: any($attempts[]; .failed),
@@ -58,7 +60,7 @@ end),
 		+ "    \(.retries) retries; last: \(.last_retry.createdAt // "?") \(.last_retry.url // .last_retry.databaseId)")
 end),
 (if ($stopped | length) == 0 then empty else
-	"\nRuns the UI test watchdog stopped at a test (\"runner\": the runner's WindowServer had frozen, so the test's failure there isn't counted above):",
+	"\nRuns a hang watchdog stopped at a test (\"runner\": the runner's WindowServer had frozen, so the test's failure there isn't counted above):",
 	($stopped[] |
 		"\(.stops[0]) runner, \(.stops[1]) test  \(.job): \(.suite) / \(.name)"
 		+ (.stopped_in | map("\n    \(.verdict): \(.createdAt // "?") \(.url // .databaseId)") | add))

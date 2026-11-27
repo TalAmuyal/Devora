@@ -11,3 +11,12 @@ Feature: Hangs the watchdog names
   @passing
   Scenario: A run that ends
     When a step passes
+
+  @outline
+  Scenario Outline: An outline whose second row blocks
+    When a step <does>
+
+    Examples:
+      | does                                                     |
+      | passes                                                   |
+      | waits synchronously for a child process that doesn't end |

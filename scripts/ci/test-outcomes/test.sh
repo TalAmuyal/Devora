@@ -121,12 +121,21 @@ expect "watchdog: the stopped test, by the bundle's identity, with the verdict" 
 echo '{"test":"","verdict":"test","reason":"launched the app, which never got a process"}' >"$scratch/unnamed.json"
 expect "watchdog: a stop it couldn't name a test for records nothing" "" "$("$here/watchdog.sh" "$scratch/unnamed.json")"
 
+# The acceptance hang watchdog's verdict (acceptance/hang-watchdog-worker.mjs): the scenario it stopped the run at, by
+# cucumber.sh's identity; a hang outside any scenario names none.
+echo '{"suite":"Agent chat","name":"A turn is stopped #2","activity":"step \"the user presses Stop\" of scenario \"A turn is stopped\" started","verdict":"runner","fences_from":"2026-11-26 20:29:01.123","windowserver_unanswered":"WindowServer didn'"'"'t answer within 10s"}' >"$scratch/hang.json"
+expect "acceptance-watchdog: the stopped scenario, by cucumber.sh's identity, with the verdict" \
+	'{"suite":"Agent chat","name":"A turn is stopped #2","outcome":"stopped","duration":null,"watchdog":"runner"}' \
+	"$("$here/acceptance-watchdog.sh" "$scratch/hang.json")"
+echo '{"suite":null,"name":null,"activity":"the run started (its BeforeAll hooks run next, then the first scenario)","verdict":"test"}' >"$scratch/hang-unnamed.json"
+expect "acceptance-watchdog: a hang outside any scenario records nothing" "" "$("$here/acceptance-watchdog.sh" "$scratch/hang-unnamed.json")"
+
 # record.sh: the run's identity on every outcome, and a missing or unreadable result logged, never failing.
 echo 'not json' >"$scratch/broken.json"
 log=$(GITHUB_RUN_ID=42 GITHUB_RUN_ATTEMPT=2 GITHUB_SHA=abc GITHUB_EVENT_NAME=pull_request GITHUB_REF=refs/pull/7/merge \
 	"$here/record.sh" sapphire "$scratch/out/outcomes.jsonl" \
 	"cucumber=$fixtures/cucumber.json" "cucumber=$scratch/missing.json" "cucumber=$scratch/broken.json" \
-	"watchdog=$scratch/no-stop.json" 2>&1)
+	"watchdog=$scratch/no-stop.json" "acceptance-watchdog=$scratch/no-hang.json" 2>&1)
 expect "record.sh exits 0" "0" "$?"
 expect "record.sh adds the run" '{"job":"sapphire","format":"cucumber","suite":"File preview pane","name":"Refreshing an existing path preserves its stacked siblings","outcome":"passed","run_id":"42","run_attempt":2,"sha":"abc","event":"pull_request","ref":"refs/pull/7/merge"}' \
 	"$(jq -c 'del(.duration)' "$scratch/out/outcomes.jsonl")"
@@ -136,7 +145,8 @@ expect "record.sh says what it recorded and what it couldn't" "$(printf '%s\n' \
 	"test-outcomes: cucumber at $fixtures/cucumber.json: 1 passed" \
 	"test-outcomes: no cucumber results at $scratch/missing.json (its tests didn't run)" \
 	"test-outcomes: couldn't read the cucumber results at $scratch/broken.json" \
-	"test-outcomes: no watchdog verdict at $scratch/no-stop.json (it didn't stop the run)")" \
+	"test-outcomes: no watchdog verdict at $scratch/no-stop.json (it didn't stop the run)" \
+	"test-outcomes: no acceptance-watchdog verdict at $scratch/no-hang.json (it didn't stop the run)")" \
 	"$(grep '^test-outcomes' <<<"$log")"
 
 if [ "$failures" -gt 0 ]; then

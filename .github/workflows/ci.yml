@@ -181,14 +181,18 @@ jobs:
         uses: ./.github/actions/record-test-outcomes
         with:
           job: e2e-ember
-          results: cucumber=project-ember/test-results/test-outcomes/e2e.json
+          results: |
+            cucumber=project-ember/test-results/test-outcomes/e2e.json
+            acceptance-watchdog=project-ember/test-results/failures/hang.json
 
       - name: Upload failure captures
         if: failure() || cancelled()
         uses: actions/upload-artifact@v7
         with:
           name: e2e-failure-captures
-          path: project-ember/test-results/failures/
+          path: |
+            project-ember/test-results/failures/
+            project-ember/test-results/test-outcomes/e2e-progress.txt
           if-no-files-found: ignore
           retention-days: 14
 
@@ -316,18 +320,23 @@ jobs:
             swift-testing=project-sapphire/build/test-outcomes/unit.jsonl
             swift-testing=project-sapphire/build/test-outcomes/transcript.jsonl
             cucumber=project-sapphire/build/test-outcomes/acceptance.json
+            acceptance-watchdog=project-sapphire/test-results/failures/hang.json
             xcresult=project-sapphire/build/ui-tests.xcresult
             watchdog=project-sapphire/build/ui-test-hang/verdict.json
             cucumber=project-sapphire/build/test-outcomes/bundle.json
             rust=${{ runner.temp }}/sapphire-tests.log
             rust=${{ runner.temp }}/core-tests.log
 
+      # With each acceptance run's progress (the scenarios as they started), which names the one running even when the job
+      # was stopped at the step's time limit.
       - name: Upload acceptance failure captures
         if: failure() || cancelled()
         uses: actions/upload-artifact@v7
         with:
           name: sapphire-failure-captures
-          path: project-sapphire/test-results/failures/
+          path: |
+            project-sapphire/test-results/failures/
+            project-sapphire/build/test-outcomes/*-progress.txt
           if-no-files-found: ignore
           retention-days: 14
 

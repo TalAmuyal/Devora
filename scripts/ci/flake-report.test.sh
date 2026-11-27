@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Checks flake-report.jq on made-up outcomes: master and pull-request counts kept apart, a failure that passed on
 # re-run flagged, skipped tests not counted as runs, tests that never failed left out, tests that needed their own retry
-# listed apart whether they passed or not, runs the UI test watchdog stopped listed apart by its verdict, the --test filter,
+# listed apart whether they passed or not, runs a hang watchdog stopped listed apart by its verdict, the --test filter,
 # and jobs not run told apart by why.
 set -uo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
@@ -78,11 +78,19 @@ expect "runs the watchdog stopped" "$(printf '%s\n' \
 	'    last failed: 2026-11-03T00:00:00Z https://ci/3' \
 	'    duration: median 50s, slowest 300s' \
 	'' \
-	'Runs the UI test watchdog stopped at a test ("runner": the runner'"'"'s WindowServer had frozen, so the test'"'"'s failure there isn'"'"'t counted above):' \
+	'Runs a hang watchdog stopped at a test ("runner": the runner'"'"'s WindowServer had frozen, so the test'"'"'s failure there isn'"'"'t counted above):' \
 	'1 runner, 1 test  sapphire: Settings / multiline save' \
 	'    runner: 2026-11-01T00:00:00Z https://ci/1' \
 	'    test: 2026-11-03T00:00:00Z https://ci/3')" \
 	"$(jq -r -s --argjson listed "$listed" --arg filter "" -f "$here/flake-report.jq" <<<"$watched")"
+
+# An acceptance scenario the watchdog stopped has no other record (a stopped run writes no Cucumber results): its own
+# hang is a failure, a runner freeze isn't.
+acceptance_hangs=$(
+	printf '{"job":"sapphire","suite":"Agent chat","name":"A turn is stopped","outcome":"stopped","duration":null,"run_id":"%s","run_attempt":1,"event":"push","watchdog":"%s"}\n' 1 runner 2 test
+)
+expect "an acceptance hang of its own fails, a runner freeze doesn't" "1/2 master, 0/0 PR  sapphire: Agent chat / A turn is stopped" \
+	"$(jq -r -s --argjson listed "$listed" --arg filter "" -f "$here/flake-report.jq" <<<"$acceptance_hangs" | sed -n 3p)"
 
 # A runner freeze in one attempt hides no failure of the test's own in the re-run.
 rerun_failed=$(
