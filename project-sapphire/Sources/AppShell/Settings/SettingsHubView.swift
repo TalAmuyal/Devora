@@ -17,11 +17,10 @@ struct SettingsHubView: View {
 			.padding(.vertical, 12)
 			Divider()
 			HSplitView {
-				// Narrower than any page needs at the window's default size, so moving between pages never changes the split.
 				MasterList(model: model)
-					.frame(minWidth: 220, idealWidth: 280, maxWidth: 320)
-				// No minimum of its own: the split takes the detail's from its content, so a control's natural width (the
-				// Claude card's segmented controls) narrows the list rather than overflowing the pane.
+					.frame(minWidth: 220, idealWidth: 280, maxWidth: 380)
+				// No minimum of its own: the split takes the detail's from its content, so the widest control's natural width
+				// (Effort, laid out on every page by `EffortWidth`) narrows the list rather than overflowing the pane.
 				DetailPanel(model: model)
 					.frame(maxWidth: .infinity)
 			}
@@ -104,18 +103,21 @@ private struct DetailPanel: View {
 	var body: some View {
 		if model.loaded {
 			ScrollView {
-				VStack(alignment: .leading, spacing: 14) {
-					switch model.focusedRow {
-					case .userDefaults:
-						Text("User Defaults").font(.title2.weight(.semibold))
-						Text("Applied to every profile unless a profile overrides a setting.").foregroundStyle(.secondary)
-						if let scope = model.scope { ScopeCards(scope: scope) }
-					case .profile(let profile):
-						ProfileDetailView(profile: profile, model: model)
-						if let scope = model.scope { ScopeCards(scope: scope) }
-					case .newProfile:
-						Text("New Profile").font(.title2.weight(.semibold))
-						if let form = model.form { ProfileFormView(model: form) }
+				ZStack(alignment: .topLeading) {
+					EffortWidth(labels: model.effortLabels)
+					VStack(alignment: .leading, spacing: 14) {
+						switch model.focusedRow {
+						case .userDefaults:
+							Text("User Defaults").font(.title2.weight(.semibold))
+							Text("Applied to every profile unless a profile overrides a setting.").foregroundStyle(.secondary)
+							if let scope = model.scope { ScopeCards(scope: scope) }
+						case .profile(let profile):
+							ProfileDetailView(profile: profile, model: model)
+							if let scope = model.scope { ScopeCards(scope: scope) }
+						case .newProfile:
+							Text("New Profile").font(.title2.weight(.semibold))
+							if let form = model.form { ProfileFormView(model: form) }
+						}
 					}
 				}
 				.padding(20)

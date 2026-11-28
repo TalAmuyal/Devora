@@ -1,3 +1,4 @@
+import CoreBindings
 import SwiftUI
 
 /// Claude's six settings use the core's metadata for all suggestion/effort choices.
@@ -14,7 +15,7 @@ struct ClaudeSettingsCard: View {
 				combo("sonnet-model", "Sonnet tier", "ANTHROPIC_DEFAULT_SONNET_MODEL")
 				combo("haiku-model", "Haiku tier", "ANTHROPIC_DEFAULT_HAIKU_MODEL")
 				row("Effort", "--effort") {
-					segments("effort", ["Default"] + Array((model.choices?.effortLevels ?? []).reversed()) + ["None"], selected: model.effort) {
+					segments("effort", ClaudeSegments.effortLabels(model.choices), selected: model.effort) {
 						model.selectEffort($0)
 					}
 					if model.effort == "Default" { hint("effort") }
@@ -106,14 +107,48 @@ struct ClaudeSettingsCard: View {
 	}
 
 	private func segments(_ key: String, _ labels: [String], selected: String, select: @escaping (String) -> Void) -> some View {
+		ClaudeSegments(key: key, labels: labels, selected: selected, select: select)
+			.accessibilityIdentifier("claude-segments-\(key)")
+	}
+}
+
+/// A Claude setting's choices as a segmented control, always at its natural width: squeezed on the first layout, a
+/// segmented control holds its natural width on later ones, which would widen the detail past its pane after any change
+/// in the card. The Settings Hub's detail lays out a hidden Effort, the widest, on every page (`EffortWidth`).
+struct ClaudeSegments: View {
+	let key: String
+	let labels: [String]
+	let selected: String
+	let select: (String) -> Void
+
+	/// "Default", the core's effort levels from the highest, then "None"; the same in every scope.
+	static func effortLabels(_ choices: ClaudeSettingChoices?) -> [String] {
+		["Default"] + Array((choices?.effortLevels ?? []).reversed()) + ["None"]
+	}
+
+	var body: some View {
 		Picker(key, selection: Binding(get: { selected }, set: { if $0 != selected { select($0) } })) {
 			ForEach(labels, id: \.self) { Text($0).tag($0) }
 		}
 		.pickerStyle(.segmented).labelsHidden()
-		// Always its natural width: squeezed on the first layout, a segmented control holds its natural width on later
-		// ones, which would widen the detail past its pane after any change in the card.
 		.fixedSize()
-		.accessibilityIdentifier("claude-segments-\(key)")
+	}
+}
+
+/// The Effort row as the Claude card draws it, hidden and with no height: laid out on every page of the Settings Hub's
+/// detail, so each page has the minimum width the widest control needs on this machine, and moving between pages never
+/// changes the split.
+struct EffortWidth: View {
+	let labels: [String]
+
+	var body: some View {
+		SettingsCard(title: "") {
+			ClaudeSegments(key: "effort", labels: labels, selected: "Default", select: { _ in })
+		}
+		.frame(height: 0)
+		.hidden()
+		.allowsHitTesting(false)
+		.accessibilityHidden(true)
 	}
 }
 

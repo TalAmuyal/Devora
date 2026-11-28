@@ -126,13 +126,47 @@ final class SettingsHubUITests: XCTestCase {
 		XCTAssertTrue(element("claude-input-opus-model").waitForNonExistence(timeout: 5), "Default hides the field")
 		XCTAssertEqual(detail.frame, opened, "Closing it must not either")
 
-		// The New Profile page has no Claude card, so it needs less room: the list's cap keeps the split the same.
+		// The New Profile page has no Claude card, yet takes the same minimum (`EffortWidth`): the split stays.
 		app.typeKey("j", modifierFlags: [])
 		XCTAssertTrue(element("profile-form-name").waitForExistence(timeout: 5), "j moves to the New Profile row")
 		XCTAssertEqual(detail.frame, opened, "The New Profile page must keep the same split")
 		app.typeKey("k", modifierFlags: [])
 		XCTAssertTrue(segments.waitForExistence(timeout: 5), "k moves back to the profile")
 		XCTAssertEqual(detail.frame, opened, "And so must the profile, again")
+	}
+
+	/// Opened straight onto "New Profile…", the one page without a Claude card on screen first, the detail already has
+	/// the minimum a profile's page needs: moving to the profile keeps the split.
+	@MainActor
+	func testOpeningOnNewProfileGivesTheSplitAProfileNeeds() throws {
+		let config = try writeConfigWithAProfile(in: scratch)
+		app = XCUIApplication()
+		app.launchEnvironment["DEVORA_CONFIG_PATH"] = config.path
+		app.launchEnvironment["DEVORA_STATE_DIR"] = scratch.appending(path: "state").path
+		let inputTrace = scratch.appending(path: "input-trace.log")
+		app.launchEnvironment["DEVORA_INPUT_TRACE"] = inputTrace.path
+		app.allowSlowShiftDoubleTaps()
+		try app.useTheFakeClaude(reportingIn: scratch)
+		app.launch()
+		addTeardownBlock { @MainActor [app] in app?.terminate() }
+		XCTAssertTrue(app.hubHeader.waitForExistence(timeout: 10))
+		// The palette opens only with no window surface up: the launch's Workspace Hub closes first.
+		app.typeKey(.escape, modifierFlags: [])
+		XCTAssertTrue(app.hubHeader.waitForNonExistence(timeout: 5), "Escape closes the launch's Workspace Hub")
+		shiftShift(
+			in: app, typing: "New Profile", opens: element("command-palette-search"), inputTrace: inputTrace,
+			failure: "Shift-Shift must open the command palette")
+		app.typeKey(.return, modifierFlags: [])
+		XCTAssertTrue(element("profile-form-name").waitForExistence(timeout: 10), "The palette's New Profile opens its page")
+		let detail = element("settings-detail-scroll")
+		let window = app.windows.firstMatch.frame
+		let opened = detail.frame
+		XCTAssertTrue(window.contains(opened), "The detail \(opened) must be inside the window \(window)")
+
+		app.typeKey("k", modifierFlags: [])
+		XCTAssertTrue(element("claude-segments-effort").waitForExistence(timeout: 5), "k moves to the profile, with its Claude card")
+		XCTAssertEqual(detail.frame, opened, "The profile's page must keep the split New Profile opened with")
+		XCTAssertGreaterThanOrEqual(opened.width, element("claude-settings-card").frame.width, "The Claude card must fit it")
 	}
 
 	@MainActor
