@@ -250,7 +250,7 @@ Each setting is edited at the **User Defaults** (global) scope and per-profile: 
 
 The Settings Hub manages:
 
-- **Claude Launch Settings** — the default model, the model for each tier, the effort level, and the permission mode (see [The `ccc` Command](#the-ccc-command) below)
+- **Claude Launch Settings** — the Claude Code command, the default model, the model for each tier, the effort level, and the permission mode (see [The `ccc` Command](#the-ccc-command) below)
 - **Terminal & Session** — the per-session app launched instead of a bare shell (e.g. `nvim`), whether Devora exposes Debi's [git shortcuts](#git-shortcuts), and the prepare command run after each worktree is created
 - **Pull Requests** — auto-merge, the PR title prefix (prepended verbatim, so include any trailing space), and the feature-branch prefix used by `debi pr submit`
 - **Task Tracker** — the provider and, for Asana, the workspace/project/tag/section IDs plus the API token (stored in your OS keychain, shared with `debi`)
@@ -272,6 +272,11 @@ What it does:
 - **Effort level**: Sets the effort level to `xhigh` (extra-high) by default, so that Claude Code always tries to give a better result
 - **Plan mode**: Claude Code starts in plan permission mode by default, which requires explicit approval before making changes -- the permission mode is configurable
 - **Plugins**: Auto-loads Devora plugins (including Judgess -- see below)
+- **Claude Code command**: Runs `claude` unless you set another command in the Claude Launch Settings, globally or per profile -- for example a wrapper script of yours that starts Claude Code through a gateway
+	- It is a command name on your login shell's `PATH`, or a full path (`/…` or `~/…`); the whole value is the program, so it takes no arguments
+	- The wrapper must run Claude Code with the arguments it is given and pass its input and output through, `--version` included
+	- `ccc` uses it from the next terminal you open, `ccc --update` included
+	- In Devora Sapphire, a profile's agents run it too: each agent keeps the command it was created with, so changing the setting applies to agents created afterwards
 
 ## Judgess
 

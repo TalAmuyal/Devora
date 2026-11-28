@@ -1,6 +1,6 @@
 @claude-config
 Feature: Claude launch configuration
-  Devora resolves the Claude Code default model, model tiers, effort level, and permission mode from user/profile config (profile → user → Devora default, per key) and injects them into session shells as environment variables: the ANTHROPIC_* vars (default model + model tiers) are read by Claude Code natively, while the DEVORA_CCC_* vars (effort, permission mode) are turned by `ccc` into `--effort` / `--permission-mode` flags.
+  Devora resolves the Claude Code default model, model tiers, effort level, permission mode, and command from user/profile config (profile → user → Devora default, per key) and injects them into session shells as environment variables: the ANTHROPIC_* vars (default model + model tiers) are read by Claude Code natively, while the DEVORA_CCC_* vars are for `ccc`, which turns the effort and permission mode into `--effort` / `--permission-mode` flags and runs the command in place of `claude`.
   A setting can be a value, None (omit the var so Claude Code uses its default), or unset (fall through).
   Values use a `:value:` sentinel so an omitted var shows as `::`.
   The settings are edited in the Settings Hub through the "Claude Launch Settings" card.
@@ -52,6 +52,17 @@ Feature: Claude launch configuration
     When a new session is created
     And "echo PM=:$DEVORA_CCC_PERMISSION_MODE:" is typed in the terminal
     Then the terminal should contain "PM=::"
+
+  Scenario: The Claude Code command is exported for ccc, defaulting to claude
+    When a new session is created
+    And "echo COMMAND=:$DEVORA_CCC_COMMAND:" is typed in the terminal
+    Then the terminal should contain "COMMAND=:claude:"
+
+  Scenario: A configured Claude Code command is exported for ccc
+    Given the global config sets the Claude "command" to "claude-gateway"
+    When a new session is created
+    And "echo COMMAND=:$DEVORA_CCC_COMMAND:" is typed in the terminal
+    Then the terminal should contain "COMMAND=:claude-gateway:"
 
   Scenario: A model tier suggests every model Claude Code offers by its version, newest major first, then by tier
     Given a profile "Work" with 1 active workspaces

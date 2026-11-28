@@ -646,6 +646,7 @@ mod tests {
                     model: "opus".into(),
                     effort: Some("high".into()),
                 }),
+                command: Some("claude-gateway".into()),
             },
             "instructions",
         )
@@ -658,6 +659,7 @@ mod tests {
         db.set_model(&choice).unwrap();
         let form = db.load().unwrap().1;
         assert_eq!(form.model, Some(choice));
+        assert_eq!(form.command.as_deref(), Some("claude-gateway"));
     }
 
     fn created(path: &Path) -> Db {
@@ -674,6 +676,7 @@ mod tests {
                 inputs: BTreeMap::new(),
                 keep_coding_instructions: true,
                 model: None,
+                command: None,
             },
             "instructions",
         )

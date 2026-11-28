@@ -21,6 +21,17 @@ Feature: Claude settings and the shared Asana token
     Then the profile "Work" config should not have "claude.sonnet-model"
     And Claude "sonnet-model" should show "Default" with hint "→ future-model-id"
 
+  Scenario: The Claude Code command is a name or a full path, inherited like the other settings
+    When the user opens the "User Defaults" settings detail
+    Then Claude "command" should show "Default" with hint "→ claude"
+    When the user sets Claude "command" to custom "claude-gateway"
+    Then the global config should have the Claude "command" set to "claude-gateway"
+    When the user opens the "Work" settings detail
+    Then Claude "command" should show "Default" with hint "→ claude-gateway"
+    When the user sets Claude "command" to custom "bin/claude"
+    Then the recorded errors should include "The Claude Code command must be a command name or a full path (/… or ~/…), not “bin/claude”"
+    And the profile "Work" config should not have "claude.command"
+
   Scenario: An unset model tier leaves the model to Claude Code, and suggests the full model IDs it offers
     When the user opens the "User Defaults" settings detail
     Then Claude "opus-model" should show "Default" with hint "→ Claude Code default"

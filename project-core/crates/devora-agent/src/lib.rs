@@ -5,6 +5,8 @@
 
 /// The models Claude Code offers, from its initialize reply.
 pub mod models;
+/// Which file a Claude Code command runs.
+pub mod program;
 /// Typed wire messages and forward-compatible parsing, verified against recorded CLI fixtures.
 pub mod protocol;
 /// Persistent process lifecycle, interactive control and in-process Judgess.
@@ -14,9 +16,6 @@ pub mod version;
 
 use std::ffi::OsString;
 use std::path::Path;
-
-/// The program a launch runs.
-pub const CLAUDE: &str = "claude";
 
 /// Environment defaults applied when the variable is unset or empty.
 pub const ENV_DEFAULTS: [(&str, &str); 3] = [

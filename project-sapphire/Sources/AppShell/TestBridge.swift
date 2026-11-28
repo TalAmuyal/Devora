@@ -178,6 +178,8 @@ final class TestBridge {
 				observation["anchor"] = panel.chat.anchor.map { String($0.sequence) as Any } ?? NSNull()
 				observation["questions"] = panel.chat.chat?.questions.count ?? 0
 				observation["error"] = panel.chat.error.map { $0 as Any } ?? NSNull()
+				// What the chat's failure line says, beside its Retry: a failed launch, or a failed call of the chat's own.
+				observation["failure"] = (panel.chat.chat?.error ?? panel.chat.error).map { $0 as Any } ?? NSNull()
 				return .init(status: 200, body: observation)
 			case ("POST", "/test/agent-chat"):
 				guard let tab = store.app.window.activeTab, let panel = surfaces.agentPanels[tab] else { throw BridgeError(status: 409, "agent chat is not open") }
@@ -607,7 +609,7 @@ final class TestBridge {
 			}
 			return
 		}
-		if let key, ["opus-model", "sonnet-model", "haiku-model", "effort", "default-model", "permission-mode"].contains(key) {
+		if let key, ["command", "opus-model", "sonnet-model", "haiku-model", "effort", "default-model", "permission-mode"].contains(key) {
 			guard let claude = scope.claude, claude.settings != nil, let choices = claude.choices else { throw BridgeError(status: 409, "Claude settings aren't loaded") }
 			let label = body["label"] as? String
 			switch action {
@@ -817,14 +819,14 @@ final class TestBridge {
 				"effort": claude.effort,
 				"effortLevels": Array((claude.choices?.effortLevels ?? []).reversed()),
 				"defaultModelOn": claude.defaultModelOn,
-				"fields": ["opus-model", "sonnet-model", "haiku-model", "permission-mode"].map { key -> [String: Any] in
+				"fields": ["command", "opus-model", "sonnet-model", "haiku-model", "permission-mode"].map { key -> [String: Any] in
 					let mode = claude.mode(key)
 					return [
 						"key": key, "segment": mode.label, "hint": claude.inheritedHint(key),
 						"input": mode == .custom ? claude.input(key) : NSNull(),
 						"showsSave": mode == .custom && claude.showsSave(key),
 						"suggestions": (key == "permission-mode" ? claude.choices?.permissionModeSuggestions : nil) ?? [],
-						"modelSuggestions": key == "permission-mode" ? [] : Self.suggestionsState(claude.suggestions(forTier: key)),
+						"modelSuggestions": key.hasSuffix("-model") ? Self.suggestionsState(claude.suggestions(forTier: key)) : [],
 					]
 				},
 			] as [String: Any]

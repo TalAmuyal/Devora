@@ -162,6 +162,7 @@ Then(
 
 /** The card's row for a Claude setting key, by the label it shows. */
 const ROW_LABELS: Record<string, string> = {
+  command: 'Claude Code command',
   'opus-model': 'Opus tier',
   'sonnet-model': 'Sonnet tier',
   'haiku-model': 'Haiku tier',

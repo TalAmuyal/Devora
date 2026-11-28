@@ -25,7 +25,6 @@ use devora_state::{
 };
 pub use models::{ModelOptions, MODEL_LOOKUP_GRACE};
 pub use operations::{Creation, CreationEvent};
-use serde_json::Value;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -60,8 +59,8 @@ struct Owner {
     done: watch::Sender<bool>,
     /// From launching its runtime until the runtime has stopped.
     live: bool,
-    /// The settings its latest launch ran with, which key the models it was offered (`ModelOptions::cached`).
-    launch_settings: Option<Value>,
+    /// What its latest launch ran, which keys the models it was offered (`ModelOptions::cached`).
+    launched: Option<models::Launch>,
 }
 
 struct Inner {
@@ -106,8 +105,17 @@ pub async fn resolve_launch_context(
 /// Whether this is a test run (`DEVORA_TEST_MODE`) that names no fake Claude CLI (`DEVORA_TEST_CLAUDE_PROGRAM`): such a
 /// run must look up no models, which would launch the user's own `claude`.
 pub fn test_run_without_fake_claude() -> bool {
+    test_run() && std::env::var_os("DEVORA_TEST_CLAUDE_PROGRAM").is_none()
+}
+
+/// Whether this is a test run that names a fake Claude CLI, which then stands for `claude`
+/// (`devora_agent_space::claude_program`).
+fn test_run_with_fake_claude() -> bool {
+    test_run() && std::env::var_os("DEVORA_TEST_CLAUDE_PROGRAM").is_some()
+}
+
+fn test_run() -> bool {
     std::env::var("DEVORA_TEST_MODE").is_ok_and(|mode| mode == "1")
-        && std::env::var_os("DEVORA_TEST_CLAUDE_PROGRAM").is_none()
 }
 
 fn lock<T>(value: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -258,7 +266,7 @@ impl Agents {
                             },
                             done,
                             live: false,
-                            launch_settings: None,
+                            launched: None,
                         },
                     );
                     inner.changed.notify_one();
@@ -711,10 +719,10 @@ impl Agents {
             if inner.closing || owner.generation != generation {
                 return Err("agent generation is stale".into());
             }
-            let running = match (owner.live, &owner.handle, &owner.launch_settings) {
+            let running = match (owner.live, &owner.handle, &owner.launched) {
                 (false, ..) => None,
-                (true, Some(handle), Some(settings)) if !*owner.pause.borrow() => {
-                    Some((handle.clone(), settings.clone()))
+                (true, Some(handle), Some(launched)) if !*owner.pause.borrow() => {
+                    Some((handle.clone(), launched.clone()))
                 }
                 (true, ..) => {
                     return Err(
@@ -726,15 +734,23 @@ impl Agents {
         };
         let models = lock(&self.inner).models.clone();
         let offered = match &running {
-            Some((_, settings)) => models
-                .cached(&key.profile, settings)
+            Some((_, launched)) => models
+                .cached(&key.profile, launched)
                 .ok_or("Devora doesn't know the models this agent is offered.")?,
             None => {
                 let context =
                     next_launch.ok_or("Devora doesn't know how to launch this agent yet.")?;
+                let (profile, name) = (key.profile.clone(), key.name.clone());
+                let probe = self
+                    .runtime
+                    .spawn_blocking(move || {
+                        Space::open(&profile, &name)?.own_probe_options(&context)
+                    })
+                    .await
+                    .map_err(|e| e.to_string())??;
                 let profile = key.profile.clone();
                 self.runtime
-                    .spawn(async move { models.get(&profile, &context).await })
+                    .spawn(async move { models.offered(&profile, probe).await })
                     .await
                     .map_err(|e| e.to_string())??
             }
@@ -802,10 +818,10 @@ impl Agents {
             if inner.closing || owner.generation != generation {
                 return Err("agent generation is stale".into());
             }
-            let running = match (owner.live, &owner.handle, &owner.launch_settings) {
+            let running = match (owner.live, &owner.handle, &owner.launched) {
                 (false, ..) => None,
-                (true, Some(handle), Some(settings)) if !*owner.pause.borrow() => {
-                    Some((handle.clone(), settings.clone()))
+                (true, Some(handle), Some(launched)) if !*owner.pause.borrow() => {
+                    Some((handle.clone(), launched.clone()))
                 }
                 (true, ..) => {
                     return Err(
@@ -817,9 +833,9 @@ impl Agents {
         };
         let models = lock(&self.inner).models.clone();
         let (offered, model) = match &running {
-            Some((_, settings)) => {
+            Some((_, launched)) => {
                 let offered = models
-                    .cached(&key.profile, settings)
+                    .cached(&key.profile, launched)
                     .ok_or("Devora doesn't know the models this agent is offered.")?;
                 let model = self
                     .state
@@ -834,21 +850,20 @@ impl Agents {
             None => {
                 let context =
                     next_launch.ok_or("Devora doesn't know how to launch this agent yet.")?;
-                let (profile, name, launch) =
-                    (key.profile.clone(), key.name.clone(), context.clone());
-                let model = self
+                let (profile, name) = (key.profile.clone(), key.name.clone());
+                let (model, probe) = self
                     .runtime
                     .spawn_blocking(move || {
-                        Space::open(&profile, &name)?
-                            .session_options(&launch)
-                            .map(|options| options.model)
+                        let space = Space::open(&profile, &name)?;
+                        let model = space.session_options(&context)?.model;
+                        Ok::<_, String>((model, space.own_probe_options(&context)?))
                     })
                     .await
                     .map_err(|e| e.to_string())??;
                 let profile = key.profile.clone();
                 let offered = self
                     .runtime
-                    .spawn(async move { models.get(&profile, &context).await })
+                    .spawn(async move { models.offered(&profile, probe).await })
                     .await
                     .map_err(|e| e.to_string())??;
                 (offered, model)
@@ -913,12 +928,18 @@ impl Agents {
             (owner.run_id, inner.launch.clone())
         };
         let Some(context) = context else { return };
-        let (profile, name, launch) = (key.profile.clone(), key.name.clone(), context.clone());
+        let (profile, name) = (key.profile.clone(), key.name.clone());
         let options = self
             .runtime
-            .spawn_blocking(move || Space::open(&profile, &name)?.session_options(&launch))
+            .spawn_blocking(move || {
+                let space = Space::open(&profile, &name)?;
+                Ok::<_, String>((
+                    space.session_options(&context)?,
+                    space.own_probe_options(&context)?,
+                ))
+            })
             .await;
-        if let Ok(Ok(options)) = options {
+        if let Ok(Ok((options, probe))) = options {
             let _ = self
                 .runtime
                 .spawn(present_stored_effort(
@@ -927,7 +948,7 @@ impl Agents {
                     key.clone(),
                     run_id,
                     options,
-                    context,
+                    probe,
                 ))
                 .await;
         }
@@ -1242,14 +1263,17 @@ async fn run_session(
         global_pause::check(inner.clone(), state.clone(), key.clone(), generation);
     publish(inner, state, key, generation, SpaceEvent::Restored(history));
     // What it will launch with, shown before it launches, so a paused or held agent shows its effort too.
-    if let Ok(options) = space.session_options(&context) {
+    if let (Ok(options), Ok(probe)) = (
+        space.session_options(&context),
+        space.own_probe_options(&context),
+    ) {
         tokio::spawn(present_stored_effort(
             inner.clone(),
             state.clone(),
             key.clone(),
             generation,
             options,
-            context.clone(),
+            probe,
         ));
     }
     while globally_paused() && state.global_paused() && !*pause.borrow() {
@@ -1306,6 +1330,8 @@ async fn run_session(
         let owner = inner.owners.get_mut(key).ok_or("agent owner disappeared")?;
         owner.handle = Some(running.handle());
     }
+    // What this launch ran, which keys the models it's offered.
+    let launched = models::Launch::new(running.launch_program(), running.launch_settings());
     // The model the user set the agent to in this run, as the space last said.
     let mut chosen = ChosenModel::default();
     // The effort the user set the agent to in this run, as the space last said.
@@ -1340,29 +1366,29 @@ async fn run_session(
                 let ready = matches!(&event, SpaceEvent::Session(SessionEvent::Ready { .. }));
                 if let SpaceEvent::Session(SessionEvent::Ready { capabilities, .. }) = &event {
                     let mut inner = lock(inner);
-                    inner.models.clone().learned(&key.profile, running.launch_settings(), devora_agent::models::decode(capabilities));
+                    inner.models.clone().learned(&key.profile, &launched, devora_agent::models::decode(capabilities));
                     if let Some(owner) = inner.owners.get_mut(key).filter(|o| o.run_id == generation) {
-                        owner.launch_settings = Some(running.launch_settings().clone());
+                        owner.launched = Some(launched.clone());
                     }
                 }
                 match event {
                     SpaceEvent::Model(model) => {
                         active = model;
-                        present_model(inner, state, key, generation, &running, &active, &chosen, chosen_effort.as_ref());
+                        present_model(inner, state, key, generation, &running, &launched, &active, &chosen, chosen_effort.as_ref());
                     }
                     SpaceEvent::ChosenEffort(effort) => {
                         chosen_effort = Some(effort);
-                        present_model(inner, state, key, generation, &running, &active, &chosen, chosen_effort.as_ref());
+                        present_model(inner, state, key, generation, &running, &launched, &active, &chosen, chosen_effort.as_ref());
                     }
                     SpaceEvent::ChosenModel(model) => {
                         chosen = model;
-                        present_model(inner, state, key, generation, &running, &active, &chosen, chosen_effort.as_ref());
+                        present_model(inner, state, key, generation, &running, &launched, &active, &chosen, chosen_effort.as_ref());
                     }
                     event => publish(inner, state, key, generation, event),
                 }
                 // The list this launch was just offered names the model, and says whether it's the one set.
                 if ready {
-                    present_model(inner, state, key, generation, &running, &active, &chosen, chosen_effort.as_ref());
+                    present_model(inner, state, key, generation, &running, &launched, &active, &chosen, chosen_effort.as_ref());
                 }
             }
         }
@@ -1378,13 +1404,12 @@ fn present_model(
     key: &Key,
     run_id: u64,
     running: &RunningSpace,
+    launched: &models::Launch,
     active: &ActiveModel,
     chosen: &ChosenModel,
     chosen_effort: Option<&ChosenEffort>,
 ) {
-    let list = lock(inner)
-        .models
-        .cached(&key.profile, running.launch_settings());
+    let list = lock(inner).models.cached(&key.profile, launched);
     let model = events::model(active, chosen, running.launch_model(), list.as_ref());
     let effort = events::effort(
         chosen_effort,
@@ -1410,10 +1435,10 @@ async fn present_stored_effort(
     key: Key,
     run_id: u64,
     options: devora_agent::session::SessionOptions,
-    context: LaunchContext,
+    probe: devora_agent::session::SessionOptions,
 ) {
     let models = lock(&inner).models.clone();
-    let list = models.get(&key.profile, &context).await.ok();
+    let list = models.offered(&key.profile, probe).await.ok();
     let effort = events::effort(
         None,
         &options.model,

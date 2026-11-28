@@ -22,7 +22,27 @@ const CALLBACK: &str = "devora-judgess";
 #[cfg(panic = "abort")]
 compile_error!("agent sessions require panic=unwind so a Judgess panic can abstain");
 
-pub(super) async fn check_version(options: &SessionOptions) -> Result<(), String> {
+/// Why a program fails the version check.
+#[derive(Debug)]
+pub enum VersionFailure {
+    /// It didn't answer `--version` as Claude Code does, with what happened: not Claude Code, or a wrapper that
+    /// doesn't pass the argument through.
+    NoAnswer(String),
+    /// It's a Claude Code that Devora doesn't support.
+    Unsupported(String),
+}
+
+impl std::fmt::Display for VersionFailure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let (Self::NoAnswer(message) | Self::Unsupported(message)) = self;
+        f.write_str(message)
+    }
+}
+
+/// Runs `options`' program with `--version`, as a session would run it, and checks that a supported Claude Code
+/// answers.
+pub async fn check_version(options: &SessionOptions) -> Result<(), VersionFailure> {
+    let no_answer = |message: String| VersionFailure::NoAnswer(message);
     let output = timeout(
         REQUEST_TIMEOUT,
         tokio::process::Command::new(&options.program)
@@ -37,15 +57,22 @@ pub(super) async fn check_version(options: &SessionOptions) -> Result<(), String
             .output(),
     )
     .await
-    .map_err(|_| "Claude version check timed out")?
-    .map_err(|error| format!("couldn't check Claude version: {error}"))?;
+    .map_err(|_| no_answer("Claude version check timed out".into()))?
+    .map_err(|error| no_answer(format!("couldn't check Claude version: {error}")))?;
     if !output.status.success() {
-        return Err(format!(
+        return Err(no_answer(format!(
             "Claude version check exited with {}",
             output.status
-        ));
+        )));
     }
-    crate::version::check_cli_version(&String::from_utf8_lossy(&output.stdout))
+    let answer = String::from_utf8_lossy(&output.stdout);
+    if !crate::version::is_cli_version(&answer) {
+        return Err(no_answer(format!(
+            "unrecognized Claude Code version: {:?}",
+            answer.trim()
+        )));
+    }
+    crate::version::check_cli_version(&answer).map_err(VersionFailure::Unsupported)
 }
 
 struct Process {

@@ -2,7 +2,7 @@ use crate::compaction::{Compaction, Context, Next, COMPACTION_FAILED};
 use crate::restart_notice::{AppRun, RestartNotice, StoppedTask};
 use crate::Space;
 use devora_agent::protocol::{BackgroundTask, CommandState, KnownMessage, Message, System};
-use devora_agent::session::stop_tree;
+use devora_agent::session::{check_version, stop_tree, VersionFailure};
 use devora_agent::session::{
     saved_model, saved_turn, PermissionAnswer, Resume, Session, SessionEvent, SessionHandle,
     SessionOptions, StopInfo, UsageSource,
@@ -13,6 +13,7 @@ use devora_agent::transcript::{
 use devora_app::log::{Level, Log};
 use devora_platform::processes::SystemProcessTable;
 use serde_json::{json, Value};
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinHandle;
@@ -283,11 +284,16 @@ pub struct RunningSpace {
     events: mpsc::UnboundedReceiver<SpaceEvent>,
     /// Ends with the stop the actor persisted, when it stopped the session itself.
     worker: Option<JoinHandle<Result<Option<StopInfo>, String>>>,
+    program: PathBuf,
     settings: Value,
     model: String,
     effort: Option<String>,
 }
 impl RunningSpace {
+    /// The file the CLI was launched from (`SessionOptions::program`): what the agent's Claude Code command ran.
+    pub fn launch_program(&self) -> &Path {
+        &self.program
+    }
     pub fn handle(&self) -> SpaceHandle {
         self.handle.clone()
     }
@@ -339,6 +345,7 @@ pub(crate) async fn start(
     run: &AppRun,
 ) -> Result<RunningSpace, String> {
     let run = run.clone();
+    let program = options.program.clone();
     let settings = options.settings.clone();
     let model = options.model.clone();
     let effort = options.effort.clone();
@@ -414,7 +421,15 @@ pub(crate) async fn start(
     })
     .await
     .map_err(|e| e.to_string())??;
-    let mut session = match Session::start(options, log.clone()).await {
+    let started = match check_version(&options).await {
+        Ok(()) => Session::launch(options, log.clone()).await,
+        Err(VersionFailure::NoAnswer(what)) => Err(format!(
+            "The Claude Code command {} didn't answer --version as Claude Code does ({what}).",
+            crate::described(space.command(), &space.profile)
+        )),
+        Err(VersionFailure::Unsupported(why)) => Err(why),
+    };
+    let mut session = match started {
         Ok(session) => session,
         Err(error) => {
             let change = transcript.system(SystemKind::Failure, &error, json!({}));
@@ -481,6 +496,7 @@ pub(crate) async fn start(
         handle,
         events: received,
         worker: Some(worker),
+        program,
         settings,
         model,
         effort,

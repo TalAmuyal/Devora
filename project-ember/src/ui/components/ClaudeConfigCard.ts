@@ -19,6 +19,7 @@ import { invokeLogOnly } from '../../invoke';
 const DEFAULT_MODEL_ALIAS = 'opusplan';
 
 type SettingKey =
+  | 'command'
   | 'opus-model'
   | 'sonnet-model'
   | 'haiku-model'
@@ -33,9 +34,11 @@ interface RowSpec {
   hint: string; // the env var / flag it drives, shown muted
   kind: 'combo' | 'effort' | 'toggle';
   placeholder?: string; // combo only: the free-text input placeholder
+  noNone?: boolean; // combo only: the setting always needs a value (the command), so it has no None
 }
 
 const ROWS: RowSpec[] = [
+  { key: 'command', label: 'Claude Code command', hint: 'a command name or a path', kind: 'combo', placeholder: 'command or path, then Enter', noNone: true },
   { key: 'opus-model', label: 'Opus tier', hint: 'ANTHROPIC_DEFAULT_OPUS_MODEL', kind: 'combo', placeholder: 'model ID, then Enter' },
   { key: 'sonnet-model', label: 'Sonnet tier', hint: 'ANTHROPIC_DEFAULT_SONNET_MODEL', kind: 'combo', placeholder: 'model ID, then Enter' },
   { key: 'haiku-model', label: 'Haiku tier', hint: 'ANTHROPIC_DEFAULT_HAIKU_MODEL', kind: 'combo', placeholder: 'model ID, then Enter' },
@@ -169,9 +172,9 @@ export function createClaudeConfigCard(options: ClaudeConfigCardOptions): HTMLEl
     const mode = displayMode(row.key);
     const segmented = createSegmentedControl<Mode>({
       items: [
-        { key: 'custom', label: 'Custom' },
-        { key: 'default', label: 'Default' },
-        { key: 'none', label: 'None' },
+        { key: 'custom' as Mode, label: 'Custom' },
+        { key: 'default' as Mode, label: 'Default' },
+        ...(row.noNone ? [] : [{ key: 'none' as Mode, label: 'None' }]),
       ],
       activeKey: mode,
       onSelect: (next) => onModeSelect(row, next),
@@ -245,7 +248,7 @@ export function createClaudeConfigCard(options: ClaudeConfigCardOptions): HTMLEl
       whitespace: 'trim',
       onCommit: (value) => editor.commit(row.key, value),
     });
-    if (row.key !== 'permission-mode') commitInput.input.setAttribute('list', modelList.id);
+    if (row.key.endsWith('-model')) commitInput.input.setAttribute('list', modelList.id);
     wrap.appendChild(commitInput.root);
 
     const chips = document.createElement('div');

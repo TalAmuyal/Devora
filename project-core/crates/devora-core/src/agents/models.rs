@@ -1,7 +1,8 @@
-//! The models each profile's agents are offered (`devora_agent::models`), cached per profile: every agent start fills it
+//! The models each profile's agents are offered (`devora_agent::models`), cached per profile and Claude Code command
+//! (an agent keeps the command it was created with, so one profile's agents may run several): every agent start fills it
 //! for free from its initialize reply, and `Agents::model_options` probes the CLI when the cache is missing, older than a
-//! day, from another CLI version, or from other launch settings (the profile's model tiers decide what an alias
-//! resolves to).
+//! day, from another CLI version, or from another launch ([`Launch`]: the profile's model tiers decide what an alias
+//! resolves to, and another Claude Code command may offer other models).
 
 use super::Agents;
 use devora_agent::models::{self, ModelList};
@@ -11,29 +12,50 @@ use serde_json::Value;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
 
 /// How long a list serves before the CLI is asked again, even at the same version.
 const FRESH: Duration = Duration::from_secs(24 * 60 * 60);
 
+/// What a model list was given under: the launch settings, and the file the Claude Code command ran, as it was then.
+/// A command that now finds another file, or the same file since replaced, is another launch.
+#[derive(Clone, Debug, PartialEq)]
+pub(super) struct Launch {
+    settings: Value,
+    program: PathBuf,
+    /// The file's modification time and size; none for a file that can't be read.
+    file: Option<(SystemTime, u64)>,
+}
+
+impl Launch {
+    pub(super) fn new(program: &Path, settings: &Value) -> Self {
+        Self {
+            settings: settings.clone(),
+            program: program.to_path_buf(),
+            file: std::fs::metadata(program)
+                .ok()
+                .and_then(|file| Some((file.modified().ok()?, file.len()))),
+        }
+    }
+}
+
 #[derive(Clone)]
 struct Cached {
     list: ModelList,
-    /// The launch settings the list was given under.
-    settings: Value,
+    launch: Launch,
     at: Instant,
 }
 
 /// A lookup's outcome, once it has one.
 type Outcome = Option<Result<ModelList, String>>;
 
-/// A lookup under way: the profile and launch settings it asks for, its outcome as it arrives, and its task.
+/// A lookup under way: the profile and launch it asks for, its outcome as it arrives, and its task.
 struct Probe {
     id: u64,
     profile: PathBuf,
-    settings: Value,
+    launch: Launch,
     outcome: watch::Receiver<Outcome>,
     task: JoinHandle<()>,
 }
@@ -47,11 +69,12 @@ struct Probes {
 }
 
 /// The models each profile is offered, cached per profile. The agent registry keeps one, which every agent start fills;
-/// a host without agents (Ember's settings) keeps its own. It runs one lookup at a time per profile and launch settings
+/// a host without agents (Ember's settings) keeps its own. It runs one lookup at a time per profile and launch
 /// (callers asking meanwhile share it), each as a task of its own that `shutdown` ends, so that a quitting app leaves no
 /// CLI behind.
 pub struct ModelOptions {
-    cache: Mutex<BTreeMap<PathBuf, Cached>>,
+    /// By profile and the file the command runs.
+    cache: Mutex<BTreeMap<(PathBuf, PathBuf), Cached>>,
     probes: Mutex<Probes>,
     /// The aliases Claude Code listed that Devora doesn't know as a tier, each logged once.
     unknown_aliases: Mutex<std::collections::BTreeSet<String>>,
@@ -68,9 +91,9 @@ impl ModelOptions {
         }
     }
 
-    /// What an agent of `profile`, launched with `settings`, was just offered: logged, as the record of what a real login
+    /// What an agent of `profile`, launched as `launch`, was just offered: logged, as the record of what a real login
     /// gets, and cached.
-    pub(super) fn learned(&self, profile: &Path, settings: &Value, list: ModelList) {
+    pub(super) fn learned(&self, profile: &Path, launch: &Launch, list: ModelList) {
         for alias in list.unknown_aliases() {
             if self
                 .unknown_aliases
@@ -104,47 +127,59 @@ impl ModelOptions {
             ),
         );
         self.cache.lock().unwrap_or_else(|e| e.into_inner()).insert(
-            profile.to_path_buf(),
+            (profile.to_path_buf(), launch.program.clone()),
             Cached {
                 list,
-                settings: settings.clone(),
+                launch: launch.clone(),
                 at: Instant::now(),
             },
         );
     }
 
-    /// The list cached for `profile` under exactly these launch settings, however old: what an agent launched with them
-    /// was offered, for reading its replies' models without asking the CLI.
-    pub(super) fn cached(&self, profile: &Path, settings: &Value) -> Option<ModelList> {
+    /// The list cached for `profile` under exactly this launch, however old: what an agent launched so was offered, for
+    /// reading its replies' models without asking the CLI.
+    pub(super) fn cached(&self, profile: &Path, launch: &Launch) -> Option<ModelList> {
         self.cache
             .lock()
             .unwrap_or_else(|e| e.into_inner())
-            .get(profile)
-            .filter(|cached| cached.settings == *settings)
+            .get(&(profile.to_path_buf(), launch.program.clone()))
+            .filter(|cached| cached.launch == *launch)
             .map(|cached| cached.list.clone())
     }
 
-    /// The models an agent of `profile` is offered, launched with `context`: the cached list while it's under a day old
-    /// and from the CLI version and launch settings an agent would get now, else a fresh one from an initialize-only
-    /// launch.
+    /// The models a new agent of `profile` is offered, launched with `context` (`offered`, for the profile's own Claude
+    /// Code command).
     pub async fn get(
         self: &Arc<Self>,
         profile: &Path,
         context: &LaunchContext,
     ) -> Result<ModelList, String> {
+        self.offered(profile, Space::probe_options(context, profile)?)
+            .await
+    }
+
+    /// The models an agent of `profile` is offered, launched as `options` ask (`Space::probe_options`, or an agent's
+    /// `own_probe_options`): the cached list while it's under a day old
+    /// and from the CLI version and the launch an agent would get now (its settings, and the file the profile's Claude
+    /// Code command runs), else a fresh one from an initialize-only launch.
+    pub(super) async fn offered(
+        self: &Arc<Self>,
+        profile: &Path,
+        options: devora_agent::session::SessionOptions,
+    ) -> Result<ModelList, String> {
         if self.lock_probes().closed {
             return Err(QUITTING.into());
         }
-        let options = Space::probe_options(context, profile)?;
         let cached = self
             .cache
             .lock()
             .unwrap_or_else(|e| e.into_inner())
-            .get(profile)
+            .get(&(profile.to_path_buf(), options.program.clone()))
             .cloned();
         if let Some(cached) = cached.filter(|cached| cached.at.elapsed() < FRESH) {
             let installed = models::cli_version(&options).await?;
-            if serves(&cached, cached.at.elapsed(), &installed, &options.settings) {
+            let launch = Launch::new(&options.program, &options.settings);
+            if serves(&cached, cached.at.elapsed(), &installed, &launch) {
                 return Ok(cached.list);
             }
         }
@@ -157,13 +192,14 @@ impl ModelOptions {
         result.expect("waited for an outcome")
     }
 
-    /// The lookup for `profile` under `options`' launch settings: the one under way, or a new one, started as a task of its
+    /// The lookup for `profile` under `options`' launch: the one under way, or a new one, started as a task of its
     /// own, which caches the list and then leaves the running lookups, failed or not, so that the next call asks again.
     fn probe(
         self: &Arc<Self>,
         profile: &Path,
         options: devora_agent::session::SessionOptions,
     ) -> Result<watch::Receiver<Outcome>, String> {
+        let launch = Launch::new(&options.program, &options.settings);
         let mut probes = self.lock_probes();
         if probes.closed {
             return Err(QUITTING.into());
@@ -171,7 +207,7 @@ impl ModelOptions {
         if let Some(probe) = probes
             .running
             .iter()
-            .find(|probe| probe.profile == profile && probe.settings == options.settings)
+            .find(|probe| probe.profile == profile && probe.launch == launch)
         {
             return Ok(probe.outcome.clone());
         }
@@ -180,11 +216,11 @@ impl ModelOptions {
         probes.next_id += 1;
         let this = self.clone();
         let key = profile.to_path_buf();
-        let settings = options.settings.clone();
+        let asked = launch.clone();
         let task = tokio::spawn(async move {
             let result = models::discover(&options).await;
             if let Ok(list) = &result {
-                this.learned(&key, &options.settings, list.clone());
+                this.learned(&key, &asked, list.clone());
             }
             this.lock_probes().running.retain(|probe| probe.id != id);
             let _ = sender.send(Some(result));
@@ -192,7 +228,7 @@ impl ModelOptions {
         probes.running.push(Probe {
             id,
             profile: profile.to_path_buf(),
-            settings,
+            launch,
             outcome: outcome.clone(),
             task,
         });
@@ -239,11 +275,9 @@ pub const MODEL_LOOKUP_GRACE: Duration = Duration::from_secs(2);
 /// Why a lookup is refused once `shutdown` has run.
 const QUITTING: &str = "Devora is quitting, so it doesn't ask Claude Code for its models";
 
-/// Whether a cached list still answers for the CLI version installed now and the launch settings an agent would get now.
-fn serves(cached: &Cached, age: Duration, installed: &str, settings: &Value) -> bool {
-    age < FRESH
-        && cached.list.cli_version.as_deref() == Some(installed)
-        && cached.settings == *settings
+/// Whether a cached list still answers for the CLI version installed now and the launch an agent would get now.
+fn serves(cached: &Cached, age: Duration, installed: &str, launch: &Launch) -> bool {
+    age < FRESH && cached.list.cli_version.as_deref() == Some(installed) && cached.launch == *launch
 }
 
 impl Agents {
@@ -319,17 +353,21 @@ mod tests {
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
-    fn tiers(opus: &str) -> Value {
-        json!({"env": {"ANTHROPIC_DEFAULT_OPUS_MODEL": opus}})
+    /// A launch of `claude` with the opus tier set to `opus`.
+    fn tiers(opus: &str) -> Launch {
+        Launch::new(
+            Path::new("/nonexistent/claude"),
+            &json!({"env": {"ANTHROPIC_DEFAULT_OPUS_MODEL": opus}}),
+        )
     }
 
-    fn cached(version: Option<&str>, settings: Value) -> Cached {
+    fn cached(version: Option<&str>, launch: Launch) -> Cached {
         Cached {
             list: ModelList {
                 cli_version: version.map(str::to_owned),
                 models: vec![],
             },
-            settings,
+            launch,
             at: Instant::now(),
         }
     }
@@ -362,6 +400,28 @@ mod tests {
         assert!(
             !serves(&list, hour, "2.1.326", &tiers("claude-opus-4-8")),
             "a changed tier resolves the aliases differently"
+        );
+    }
+
+    #[test]
+    fn a_list_serves_only_the_command_file_it_was_given_under() {
+        let hour = Duration::from_secs(60 * 60);
+        let dir = tempfile::tempdir().unwrap();
+        let (gateway, other) = (dir.path().join("claude-gateway"), dir.path().join("other"));
+        std::fs::write(&gateway, "#!/bin/sh\nexec claude \"$@\"\n").unwrap();
+        std::fs::write(&other, "#!/bin/sh\nexec claude \"$@\"\n").unwrap();
+        let settings = json!({});
+        let launch = Launch::new(&gateway, &settings);
+        let list = cached(Some("2.1.326"), launch.clone());
+        assert!(serves(&list, hour, "2.1.326", &launch));
+        assert!(
+            !serves(&list, hour, "2.1.326", &Launch::new(&other, &settings)),
+            "another command may offer other models"
+        );
+        std::fs::write(&gateway, "#!/bin/sh\nexec claude --gateway east \"$@\"\n").unwrap();
+        assert!(
+            !serves(&list, hour, "2.1.326", &Launch::new(&gateway, &settings)),
+            "the same command, its file since replaced"
         );
     }
 }

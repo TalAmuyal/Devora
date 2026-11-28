@@ -58,6 +58,12 @@ pub struct CreationForm {
     /// Claude settings.
     #[serde(default)]
     pub model: Option<ModelChoice>,
+    /// The Claude Code command the agent runs, as its profile had it configured when the agent was created (a name or a
+    /// path, `devora_config::config::claude_command`), which creation fills in. Every launch resolves it anew, so a
+    /// changed `PATH` applies while a changed setting doesn't. Agents created before the setting existed have none and
+    /// run `claude`.
+    #[serde(default)]
+    pub command: Option<String>,
 }
 
 fn keep_by_default() -> bool {
@@ -108,14 +114,14 @@ fn validate_model(choice: &ModelChoice) -> Result<(), String> {
     Ok(())
 }
 
-/// Host-owned executable, selected plugins, behavioral settings and scrubbed
-/// transport environment. Configured tool env belongs in settings.env. Credentials
+/// Host-owned selected plugins, behavioral settings and scrubbed transport
+/// environment, whose `PATH` and `HOME` are where a Claude Code command is looked
+/// up ([`claude_program`]). Configured tool env belongs in settings.env. Credentials
 /// stay in environment. The containing profile supplies alias values, and the model and
 /// effort of agents created without a [`ModelChoice`].
 #[derive(Clone)]
 pub struct LaunchContext {
     pub global_config: PathBuf,
-    pub program: PathBuf,
     pub plugins: Vec<Plugin>,
     pub settings: Value,
     pub environment: BTreeMap<String, String>,
@@ -251,6 +257,8 @@ impl Space {
             validate_model(choice)?;
         }
         let profile = fs::canonicalize(profile).map_err(storage)?;
+        let mut form = form;
+        form.command = Some(config::claude_command(global_config, profile.to_str()));
         fs::create_dir_all(profile.join("agent-spaces")).map_err(storage)?;
         let root = catalogue(&profile)?;
         let path = root.join(&form.name);
@@ -514,7 +522,7 @@ impl Space {
         };
         let behavior = launch_settings(context, &settings)?;
         Ok(SessionOptions {
-            program: context.program.clone(),
+            program: claude_program(self.command(), &self.profile, context)?,
             working_directory: self.path.clone(),
             instructions: if self.form.keep_coding_instructions {
                 Instructions::Append(self.instructions.clone())
@@ -531,28 +539,29 @@ impl Space {
         })
     }
 
-    /// How to launch the CLI as an agent of `profile` would be, for asking it about itself rather than running a session
-    /// (`devora_agent::models`): that profile's settings, the host's environment, in the profile's directory.
+    /// The Claude Code command the agent runs: the one stored when it was created, or `claude` for an agent from before.
+    pub fn command(&self) -> &str {
+        self.form
+            .command
+            .as_deref()
+            .unwrap_or(config::DEFAULT_CLAUDE_COMMAND)
+    }
+
+    /// How to launch the CLI as a new agent of `profile` would be, for asking it about itself rather than running a
+    /// session (`devora_agent::models`): that profile's settings and Claude Code command, the host's environment, in the
+    /// profile's directory.
     pub fn probe_options(
         context: &LaunchContext,
         profile: &Path,
     ) -> Result<SessionOptions, String> {
-        let settings = config::read_claude_settings_in(
-            &context.global_config,
-            Some(profile.to_str().ok_or("profile path is not UTF-8")?),
-        )?;
-        Ok(SessionOptions {
-            program: context.program.clone(),
-            working_directory: profile.to_path_buf(),
-            instructions: Instructions::Append(String::new()),
-            model: String::new(),
-            effort: None,
-            permission_mode: String::new(),
-            plugins: vec![],
-            settings: launch_settings(context, &settings)?,
-            environment: context.environment.clone(),
-            resume: None,
-        })
+        let profile_path = profile.to_str().ok_or("profile path is not UTF-8")?;
+        let command = config::claude_command(&context.global_config, Some(profile_path));
+        probe_options(context, profile, &command)
+    }
+
+    /// [`Space::probe_options`] for this agent, which runs its own command, whatever its profile's is now.
+    pub fn own_probe_options(&self, context: &LaunchContext) -> Result<SessionOptions, String> {
+        probe_options(context, &self.profile, self.command())
     }
 
     /// Launches the agent's CLI in `run`, the app process's identity, which
@@ -582,6 +591,65 @@ impl Space {
             compaction::Compaction::new(self.db.compact_threshold()?, profile_threshold);
         running::start(self, options, compaction, log, globally_paused, run).await
     }
+}
+
+fn probe_options(
+    context: &LaunchContext,
+    profile: &Path,
+    command: &str,
+) -> Result<SessionOptions, String> {
+    let settings = config::read_claude_settings_in(
+        &context.global_config,
+        Some(profile.to_str().ok_or("profile path is not UTF-8")?),
+    )?;
+    Ok(SessionOptions {
+        program: claude_program(command, profile, context)?,
+        working_directory: profile.to_path_buf(),
+        instructions: Instructions::Append(String::new()),
+        model: String::new(),
+        effort: None,
+        permission_mode: String::new(),
+        plugins: vec![],
+        settings: launch_settings(context, &settings)?,
+        environment: context.environment.clone(),
+        resume: None,
+    })
+}
+
+/// The file `command` runs for an agent of `profile` (`devora_agent::program`), looked up in the launch's environment;
+/// or what to tell the user when there's none. In a test run that names a fake Claude CLI, the fake stands for `claude`
+/// itself, so that a test can still set another command.
+pub fn claude_program(
+    command: &str,
+    profile: &Path,
+    context: &LaunchContext,
+) -> Result<PathBuf, String> {
+    let variable = |name: &str| context.environment.get(name).map(String::as_str);
+    if command == config::DEFAULT_CLAUDE_COMMAND && variable("DEVORA_TEST_MODE") == Some("1") {
+        if let Some(fake) = variable("DEVORA_TEST_CLAUDE_PROGRAM") {
+            return Ok(PathBuf::from(fake));
+        }
+    }
+    devora_agent::program::resolve(command, variable("PATH"), variable("HOME")).ok_or_else(|| {
+        format!(
+            "The Claude Code command {} {}.",
+            described(command, profile),
+            if command.contains('/') {
+                "isn't a file you can run"
+            } else {
+                "isn't on your login shell's PATH"
+            }
+        )
+    })
+}
+
+/// A Claude Code command as an error names it: the command and the profile whose agent runs it.
+fn described(command: &str, profile: &Path) -> String {
+    let profile = profile
+        .to_str()
+        .and_then(config::profile_name)
+        .unwrap_or_else(|| profile.display().to_string());
+    format!("“{command}” for profile {profile}")
 }
 
 /// The host's launch settings, with the profile's model tiers in their `env` unless the host set them already.

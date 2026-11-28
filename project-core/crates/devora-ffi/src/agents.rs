@@ -49,7 +49,6 @@ pub struct AgentPlugin {
 /// Environment holds scrubbed platform/auth/proxy transport and stays out of argv.
 #[derive(uniffi::Record)]
 pub struct AgentLaunch {
-    pub program: String,
     pub plugins: Vec<AgentPlugin>,
     pub settings_json: String,
     pub environment: HashMap<String, String>,
@@ -67,6 +66,7 @@ impl AgentCreationForm {
                 model: choice.model,
                 effort: choice.effort,
             }),
+            command: None,
         }
     }
 }
@@ -172,7 +172,6 @@ impl AgentLaunch {
             .map_err(|e| format!("invalid agent settings: {e}"))?;
         Ok(LaunchContext {
             global_config,
-            program: self.program.into(),
             settings,
             plugins: self
                 .plugins
@@ -651,7 +650,6 @@ impl DevoraCore {
             .resolve_launch(self.config_path.clone(), resources_dir.map(PathBuf::from))
             .await?;
         Ok(AgentLaunch {
-            program: context.program.to_string_lossy().into_owned(),
             plugins: context
                 .plugins
                 .into_iter()

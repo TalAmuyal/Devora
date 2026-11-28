@@ -133,6 +133,56 @@ fn ccc_matches_the_recorded_ccc_sh_behavior() {
     }
 }
 
+// A session's terminal exports its Claude Code command (`DEVORA_CCC_COMMAND`), and `ccc` runs that in place of `claude`.
+#[test]
+fn ccc_runs_the_sessions_claude_code_command() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path().canonicalize().unwrap();
+    fake_bundle(&root, true);
+    let bin = root.join("bin");
+    std::fs::create_dir_all(root.join("tools")).unwrap();
+    std::fs::create_dir(&bin).unwrap();
+    write_fake_claude(&bin);
+    write_script(
+        &bin.join("claude-gateway"),
+        "#!/bin/sh\necho on-path \"$@\"\n",
+    );
+    write_script(
+        &root.join("tools/gateway"),
+        "#!/bin/sh\necho in-home \"$@\"\n",
+    );
+    let ccc = |command: &str, args: &[&str]| {
+        let output = output(
+            Command::new(root.join("bundled-apps/ccc"))
+                .args(args)
+                .env_clear()
+                .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+                .env("HOME", &root)
+                .env("DEVORA_CCC_EFFORT", "high")
+                .env("DEVORA_CCC_COMMAND", command),
+        );
+        (
+            String::from_utf8_lossy(&output.stdout).trim().to_owned(),
+            String::from_utf8_lossy(&output.stderr).trim().to_owned(),
+            output.status.code().unwrap(),
+        )
+    };
+
+    let (launched, _, code) = ccc("claude-gateway", &["--resume"]);
+    assert_eq!(launched, "on-path --resume --effort high");
+    assert_eq!(code, 0);
+    assert_eq!(ccc("claude-gateway", &["--update"]).0, "on-path --update");
+    assert_eq!(ccc("~/tools/gateway", &["--update"]).0, "in-home --update");
+    // Unset in a terminal from before the setting, or empty: `claude`, as ever.
+    assert!(ccc("", &[]).0.contains("\"args\""), "the fake claude ran");
+    let (_, error, code) = ccc("claude-missing", &[]);
+    assert!(
+        error.starts_with("debi: cannot run claude-missing: "),
+        "{error}"
+    );
+    assert_eq!(code, 127);
+}
+
 #[test]
 fn other_commands_are_delegated_to_debi_go() {
     let tmp = tempfile::tempdir().unwrap();
