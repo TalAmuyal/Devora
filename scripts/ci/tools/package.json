@@ -1,7 +1,7 @@
 {
   "name": "devora-ci-tools",
   "private": true,
-  "description": "Tools CI installs, pinned so Dependabot can bump them (README.md)",
+  "description": "Tools CI installs, pinned in one place (README.md)",
   "dependencies": {
     "@anthropic-ai/claude-code": "2.1.330"
   }
