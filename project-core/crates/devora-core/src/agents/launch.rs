@@ -1,11 +1,12 @@
 //! What an Agent Space session is launched with when the app supplies nothing
-//! (ADR-009, ADR-012): Claude as the user's login shell finds it, that shell's
-//! environment, the bundled plugins, and Devora's defaults as inline settings.
+//! (ADR-009, ADR-012): the user's login shell's environment, the bundled plugins,
+//! and Devora's defaults as inline settings.
 //!
 //! A Finder-launched app has a minimal environment, so the login shell is asked,
 //! as the Health check does. Its environment reaches Claude, and so the agent's
 //! tools, as it reaches `ccc` in a terminal, less [`REMOVED`] and with the bundle's
-//! directories first on `PATH`.
+//! directories first on `PATH`. Each agent's Claude Code command is looked up on
+//! that `PATH` when the agent launches (`devora_agent_space::claude_program`).
 use super::{LaunchContext, Plugin};
 use devora_config::config;
 use std::collections::BTreeMap;
@@ -38,27 +39,18 @@ pub(super) async fn resolve(
     resources: Option<PathBuf>,
 ) -> Result<LaunchContext, String> {
     // The acceptance harness runs a fake CLI with the app's own environment.
-    let test_program = std::env::var("DEVORA_TEST_MODE")
-        .is_ok_and(|mode| mode == "1")
-        .then(|| std::env::var_os("DEVORA_TEST_CLAUDE_PROGRAM"))
-        .flatten();
-    let (program, inherited) = match test_program {
-        Some(program) => (PathBuf::from(program), std::env::vars().collect()),
-        None => capture_login_shell().await?,
+    let inherited = if super::test_run_with_fake_claude() {
+        std::env::vars().collect()
+    } else {
+        capture_login_shell().await?
     };
-    Ok(context(
-        global_config,
-        resources.as_deref(),
-        program,
-        inherited,
-    ))
+    Ok(context(global_config, resources.as_deref(), inherited))
 }
 
 /// The pure part of [`resolve`], given what the login shell reported.
 fn context(
     global_config: PathBuf,
     resources: Option<&Path>,
-    program: PathBuf,
     inherited: BTreeMap<String, String>,
 ) -> LaunchContext {
     let mut environment: BTreeMap<String, String> = inherited
@@ -96,30 +88,21 @@ fn context(
         .collect();
     LaunchContext {
         global_config,
-        program,
         plugins,
         settings: serde_json::json!({ "env": env }),
         environment,
     }
 }
 
-/// Runs the user's login shell once to find `claude` and read its environment.
-/// The shell's own stdout (rc-file noise) is discarded; both results go to files.
-async fn capture_login_shell() -> Result<(PathBuf, BTreeMap<String, String>), String> {
+/// Runs the user's login shell once to read its environment.
+/// The shell's own stdout (rc-file noise) is discarded; the result goes to a file.
+async fn capture_login_shell() -> Result<BTreeMap<String, String>, String> {
     let directory = tempfile::tempdir().map_err(|e| e.to_string())?;
-    let program_file = directory.path().join("program");
     let env_file = directory.path().join("env");
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into());
     let mut command = tokio::process::Command::new(shell);
     command
-        .args([
-            "-l",
-            "-i",
-            "-c",
-            "command -v claude > \"$1\"; env -0 > \"$2\"",
-            "devora-agent",
-        ])
-        .arg(&program_file)
+        .args(["-l", "-i", "-c", "env -0 > \"$1\"", "devora-agent"])
         .arg(&env_file)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -132,11 +115,6 @@ async fn capture_login_shell() -> Result<(PathBuf, BTreeMap<String, String>), St
     if !status.success() {
         return Err(format!("your login shell exited with {status}"));
     }
-    let program = std::fs::read_to_string(&program_file).unwrap_or_default();
-    let program = PathBuf::from(program.trim());
-    if !program.is_absolute() {
-        return Err("Claude Code (`claude`) isn't on your login shell's PATH".into());
-    }
     let env = std::fs::read(&env_file).map_err(|e| e.to_string())?;
     let inherited = env
         .split(|byte| *byte == 0)
@@ -146,7 +124,7 @@ async fn capture_login_shell() -> Result<(PathBuf, BTreeMap<String, String>), St
             Some((key.to_string(), value.to_string()))
         })
         .collect();
-    Ok((program, inherited))
+    Ok(inherited)
 }
 
 #[cfg(test)]
@@ -171,12 +149,7 @@ mod tests {
             ]
             .map(|(k, v)| (k.to_string(), v.to_string())),
         );
-        let context = context(
-            "/config.json".into(),
-            Some(resources.path()),
-            "/opt/homebrew/bin/claude".into(),
-            inherited,
-        );
+        let context = context("/config.json".into(), Some(resources.path()), inherited);
         assert_eq!(
             context.environment.keys().collect::<Vec<_>>(),
             ["GH_TOKEN", "PATH", "SSH_AUTH_SOCK"]

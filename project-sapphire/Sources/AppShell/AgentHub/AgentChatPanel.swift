@@ -78,14 +78,6 @@ struct AgentChatPanel: View {
 
 	var body: some View {
 		VStack(spacing: 0) {
-			if let error = model.chat.chat?.error ?? model.chat.error {
-				HStack {
-					Text(error).textSelection(.enabled)
-					Spacer()
-					Button("Retry") { Task { await model.chat.retry() } }.disabled(model.chat.globallyPaused)
-				}
-				.padding(12).foregroundStyle(.orange)
-			}
 			if model.prepared {
 				TranscriptView(
 					items: model.chat.items.map { TranscriptKit.TranscriptItem($0, name: { model.chat.modelSuggestions?.name(of: $0) }) },
@@ -100,6 +92,18 @@ struct AgentChatPanel: View {
 				if let step = model.chat.chat?.step { AgentTurnStatus(step: step) }
 			} else {
 				ProgressView("Opening agent…").frame(maxWidth: .infinity, maxHeight: .infinity)
+			}
+			// What failed, with its Retry: the one place a failed launch is shown, so it gets no error banner. Above the
+			// prompt, where a banner for something else doesn't cover it.
+			if let error = model.chat.chat?.error ?? model.chat.error {
+				HStack(alignment: .firstTextBaseline, spacing: 8) {
+					Image(systemName: "exclamationmark.triangle.fill").accessibilityHidden(true)
+					Text(error).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+					Spacer()
+					Button("Retry") { Task { await model.chat.retry() } }.disabled(model.chat.globallyPaused)
+				}
+				.padding(.horizontal, 12).padding(.vertical, 8).foregroundStyle(.orange)
+				.accessibilityIdentifier("agent-chat-failure")
 			}
 			Divider()
 			AgentPrompt(

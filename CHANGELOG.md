@@ -20,6 +20,7 @@ Types of changes:
 
 ### Added
 
+- A **Claude Code command** in the Claude Launch Settings, globally or per profile: `ccc` (and `ccc --update`) and Devora Sapphire's agents run it in place of `claude`, so Claude Code can be started through a wrapper of yours; it is a command name on your login shell's `PATH` or a full path, and each agent keeps the command it was created with
 - A program in a Devora Sapphire terminal that asks to be told of light/dark switches (mode 2031, as Neovim and Helix can) is told when the appearance switches, and a program that asks for the scheme gets the current one; new terminals still keep Devora's environment and their Default app in both appearances
 - Devora Sapphire's agent chat shows a message the agent hasn't received yet: one sent while the agent works on a turn of its own waits for the agent's next step, in a dashed blue outline saying "Not yet received"; if the agent's session ends first, the outline turns red and says "Not delivered: send it again", which a relaunch still shows
 - Devora Sapphire's agent chat has an Effort widget beside Model: it shows the agent's effort level and opens a menu of the levels its model takes; a pick applies from the next turn without restarting the agent (during a turn it shows in orange until the turn ends), and a paused agent uses it when it resumes
@@ -74,6 +75,8 @@ Types of changes:
 
 ### Changed
 
+- Devora Sapphire opens an agent's tab even when Claude Code can't be found, and says why in its chat with Retry, where it used to refuse to open the agent; Retry looks the command up again, so installing it is enough
+- Devora Sapphire shows an agent's failed launch in its chat only, just above the prompt with Retry, and no longer as an error banner too
 - Devora Sapphire's compaction threshold goes from 10% to 90%, in the Agent card and an agent's Context popover: above 90% there's no room left for the agent to save its memory first; a threshold stored before (1% to 100%) keeps working, used as the nearest limit, and the card and popover say so
 - Devora Ember now declares macOS 26 as its minimum: it installs and runs on macOS 26 or newer, and is built and tested on macOS 27
 - Devora Sapphire's agent chat shows a turn the agent started itself (a background task reporting) as running, with its step and Stop, and keeps Send: a prompt sent then joins that turn

@@ -52,6 +52,8 @@ export interface AgentChatState {
   canSend: boolean;
   questions: number;
   error: string | null;
+  /** What the chat's failure line says, beside its Retry; null when it shows none. */
+  failure: string | null;
 }
 
 export interface TabState {

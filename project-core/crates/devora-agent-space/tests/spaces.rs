@@ -45,6 +45,7 @@ impl Fixture {
             inputs: BTreeMap::new(),
             keep_coding_instructions: true,
             model: None,
+            command: None,
         }
     }
     fn create(&self, form: CreationForm) -> Result<Space, String> {
@@ -116,7 +117,10 @@ impl Fixture {
             .split_once('\n')
             .unwrap()
             .1;
-        let program = self.root.path().join("fake-cli");
+        // The agents' `claude`, first on their PATH.
+        let bin = self.root.path().join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        let program = bin.join("claude");
         // Python writes the executable, not this process: a child another test thread forks while this process has
         // it open for writing would inherit the descriptor until its own exec, and exec'ing the file meanwhile fails
         // on Linux with "Text file busy".
@@ -132,11 +136,13 @@ impl Fixture {
         assert!(written.success());
         LaunchContext {
             global_config: self.global.clone(),
-            program,
             plugins: vec![],
             settings: json!({"env":{"SPACE_CONFIG":"explicit"}}),
             environment: BTreeMap::from([
-                ("PATH".into(), std::env::var("PATH").unwrap()),
+                (
+                    "PATH".into(),
+                    format!("{}:{}", bin.display(), std::env::var("PATH").unwrap()),
+                ),
                 ("HOME".into(), self.root.path().display().to_string()),
                 (
                     "CLAUDE_CONFIG_DIR".into(),
@@ -634,6 +640,149 @@ fn a_chosen_model_and_effort_outlive_profile_changes_and_no_effort_leaves_it_to_
         effort: Some("extreme".into()),
     });
     assert!(fixture.create(form).is_err());
+}
+
+/// A Claude Code command of the user's: an executable `script` called `name`, beside the agents' `claude`.
+fn write_command(fixture: &Fixture, name: &str, script: &str) -> PathBuf {
+    use std::os::unix::fs::PermissionsExt;
+    let file = fixture.root.path().join("bin").join(name);
+    std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+    std::fs::write(&file, script).unwrap();
+    std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o755)).unwrap();
+    file
+}
+
+/// Sets the profile, named Work, to run `command` as Claude Code.
+fn set_command(fixture: &Fixture, command: &str) {
+    std::fs::write(
+        fixture.profile.join("config.json"),
+        json!({"name": "Work", "prepare-command": "true", "claude": {"command": command}})
+            .to_string(),
+    )
+    .unwrap();
+}
+
+#[test]
+fn an_agent_keeps_the_command_it_was_created_with_and_each_launch_looks_it_up_again() {
+    let fixture = Fixture::new();
+    let context = fixture.context();
+    let gateway = write_command(
+        &fixture,
+        "claude-gateway",
+        "#!/bin/sh\nexec claude \"$@\"\n",
+    );
+    set_command(&fixture, "claude-gateway");
+    fixture.create(fixture.form("Delta")).unwrap();
+    // The profile moves on; the agent doesn't.
+    set_command(&fixture, "claude-other");
+    let delta = || Space::open(&fixture.profile, "Delta").unwrap();
+    assert_eq!(delta().session_options(&context).unwrap().program, gateway);
+    assert_eq!(
+        delta().own_probe_options(&context).unwrap().program,
+        gateway,
+        "its models are its own command's"
+    );
+    assert_eq!(
+        Space::probe_options(&context, &fixture.profile)
+            .err()
+            .unwrap(),
+        "The Claude Code command “claude-other” for profile Work isn't on your login shell's PATH."
+    );
+
+    // A command that's gone fails the launch by name, and one installed since is found without reopening anything.
+    std::fs::remove_file(&gateway).unwrap();
+    assert_eq!(
+        delta().session_options(&context).err().unwrap(),
+        "The Claude Code command “claude-gateway” for profile Work isn't on your login shell's PATH."
+    );
+    write_command(
+        &fixture,
+        "claude-gateway",
+        "#!/bin/sh\nexec claude \"$@\"\n",
+    );
+    assert_eq!(delta().session_options(&context).unwrap().program, gateway);
+
+    set_command(&fixture, "~/bin/missing");
+    fixture.create(fixture.form("Echo")).unwrap();
+    assert_eq!(
+        Space::open(&fixture.profile, "Echo")
+            .unwrap()
+            .session_options(&context)
+            .err()
+            .unwrap(),
+        "The Claude Code command “~/bin/missing” for profile Work isn't a file you can run."
+    );
+
+    // An agent created before the setting existed has no command, and runs `claude`.
+    let before: CreationForm = serde_json::from_value(json!({
+        "name": "Foxtrot", "role": null, "repos": [], "inputs": {},
+    }))
+    .unwrap();
+    assert_eq!(before.command, None);
+    set_command(&fixture, "claude");
+    fixture.create(fixture.form("Golf")).unwrap();
+    assert_eq!(
+        Space::open(&fixture.profile, "Golf")
+            .unwrap()
+            .session_options(&context)
+            .unwrap()
+            .program,
+        fixture.root.path().join("bin/claude")
+    );
+}
+
+#[tokio::test]
+async fn a_command_that_does_not_answer_version_as_claude_code_fails_the_launch_by_name() {
+    let fixture = Fixture::new();
+    let context = fixture.context();
+    write_command(&fixture, "claude-gateway", "#!/bin/sh\necho gateway 1.0\n");
+    set_command(&fixture, "claude-gateway");
+    let space = fixture.create(fixture.form("Delta")).unwrap();
+    let log = Arc::new(Log::open(&fixture.root.path().join("log")).unwrap());
+    let error = space
+        .start(&context, log, &fixture.run)
+        .await
+        .err()
+        .unwrap();
+    assert_eq!(
+        error,
+        "The Claude Code command “claude-gateway” for profile Work didn't answer --version as Claude Code does \
+         (unrecognized Claude Code version: \"gateway 1.0\")."
+    );
+}
+
+// The CLI Devora records, to stop one an earlier Devora left running, is the process it spawned: the wrapper, when the
+// command is one that runs Claude Code as its child. Stopping that process's tree stops Claude Code too.
+#[tokio::test]
+async fn a_command_that_runs_claude_code_as_its_child_is_stopped_with_it() {
+    let fixture = Fixture::new();
+    let context = fixture.context();
+    write_command(
+        &fixture,
+        "claude-gateway",
+        "#!/bin/sh\nclaude \"$@\"\nexit $?\n",
+    );
+    set_command(&fixture, "claude-gateway");
+    let space = fixture.create(fixture.form("Delta")).unwrap();
+    let log = Arc::new(Log::open(&fixture.root.path().join("log")).unwrap());
+    let mut running = space.start(&context, log, &fixture.run).await.unwrap();
+    settle(&mut running).await;
+
+    let table = SystemProcessTable;
+    let wrapper = recorded_cli(&fixture).unwrap();
+    let claude = std::fs::read_to_string(fixture.root.path().join("report.jsonl"))
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
+        .rfind(|entry| entry["kind"] == "start")
+        .unwrap()["pid"]
+        .as_u64()
+        .unwrap() as u32;
+    assert_ne!(wrapper.pid, claude, "the wrapper didn't exec");
+    assert!(table.get(claude).is_some());
+    assert!(stop_tree(&table, wrapper, Duration::from_secs(5)).unwrap());
+    assert_eq!(table.get(claude), None);
+    let _ = running.pause().await;
 }
 
 #[test]

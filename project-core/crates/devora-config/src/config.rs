@@ -164,42 +164,60 @@ pub fn get_git_shortcuts_enabled(profile_path: Option<&str>) -> bool {
 
 /// One configurable Claude launch setting: its kebab-case config key (under the top-level `claude` object), the environment variable the PTY exports, and the Devora default value.
 /// The model tiers have no Devora default: unset at every scope, their variable isn't exported, and Claude Code picks the model.
+/// `none_allowed` is false for a setting Devora always needs a value of (the command): None is refused when written, and
+/// a stored `null` falls through as if absent.
 struct ClaudeSettingSpec {
     key: &'static str,
     env_var: &'static str,
     default: Option<&'static str>,
+    none_allowed: bool,
 }
 
-const CLAUDE_SETTINGS: [ClaudeSettingSpec; 6] = [
+/// The command Devora runs as Claude Code when no level sets one.
+pub const DEFAULT_CLAUDE_COMMAND: &str = "claude";
+
+const CLAUDE_SETTINGS: [ClaudeSettingSpec; 7] = [
     ClaudeSettingSpec {
         key: "opus-model",
         env_var: "ANTHROPIC_DEFAULT_OPUS_MODEL",
         default: None,
+        none_allowed: true,
     },
     ClaudeSettingSpec {
         key: "sonnet-model",
         env_var: "ANTHROPIC_DEFAULT_SONNET_MODEL",
         default: None,
+        none_allowed: true,
     },
     ClaudeSettingSpec {
         key: "haiku-model",
         env_var: "ANTHROPIC_DEFAULT_HAIKU_MODEL",
         default: None,
+        none_allowed: true,
     },
     ClaudeSettingSpec {
         key: "effort",
         env_var: "DEVORA_CCC_EFFORT",
         default: Some("xhigh"),
+        none_allowed: true,
     },
     ClaudeSettingSpec {
         key: "default-model",
         env_var: "ANTHROPIC_MODEL",
         default: Some("opusplan"),
+        none_allowed: true,
     },
     ClaudeSettingSpec {
         key: "permission-mode",
         env_var: "DEVORA_CCC_PERMISSION_MODE",
         default: Some("plan"),
+        none_allowed: true,
+    },
+    ClaudeSettingSpec {
+        key: "command",
+        env_var: "DEVORA_CCC_COMMAND",
+        default: Some(DEFAULT_CLAUDE_COMMAND),
+        none_allowed: false,
     },
 ];
 
@@ -293,7 +311,7 @@ fn resolve_one(
             Some(Value::String(s)) if !s.trim().is_empty() => {
                 return ResolvedSetting::Value(s.clone());
             }
-            Some(Value::Null) => return ResolvedSetting::None,
+            Some(Value::Null) if spec.none_allowed => return ResolvedSetting::None,
             _ => {} // absent / empty / malformed → fall through
         }
     }
@@ -301,6 +319,42 @@ fn resolve_one(
         Some(default) => ResolvedSetting::Value(default.to_string()),
         None => ResolvedSetting::None,
     }
+}
+
+/// A Claude Code command is a command name (looked up on the login shell's PATH), an absolute path, or a path in the
+/// home directory (`~/…`); the whole string is the program, with no arguments. Another path has no directory it could
+/// be relative to.
+fn check_claude_command(command: &str) -> Result<(), String> {
+    if command.contains('/') && !command.starts_with('/') && !command.starts_with("~/") {
+        return Err(format!(
+            "The Claude Code command must be a command name or a full path (/… or ~/…), not “{command}”"
+        ));
+    }
+    Ok(())
+}
+
+/// The command Devora runs as Claude Code for `profile` (profile → User Defaults → `claude`), as configured: a name, or a
+/// path with `~/` still unexpanded. The one place that decides it, for agents (stored when each is created), the model
+/// list and `ccc` (`DEVORA_CCC_COMMAND`).
+pub fn claude_command(global_config: &Path, profile: Option<&str>) -> String {
+    let user = read_config_lenient(global_config);
+    let profile = profile.and_then(|p| read_config_lenient(&profile_config_path(p)));
+    let spec = CLAUDE_SETTINGS
+        .iter()
+        .find(|spec| spec.key == "command")
+        .expect("the command setting");
+    match resolve_one(profile.as_ref(), user.as_ref(), spec) {
+        ResolvedSetting::Value(command) => command,
+        ResolvedSetting::None => DEFAULT_CLAUDE_COMMAND.to_owned(),
+    }
+}
+
+/// The name a profile goes by, from its own config; `None` for a directory that isn't a named profile.
+pub fn profile_name(profile: &str) -> Option<String> {
+    read_config_lenient(&profile_config_path(profile))?
+        .get("name")?
+        .as_str()
+        .map(str::to_owned)
 }
 
 /// Resolves the Claude launch settings for a session and returns the environment variables the PTY should export.
@@ -429,6 +483,9 @@ pub fn write_claude_setting_in(
                     .map(str::trim)
                     .filter(|s| !s.is_empty())
                     .ok_or_else(|| format!("a non-empty value is required to set {key}"))?;
+                if spec.key == "command" {
+                    check_claude_command(v)?;
+                }
                 if spec.key == "effort" && !CLAUDE_EFFORT_LEVELS.contains(&v) {
                     return Err(format!(
                         "invalid effort level: {v} (expected one of {})",
@@ -436,6 +493,9 @@ pub fn write_claude_setting_in(
                     ));
                 }
                 claude_obj.insert(key.to_string(), Value::String(v.to_string()));
+            }
+            "none" if !spec.none_allowed => {
+                return Err(format!("{key} can't be None: use Default"));
             }
             "none" => {
                 claude_obj.insert(key.to_string(), Value::Null);
@@ -991,6 +1051,78 @@ mod tests {
             CLAUDE_EFFORT_LEVELS,
             ["low", "medium", "high", "xhigh", "max"]
         );
+    }
+
+    #[test]
+    fn the_claude_code_command_is_the_profiles_then_the_users_then_claude_and_never_none() {
+        let _guard = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        let original = std::env::var("DEVORA_CONFIG_PATH").ok();
+        let tmp = tempfile::tempdir().unwrap();
+        let global = tmp.path().join("global-config.json");
+        std::env::set_var("DEVORA_CONFIG_PATH", &global);
+        let profile_dir = tmp.path().join("profile");
+        fs::create_dir_all(&profile_dir).unwrap();
+        let profile = profile_dir.to_str().unwrap();
+        let command = |profile| claude_command(&global, profile);
+
+        assert_eq!(command(Some(profile)), "claude");
+        write_claude_setting_in(&global, None, "command", "value", Some("~/bin/gateway")).unwrap();
+        assert_eq!(command(Some(profile)), "~/bin/gateway");
+        write_claude_setting_in(
+            &global,
+            Some(profile),
+            "command",
+            "value",
+            Some("claude-work"),
+        )
+        .unwrap();
+        assert_eq!(command(Some(profile)), "claude-work");
+        assert_eq!(command(None), "~/bin/gateway");
+        // A terminal's `ccc` gets it as the settings export it.
+        assert_eq!(
+            claude_launch_env(Some(profile))["DEVORA_CCC_COMMAND"],
+            "claude-work"
+        );
+        write_claude_setting_in(&global, Some(profile), "command", "default", None).unwrap();
+        assert_eq!(command(Some(profile)), "~/bin/gateway");
+
+        // Devora always needs a command: None is refused, and a null written by hand reads as if absent.
+        assert_eq!(
+            write_claude_setting_in(&global, Some(profile), "command", "none", None).unwrap_err(),
+            "command can't be None: use Default"
+        );
+        fs::write(
+            profile_dir.join("config.json"),
+            r#"{"claude":{"command":null}}"#,
+        )
+        .unwrap();
+        assert_eq!(command(Some(profile)), "~/bin/gateway");
+        assert_eq!(
+            read_claude_settings_in(&global, Some(profile))
+                .unwrap()
+                .resolved["command"],
+            "~/bin/gateway"
+        );
+
+        // A name, an absolute path or a path in the home directory; a space is part of the name.
+        for accepted in ["claude gateway", "/opt/gateway/claude", "~/bin/claude"] {
+            write_claude_setting_in(&global, None, "command", "value", Some(accepted)).unwrap();
+            assert_eq!(command(None), accepted);
+        }
+        for relative in ["bin/claude", "./claude", "../claude"] {
+            assert_eq!(
+                write_claude_setting_in(&global, None, "command", "value", Some(relative))
+                    .unwrap_err(),
+                format!(
+                    "The Claude Code command must be a command name or a full path (/… or ~/…), not “{relative}”"
+                )
+            );
+        }
+
+        match original {
+            Some(path) => std::env::set_var("DEVORA_CONFIG_PATH", path),
+            None => std::env::remove_var("DEVORA_CONFIG_PATH"),
+        }
     }
 
     #[test]

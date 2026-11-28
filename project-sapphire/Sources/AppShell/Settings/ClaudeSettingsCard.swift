@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Claude's six settings use the core's metadata for all suggestion/effort choices.
+/// Claude's seven settings use the core's metadata for all suggestion/effort choices.
 struct ClaudeSettingsCard: View {
 	let model: ClaudeSettingsModel
 	@FocusState private var focus: String?
@@ -10,9 +10,11 @@ struct ClaudeSettingsCard: View {
 			if model.settings == nil || model.choices == nil {
 				Text("Loading…").foregroundStyle(.secondary)
 			} else {
-				combo("opus-model", "Opus tier", "ANTHROPIC_DEFAULT_OPUS_MODEL")
-				combo("sonnet-model", "Sonnet tier", "ANTHROPIC_DEFAULT_SONNET_MODEL")
-				combo("haiku-model", "Haiku tier", "ANTHROPIC_DEFAULT_HAIKU_MODEL")
+				// The program itself: always a value, so no None.
+				combo("command", "Claude Code command", "a command name or a path", modes: [.custom, .default])
+				combo("opus-model", "Opus tier", "ANTHROPIC_DEFAULT_OPUS_MODEL", modes: ClaudeMode.allCases)
+				combo("sonnet-model", "Sonnet tier", "ANTHROPIC_DEFAULT_SONNET_MODEL", modes: ClaudeMode.allCases)
+				combo("haiku-model", "Haiku tier", "ANTHROPIC_DEFAULT_HAIKU_MODEL", modes: ClaudeMode.allCases)
 				row("Effort", "--effort") {
 					segments("effort", ["Default"] + Array((model.choices?.effortLevels ?? []).reversed()) + ["None"], selected: model.effort) {
 						model.selectEffort($0)
@@ -29,7 +31,7 @@ struct ClaudeSettingsCard: View {
 					}
 					Text(model.defaultModelOn ? "→ opusplan" : "→ not set").foregroundStyle(.secondary)
 				}
-				combo("permission-mode", "Permission mode", "--permission-mode")
+				combo("permission-mode", "Permission mode", "--permission-mode", modes: ClaudeMode.allCases)
 			}
 		}
 		.accessibilityElement(children: .contain)
@@ -40,19 +42,19 @@ struct ClaudeSettingsCard: View {
 		.onChange(of: focus) { _, key in model.focusedKey = key }
 	}
 
-	private func combo(_ key: String, _ label: String, _ detail: String) -> some View {
+	private func combo(_ key: String, _ label: String, _ detail: String, modes: [ClaudeMode]) -> some View {
 		row(label, detail) {
 			let mode = model.mode(key)
-			segments(key, ClaudeMode.allCases.map(\.label), selected: mode.label) { label in
+			segments(key, modes.map(\.label), selected: mode.label) { label in
 				if let mode = ClaudeMode.allCases.first(where: { $0.label == label }) { model.select(mode, key: key) }
 			}
 			if mode == .custom {
 				HStack(spacing: 6) {
-					TextField(key == "permission-mode" ? "permission mode, then Enter" : "model ID, then Enter", text: Binding(get: { model.input(key) }, set: { model.edit(key, $0) }))
+					TextField(placeholder(key), text: Binding(get: { model.input(key) }, set: { model.edit(key, $0) }))
 						.textFieldStyle(.roundedBorder)
 						.frame(maxWidth: 340)
 						.focused($focus, equals: key)
-						.modelSuggestions(key == "permission-mode" ? [] : model.suggestions(forTier: key), showsModelIDs: true)
+						.modelSuggestions(key.hasSuffix("-model") ? model.suggestions(forTier: key) : [], showsModelIDs: true)
 						.onSubmit { model.commit(key) }
 						.accessibilityIdentifier("claude-input-\(key)")
 					if model.showsSave(key) {
@@ -75,6 +77,14 @@ struct ClaudeSettingsCard: View {
 			} else {
 				Text("No override — Claude Code decides").foregroundStyle(.secondary)
 			}
+		}
+	}
+
+	private func placeholder(_ key: String) -> String {
+		switch key {
+		case "permission-mode": "permission mode, then Enter"
+		case "command": "command or path, then Enter"
+		default: "model ID, then Enter"
 		}
 	}
 

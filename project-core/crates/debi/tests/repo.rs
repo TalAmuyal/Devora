@@ -221,6 +221,7 @@ fn add_to_an_open_agent_space_preserves_its_instruction_layout() {
             inputs: BTreeMap::new(),
             keep_coding_instructions: true,
             model: None,
+            command: None,
         },
         BTreeMap::new(),
         &f.global,

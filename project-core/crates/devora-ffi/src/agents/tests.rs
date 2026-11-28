@@ -30,7 +30,10 @@ fn requested(chat: &Chat) -> bool {
 struct Fixture {
     profile: Profile,
     core: Arc<DevoraCore>,
-    program: String,
+    /// The log of the core the fixture started with, whose reported errors a UI shows on banners.
+    log: Arc<crate::log::AppLog>,
+    /// The directory holding the agents' `claude` (the fake CLI), first on their PATH.
+    bin: String,
     config: String,
     /// The context window the fake reports (`DEVORA_FAKE_CONTEXT_WINDOW`), when a test sets one.
     context_window: std::sync::Mutex<Option<String>>,
@@ -46,7 +49,9 @@ impl Fixture {
             r#"{"claude":{"default-model":"haiku","effort":"low"}}"#,
         )
         .unwrap();
-        let program = profile.root.path().join("fake-cli");
+        let bin = profile.root.path().join("bin");
+        fs::create_dir_all(&bin).unwrap();
+        let program = bin.join("claude");
         let source = include_str!("../../../devora-agent/tests/support/fake_cli.py")
             .split_once('\n')
             .unwrap()
@@ -73,12 +78,17 @@ impl Fixture {
                 .to_string_lossy()
                 .into_owned()
         });
-        let core =
-            DevoraCore::new(Some(config.to_string_lossy().into_owned()), state, log).unwrap();
+        let core = DevoraCore::new(
+            Some(config.to_string_lossy().into_owned()),
+            state,
+            log.clone(),
+        )
+        .unwrap();
         Self {
             profile,
             core,
-            program: program.to_string_lossy().into_owned(),
+            log,
+            bin: bin.to_string_lossy().into_owned(),
             config: config.to_string_lossy().into_owned(),
             context_window: Default::default(),
         }
@@ -107,11 +117,13 @@ impl Fixture {
 
     fn base_launch(&self) -> AgentLaunch {
         AgentLaunch {
-            program: self.program.clone(),
             plugins: vec![],
             settings_json: r#"{"env":{"HOST_ONLY":"kept"}}"#.into(),
             environment: HashMap::from([
-                ("PATH".into(), std::env::var("PATH").unwrap()),
+                (
+                    "PATH".into(),
+                    format!("{}:{}", self.bin, std::env::var("PATH").unwrap()),
+                ),
                 (
                     "DEVORA_FAKE_FIXTURES".into(),
                     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -2005,13 +2017,10 @@ fn deleting_an_agent_whose_run_failed_closes_its_tab_and_deletes_it() {
     let events = f.core.subscribe_agent_chats().unwrap();
     f.create("Broken");
     let mut launch = f.launch();
-    launch.program = f
-        .profile
-        .root
-        .path()
-        .join("no-such-claude")
-        .to_string_lossy()
-        .into_owned();
+    // A PATH without `claude` on it.
+    launch
+        .environment
+        .insert("PATH".into(), f.profile.path_string());
     let tab = block_on(
         f.core
             .open_agent_space(f.profile.path_string(), "Broken".into(), launch),
@@ -2029,6 +2038,58 @@ fn deleting_an_agent_whose_run_failed_closes_its_tab_and_deletes_it() {
         .list_agent_spaces(f.profile.path_string())
         .unwrap()
         .is_empty());
+}
+
+// A launch that fails says why in the agent's chat, where it stays, whatever failed. Opening the agent again (the chat's
+// Retry) looks its command up afresh, so installing the missing command is enough.
+#[test]
+fn a_failed_launch_says_why_in_the_chat_and_retry_launches_once_it_is_fixed() {
+    use std::os::unix::fs::PermissionsExt;
+    let f = Fixture::new(false);
+    let events = f.core.subscribe_agent_chats().unwrap();
+    f.core
+        .set_claude_setting(
+            Some(f.profile.path_string()),
+            "command".into(),
+            Some(crate::claude_settings::ClaudeValue::Text {
+                value: "claude-gateway".into(),
+            }),
+        )
+        .unwrap();
+    f.create("Echo");
+    let install = |script: &str| {
+        let gateway = Path::new(&f.bin).join("claude-gateway");
+        fs::write(&gateway, script).unwrap();
+        fs::set_permissions(&gateway, fs::Permissions::from_mode(0o755)).unwrap();
+    };
+    let failed_with = |tab: u64, what: &str| {
+        f.wait(&events, |c| {
+            c.tab == tab
+                && c.phase == ChatPhase::Failed
+                && c.error.as_deref().is_some_and(|error| {
+                    error.starts_with("The Claude Code command “claude-gateway” for profile ")
+                        && error.contains(what)
+                })
+        });
+    };
+
+    let tab = f.open("Echo");
+    failed_with(tab, "isn't on your login shell's PATH.");
+    // Another failure, of a command that's there but isn't Claude Code.
+    install("#!/bin/sh\necho gateway 1.0\n");
+    assert_eq!(f.open("Echo"), tab);
+    failed_with(tab, "didn't answer --version as Claude Code does");
+    install("#!/bin/sh\nexec claude \"$@\"\n");
+    assert_eq!(f.open("Echo"), tab);
+    let running = f.wait(&events, |c| c.tab == tab && c.phase == ChatPhase::Running);
+    assert_eq!(running.error, None);
+
+    // The chat said both failures, so neither was reported for an error banner too: the first report is this one.
+    f.log.report_error("the next error".into()).unwrap();
+    assert_eq!(
+        block_on(f.log.errors().unwrap().next_batch(8)).unwrap(),
+        ["the next error"]
+    );
 }
 
 // A delete that fails once the agent has stopped leaves what the UI's own steps left: the agent paused, stored so, with

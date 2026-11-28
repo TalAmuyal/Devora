@@ -37,6 +37,7 @@ use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot, watch};
 use tokio::task::JoinHandle;
 pub use tree::{stop_tree, CliProcess};
+pub use worker::{check_version, VersionFailure};
 
 /// Which CLI message supplied a token-usage update.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -270,13 +271,20 @@ pub struct Session {
 impl Session {
     /// Validate the CLI version, launch it and wait for initialize to succeed.
     pub async fn start(options: SessionOptions, log: Arc<Log>) -> Result<Self, String> {
+        check_version(&options)
+            .await
+            .map_err(|failure| failure.to_string())?;
+        Self::launch(options, log).await
+    }
+
+    /// [`Session::start`] for a caller that ran [`check_version`] itself, to say more about its failure.
+    pub async fn launch(options: SessionOptions, log: Arc<Log>) -> Result<Self, String> {
         let session_id = options
             .resume
             .as_ref()
             .filter(|resume| resume.has_conversation)
             .map(|resume| resume.session_id.clone())
             .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
-        worker::check_version(&options).await?;
         let (commands, received) = mpsc::unbounded_channel();
         let (events, event_stream) = mpsc::unbounded_channel();
         let (ready, initialized) = oneshot::channel();

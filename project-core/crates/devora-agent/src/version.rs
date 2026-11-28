@@ -9,21 +9,6 @@ pub const MINIMUM_CLI_VERSION: &str = "2.1.312";
 /// Check a `claude --version` response, including its optional product suffix.
 /// Unrecognized or prerelease versions are rejected, rather than assumed safe.
 pub fn check_cli_version(output: &str) -> Result<(), String> {
-    fn components(text: &str) -> Option<[u64; 3]> {
-        if text
-            .bytes()
-            .any(|byte| !byte.is_ascii_digit() && byte != b'.')
-        {
-            return None;
-        }
-        let mut parts = text.split('.');
-        let version = [
-            parts.next()?.parse().ok()?,
-            parts.next()?.parse().ok()?,
-            parts.next()?.parse().ok()?,
-        ];
-        parts.next().is_none().then_some(version)
-    }
     let version = output.split_whitespace().next().unwrap_or_default();
     let parsed = components(version)
         .ok_or_else(|| format!("unrecognized Claude Code version: {output:?}"))?;
@@ -33,6 +18,27 @@ pub fn check_cli_version(output: &str) -> Result<(), String> {
         ));
     }
     Ok(())
+}
+
+/// Whether `output` is what a Claude Code answers `--version` with, whatever the version.
+pub fn is_cli_version(output: &str) -> bool {
+    components(output.split_whitespace().next().unwrap_or_default()).is_some()
+}
+
+fn components(text: &str) -> Option<[u64; 3]> {
+    if text
+        .bytes()
+        .any(|byte| !byte.is_ascii_digit() && byte != b'.')
+    {
+        return None;
+    }
+    let mut parts = text.split('.');
+    let version = [
+        parts.next()?.parse().ok()?,
+        parts.next()?.parse().ok()?,
+        parts.next()?.parse().ok()?,
+    ];
+    parts.next().is_none().then_some(version)
 }
 
 #[cfg(test)]

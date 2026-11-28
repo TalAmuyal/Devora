@@ -9,12 +9,16 @@ use std::os::unix::process::{CommandExt, ExitStatusExt};
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, ExitStatus};
 
-use devora_agent::{Ccc, CLAUDE};
+use devora_agent::Ccc;
+use devora_config::config::DEFAULT_CLAUDE_COMMAND;
 
 mod repo;
 
 /// The Go CLI that runs every command not yet ported.
 const DEBI_GO: &str = "debi-go";
+
+/// The session's Claude Code command (`devora_config`'s `command` setting), as its terminal exports it.
+const COMMAND_ENV: &str = "DEVORA_CCC_COMMAND";
 
 /// What a shell reports for a command it cannot run.
 const EXIT_CANNOT_RUN: u8 = 127;
@@ -47,16 +51,31 @@ fn ccc(args: &[OsString]) -> ExitCode {
     // In the app bundle: `Resources/bundled-apps/debi` next to `Resources/cc-plugins/`.
     let plugins_dir =
         own_dir().and_then(|dir| dir.parent().map(|parent| parent.join("cc-plugins")));
-    match devora_agent::ccc(args, plugins_dir.as_deref(), |name| {
+    let ccc = devora_agent::ccc(args, plugins_dir.as_deref(), |name| {
         std::env::var(name).ok()
-    }) {
-        Ccc::Update => match Command::new(CLAUDE).arg("--update").status() {
+    });
+    // The session's Claude Code command, which its terminal exports; a terminal from before the setting has none.
+    let command = std::env::var(COMMAND_ENV)
+        .ok()
+        .filter(|command| !command.is_empty())
+        .unwrap_or_else(|| DEFAULT_CLAUDE_COMMAND.to_owned());
+    let Some(program) =
+        devora_agent::program::expand(&command, std::env::var("HOME").ok().as_deref())
+    else {
+        eprintln!("ccc: cannot run {command}: there is no home directory (HOME) for ~/");
+        return ExitCode::from(EXIT_CANNOT_RUN);
+    };
+    match ccc {
+        Ccc::Update => match Command::new(&program).arg("--update").status() {
             Ok(status) => exit_code(status),
-            Err(error) => cannot_run(CLAUDE, &error),
+            Err(error) => cannot_run(&command, &error),
         },
         Ccc::Launch(spec) => {
-            let error = Command::new(CLAUDE).args(&spec.args).envs(spec.env).exec();
-            cannot_run(CLAUDE, &error)
+            let error = Command::new(&program)
+                .args(&spec.args)
+                .envs(spec.env)
+                .exec();
+            cannot_run(&command, &error)
         }
     }
 }
