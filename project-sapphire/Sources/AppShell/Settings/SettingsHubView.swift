@@ -19,8 +19,10 @@ struct SettingsHubView: View {
 			HSplitView {
 				MasterList(model: model)
 					.frame(minWidth: 220, idealWidth: 280, maxWidth: 380)
+				// No minimum of its own: the split takes the detail's from its content, so a control's natural width (the
+				// Claude card's segmented controls) narrows the list rather than overflowing the pane.
 				DetailPanel(model: model)
-					.frame(minWidth: 420, maxWidth: .infinity)
+					.frame(maxWidth: .infinity)
 			}
 			Divider()
 			KeyHintBar(hints: [

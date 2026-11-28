@@ -110,6 +110,9 @@ struct ClaudeSettingsCard: View {
 			ForEach(labels, id: \.self) { Text($0).tag($0) }
 		}
 		.pickerStyle(.segmented).labelsHidden()
+		// Always its natural width: squeezed on the first layout, a segmented control holds its natural width on later
+		// ones, which would widen the detail past its pane after any change in the card.
+		.fixedSize()
 		.accessibilityIdentifier("claude-segments-\(key)")
 	}
 }

@@ -96,6 +96,37 @@ final class SettingsHubUITests: XCTestCase {
 		add(screenshot)
 	}
 
+	/// At the window's default size, its narrowest, the Effort control's seven segments need more than the detail pane
+	/// had: the detail is as wide as its widest control from the start, and nothing in the card moves it.
+	@MainActor
+	func testTheDetailStaysInItsPaneWhenACustomFieldOpens() throws {
+		let config = try writeConfigWithAProfile(in: scratch)
+		app = XCUIApplication()
+		app.launchEnvironment["DEVORA_CONFIG_PATH"] = config.path
+		app.launchEnvironment["DEVORA_STATE_DIR"] = scratch.appending(path: "state").path
+		try app.useTheFakeClaude(reportingIn: scratch)
+		app.launch()
+		addTeardownBlock { @MainActor [app] in app?.terminate() }
+		XCTAssertTrue(app.hubHeader.waitForExistence(timeout: 10))
+		app.typeKey("p", modifierFlags: .shift)
+		let segments = element("claude-segments-opus-model")
+		XCTAssertTrue(segments.waitForExistence(timeout: 5) && element("claude-segments-effort").exists, "the active profile's Claude card loads")
+		let detail = element("settings-detail-scroll")
+		let window = app.windows.firstMatch.frame
+		let opened = detail.frame
+		XCTAssertTrue(window.contains(opened), "The detail \(opened) must be inside the window \(window)")
+		XCTAssertGreaterThanOrEqual(
+			opened.width, element("claude-settings-card").frame.width, "The Claude card must fit its detail, Effort included")
+
+		segments.radioButtons["Custom"].click()
+		XCTAssertTrue(element("claude-input-opus-model").waitForExistence(timeout: 5), "Custom reveals the field")
+		XCTAssertEqual(detail.frame, opened, "Opening a Custom field must not move or widen the detail")
+		app.typeKey(.escape, modifierFlags: [])
+		segments.radioButtons["Default"].click()
+		XCTAssertTrue(element("claude-input-opus-model").waitForNonExistence(timeout: 5), "Default hides the field")
+		XCTAssertEqual(detail.frame, opened, "Closing it must not either")
+	}
+
 	@MainActor
 	private func waitFor(_ element: XCUIElement, _ predicate: String) -> Bool {
 		XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: predicate), object: element)], timeout: 5) == .completed
