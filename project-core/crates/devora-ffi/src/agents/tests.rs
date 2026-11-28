@@ -30,6 +30,8 @@ fn requested(chat: &Chat) -> bool {
 struct Fixture {
     profile: Profile,
     core: Arc<DevoraCore>,
+    /// The log of the core the fixture started with, whose reported errors a UI shows on banners.
+    log: Arc<crate::log::AppLog>,
     /// The directory holding the agents' `claude` (the fake CLI), first on their PATH.
     bin: String,
     config: String,
@@ -76,11 +78,16 @@ impl Fixture {
                 .to_string_lossy()
                 .into_owned()
         });
-        let core =
-            DevoraCore::new(Some(config.to_string_lossy().into_owned()), state, log).unwrap();
+        let core = DevoraCore::new(
+            Some(config.to_string_lossy().into_owned()),
+            state,
+            log.clone(),
+        )
+        .unwrap();
         Self {
             profile,
             core,
+            log,
             bin: bin.to_string_lossy().into_owned(),
             config: config.to_string_lossy().into_owned(),
             context_window: Default::default(),
@@ -2076,6 +2083,13 @@ fn a_failed_launch_says_why_in_the_chat_and_retry_launches_once_it_is_fixed() {
     assert_eq!(f.open("Echo"), tab);
     let running = f.wait(&events, |c| c.tab == tab && c.phase == ChatPhase::Running);
     assert_eq!(running.error, None);
+
+    // The chat said both failures, so neither was reported for an error banner too: the first report is this one.
+    f.log.report_error("the next error".into()).unwrap();
+    assert_eq!(
+        block_on(f.log.errors().unwrap().next_batch(8)).unwrap(),
+        ["the next error"]
+    );
 }
 
 // A delete that fails once the agent has stopped leaves what the UI's own steps left: the agent paused, stored so, with

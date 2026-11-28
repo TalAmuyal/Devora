@@ -25,11 +25,10 @@ Feature: The Claude Code command
     Given the profile "Work" runs Claude Code through the command "claude-gateway"
     And an agent "Echo" was created
     Then the agent chat should say its launch failed: "isn't a file you can run."
-    And the recorded errors should include "isn't a file you can run."
+    And no error banners should be visible
     When the command "claude-gateway" is installed, but is not Claude Code
     And the user retries the agent's launch
     Then the agent chat should say its launch failed: "didn't answer --version as Claude Code does"
-    And the recorded errors should include "didn't answer --version as Claude Code does"
     When the command "claude-gateway" is installed
     And the user retries the agent's launch
     Then the agent chat should show no failure

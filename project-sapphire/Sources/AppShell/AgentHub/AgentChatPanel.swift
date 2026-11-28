@@ -93,8 +93,8 @@ struct AgentChatPanel: View {
 			} else {
 				ProgressView("Opening agent…").frame(maxWidth: .infinity, maxHeight: .infinity)
 			}
-			// Above the prompt, where the window's error banner never covers it: what failed stays readable, with its Retry,
-			// after the banner is dismissed.
+			// What failed, with its Retry: the one place a failed launch is shown, so it gets no error banner. Above the
+			// prompt, where a banner for something else doesn't cover it.
 			if let error = model.chat.chat?.error ?? model.chat.error {
 				HStack(alignment: .firstTextBaseline, spacing: 8) {
 					Image(systemName: "exclamationmark.triangle.fill").accessibilityHidden(true)

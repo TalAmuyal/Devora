@@ -76,7 +76,7 @@ Types of changes:
 ### Changed
 
 - Devora Sapphire opens an agent's tab even when Claude Code can't be found, and says why in its chat with Retry, where it used to refuse to open the agent; Retry looks the command up again, so installing it is enough
-- Devora Sapphire's agent chat shows a failed launch just above the prompt, where the error banner no longer covers it
+- Devora Sapphire shows an agent's failed launch in its chat only, just above the prompt with Retry, and no longer as an error banner too
 - Devora Sapphire's compaction threshold goes from 10% to 90%, in the Agent card and an agent's Context popover: above 90% there's no room left for the agent to save its memory first; a threshold stored before (1% to 100%) keeps working, used as the nearest limit, and the card and popover say so
 - Devora Ember now declares macOS 26 as its minimum: it installs and runs on macOS 26 or newer, and is built and tested on macOS 27
 - Devora Sapphire's agent chat shows a turn the agent started itself (a background task reporting) as running, with its step and Stop, and keeps Send: a prompt sent then joins that turn

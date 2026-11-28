@@ -18,7 +18,7 @@ use devora_agent_space::{AppRun, Space};
 pub use devora_agent_space::{
     CreationForm, Entry as SpaceEntry, Field, LaunchContext, ModelChoice, Source,
 };
-use devora_app::log::Log;
+use devora_app::log::{Level, Log};
 pub use devora_config::agent::Scope;
 use devora_state::{
     AgentPause, ChatCommand, ChatPhase, ChatUpdate, Command, Event, SessionKind, Store,
@@ -325,7 +325,8 @@ impl Agents {
                             phase: ChatPhase::Failed,
                         },
                     );
-                    self.log.report_error(&error);
+                    // The tab's chat says it, so it gets no error banner too.
+                    self.log.write(Level::Error, &format!("{name}: {error}"));
                 }
             }
         }
@@ -1184,7 +1185,13 @@ async fn run(
             owner.live = false;
             inner.changed.notify_one();
             if let Err(error) = outcome {
-                log.report_error(&error);
+                // The agent's chat says it, beside Retry, so it gets no error banner too; with no tab to say it, it
+                // is reported.
+                if owner.tab.is_some() {
+                    log.write(Level::Error, &format!("{}: {error}", key.name));
+                } else {
+                    log.report_error(&format!("{}: {error}", key.name));
+                }
                 if inner.closing {
                     inner
                         .shutdown_problems
