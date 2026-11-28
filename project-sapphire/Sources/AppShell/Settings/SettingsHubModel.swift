@@ -44,6 +44,9 @@ final class SettingsHubModel {
 	let store: Store
 	/// False until the profiles are listed, while the list shows its loading placeholder.
 	private(set) var loaded = false
+	/// The Effort control's labels, which every page lays out hidden (`EffortWidth`); read before `loaded`, so the split
+	/// never moves when they arrive.
+	private(set) var effortLabels = ClaudeSegments.effortLabels(nil)
 	private(set) var cursor = ListCursor()
 	/// The loaded details, by profile path.
 	private(set) var details: [String: ProfileDetail] = [:]
@@ -83,10 +86,12 @@ final class SettingsHubModel {
 
 	func isActive(_ profile: Profile) -> Bool { profile.path == store.selectedProfilePath }
 
-	/// Lists the profiles, then focuses the active profile's row (the User Defaults' without one), or the New Profile row.
+	/// Lists the profiles and reads the effort levels, then focuses the active profile's row (the User Defaults' without
+	/// one), or the New Profile row.
 	func load() {
 		Task {
 			await store.listProfiles()
+			effortLabels = ClaudeSegments.effortLabels(await store.claudeSettingChoices())
 			loaded = true
 			switch opening {
 			case .newProfile:

@@ -122,6 +122,7 @@ Types of changes:
 
 ### Fixed
 
+- Devora Sapphire's Settings Hub no longer shifts a profile's or User Defaults' settings left, cutting them off at both edges, after a Custom choice in Claude Launch Settings at the window's default size; the profile list is a little narrower there instead, so every effort level stays visible
 - In Devora Sapphire's New Agent dialog, a field that gets the focus in a short window scrolls fully into view, with its note, instead of staying cut off at the form's edge; the repo list comes into view with its filter
 - Devora Sapphire's agent chat draws a link in the user's own message in the bubble's text color, underlined; it was the accent blue, nearly invisible on the blue bubble
 - Devora Sapphire's Compact Now, and the compaction at an agent's threshold, now work when the context is too full for the agent to save its memory first: Devora compacts anyway, says so in the transcript, and asks the agent to refresh its memory afterwards; if the compaction itself fails, the transcript says so and what to try
