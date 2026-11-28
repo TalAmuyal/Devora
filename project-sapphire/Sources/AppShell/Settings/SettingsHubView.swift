@@ -17,8 +17,9 @@ struct SettingsHubView: View {
 			.padding(.vertical, 12)
 			Divider()
 			HSplitView {
+				// Narrower than any page needs at the window's default size, so moving between pages never changes the split.
 				MasterList(model: model)
-					.frame(minWidth: 220, idealWidth: 280, maxWidth: 380)
+					.frame(minWidth: 220, idealWidth: 280, maxWidth: 320)
 				// No minimum of its own: the split takes the detail's from its content, so a control's natural width (the
 				// Claude card's segmented controls) narrows the list rather than overflowing the pane.
 				DetailPanel(model: model)

@@ -1,7 +1,7 @@
 # Settings Hub
 
 Ember's Settings Hub (`Sources/AppShell/Settings/`): the profiles beside the focused row's detail, on a page layer over the Workspace Hub (`Surfaces.openSettingsHub`), so that closing it (`q`, Escape, or what closes it below) reloads the hub.
-The detail is as wide as its widest control: its minimum comes from its content (the Claude card's segmented controls hold their natural width, Effort's seven levels the widest), so at the window's default size, its narrowest, the profile list gives way rather than the detail overflowing its pane.
+The detail is as wide as its widest control: its minimum comes from its content (the Claude card's segmented controls hold their natural width, Effort's seven levels the widest), so at the window's default size, its narrowest, the profile list gives way rather than the detail overflowing its pane. The list is capped at 320 pt, narrower than any page needs there, so pages with less to show (New Profile) keep the same split.
 
 - `SettingsHubModel` holds one opening: the master list ("User Defaults" pinned first, the store's profiles with the active one's dot and their repo counts, "New Profile…" pinned last), its cursor, and the focused row's detail; it lists the profiles again on opening (`Store.listProfiles`) and focuses the active profile's row, or the New Profile row for "New Profile…".
 	Its keys are Ember's: `j`/`k` and the arrows move, Enter sets the focused profile active, `n` (or Enter on the New Profile row) gives the form's name field the focus on the main actor's next turn, and `d` deletes; a key typed into a card's input or the form's fields is theirs (Escape leaves the field), and `q` and Escape go on to the stack's dismissal.

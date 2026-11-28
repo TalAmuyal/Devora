@@ -97,7 +97,7 @@ final class SettingsHubUITests: XCTestCase {
 	}
 
 	/// At the window's default size, its narrowest, the Effort control's seven segments need more than the detail pane
-	/// had: the detail is as wide as its widest control from the start, and nothing in the card moves it.
+	/// had: the detail is as wide as its widest control from the start, and neither the card nor a page change moves it.
 	@MainActor
 	func testTheDetailStaysInItsPaneWhenACustomFieldOpens() throws {
 		let config = try writeConfigWithAProfile(in: scratch)
@@ -125,6 +125,14 @@ final class SettingsHubUITests: XCTestCase {
 		segments.radioButtons["Default"].click()
 		XCTAssertTrue(element("claude-input-opus-model").waitForNonExistence(timeout: 5), "Default hides the field")
 		XCTAssertEqual(detail.frame, opened, "Closing it must not either")
+
+		// The New Profile page has no Claude card, so it needs less room: the list's cap keeps the split the same.
+		app.typeKey("j", modifierFlags: [])
+		XCTAssertTrue(element("profile-form-name").waitForExistence(timeout: 5), "j moves to the New Profile row")
+		XCTAssertEqual(detail.frame, opened, "The New Profile page must keep the same split")
+		app.typeKey("k", modifierFlags: [])
+		XCTAssertTrue(segments.waitForExistence(timeout: 5), "k moves back to the profile")
+		XCTAssertEqual(detail.frame, opened, "And so must the profile, again")
 	}
 
 	@MainActor
